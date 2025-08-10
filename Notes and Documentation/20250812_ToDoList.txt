@@ -1,0 +1,20 @@
+TODO LIST - 20250811
+--------------------------
+1. Memory Tracking & Shutdown Cleanup (planning doc)
+   - Design centralized memory tracker to register all sensitive variables.
+   - Categorize entries (SessionBound, TempOnly).
+   - Plan wipe sequence for normal shutdown.
+   - Plan wipe sequence for abnormal shutdown.
+   - Include how to integrate with existing SecureEncryptedDataStore.
+
+2. Add Category UI redesign
+   - Remove extra window.
+   - Inline category creation in main panel.
+   - Maintain validation and duplicate checking.
+   - Ensure data refresh logic stays unified with Panel/CategoryGrid changes.
+
+3. Review Main Password Entry/Creation UI
+   - Assess current layout and styling.
+   - Identify 'butt ugly' areas — fix spacing, alignment, visual hierarchy.
+   - Ensure secure password entry (no plaintext leaks).
+   - Make it visually consistent with new Add Category UI.

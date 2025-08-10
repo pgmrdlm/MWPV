@@ -1,0 +1,63 @@
+Thanks! Since your CategoryGrid is inside a Panel UserControl, and Panel is used in MainWindow, the flow looks like this:
+
+
+MainWindow
+└── Panel (UserControl)
+    └── CategoryGrid (UserControl)
+        └── DataGrid
+So to refresh the category grid from MainWindow, you need to:
+
+✅ Final Plan:
+🔹 1. CategoryGrid.xaml.cs — Add a public Refresh() method
+csharp
+Copy
+Edit
+public void Refresh()
+{
+    var categories = CategoryService.LoadCatagories();
+    CategoryDataGrid.ItemsSource = categories; // Name your DataGrid "CategoryDataGrid"
+}
+Make sure the DataGrid in CategoryGrid.xaml has:
+
+xml
+Copy
+Edit
+<DataGrid x:Name="CategoryDataGrid" ... />
+🔹 2. Panel.xaml — Add a method to refresh its CategoryGrid
+In Panel.xaml.cs:
+
+csharp
+Copy
+Edit
+public void RefreshCategoryGrid()
+{
+    categoryGrid.Refresh(); // Make sure your CategoryGrid is named in XAML
+}
+Make sure your XAML has:
+
+xml
+Copy
+Edit
+<local:CategoryGrid x:Name="categoryGrid" />
+🔹 3. MainWindow.xaml — Give the Panel a name
+In MainWindow.xaml:
+
+xml
+Copy
+Edit
+<local:Panel x:Name="panelControl" />
+🔹 4. MainWindow.xaml.cs — Add:
+csharp
+Copy
+Edit
+public void RefreshCategoryView()
+{
+    panelControl.RefreshCategoryGrid();
+}
+🔹 5. Call it after insert
+In NewCategoryEntry.xaml.cs or wherever you insert:
+
+csharp
+Copy
+Edit
+_mainWindow.RefreshCategoryView();  // ✅ this refreshes the DataGrid!

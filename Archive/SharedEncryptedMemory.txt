@@ -1,0 +1,170 @@
+1. SecureEncryptedDataStore.cs
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace YourAppNamespace.Security
+{
+    // 🔐 A single static class to store encrypted data in memory.
+    public static class SecureEncryptedDataStore
+    {
+        // ✅ AES Encryption Key (32 bytes for AES-256)
+        private static readonly byte[] Key = Encoding.UTF8.GetBytes("Your32ByteEncryptionKeyHere1234567890");
+
+        // ✅ AES Initialization Vector (16 bytes)
+        private static readonly byte[] IV = Encoding.UTF8.GetBytes("16ByteInitVector!");
+
+        // ✅ Dictionary to store encrypted values under string keys.
+        private static readonly Dictionary<string, string> EncryptedValues = new();
+
+        // ✅ Public method to store (and encrypt) sensitive data
+        public static void Set(string key, string plainText)
+        {
+            EncryptedValues[key] = Encrypt(plainText);
+        }
+
+        // ✅ Public method to retrieve (and decrypt) sensitive data
+        public static string Get(string key)
+        {
+            if (!EncryptedValues.TryGetValue(key, out var encryptedValue))
+                throw new InvalidOperationException($"No data found for key: {key}");
+
+            return Decrypt(encryptedValue);
+        }
+
+        // ✅ Clears all stored data (manual cleanup option)
+        public static void Clear() => EncryptedValues.Clear();
+
+        // ✅ Private method to encrypt plaintext
+        private static string Encrypt(string plainText)
+        {
+            using var aes = Aes.Create();
+            aes.Key = Key;
+            aes.IV = IV;
+
+            using var ms = new MemoryStream();
+            using var cs = new CryptoStream(ms, aes.CreateEncryptor(), CryptoStreamMode.Write);
+            using var sw = new StreamWriter(cs);
+
+            sw.Write(plainText);
+            sw.Close();
+
+            return Convert.ToBase64String(ms.ToArray());
+        }
+
+        // ✅ Private method to decrypt back to plaintext
+        private static string Decrypt(string encryptedText)
+        {
+            using var aes = Aes.Create();
+            aes.Key = Key;
+            aes.IV = IV;
+
+            var buffer = Convert.FromBase64String(encryptedText);
+            using var ms = new MemoryStream(buffer);
+            using var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Read);
+            using var sr = new StreamReader(cs);
+
+            return sr.ReadToEnd();
+        }
+    }
+}
+2. Set Data (e.g., in MainWindow)
+SecureEncryptedDataStore.Set("Password1", "MySecretPassword!");
+SecureEncryptedDataStore.Set("Password2", "AnotherSecretPassword!");
+SecureEncryptedDataStore.Set("FilePath", @"C:\Sensitive\File.txt");
+SecureEncryptedDataStore.Set("SQL", "Server=localhost;Database=MyDB;User Id=sa;Password=myPassword;");
+3. Access Anywhere in Your App (services, windows, classes)
+string password1 = SecureEncryptedDataStore.Get("Password1");
+string password2 = SecureEncryptedDataStore.Get("Password2");
+string filePath = SecureEncryptedDataStore.Get("FilePath");
+string sqlConnection = SecureEncryptedDataStore.Get("SQL");
+
+Example: List and Read Files from 7-Zip Archive
+using SevenZip;
+using System;
+using System.IO;
+using System.Linq;
+
+class Program
+{
+    static void Main()
+    {
+        // Set path to your 7z.dll file
+        SevenZipExtractor.SetLibraryPath(@"C:\Path\To\7z.dll");
+
+        string archivePath = @"C:\Path\To\archive.7z";
+
+        using (var extractor = new SevenZipExtractor(archivePath))
+        {
+            Console.WriteLine("Files in archive:");
+            foreach (var entry in extractor.ArchiveFileData.Where(x => !x.IsDirectory))
+            {
+                Console.WriteLine($"- {entry.FileName}");
+            }
+
+            // Example: Read first file as bytes
+            var firstFile = extractor.ArchiveFileData.First(x => !x.IsDirectory).FileName;
+            using var ms = new MemoryStream();
+            extractor.ExtractFile(firstFile, ms);
+            byte[] fileBytes = ms.ToArray();
+
+            Console.WriteLine($"Read {fileBytes.Length} bytes from {firstFile}");
+        }
+    }
+}
+Here's a clean and straightforward C# example to check if a string contains at least 2 of these conditions:
+
+✅ at least one uppercase letter
+
+✅ at least one lowercase letter
+
+✅ at least one numeric digit
+
+✅ at least one special character (punctuation or symbol)
+
+using System;
+using System.Linq;
+
+public class StringStrengthChecker
+{
+    public static bool MeetsAtLeastTwoConditions(string input)
+    {
+        int conditionsMet = 0;
+
+        if (input.Any(char.IsUpper)) conditionsMet++;
+        if (input.Any(char.IsLower)) conditionsMet++;
+        if (input.Any(char.IsDigit)) conditionsMet++;
+        if (input.Any(ch => !char.IsLetterOrDigit(ch))) conditionsMet++;
+
+        return conditionsMet >= 2;
+    }
+}
+Example usssage
+Console.WriteLine(StringStrengthChecker.MeetsAtLeastTwoConditions("password"));      // False
+Console.WriteLine(StringStrengthChecker.MeetsAtLeastTwoConditions("Password"));      // True (upper + lower)
+Console.WriteLine(StringStrengthChecker.MeetsAtLeastTwoConditions("pass123"));       // True (lower + digit)
+Console.WriteLine(StringStrengthChecker.MeetsAtLeastTwoConditions("PASS!"));         // True (upper + special)
+Console.WriteLine(StringStrengthChecker.MeetsAtLeastTwoConditions("123456"));        // False (only digits)
+
+using System;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+
+public static class SecureEncryption
+{
+    // Generate 32-byte random key using RNGCryptoServiceProvider
+    private static readonly byte[] Key = GenerateSecureKey(32);
+
+    private static byte[] GenerateSecureKey(int length)
+    {
+        byte[] key = new byte[length];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(key);
+        }
+        return key;
+    }
+}
