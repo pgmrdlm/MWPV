@@ -399,3 +399,15 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+# --- MWPV project-specific ---
+# Secret archives / runtime artifacts
+*.7z
+keys.7z
+Key.7z
+**/DB_Password.txt
+**/keyset.json
+
+# Local app/runtime dumps that might get copied into the repo by accident
+# (keep your SOURCE sql scripts in repo; this only shields stray runtime copies)
+**/MWPV.db
+**/MWPV_*.db
