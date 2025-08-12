@@ -7,9 +7,14 @@ namespace Utilities.Helpers
 {
     public static class DatabaseHelper
     {
-        // Keep your existing key name if your code expects it to match a filename
-        private const string DbPasswordKey = "DB_Password.txt";
+        // SINGLE SOURCE OF TRUTH:
+        // Loader/extractor matches this exact filename inside the key archive.
+        // Do NOT rename or strip ".txt".
+        public const string DbPasswordKey = "DB_Password.txt";
 
+        /// <summary>
+        /// %LOCALAPPDATA%/MWPV/MWPV.db
+        /// </summary>
         public static string GetAppDbPath()
         {
             return Path.Combine(
@@ -19,76 +24,73 @@ namespace Utilities.Helpers
         }
 
         /// <summary>
-        /// Persist the DB password securely. Accepts char[] and never stores a string.
-        /// Wipes the caller buffer after storing.
+        /// Optional convenience: %LOCALAPPDATA%/MWPV/sql
         /// </summary>
-        public static void StoreDatabasePassword(char[] generatedPassword)
+        public static string GetSqlFolderPath()
         {
-            if (generatedPassword == null || generatedPassword.Length == 0)
-                throw new ArgumentException("Password cannot be null/empty.", nameof(generatedPassword));
-
-            // If caller might still need their buffer, we copy; SetAndWipe will wipe the copy.
-            var copy = new char[generatedPassword.Length];
-            Array.Copy(generatedPassword, copy, generatedPassword.Length);
-
-            try
-            {
-                SecureEncryptedDataStore.SetAndWipe(DbPasswordKey, copy);
-            }
-            finally
-            {
-                // Wipe the original UI/source buffer
-                SensitiveDataCleaner.WipeCharArray(ref generatedPassword);
-            }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MWPV",
+                "sql");
         }
 
         /// <summary>
-        /// Read the DB password as a char[]. Caller MUST wipe the returned array.
+        /// Store the DB password in the SecureEncryptedDataStore (as char[]).
+        /// Callers should pass in a freshly created char[] and NOT reuse it.
+        /// This method wipes the provided array after storing.
+        /// </summary>
+        public static void StoreDatabasePassword(char[] password)
+        {
+            if (password == null || password.Length == 0)
+                throw new ArgumentException("Password must not be empty.", nameof(password));
+
+            // Store and wipe the provided char[] inside the datastore
+            SecureEncryptedDataStore.SetAndWipe(DbPasswordKey, password);
+        }
+
+
+        /// <summary>
+        /// Retrieve the DB password as a char[] from the SecureEncryptedDataStore.
+        /// Caller MUST wipe the returned array when done.
         /// </summary>
         public static char[] ReadDatabasePassword()
         {
-            // Pull directly as char[] from the datastore; caller wipes it.
             return SecureEncryptedDataStore.GetChars(DbPasswordKey);
         }
 
         /// <summary>
         /// Execute an action that needs the password as a string.
-        /// Converts to string just-in-time; wipes the char[] afterward.
+        /// Creates a string just-in-time and wipes both the string and the char[] afterward.
         /// </summary>
         public static void WithDatabasePasswordString(Action<string> use)
         {
             if (use == null) throw new ArgumentNullException(nameof(use));
 
-            char[] pwd = null;
-            string pwStr = null;
-
+            char[] pwChars = null;
+            string pwString = null;
             try
             {
-                pwd = ReadDatabasePassword();
-                if (pwd == null || pwd.Length == 0)
-                    throw new InvalidOperationException("Database password is missing or empty.");
+                pwChars = ReadDatabasePassword();
+                if (pwChars == null || pwChars.Length == 0)
+                    throw new InvalidOperationException("Database password not loaded.");
 
-                pwStr = new string(pwd);
-                use(pwStr);
+                pwString = new string(pwChars);
+                use(pwString);
             }
             finally
             {
-                // Can't deterministically wipe strings, but call your helper if you implemented one
-                SensitiveDataCleaner.WipeString(ref pwStr);
-                SensitiveDataCleaner.WipeCharArray(ref pwd);
+                if (pwString != null) SensitiveDataCleaner.WipeString(ref pwString);
+                if (pwChars != null) SensitiveDataCleaner.WipeCharArray(pwChars);
             }
         }
 
         /// <summary>
-        /// Open (or create) the app DB using the stored password. Wipes transients.
+        /// Open an application DB connection (read/write/create) using the stored password.
+        /// Returns an OPEN SqliteConnection. Caller is responsible for disposing it.
         /// </summary>
         public static SqliteConnection GetAppOpenConnection()
         {
-            string dbPath = GetAppDbPath();
-            var dir = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
-
+            var dbPath = GetAppDbPath();
             SqliteConnection conn = null;
 
             WithDatabasePasswordString(pw =>
@@ -97,14 +99,22 @@ namespace Utilities.Helpers
                 {
                     DataSource = dbPath,
                     Mode = SqliteOpenMode.ReadWriteCreate,
+                    // NOTE: This relies on a build of Microsoft.Data.Sqlite that supports encryption.
+                    // If you’re using SQLCipher, ensure the native bits are present.
                     Password = pw
                 };
 
                 conn = new SqliteConnection(csb.ToString());
                 conn.Open();
+
+                // Centralized PRAGMAs (if you have them) could go here.
+                // using var cmd = conn.CreateCommand();
+                // cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
+                // cmd.ExecuteNonQuery();
             });
 
             return conn;
         }
+
     }
 }

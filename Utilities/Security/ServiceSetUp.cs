@@ -16,6 +16,7 @@ namespace Utilities.Security
         private const string Key_DbPwPath = "DB_Password_Path";
         private const string Key_DbConnNoPw = "DB_String";
 
+        // NOTE: ensure this path is valid on the target machine
         private static readonly string sevenZipLibraryPath = @"C:\Users\pgmrd\My Drive\MWPV\MWPV\7z.dll";
 
         public string SetUpDataBase()
@@ -42,7 +43,7 @@ namespace Utilities.Security
             try
             {
                 var schemaPath = Path.Combine(strMWPV_Folder, "sql", "MWPV_DB_Create.sql");
-                strDB_Create = File.ReadAllText(schemaPath);
+                strDB_Create = File.ReadAllText(schemaPath, Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -59,12 +60,13 @@ namespace Utilities.Security
                     cmd.ExecuteNonQuery();
                 }
 
-                string tempPasswordPath = Path.Combine(Path.GetTempPath(), "DB_Password.txt");
+                // Temp location for the DB password under the canonical filename
+                string tempPasswordPath = Path.Combine(Path.GetTempPath(), DatabaseHelper.DbPasswordKey);
                 try
                 {
                     DatabaseHelper.WithDatabasePasswordString(pw =>
                     {
-                        File.WriteAllText(tempPasswordPath, pw);
+                        File.WriteAllText(tempPasswordPath, pw, Encoding.UTF8);
                         SecureEncryptedDataStore.SetString(Key_DbPwPath, tempPasswordPath);
                     });
                 }
@@ -123,18 +125,29 @@ namespace Utilities.Security
                 SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
 
                 string[] files = Directory.GetFiles(strDirectoryToCompress, "*.*", SearchOption.TopDirectoryOnly);
+
+
                 if (files.Length == 0)
                     return "No files found to compress.";
 
+                // Copy the temp DB password into the sql folder under the canonical filename before zipping
                 string strtmppwfile = SecureEncryptedDataStore.GetString(Key_DbPwPath);
                 if (!string.IsNullOrWhiteSpace(strtmppwfile) && File.Exists(strtmppwfile))
                 {
-                    File.Copy(strtmppwfile, Path.Combine(strDirectoryToCompress, "DB_Password.txt"), true);
+                    File.Copy(strtmppwfile, Path.Combine(strDirectoryToCompress, DatabaseHelper.DbPasswordKey), true);
                     SensitiveDataCleaner.SecureFileDelete(strtmppwfile);
                 }
-
-                if (File.Exists(strKeyFilePath))
-                    File.Delete(strKeyFilePath);
+        
+                if (!string.IsNullOrWhiteSpace(strKeyFilePath) && File.Exists(strKeyFilePath))
+                {
+                    // Best effort secure delete (1 pass, shred name, final zero pass)
+                    SensitiveDataCleaner.SecureFileDelete(
+                        strKeyFilePath,
+                        overwritePasses: 1,
+                        shredName: true,
+                        finalZeroPass: true
+                    );
+                }
 
                 var compressor = new SevenZipCompressor
                 {
@@ -183,6 +196,7 @@ namespace Utilities.Security
             catch (SevenZipException)
             {
                 // Wrong password or corrupt archive
+
                 return false;
             }
             catch (ArgumentException)
@@ -200,7 +214,6 @@ namespace Utilities.Security
                 SensitiveDataCleaner.WipeSensitiveStrings(ref password, ref archivePath);
             }
         }
-
 
         public static string LoadSqlFromEncryptedArchive(string strFile)
         {
@@ -239,11 +252,14 @@ namespace Utilities.Security
                 memStream.Position = 0;
 
                 using var reader = new StreamReader(memStream, Encoding.UTF8);
+
+
                 string strContents = reader.ReadToEnd();
 
                 try
                 {
-                    if (string.Equals(Path.GetFileName(entry.FileName), "DB_Password.txt", StringComparison.OrdinalIgnoreCase))
+                    // SPECIAL-CASE: password file — use the shared constant
+                    if (string.Equals(Path.GetFileName(entry.FileName), DatabaseHelper.DbPasswordKey, StringComparison.OrdinalIgnoreCase))
                     {
                         DatabaseHelper.StoreDatabasePassword(strContents.ToCharArray());
                         return "worked";
@@ -258,9 +274,10 @@ namespace Utilities.Security
                     SensitiveDataCleaner.WipeString(ref strKeyPW);
                 }
             }
-            catch (SevenZipException)
+            catch (SevenZipException ex)
             {
                 // Wrong password or invalid file → handled same as UI
+                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, ex.Message);
                 return "error";
             }
             catch (Exception ex)

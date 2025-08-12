@@ -1,0 +1,38 @@
+INSERT INTO Logs
+(
+  CreatedUtc,
+  Level,
+  Source,
+  EventCode,
+  CorrelationId,
+  SessionId,
+  MachineId,
+  AppVersion,
+  IsCrash,
+  Payload,
+  PayloadFmt,
+  PayloadVer,
+  KeySetVersion,
+  StackHash,
+  Reserved1,
+  Reserved2
+)
+VALUES
+(
+  @CreatedUtc,                -- INTEGER unix time (e.g., ToUnixTimeSeconds)
+  @Level,                     -- TRACE|DEBUG|INFO|WARN|ERROR|FATAL
+  @Source,
+  @EventCode,
+  @CorrelationId,
+  @SessionId,
+  @MachineId,
+  COALESCE(@AppVersion, '0.0.0'),
+  COALESCE(@IsCrash, 0),
+  @Payload,                   -- encrypted bytes
+  COALESCE(@PayloadFmt, 'json+aesgcm'),
+  COALESCE(@PayloadVer, 1),
+  COALESCE(@KeySetVersion, 1),
+  @StackHash,
+  @Reserved1,
+  @Reserved2
+);

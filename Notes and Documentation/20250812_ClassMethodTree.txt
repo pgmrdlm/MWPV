@@ -1,0 +1,208 @@
+Class → Methods Breakdown
+Generated: 2025-08-12 01:34:41
+Source archive: MWPV.zip
+Note: This is a best-effort static regex parse; signatures may be simplified.
+
+namespace <global>
+  public class Catagories
+    (no methods found)
+  static class LogHelpers
+    - static string MapLevelName(string levelName)
+    - static long NowUnixSeconds()
+
+namespace MWPV
+  partial class App : System.Windows.Application
+    - override void OnExit(ExitEventArgs e)
+    - override void OnStartup(StartupEventArgs e)
+  partial class MainWindow : Window
+    - public MainWindow()
+    - public MainWindow()
+    - private void OpenCategoryEntry_Click(object sender, RoutedEventArgs e)
+  internal class SelectCatagories
+    - internal SelectCatagories()
+    - internal SelectCatagories()
+
+namespace MWPV.Converters
+  public class StringNullOrEmptyToVisibilityConverter : IValueConverter
+    - public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    - public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+
+namespace MWPV.Services
+  static class CategoryService
+    - static bool DoesCatagoryExist(string categoryName)
+    - static void InsertCategory(string newCategory)
+    - static ObservableCollection<Catagories> LoadCatagories()
+  static class CryptoLogCodec
+    - static byte[] Decrypt(byte[] blob)
+    - static byte[] Encrypt(byte[] plaintext)
+  sealed class LogRepository
+    - static byte[] Decrypt(byte[] blob)
+    - static byte[] DeriveKey32()
+    - static byte[] Encrypt(byte[] plaintext)
+    - static string? GetMachineGuid()
+    - static string GetStableMachineId()
+    - static string? GetSystemDriveSerial_PInvoke()
+    - async System.Threading.Tasks.Task<long> LogAsync(LogLevel level, string source, string eventCode, object payloadObject, bool isCrash = false, string? sessionId = null, string? stackHash = null, string? correlationId = null, int payloadVer = 1, int keySetVersion = 1)
+    - public LogRepository(Func<SqliteConnection> openConnection, string appVersion)
+    - public LogRepository(Func<SqliteConnection> openConnection, string appVersion)
+    - public LogRepository(string connectionString, string appVersion)
+    - public LogRepository(string connectionString, string appVersion)
+    - static string MapLevel(LogLevel level)
+    - static long NowUnixSeconds()
+    - private SqliteConnection Open()
+  static class MachineKeyProvider
+    - static byte[] DeriveKey32()
+    - static string? GetMachineGuid()
+    - static string GetStableMachineId()
+    - static string? GetSystemDriveSerial_PInvoke()
+
+namespace MWPV.View.UserControls
+  partial class CategoryGrid : System.Windows.Controls.UserControl
+    - private void Button1_Click(object sender, RoutedEventArgs e)
+    - private void Button2_Click(object sender, RoutedEventArgs e)
+    - private void Button3_Click(object sender, RoutedEventArgs e)
+    - public CategoryGrid()
+    - public CategoryGrid()
+    - public void RefreshCategoryGrid()
+  partial class MenuBar : System.Windows.Controls.UserControl
+    - public MenuBar()
+    - public MenuBar()
+  partial class Panel : System.Windows.Controls.UserControl
+    - private void CategoryGrid_CategoryItemClicked(object sender, EventArgs e)
+    - public Panel()
+    - public Panel()
+    - public void RefreshCategoryGrid()
+    - private void btnAddCategory_Click(object sender, RoutedEventArgs e)
+  public class StringNullOrEmptyToVisibilityConverter : IValueConverter
+    - public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    - public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+
+namespace Utilities.Helpers
+  static class DatabaseHelper
+    - static string GetAppDbPath()
+    - static SqliteConnection GetAppOpenConnection()
+    - static string GetSqlFolderPath()
+    - static char[] ReadDatabasePassword()
+    - static void StoreDatabasePassword(char[] password)
+    - static void WithDatabasePasswordString(Action<string> use)
+  static class ErrorHandler
+    - static ErrorResult Abend(Exception ex, string contextMessage = "A critical error has occurred", string stage = "unspecified", ErrorSeverity severity = ErrorSeverity.Error, WpfButtons buttons = WpfButtons.OK, WpfImage icon = WpfImage.Stop, bool log = true, [CallerMemberName] string member = "", [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    - static void Configure(LogRepository logs, Func<string>? sessionIdProvider = null, string? appVersion = null)
+    - static WpfImage IconFor(ErrorSeverity severity)
+    - static void Info(string message, string stage = "unspecified", [CallerMemberName] string member = "", [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    - static LogLevel MapLevel(ErrorSeverity s)
+    - static string? Redact(string? s)
+    - static void RegisterGlobalHandlers(System.Windows.Application app)
+    - static string SafeFileName(string path)
+    - static string ShortHash(string s)
+    - static bool Try(Action action, string contextMessage = "Operation failed", string stage = "unspecified", ErrorSeverity severity = ErrorSeverity.Error, bool rethrow = false, [CallerMemberName] string member = "", [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+  struct ErrorResult
+    (no methods found)
+
+namespace Utilities.Helpers.Debug
+  static class DebugCommands
+    (no methods found)
+
+namespace Utilities.Security
+  partial class CreateKeyFileAndPassword : Window
+    - public CreateKeyFileAndPassword()
+    - public CreateKeyFileAndPassword()
+  sealed class EarlyFail
+    (no methods found)
+  partial class EarlyLoginFailures
+    - static string EnsureDir()
+    - static bool FlushToDb(Func<DateTime, EarlyFailType, string, bool> writeDbLog, Func<string, bool> secureFileDelete = null)
+    - static bool HasPending()
+    - static int PendingCount()
+    - static void Record(EarlyFailType type, string detail = null)
+    - static void Record(string type, string detail)
+    - static string ResolveDir()
+    - static void TrySecureDeleteWithFallbacks(string file, Func<string, bool> secureFileDelete, string quarantineDir)
+  sealed class SecureDeleteResult
+    (no methods found)
+  static class SecureEncryptedDataStore
+    - static void Clear(string key)
+    - static void ClearAll()
+    - static byte[] DecryptWithEmbeddedIv(byte[] combined)
+    - static byte[] EncryptWithRandomIv(byte[] plain)
+    - static byte[] GetBytes(string key)
+    - static char[] GetChars(string key)
+    - static string GetString(string key)
+    - static bool HasKey(string key)
+    - static IEnumerable<string> Keys()
+    - static SecureEncryptedDataStore()
+    - static SecureEncryptedDataStore()
+    - static void Set(string key, byte[] plainBytes)
+    - static void SetAndWipe(string key, char[] plainChars)
+    - static void SetBytesInternal(string key, byte[] plainBytes)
+    - static void SetNoWipe(string key, char[] plainChars)
+    - static void SetString(string key, string value)
+    - static void WipeByteArray(byte[] data)
+  static class SecureLogService
+    - static string ComputeMachineIdHash()
+    - static byte[] DeriveKey32()
+    - static byte[] EncryptPayload(ReadOnlySpan<byte> plaintext)
+    - static string? GetSystemDriveSerial()
+    - static void Initialize(Func<SqliteConnection> openAppConnection, string? appVersion = null, string? defaultSource = null)
+    - static string Sha256Hex(string s)
+    - async Task<bool> WriteAsync(LogLevel level, object? payload = null, string? eventCode = null, string? source = null, Exception? ex = null, bool isCrash = false, CancellationToken ct = default)
+  static class SecurePassword
+    - static void Generate(ref char[] target, int length)
+    - static string GenerateAsString(int length)
+    - static bool IsPasswordValid(string password, string verifyPassword, out string errorMessage)
+  static class SensitiveDataCleaner
+    - static void Clear(System.Windows.Controls.PasswordBox pb)
+    - static void Clear(System.Windows.Controls.TextBox tb)
+    - static bool DeleteWithRetry(string filePath)
+    - static string GetRandomFileNameLike(string originalPath)
+    - static SecureDeleteResult QuarantineThenSecureDelete(string srcPath, string quarantineDir, int overwritePasses = 1, int maxRetries = 5)
+    - static void RandomRenameSafe(string filePath)
+    - static string RandomizedAscii(int len)
+    - static void ScrubTimestampsSafe(string filePath)
+    - static void SecureDeleteAllFiles(string folderPath, int overwritePasses = 1, bool recursive = false, bool shredNames = true, bool finalZeroPass = false)
+    - static void SecureDeleteDirectory(string folderPath, int overwritePasses = 1, bool shredNames = true, bool finalZeroPass = false, bool removeDirectories = true)
+    - static bool SecureFileDelete(string filePath, int overwritePasses = 1, bool shredName = true, bool finalZeroPass = false)
+    - static SecureDeleteResult SecureFileDeleteDiagnose(string path, int overwritePasses = 1, int maxRetries = 5)
+    - static void TryDeleteDirectory(string dir)
+    - static void TryNormalizeAttributes(string filePath)
+    - static void TryNormalizeDirectoryAttributes(string dir)
+    - static void WipeAndClear(IDictionary<string, char[]> dict)
+    - static void WipeAndClear(IList<char[]> arrays)
+    - static void WipeByteArray(byte[] data)
+    - static void WipeByteArray(ref byte[] data)
+    - static void WipeCharArray(char[] data)
+    - static void WipeCharArray(ref char[] data)
+    - static void WipeSecureString(SecureString secure)
+    - static void WipeSensitiveStrings(ref string password, ref string archivePath)
+    - static void WipeString(ref string data)
+    - static void WipeStringBuilder(StringBuilder sb)
+  internal class ServiceSetUp
+    - static string LoadSqlFromEncryptedArchive(string strFile)
+    - public string SetUpDataBase()
+    - public string SetUpKeyFile()
+    - static bool VerifyKeyFilePW(string archivePath, string password)
+  partial class SetupPasswordAndKeyFile : Window
+    - public SetupPasswordAndKeyFile()
+    - public SetupPasswordAndKeyFile()
+    - private bool ValidateFirstRunInputs(string password, string verifyPassword, out string error)
+    - private void btnCancel_Click(object sender, RoutedEventArgs e)
+    - private void btnCreateKeyFile_Click(object sender, RoutedEventArgs e)
+    - private void btnSubmit_Click(object sender, RoutedEventArgs e)
+
+namespace Utilities.Services
+  static class ExportService
+    - async Task CopyFileWithRetryAsync(string src, string dest, bool overwrite, CancellationToken ct)
+    - async Task<bool> ExportEncryptedDbAsync(string dbPath, Func<SqliteConnection> openAppConnection, string? defaultFileName = "MWPV_EncryptedBackup.db", CancellationToken ct = default)
+    - async Task<bool> ExportKeyArchiveAsync(string keyArchivePath, CancellationToken ct = default)
+  static class FullSqlExportService
+    - static string CoerceLogsPayloadToText(string createSql)
+    - static byte[] DeriveKey32()
+    - async Task DumpTableAsync(SqliteConnection cn, string table, global::System.IO.StreamWriter sw, bool decryptLogsPayload, CancellationToken ct)
+    - async Task<bool> ExportFullDbAsSqlAsync(Func<SqliteConnection> openAppConnection, bool decryptLogsPayload = true, CancellationToken ct = default)
+    - async Task<string> GetCreateTableSqlAsync(SqliteConnection cn, string table, CancellationToken ct)
+    - static string? GetSystemDriveSerial()
+    - async Task<List<string>> GetUserTablesAsync(SqliteConnection cn, CancellationToken ct)
+    - static string QuoteIdent(string name)
+    - static string SqlText(string s)
+    - static string ToSqlLiteral(object val)
+    - static string TryDecryptToJson(byte[] blob)

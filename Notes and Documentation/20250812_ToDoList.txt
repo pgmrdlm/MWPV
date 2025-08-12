@@ -1,20 +1,44 @@
-TODO LIST - 20250811
---------------------------
-1. Memory Tracking & Shutdown Cleanup (planning doc)
-   - Design centralized memory tracker to register all sensitive variables.
-   - Categorize entries (SessionBound, TempOnly).
-   - Plan wipe sequence for normal shutdown.
-   - Plan wipe sequence for abnormal shutdown.
-   - Include how to integrate with existing SecureEncryptedDataStore.
+TODO LIST – 2025-08-12
+---------------------------------
 
-2. Add Category UI redesign
-   - Remove extra window.
-   - Inline category creation in main panel.
-   - Maintain validation and duplicate checking.
-   - Ensure data refresh logic stays unified with Panel/CategoryGrid changes.
+1) Keys first (prerequisite for everything)  — TODO
+   [ ] Create-if-missing for LogPayloadKey + UserSecretsKey.
+   [ ] Load into SecureEncryptedDataStore; wipe temp buffers.
+   [ ] Surface KeySetVersion for tagging log rows.
 
-3. Review Main Password Entry/Creation UI
-   - Assess current layout and styling.
-   - Identify 'butt ugly' areas — fix spacing, alignment, visual hierarchy.
-   - Ensure secure password entry (no plaintext leaks).
-   - Make it visually consistent with new Add Category UI.
+2) Early-log ingestion pipeline  — PARTIAL
+   [ ] Switch ingest encryption to LogPayloadKey (currently DPAPI CurrentUser).
+   [ ] Define parameterized .elog format (+ version tag).
+   [ ] Batch ingest: single transaction (~200 entries max).
+   [ ] Dedupe: prefer LogGuid; else content hash.
+   [x] Quarantine on failure + WARN log row (EARLY_ELOG_DELETE_FAILED).
+   [ ] Final secure-delete sweep of %LOCALAPPDATA%\MWPV\early after PendingCount()==0.
+
+3) Robust delete & edge cases  — PARTIAL
+   [x] Keep FlushToDb delete but route via QuarantineThenSecureDelete.
+   [ ] Add final folder sweep as a backstop.
+   [ ] DPAPI Unprotect retry logic (up to 3 tries); quarantine if still failing.
+   [x] Debug breadcrumbs for delete attempts; silence in Release.
+   [ ] (Optional) Delete-on-reboot fallback (MoveFileEx).
+
+4) Kill the double-emit  — TODO
+   [ ] Two log entries for bad password (SetupPasswordAndKeyFile + VerifyKeyFilePW).
+   [ ] Keep only one canonical emitter; skip if already early-logged for same LogGuid.
+
+5) Post-login DB logging changes  — TODO
+   [ ] Use LogPayloadKey for all new log payloads.
+   [ ] Add PayloadVer / KeySetVersion tagging.
+   [ ] Maintain read access for older machine-bound entries.
+
+6) UX accuracy  — PARTIAL
+   [x] Replace popup with quiet, log-only notice (EARLY_LOGIN_FAILURES_PENDING).
+   [ ] Popup/log text reflects ingestion result: success / partial / failure, with counts (debug-only is fine).
+
+Acceptance Checks
+-----------------
+   [ ] Two bad logins → exactly one early-log per attempt.
+   [~] Good login → batch ingest, dedupe, early folder ends empty.  (Folder empty ✅; batch/dedupe pending)
+   [ ] New DB log rows have PayloadVer & KeySetVersion.
+   [x] Old log rows still readable.
+   [ ] DPAPI throw in Debug → no pause; file quarantined and WARN logged.
+   [ ] ~200 .elog files → single transaction observed; performance acceptable.

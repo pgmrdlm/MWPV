@@ -16,6 +16,8 @@ namespace Utilities.Security
 
     public static class SecureLogService
     {
+        private const string SqlInsertKey = "Logs_Insert_V2.sql";
+
         private static Func<SqliteConnection>? _openAppConnection;
         private static string _appVersion = "0.0.0";
         private static string _defaultSource = "MWPV";
@@ -67,32 +69,46 @@ namespace Utilities.Security
                 byte[] plain = Encoding.UTF8.GetBytes(json);
                 byte[] encBlob = EncryptPayload(plain);
 
-                string levelText = level.ToString().ToUpperInvariant();
+                // Normalize inputs
+                string levelText = level.ToString().ToUpperInvariant(); // DEBUG|INFO|WARN|ERROR|FATAL
                 string src = string.IsNullOrWhiteSpace(source) ? _defaultSource : source!;
                 string machId = ComputeMachineIdHash();
                 string stackHash = ex?.StackTrace is string st ? Sha256Hex(st) : "";
 
+                // Load the insert template from the encrypted store
+                string sql = SecureEncryptedDataStore.GetString(SqlInsertKey);
+                if (string.IsNullOrWhiteSpace(sql))
+                    return false; // template missing → skip quietly
+
                 using var cn = _openAppConnection();
                 using var cmd = cn.CreateCommand();
-                cmd.CommandText = @"
-INSERT INTO ""Logs""
-(""CreatedUtc"", ""Level"", ""Source"", ""EventCode"", ""SessionId"", ""MachineId"",
- ""AppVersion"", ""IsCrash"", ""Payload"", ""PayloadFmt"", ""StackHash"")
-VALUES ($ts, $lv, $src, $evt, $sid, $mid, $ver, $cr, $pld, $fmt, $sh);";
+                cmd.CommandText = sql;
 
-                cmd.Parameters.AddWithValue("$ts", DateTime.UtcNow.ToString("o"));
-                cmd.Parameters.AddWithValue("$lv", levelText);
-                cmd.Parameters.AddWithValue("$src", src);
-                cmd.Parameters.AddWithValue("$evt", eventCode ?? "");
-                cmd.Parameters.AddWithValue("$sid", _sessionId);
-                cmd.Parameters.AddWithValue("$mid", machId);
-                cmd.Parameters.AddWithValue("$ver", _appVersion);
-                cmd.Parameters.AddWithValue("$cr", isCrash ? 1 : 0);
-                cmd.Parameters.Add("$pld", SqliteType.Blob).Value = encBlob;   // ensure BLOB storage
-                cmd.Parameters.AddWithValue("$fmt", "json+aesgcm");
-                cmd.Parameters.AddWithValue("$sh", stackHash);
+                // Bind parameters expected by Logs_Insert_V2.sql
+                cmd.Parameters.AddWithValue("@CreatedUtc", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                cmd.Parameters.AddWithValue("@Level", levelText);
+                cmd.Parameters.AddWithValue("@Source", (object?)src ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@EventCode", (object?)eventCode ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@CorrelationId", DBNull.Value); // not used here yet
+                cmd.Parameters.AddWithValue("@SessionId", _sessionId);
+                cmd.Parameters.AddWithValue("@MachineId", machId);
+                cmd.Parameters.AddWithValue("@AppVersion", _appVersion);
+                cmd.Parameters.AddWithValue("@IsCrash", isCrash ? 1 : 0);
 
-                _ = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                var p = cmd.CreateParameter();
+                p.ParameterName = "@Payload";
+                p.SqliteType = SqliteType.Blob;
+                p.Value = encBlob;
+                cmd.Parameters.Add(p);
+
+                cmd.Parameters.AddWithValue("@PayloadFmt", "json+aesgcm");
+                cmd.Parameters.AddWithValue("@PayloadVer", 1);
+                cmd.Parameters.AddWithValue("@KeySetVersion", 1);
+                cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@Reserved1", DBNull.Value);
+                cmd.Parameters.AddWithValue("@Reserved2", DBNull.Value);
+
+                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 return true;
             }
             catch
