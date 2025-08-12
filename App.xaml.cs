@@ -78,7 +78,7 @@ namespace MWPV
                     ErrorHandler.RegisterGlobalHandlers(this);
 
                     // Smoke test so you can confirm logging without forcing an error
-                    ErrorHandler.Info($"Logging online (v{appVersion})", stage: "startup");
+                    // ErrorHandler.Info($"Logging online (v{appVersion})", stage: "startup");
 
                     // (Optional) sweep stray unpacked SQL files on startup
                     try

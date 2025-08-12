@@ -172,6 +172,9 @@ namespace Utilities.Security
             SensitiveDataCleaner.WipeString(ref verifyPassword);
             SensitiveDataCleaner.WipeString(ref fullPath);
 
+            // ✅ Load keys for this session (archive already verified/unlocked)
+            ServiceSetUp.EnsureKeySetFromArchive();
+
             // 📦 Load additional SQL logic from key archive
             string[] strSqlite =
             {
@@ -181,6 +184,10 @@ namespace Utilities.Security
                 "SelectCatagories.sql",
                 "Logs_Insert_V2.sql"
             };
+
+            // ✅ Load keys for this session (archive already verified/unlocked)
+            ServiceSetUp.EnsureKeySetFromArchive();
+
             for (int i = 0; i < strSqlite.Length; i++)
             {
                 ServiceSetUp.LoadSqlFromEncryptedArchive(strSqlite[i]);
@@ -189,6 +196,8 @@ namespace Utilities.Security
             // Success: keyfile password verified and DB connection is open
             if (EarlyLoginFailures.HasPending())
             {
+                // NOTE: Intentionally shows even for same-session failures
+                // to inform hostile actors they have been logged.
                 ErrorHandler.Info("Previous login failures were detected and will be logged.", "Login Notice");
 
                 EarlyLoginFailures.FlushToDb(
