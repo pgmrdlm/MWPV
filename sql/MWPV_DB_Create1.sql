@@ -1,5 +1,5 @@
 --
--- File generated with SQLiteStudio v3.4.4 on Mon Aug 11 09:41:56 2025
+-- File generated with SQLiteStudio v3.4.4 on Tue Aug 12 13:27:22 2025
 --
 -- Text encoding used: System
 --
@@ -265,7 +265,7 @@ CREATE TABLE Logs (
     AppVersion    TEXT,
     IsCrash       INTEGER NOT NULL
                           DEFAULT 0,
-    Payload       BLOB    NOT NULL,
+    Payload       TEXT    NOT NULL,
     PayloadFmt    TEXT    NOT NULL
                           DEFAULT 'json+aesgcm',
     PayloadVer    INTEGER NOT NULL
@@ -277,19 +277,707 @@ CREATE TABLE Logs (
     Reserved2     TEXT
 );
 
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     1,
+                     1755014744,
+                     'INFO',
+                     'post-login',
+                     'EARLY_LOGIN_FAILURES_PENDING',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"pending":3,"dir":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
 
--- Index: idx_pin_history_itemid_createdat_desc
-CREATE INDEX idx_pin_history_itemid_createdat_desc ON CatagoryItemPinHistory (
-    ItemId,
-    CreatedAt DESC
-);
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     2,
+                     1755014744,
+                     'INFO',
+                     'SetupPasswordAndKeyFile',
+                     'EARLY_LOGIN_FAILURE',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"earlyFail":"KeyfileMissingOrCorrupt","detail":"InvalidPasswordOrKeyFile: Invalid key-file password or wrong key file. Path=\u0027C:\\Users\\pgmrd\\Desktop\\Key.7z\u0027","occurredUtc":"2025-08-12T16:03:46.5071358Z"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
 
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     3,
+                     1755014744,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETE_ATTEMPT',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160346523-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
 
--- Index: idx_pw_history_itemid_createdat_desc
-CREATE INDEX idx_pw_history_itemid_createdat_desc ON CatagoryItemPasswordHistory (
-    ItemId,
-    CreatedAt DESC
-);
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     4,
+                     1755014744,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETED',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160346523-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     5,
+                     1755014744,
+                     'INFO',
+                     'SetupPasswordAndKeyFile',
+                     'EARLY_LOGIN_FAILURE',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"earlyFail":"KeyfileMissingOrCorrupt","detail":"InvalidPasswordOrKeyFile: Invalid key-file password or wrong key file. Path=\u0027C:\\Users\\pgmrd\\Desktop\\Key.7z\u0027","occurredUtc":"2025-08-12T16:03:52.2639318Z"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     6,
+                     1755014744,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETE_ATTEMPT',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160352264-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     7,
+                     1755014744,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETED',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160352264-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     8,
+                     1755014744,
+                     'INFO',
+                     'SetupPasswordAndKeyFile',
+                     'EARLY_LOGIN_FAILURE',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"earlyFail":"KeyfileMissingOrCorrupt","detail":"InvalidPasswordOrKeyFile: Invalid key-file password or wrong key file. Path=\u0027C:\\Users\\pgmrd\\Desktop\\Key.7z\u0027","occurredUtc":"2025-08-12T16:03:54.0423398Z"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     9,
+                     1755014744,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETE_ATTEMPT',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160354042-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     10,
+                     1755014745,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETED',
+                     NULL,
+                     '4e9db57bd37940a6a0a4997026205d98',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"path":"C:\\Users\\pgmrd\\AppData\\Local\\MWPV\\early\\20250812160354042-KeyfileMissingOrCorrupt.elog"}',
+                     'json+aesgcm',
+                     1,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     11,
+                     1755017624,
+                     'INFO',
+                     'post-login',
+                     'EARLY_LOGIN_FAILURES_PENDING',
+                     NULL,
+                     'bebbfd30c1234f17b3c3bdc010179d4e',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     12,
+                     1755017624,
+                     'INFO',
+                     'SetupPasswordAndKeyFile',
+                     'EARLY_LOGIN_FAILURE',
+                     NULL,
+                     'bebbfd30c1234f17b3c3bdc010179d4e',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     13,
+                     1755017624,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETE_ATTEMPT',
+                     NULL,
+                     'bebbfd30c1234f17b3c3bdc010179d4e',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     14,
+                     1755017624,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETED',
+                     NULL,
+                     'bebbfd30c1234f17b3c3bdc010179d4e',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     15,
+                     1755018126,
+                     'INFO',
+                     'post-login',
+                     'EARLY_LOGIN_FAILURES_PENDING',
+                     NULL,
+                     'ffbfb37e3220444b960b8e3e08e72568',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     16,
+                     1755018126,
+                     'INFO',
+                     'SetupPasswordAndKeyFile',
+                     'EARLY_LOGIN_FAILURE',
+                     NULL,
+                     'ffbfb37e3220444b960b8e3e08e72568',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     17,
+                     1755018126,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETE_ATTEMPT',
+                     NULL,
+                     'ffbfb37e3220444b960b8e3e08e72568',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
+
+INSERT INTO Logs (
+                     Id,
+                     CreatedUtc,
+                     Level,
+                     Source,
+                     EventCode,
+                     CorrelationId,
+                     SessionId,
+                     MachineId,
+                     AppVersion,
+                     IsCrash,
+                     Payload,
+                     PayloadFmt,
+                     PayloadVer,
+                     KeySetVersion,
+                     StackHash,
+                     Reserved1,
+                     Reserved2
+                 )
+                 VALUES (
+                     18,
+                     1755018126,
+                     'INFO',
+                     'EarlyLoginIngest',
+                     'EARLY_ELOG_DELETED',
+                     NULL,
+                     'ffbfb37e3220444b960b8e3e08e72568',
+                     'f519b045de8ff1f411f7522cc3617ef2aae017c28dc9f3fee6dd3a2c180194c2',
+                     '1.0.0.0',
+                     0,
+                     '{"decryptError":true}',
+                     'json+aesgcm',
+                     2,
+                     1,
+                     '',
+                     NULL,
+                     NULL
+                 );
 
 
 -- View: vw_CurrentPassword

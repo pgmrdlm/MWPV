@@ -1,12 +1,12 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.Win32;
 using System;
-using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,20 +14,41 @@ namespace Utilities.Security
 {
     public enum LogLevel { Debug, Info, Warn, Error, Fatal }
 
+    /// <summary>
+    /// Secure, parameterized logging to the local encrypted SQLite database.
+    /// - Payloads are JSON encrypted with AES-GCM using provisioned LogPayloadKey.
+    /// - New rows are tagged with PayloadVer and KeySetVersion for forward compatibility.
+    /// - SQL templates (e.g., "Logs_Insert_V2.sql") are loaded from SecureEncryptedDataStore,
+    ///   with a generic version-aware resolver that picks the highest available "…_V#.sql" or falls back to "… .sql".
+    /// </summary>
     public static class SecureLogService
     {
-        private const string SqlInsertKey = "Logs_Insert_V2.sql";
+        /// <summary>
+        /// Logical (base) name for the insert template. The resolver will look for:
+        ///   - "Logs_Insert_V{n}.sql" (highest n wins), then
+        ///   - "Logs_Insert.sql"
+        /// </summary>
+        private const string InsertBaseName = "Logs_Insert";
+
+        /// <summary>
+        /// Bump when payload format or key policy changes.
+        /// </summary>
+        private const int PayloadVer = 2;
 
         private static Func<SqliteConnection>? _openAppConnection;
         private static string _appVersion = "0.0.0";
         private static string _defaultSource = "MWPV";
         private static string _sessionId = Guid.NewGuid().ToString("N");
+
         private static readonly JsonSerializerOptions _json = new()
         {
             WriteIndented = false,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
+        /// <summary>
+        /// Initialize the service. Call once after the database is ready.
+        /// </summary>
         public static void Initialize(Func<SqliteConnection> openAppConnection,
                                       string? appVersion = null,
                                       string? defaultSource = null)
@@ -40,6 +61,9 @@ namespace Utilities.Security
             _sessionId = Guid.NewGuid().ToString("N");
         }
 
+        /// <summary>
+        /// Write a log row. Never throws; returns false on failure.
+        /// </summary>
         public static async Task<bool> WriteAsync(
             LogLevel level,
             object? payload = null,
@@ -51,6 +75,7 @@ namespace Utilities.Security
         {
             if (_openAppConnection is null) return false;
 
+            byte[]? plain = null;
             try
             {
                 // Compose JSON payload (include exception details if provided)
@@ -65,8 +90,9 @@ namespace Utilities.Security
                             stack = ex.StackTrace
                         }
                     };
+
                 string json = body is null ? "{}" : JsonSerializer.Serialize(body, _json);
-                byte[] plain = Encoding.UTF8.GetBytes(json);
+                plain = Encoding.UTF8.GetBytes(json);
                 byte[] encBlob = EncryptPayload(plain);
 
                 // Normalize inputs
@@ -75,8 +101,8 @@ namespace Utilities.Security
                 string machId = ComputeMachineIdHash();
                 string stackHash = ex?.StackTrace is string st ? Sha256Hex(st) : "";
 
-                // Load the insert template from the encrypted store
-                string sql = SecureEncryptedDataStore.GetString(SqlInsertKey);
+                // Resolve the insert SQL from the secure store (version-aware)
+                string? sql = ResolveSqlTemplate(InsertBaseName);
                 if (string.IsNullOrWhiteSpace(sql))
                     return false; // template missing → skip quietly
 
@@ -84,12 +110,12 @@ namespace Utilities.Security
                 using var cmd = cn.CreateCommand();
                 cmd.CommandText = sql;
 
-                // Bind parameters expected by Logs_Insert_V2.sql
+                // Bind parameters expected by Logs_Insert_V*.sql
                 cmd.Parameters.AddWithValue("@CreatedUtc", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
                 cmd.Parameters.AddWithValue("@Level", levelText);
                 cmd.Parameters.AddWithValue("@Source", (object?)src ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@EventCode", (object?)eventCode ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@CorrelationId", DBNull.Value); // not used here yet
+                cmd.Parameters.AddWithValue("@CorrelationId", DBNull.Value); // not used yet
                 cmd.Parameters.AddWithValue("@SessionId", _sessionId);
                 cmd.Parameters.AddWithValue("@MachineId", machId);
                 cmd.Parameters.AddWithValue("@AppVersion", _appVersion);
@@ -102,8 +128,8 @@ namespace Utilities.Security
                 cmd.Parameters.Add(p);
 
                 cmd.Parameters.AddWithValue("@PayloadFmt", "json+aesgcm");
-                cmd.Parameters.AddWithValue("@PayloadVer", 1);
-                cmd.Parameters.AddWithValue("@KeySetVersion", 1);
+                cmd.Parameters.AddWithValue("@PayloadVer", PayloadVer);
+                cmd.Parameters.AddWithValue("@KeySetVersion", CurrentKeySetVersion());
                 cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@Reserved1", DBNull.Value);
                 cmd.Parameters.AddWithValue("@Reserved2", DBNull.Value);
@@ -116,27 +142,111 @@ namespace Utilities.Security
                 // Logging must never throw.
                 return false;
             }
+            finally
+            {
+                if (plain != null) SensitiveDataCleaner.WipeByteArray(plain);
+            }
+        }
+
+        // ---------- SQL template resolution ----------
+
+        /// <summary>
+        /// Resolve a SQL template by base name from SecureEncryptedDataStore.
+        /// Looks for "{base}.sql" and "{base}_V{n}.sql" (highest n wins), case-insensitive.
+        /// Returns null if nothing is found.
+        /// </summary>
+        public static string? ResolveSqlTemplate(string baseName)
+        {
+            if (string.IsNullOrWhiteSpace(baseName)) return null;
+
+            // Fast path: exact "{base}.sql"
+            string exact = baseName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
+                ? baseName
+                : baseName + ".sql";
+
+            var exactSql = SecureEncryptedDataStore.GetString(exact);
+            if (!string.IsNullOrWhiteSpace(exactSql))
+                return exactSql;
+
+            // Versioned scan: "{base}_V{n}.sql" → pick highest n
+            // Example: "Logs_Insert_V2.sql", "Logs_Insert_V3.sql"
+            var keys = SecureEncryptedDataStore.Keys();
+            if (keys is null) return null;
+
+            var rx = new Regex(
+                $"^{Regex.Escape(baseName)}_V(\\d+)\\.sql$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+            int bestVer = -1;
+            string? bestKey = null;
+
+            foreach (var key in keys)
+            {
+                if (key is null) continue;
+                var m = rx.Match(key);
+                if (!m.Success) continue;
+                if (int.TryParse(m.Groups[1].Value, out int ver) && ver > bestVer)
+                {
+                    bestVer = ver;
+                    bestKey = key;
+                }
+            }
+
+            return bestKey is null ? null : SecureEncryptedDataStore.GetString(bestKey);
         }
 
         // ---------- AES-GCM helpers ----------
+
+        /// <summary>
+        /// Encrypts the payload with AES-GCM using the provisioned LogPayloadKey.
+        /// Layout: IV(12) | CIPHERTEXT | TAG(16).
+        /// </summary>
         private static byte[] EncryptPayload(ReadOnlySpan<byte> plaintext)
         {
-            byte[] key = DeriveKey32();
-            byte[] iv = new byte[12];
+            byte[] key = GetLogKey();            // provisioned AES-256 key (or legacy fallback)
+            byte[] iv = new byte[12];           // 96-bit nonce
             RandomNumberGenerator.Fill(iv);
 
             byte[] ciphertext = new byte[plaintext.Length];
             byte[] tag = new byte[16];
 
-            using var aes = new AesGcm(key);
-            aes.Encrypt(iv, plaintext, ciphertext, tag);
+            using (var gcm = new AesGcm(key))
+            {
+                gcm.Encrypt(iv, plaintext, ciphertext, tag);
+            }
 
             byte[] blob = new byte[iv.Length + ciphertext.Length + tag.Length];
             Buffer.BlockCopy(iv, 0, blob, 0, iv.Length);
             Buffer.BlockCopy(ciphertext, 0, blob, iv.Length, ciphertext.Length);
             Buffer.BlockCopy(tag, 0, blob, iv.Length + ciphertext.Length, tag.Length);
+
+            Array.Clear(ciphertext, 0, ciphertext.Length);
+            Array.Clear(tag, 0, tag.Length);
             return blob;
         }
+
+        /// <summary>
+        /// Returns the current KeySetVersion from the secure store (defaults to 1).
+        /// </summary>
+        private static int CurrentKeySetVersion()
+        {
+            var s = SecureEncryptedDataStore.GetString("KeySetVersion");
+            return int.TryParse(s, out var v) && v > 0 ? v : 1;
+        }
+
+        /// <summary>
+        /// Gets the provisioned LogPayloadKey from the secure store; falls back to legacy machine-bound derivation.
+        /// </summary>
+        private static byte[] GetLogKey()
+        {
+            if (SecureEncryptedDataStore.HasKey("LogPayloadKey"))
+                return SecureEncryptedDataStore.GetBytes("LogPayloadKey");
+
+            // Legacy fallback so older installs still work (machine-bound)
+            return DeriveKey32();
+        }
+
+        // ---------- Legacy key material (fallback) ----------
 
         private static byte[] DeriveKey32()
         {

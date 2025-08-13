@@ -1,13 +1,13 @@
 TODO LIST – 2025-08-12
 ---------------------------------
 
-1) Keys first (prerequisite for everything)  — TODO
-   [ ] Create-if-missing for LogPayloadKey + UserSecretsKey.
-   [ ] Load into SecureEncryptedDataStore; wipe temp buffers.
-   [ ] Surface KeySetVersion for tagging log rows.
+1) Keys first (prerequisite for everything)  — DONE
+   [x] Create-if-missing for LogPayloadKey + UserSecretsKey.
+   [x] Load into SecureEncryptedDataStore; wipe temp buffers.
+   [x] Surface KeySetVersion for tagging log rows.
 
 2) Early-log ingestion pipeline  — PARTIAL
-   [ ] Switch ingest encryption to LogPayloadKey (currently DPAPI CurrentUser).
+   [x] Switch ingest encryption to LogPayloadKey (was DPAPI CurrentUser).
    [ ] Define parameterized .elog format (+ version tag).
    [ ] Batch ingest: single transaction (~200 entries max).
    [ ] Dedupe: prefer LogGuid; else content hash.
@@ -21,13 +21,14 @@ TODO LIST – 2025-08-12
    [x] Debug breadcrumbs for delete attempts; silence in Release.
    [ ] (Optional) Delete-on-reboot fallback (MoveFileEx).
 
-4) Kill the double-emit  — TODO
+4) Kill the double-emit  — CLOSED
+   [ ] No duplicate emits observed in tests; monitor only.
    [ ] Two log entries for bad password (SetupPasswordAndKeyFile + VerifyKeyFilePW).
    [ ] Keep only one canonical emitter; skip if already early-logged for same LogGuid.
 
 5) Post-login DB logging changes  — TODO
-   [ ] Use LogPayloadKey for all new log payloads.
-   [ ] Add PayloadVer / KeySetVersion tagging.
+   [x] Use LogPayloadKey for all new log payloads.
+   [x] Add PayloadVer / KeySetVersion tagging.
    [ ] Maintain read access for older machine-bound entries.
 
 6) UX accuracy  — PARTIAL
@@ -36,9 +37,9 @@ TODO LIST – 2025-08-12
 
 Acceptance Checks
 -----------------
-   [ ] Two bad logins → exactly one early-log per attempt.
+   [x] Two bad logins → exactly one early-log per attempt.
    [~] Good login → batch ingest, dedupe, early folder ends empty.  (Folder empty ✅; batch/dedupe pending)
-   [ ] New DB log rows have PayloadVer & KeySetVersion.
+   [x] New DB log rows have PayloadVer & KeySetVersion.
    [x] Old log rows still readable.
    [ ] DPAPI throw in Debug → no pause; file quarantined and WARN logged.
    [ ] ~200 .elog files → single transaction observed; performance acceptable.

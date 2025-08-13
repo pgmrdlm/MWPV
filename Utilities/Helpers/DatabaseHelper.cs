@@ -48,7 +48,6 @@ namespace Utilities.Helpers
             SecureEncryptedDataStore.SetAndWipe(DbPasswordKey, password);
         }
 
-
         /// <summary>
         /// Retrieve the DB password as a char[] from the SecureEncryptedDataStore.
         /// Caller MUST wipe the returned array when done.
@@ -107,7 +106,7 @@ namespace Utilities.Helpers
                 conn = new SqliteConnection(csb.ToString());
                 conn.Open();
 
-                // Centralized PRAGMAs (if you have them) could go here.
+                // Centralized PRAGMAs (optional):
                 // using var cmd = conn.CreateCommand();
                 // cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
                 // cmd.ExecuteNonQuery();
@@ -116,5 +115,9 @@ namespace Utilities.Helpers
             return conn;
         }
 
+        /// <summary>
+        /// Convenience alias so call sites can use DatabaseHelper.OpenConnection().
+        /// </summary>
+        public static SqliteConnection OpenConnection() => GetAppOpenConnection();
     }
 }

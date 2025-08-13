@@ -1,7 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Windows;
-using Utilities.Helpers;
+using Microsoft.Data.Sqlite;          // Microsoft provider (ok to keep even if not used directly here)
+using Utilities.Helpers;             // DatabaseHelper, ErrorHandler
+using Utilities.Sql;                 // SqlCatagory, SchemaBootstrap
+using Utilities.Security;            // SecureEncryptedDataCleaner, SecureEncryptedDataStore, etc.
 
 namespace Utilities.Security
 {
@@ -10,7 +13,7 @@ namespace Utilities.Security
         // 🔑 SecureEncryptedDataStore key names
         private const string Key_DBPassword = "DB_Password.txt"; // matches the file name inside the archive
         private const string Key_KeyFile = "KeyFile";         // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";             // sensitive password
+        private const string Key_KeyPW = "KeyPW";           // sensitive password
 
         // Full path to local encrypted database
         private readonly string localAppDataPath = Path.Combine(
@@ -176,21 +179,19 @@ namespace Utilities.Security
             ServiceSetUp.EnsureKeySetFromArchive();
 
             // 📦 Load additional SQL logic from key archive
-            string[] strSqlite =
-            {
-                "CatagoryExists.sql",
-                DatabaseHelper.DbPasswordKey,
-                "InsertCatagory.sql",
-                "SelectCatagories.sql",
-                "Logs_Insert_V2.sql"
-            };
+            SqlCatagory.EnsureKeysAndLoadAll();
 
-            // ✅ Load keys for this session (archive already verified/unlocked)
-            ServiceSetUp.EnsureKeySetFromArchive();
-
-            for (int i = 0; i < strSqlite.Length; i++)
+            // 🧱 Ensure Logs schema exists (Init + Indexes), idempotent.
+            // Uses your DatabaseHelper to open an already-keyed connection.
+            try
             {
-                ServiceSetUp.LoadSqlFromEncryptedArchive(strSqlite[i]);
+                using var openConn = DatabaseHelper.OpenConnection();
+                SchemaBootstrap.EnsureLogsSchema(openConn);
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal: surface a friendly message and continue
+                ErrorHandler.Info($"Log schema bootstrap failed: {ex.Message}", "Schema Bootstrap");
             }
 
             // Success: keyfile password verified and DB connection is open
