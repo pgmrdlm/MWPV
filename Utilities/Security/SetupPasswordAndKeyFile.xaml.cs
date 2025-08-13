@@ -1,10 +1,12 @@
 ﻿using System;
 using System.IO;
+using System.Reflection;              // NEW: for app version
 using System.Windows;
 using Microsoft.Data.Sqlite;          // Microsoft provider (ok to keep even if not used directly here)
 using Utilities.Helpers;             // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                 // SqlCatagory, SchemaBootstrap
 using Utilities.Security;            // SecureEncryptedDataCleaner, SecureEncryptedDataStore, etc.
+using MWPV.Services;                 // NEW: LogRepository, LogLevel
 
 namespace Utilities.Security
 {
@@ -197,19 +199,27 @@ namespace Utilities.Security
             // Success: keyfile password verified and DB connection is open
             if (EarlyLoginFailures.HasPending())
             {
-                // NOTE: Intentionally shows even for same-session failures
-                // to inform hostile actors they have been logged.
                 ErrorHandler.Info("Previous login failures were detected and will be logged.", "Login Notice");
+
+                // NEW: Use LogRepository so FlushToDb knows true/false and deletes files on success
+                var repo = new LogRepository(
+                    Utilities.Helpers.DatabaseHelper.OpenConnection,
+                    Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "dev"
+                );
 
                 EarlyLoginFailures.FlushToDb(
                     (utc, type, detail) =>
-                        SecureLogService.WriteAsync(
-                            level: LogLevel.Info,
-                            payload: new { earlyFail = type.ToString(), detail, occurredUtc = utc },
+                        repo.LogAsync(
+                           level: MWPV.Services.LogLevel.Info,
+                            source: "SetupPasswordAndKeyFile",
                             eventCode: "EARLY_LOGIN_FAILURE",
-                            source: "SetupPasswordAndKeyFile"
-                        ).GetAwaiter().GetResult(),
-                    path => SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1)
+                            payloadObject: new { earlyFail = type.ToString(), detail, occurredUtc = utc },
+                            isCrash: false,
+                            sessionId: null,
+                            stackHash: null
+                        ).GetAwaiter().GetResult() > 0,   // convert inserted row id -> success
+
+                    path => { SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1); return true; }
                 );
             }
 

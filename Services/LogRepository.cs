@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Utilities.Security; // for SecureEncryptedDataStore
+using Utilities.Sql;       // SecureSql
 
 namespace MWPV.Services
 {
@@ -51,58 +51,61 @@ namespace MWPV.Services
             bool isCrash = false,
             string? sessionId = null,
             string? stackHash = null,
-            string? correlationId = null,
-            int payloadVer = 1,
-            int keySetVersion = 1)
+            string? correlationId = null,   // retained in signature for future, not bound currently
+            int payloadVer = 1,             // retained in signature for future, not bound currently
+            int keySetVersion = 1)          // retained in signature for future, not bound currently
         {
             // Get SQL template from encrypted store
-            var sql = SecureEncryptedDataStore.GetString(SqlInsertKey);
+            string? sql = null;
+            try { sql = SecureSql.Require(SqlInsertKey); } catch { }
             if (string.IsNullOrWhiteSpace(sql))
-            {
-                // Template not available; skip logging quietly
-                return 0L;
-            }
+                return 0L; // template missing — skip quietly
 
-            // Serialize -> encrypt (currently machine-bound AES-GCM: IV|CT|TAG)
+            // Serialize -> encrypt (machine-bound AES-GCM: IV|CT|TAG)
             var json = JsonSerializer.Serialize(payloadObject, new JsonSerializerOptions { WriteIndented = false });
             var payload = CryptoLogCodec.Encrypt(Encoding.UTF8.GetBytes(json));
 
             using var cn = Open();
             if (_openConnection == null) await cn.OpenAsync(); // only when using conn string
 
-            // Bind to match Logs_Insert_V2.sql parameters
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = sql;
 
-                cmd.Parameters.AddWithValue("@CreatedUtc", NowUnixSeconds());
+                // timestamps as ISO-8601 text (schema uses TEXT)
+                var nowIso = DateTime.UtcNow.ToString("o");
+                cmd.Parameters.AddWithValue("@WhenUtc", nowIso);
+                cmd.Parameters.AddWithValue("@CreatedUtc", nowIso);
+
+                // coalesce NOT NULL columns to safe values
+                var safeSource = string.IsNullOrWhiteSpace(source) ? "app" : source;
+                var safeEventCode = string.IsNullOrWhiteSpace(eventCode) ? "GENERAL" : eventCode;
+                var safeSessionId = string.IsNullOrWhiteSpace(sessionId) ? "startup" : sessionId;
+
+                // core fields
                 cmd.Parameters.AddWithValue("@Level", MapLevel(level));
-                cmd.Parameters.AddWithValue("@Source", source ?? (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@EventCode", eventCode ?? (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@CorrelationId", correlationId ?? (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@SessionId", sessionId ?? (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@MachineId", _machineId);
-                cmd.Parameters.AddWithValue("@AppVersion", _appVersion);
+                cmd.Parameters.AddWithValue("@Source", safeSource);
+                cmd.Parameters.AddWithValue("@EventCode", safeEventCode);
+                cmd.Parameters.AddWithValue("@SessionId", safeSessionId);
+                cmd.Parameters.AddWithValue("@MachineId", _machineId ?? string.Empty);
+                cmd.Parameters.AddWithValue("@AppVersion", _appVersion ?? string.Empty);
                 cmd.Parameters.AddWithValue("@IsCrash", isCrash ? 1 : 0);
 
-                // Payload as BLOB
+                // payload (BLOB)
                 var p = cmd.CreateParameter();
                 p.ParameterName = "@Payload";
                 p.SqliteType = SqliteType.Blob;
-                p.Value = payload;
+                p.Value = payload ?? Array.Empty<byte>();
                 cmd.Parameters.Add(p);
 
+                // metadata
                 cmd.Parameters.AddWithValue("@PayloadFmt", "json+aesgcm");
-                cmd.Parameters.AddWithValue("@PayloadVer", payloadVer);
-                cmd.Parameters.AddWithValue("@KeySetVersion", keySetVersion);
-                cmd.Parameters.AddWithValue("@StackHash", stackHash ?? (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@Reserved1", DBNull.Value);
-                cmd.Parameters.AddWithValue("@Reserved2", DBNull.Value);
+                cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
 
                 await cmd.ExecuteNonQueryAsync();
+
             }
 
-            // Fetch last row id (separate command keeps the INSERT template clean)
             using var idCmd = cn.CreateCommand();
             idCmd.CommandText = "SELECT last_insert_rowid();";
             var idObj = await idCmd.ExecuteScalarAsync();
@@ -145,8 +148,6 @@ namespace MWPV.Services
             LogLevel.Critical => "FATAL",
             _ => "INFO"
         };
-
-        private static long NowUnixSeconds() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         private static class MachineKeyProvider
         {

@@ -6,7 +6,7 @@ LOGGING (umbrella entry)
 A) Wire logging SQL scripts (no hardcoded SQL)  — TODO
    [x] Add Logs_Insert_V2.sql, Logs_Select_Recent.sql, Logs_Init.sql, Logs_Indexes.sql to key archive.
    [x] Load scripts into SecureEncryptedDataStore at startup (keys = filenames).
-   [ ] Add SchemaBootstrap.EnsureLogsSchema(openConn) call post-unlock (runs Init + Indexes idempotently).
+   [x] Add SchemaBootstrap.EnsureLogsSchema(openConn) call post-unlock (runs Init + Indexes idempotently).
    [ ] Update LogRepository.GetRecentAsync to use Logs_Select_Recent.sql (fallback to inline only if missing).
    [ ] (Optional) Cache insert SQL text at construction; warn in DEBUG if any script is missing.
 

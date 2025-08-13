@@ -110,29 +110,25 @@ namespace Utilities.Security
                 using var cmd = cn.CreateCommand();
                 cmd.CommandText = sql;
 
-                // Bind parameters expected by Logs_Insert_V*.sql
-                cmd.Parameters.AddWithValue("@CreatedUtc", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-                cmd.Parameters.AddWithValue("@Level", levelText);
+                // Bind parameters expected by Logs_Insert_V2.sql (current schema)
+                cmd.Parameters.AddWithValue("@CreatedUtc", DateTime.UtcNow.ToString("o")); // TEXT ISO-8601
+                cmd.Parameters.AddWithValue("@Level", levelText ?? "");
                 cmd.Parameters.AddWithValue("@Source", (object?)src ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@EventCode", (object?)eventCode ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@CorrelationId", DBNull.Value); // not used yet
-                cmd.Parameters.AddWithValue("@SessionId", _sessionId);
-                cmd.Parameters.AddWithValue("@MachineId", machId);
-                cmd.Parameters.AddWithValue("@AppVersion", _appVersion);
+                cmd.Parameters.AddWithValue("@SessionId", (object?)_sessionId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@MachineId", (object?)machId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@AppVersion", (object?)_appVersion ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@IsCrash", isCrash ? 1 : 0);
 
                 var p = cmd.CreateParameter();
                 p.ParameterName = "@Payload";
                 p.SqliteType = SqliteType.Blob;
-                p.Value = encBlob;
+                p.Value = (object?)encBlob ?? Array.Empty<byte>();
                 cmd.Parameters.Add(p);
 
                 cmd.Parameters.AddWithValue("@PayloadFmt", "json+aesgcm");
-                cmd.Parameters.AddWithValue("@PayloadVer", PayloadVer);
-                cmd.Parameters.AddWithValue("@KeySetVersion", CurrentKeySetVersion());
                 cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@Reserved1", DBNull.Value);
-                cmd.Parameters.AddWithValue("@Reserved2", DBNull.Value);
+
 
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 return true;
