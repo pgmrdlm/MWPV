@@ -1,5 +1,11 @@
-TODO LIST – 2025-08-12
+TODO LIST – 2025-08-12 (Updated)
 ---------------------------------
+
+0) Priority Fix – Replace hardcoded log insert with datastore-loaded SQL — TODO
+   - Load "log_insert" SQL text from SecureEncryptedDataStore (7z preloaded).
+   - Store in _insertSql field during LogRepository construction.
+   - Use _insertSql in LogAsync instead of hardcoded const string.
+   - Verify execution and parameter alignment with stored script.
 
 1) Keys first (prerequisite for everything)  — DONE
    [x] Create-if-missing for LogPayloadKey + UserSecretsKey.
