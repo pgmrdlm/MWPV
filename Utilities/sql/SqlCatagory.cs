@@ -1,4 +1,4 @@
-﻿// Utilities/Sql/sqlCatagory.cs
+﻿// Utilities/Sql/SqlCatagory.cs
 using System;
 using System.Collections.Generic;
 using Utilities.Helpers;      // DatabaseHelper.DbPasswordKey
@@ -22,7 +22,8 @@ namespace Utilities.Sql
             "Logs_Indexes.sql",
             "Logs_Init.sql",
             "Logs_Insert_V2.sql",
-            "Logs_Select_Recent.sql",
+            "Logs_Select_Recent.sql",       // NEW (already present, kept)
+            "Logs_LastInsertId.sql",        // NEW
             "MWPV_DB_Create.sql",
             "SelectCatagories.sql"
         };

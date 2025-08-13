@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Utilities.Sql;       // SecureSql
+using Utilities.Sql; // SecureSql
 
 namespace MWPV.Services
 {
@@ -15,14 +15,16 @@ namespace MWPV.Services
 
     public sealed class LogRepository
     {
-        private const string SqlInsertKey = "Logs_Insert_V2.sql"; // filename key inside the key archive
+        private const string SqlInsertKey = "Logs_Insert_V2.sql";
+        private const string SqlSelectRecentKey = "Logs_Select_Recent.sql";
+        private const string SqlLastInsertIdKey = "Logs_LastInsertId.sql";
 
-        private readonly string? _connStr;                          // optional
-        private readonly Func<SqliteConnection>? _openConnection;   // preferred
+        private readonly string? _connStr;
+        private readonly Func<SqliteConnection>? _openConnection;
         private readonly string _appVersion;
         private readonly string _machineId;
 
-        // Preferred: pass a factory that returns an OPEN, keyed SqliteConnection
+        // Preferred: factory that returns an OPEN, keyed SqliteConnection
         public LogRepository(Func<SqliteConnection> openConnection, string appVersion)
         {
             _openConnection = openConnection ?? throw new ArgumentNullException(nameof(openConnection));
@@ -30,7 +32,7 @@ namespace MWPV.Services
             _machineId = MachineKeyProvider.GetStableMachineId();
         }
 
-        // Optional: pass a connection string (will OpenAsync() internally)
+        // Optional: connection string (we open it)
         public LogRepository(string connectionString, string appVersion)
         {
             _connStr = string.IsNullOrWhiteSpace(connectionString) ? throw new ArgumentNullException(nameof(connectionString)) : connectionString;
@@ -38,7 +40,6 @@ namespace MWPV.Services
             _machineId = MachineKeyProvider.GetStableMachineId();
         }
 
-        // Helper to obtain a connection; factory returns OPEN, string path returns CLOSED
         private SqliteConnection Open()
             => _openConnection != null ? _openConnection()
                                        : new SqliteConnection(_connStr!);
@@ -51,26 +52,33 @@ namespace MWPV.Services
             bool isCrash = false,
             string? sessionId = null,
             string? stackHash = null,
-            string? correlationId = null,   // retained in signature for future, not bound currently
-            int payloadVer = 1,             // retained in signature for future, not bound currently
-            int keySetVersion = 1)          // retained in signature for future, not bound currently
+            string? correlationId = null, // reserved
+            int payloadVer = 1,           // reserved
+            int keySetVersion = 1)        // reserved
         {
-            // Get SQL template from encrypted store
-            string? sql = null;
-            try { sql = SecureSql.Require(SqlInsertKey); } catch { }
-            if (string.IsNullOrWhiteSpace(sql))
-                return 0L; // template missing — skip quietly
+            string? insertSql = null;
+            string? lastIdSql = null;
+            try
+            {
+                insertSql = SecureSql.Require(SqlInsertKey);
+                lastIdSql = SecureSql.Require(SqlLastInsertIdKey);
+            }
+            catch
+            {
+                // Missing scripts — skip quietly
+                return 0L;
+            }
 
             // Serialize -> encrypt (machine-bound AES-GCM: IV|CT|TAG)
             var json = JsonSerializer.Serialize(payloadObject, new JsonSerializerOptions { WriteIndented = false });
             var payload = CryptoLogCodec.Encrypt(Encoding.UTF8.GetBytes(json));
 
             using var cn = Open();
-            if (_openConnection == null) await cn.OpenAsync(); // only when using conn string
+            if (_openConnection == null) await cn.OpenAsync();
 
             using (var cmd = cn.CreateCommand())
             {
-                cmd.CommandText = sql;
+                cmd.CommandText = insertSql;
 
                 // timestamps as ISO-8601 text (schema uses TEXT)
                 var nowIso = DateTime.UtcNow.ToString("o");
@@ -103,11 +111,10 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
 
                 await cmd.ExecuteNonQueryAsync();
-
             }
 
             using var idCmd = cn.CreateCommand();
-            idCmd.CommandText = "SELECT last_insert_rowid();";
+            idCmd.CommandText = lastIdSql!;
             var idObj = await idCmd.ExecuteScalarAsync();
             return idObj is long id ? id : Convert.ToInt64(idObj ?? 0L);
         }
@@ -115,16 +122,19 @@ namespace MWPV.Services
         public async System.Threading.Tasks.Task<(long Id, string Json)[]> GetRecentAsync(int count = 50, bool crashesOnly = false)
         {
             var list = new List<(long, string)>();
-            string sql = @"SELECT Id, Payload FROM Logs WHERE 1=1 "
-                       + (crashesOnly ? "AND IsCrash=1 " : "")
-                       + "ORDER BY Id DESC LIMIT $c;";
+
+            string? selectSql = null;
+            try { selectSql = SecureSql.Require(SqlSelectRecentKey); }
+            catch { return list.ToArray(); } // script missing — return empty
 
             using var cn = Open();
             if (_openConnection == null) await cn.OpenAsync();
 
             using var cmd = cn.CreateCommand();
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("$c", count);
+            cmd.CommandText = selectSql;
+            cmd.Parameters.AddWithValue("@Limit", count);
+            // Pass NULL for "all", 1 for crashes only (matches WHERE (@CrashesOnly IS NULL OR IsCrash = @CrashesOnly))
+            cmd.Parameters.AddWithValue("@CrashesOnly", crashesOnly ? 1 : (object)DBNull.Value);
 
             using var rd = await cmd.ExecuteReaderAsync();
             while (await rd.ReadAsync())

@@ -9,6 +9,10 @@ using System.Windows;
 using Utilities.Helpers;                     // DatabaseHelper, ErrorHandler
 using Utilities.Security;                    // Batteries_V2, EarlyLoginFailures, SecureLogService
 using MessageBox = System.Windows.MessageBox;   // Alias
+#if DEBUG
+using System.Diagnostics;                    // DEBUG output
+using System.Threading.Tasks;                // Task for probe
+#endif
 
 namespace MWPV
 {
@@ -76,9 +80,6 @@ namespace MWPV
 
                     // Re-register so unhandled exceptions from here on also get logged
                     ErrorHandler.RegisterGlobalHandlers(this);
-
-                    // Smoke test so you can confirm logging without forcing an error
-                    // ErrorHandler.Info($"Logging online (v{appVersion})", stage: "startup");
 
                     // (Optional) sweep stray unpacked SQL files on startup
                     try
@@ -158,6 +159,7 @@ namespace MWPV
                         log: false);
                 }
 
+
                 // --- Launch main window ---
                 var mainWindow = new MainWindow();
                 Current.MainWindow = mainWindow;
@@ -178,4 +180,6 @@ namespace MWPV
             base.OnExit(e);
         }
     }
+
+
 }
