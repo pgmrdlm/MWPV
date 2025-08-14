@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Utilities.Helpers; // ErrorHandler
 
 namespace Utilities.Services
 {
@@ -87,13 +88,14 @@ namespace Utilities.Services
             }
             catch (Exception ex)
             {
-                Utilities.Helpers.ErrorHandler.Abend(
+                ErrorHandler.Abend(
                     ex,
                     "Full SQL export failed",
-                    stage: "export-sql",
-                    severity: Utilities.Helpers.ErrorSeverity.Error);
+                    stage: "export-sql"
+                );
                 return false;
             }
+
         }
 
         // ----------- schema helpers -----------

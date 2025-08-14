@@ -1,17 +1,27 @@
-﻿using MWPV.Services;                        // LogRepository
+﻿// App.xaml.cs
+// Purpose:
+//   - Single-instance gate, SQLCipher init, early crash handling.
+//   - Run SetupPasswordAndKeyFile first, then wire encrypted logging.
+//   - Replace any direct MessageBox.Show with ErrorHandler.InfoTitled for consistency.
+//
+// Why this change:
+//   Using ErrorHandler ensures *all* user-facing popups go through one place,
+//   and (once configured) those events get logged securely too. It keeps titles
+//   consistent and avoids ad-hoc MessageBox calls scattered around the app.
+
+using MWPV.Services;                        // LogRepository
 using SQLitePCL;                             // SQLCipher init
 using System;                                // Guid
 using System.IO;                             // Path, Directory
 using System.Reflection;                     // App version
 using System.Security.Principal;             // User SID for mutex
 using System.Threading;                      // Mutex
-using System.Windows;
+using System.Windows;                        // Application, Window
 using Utilities.Helpers;                     // DatabaseHelper, ErrorHandler
-using Utilities.Security;                    // Batteries_V2, EarlyLoginFailures, SecureLogService
-using MessageBox = System.Windows.MessageBox;   // Alias
+using Utilities.Diagnostics;                 // EarlyLoginFailures
+using Utilities.Security;                    // Batteries_V2, EarlyLoginFailures, SecureLogService, SensitiveDataCleaner
 #if DEBUG
-using System.Diagnostics;                    // DEBUG output
-using System.Threading.Tasks;                // Task for probe
+using System.Diagnostics;                    // Debug
 #endif
 
 namespace MWPV
@@ -29,14 +39,17 @@ namespace MWPV
             _singleInstanceMutex = new Mutex(initiallyOwned: true, name: mutexName, createdNew: out createdNew);
             if (!createdNew)
             {
-                MessageBox.Show("MWPV is already running.", "Already running",
-                                MessageBoxButton.OK, MessageBoxImage.Information);
+                // (Changed) Use centralized helper instead of MessageBox.Show
+                ErrorHandler.InfoTitled("Already running", "MWPV is already running.", stage: "single-instance");
                 Current.Shutdown();
                 return;
             }
 
             // --- SQLCipher runtime init ---
             Batteries_V2.Init();
+
+            // --- SevenZip runtime init ---
+            SevenZipHelper.ConfigureLibraryPath();
 
             // --- Register global error handlers early (UI won't crash even before DB setup) ---
             ErrorHandler.RegisterGlobalHandlers(this);
@@ -51,7 +64,7 @@ namespace MWPV
 
             // Run setup to create/open encrypted DB + key (this must set up the password store)
             Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            var setupWindow = new SetupPasswordAndKeyFile();
+            var setupWindow = new Utilities.Security.SetupPasswordAndKeyFile();
             bool? ok = setupWindow.ShowDialog();
 
             if (ok == true)
@@ -75,7 +88,7 @@ namespace MWPV
                         appVersion: appVersion
                     );
 
-                    // Initialize SecureLogService so we can log the pending early failures
+                    // Initialize SecureLogService so we can log pending early failures
                     SecureLogService.Initialize(DatabaseHelper.GetAppOpenConnection, appVersion, "MWPV");
 
                     // Re-register so unhandled exceptions from here on also get logged
@@ -155,10 +168,9 @@ namespace MWPV
                         "Failed to initialize encrypted logging",
                         stage: "startup-logging",
                         severity: ErrorSeverity.Warning,
-                        icon: MessageBoxImage.Warning,
+                        icon: System.Windows.MessageBoxImage.Warning,
                         log: false);
                 }
-
 
                 // --- Launch main window ---
                 var mainWindow = new MainWindow();
@@ -180,6 +192,4 @@ namespace MWPV
             base.OnExit(e);
         }
     }
-
-
 }

@@ -1,4 +1,9 @@
 ﻿// Utilities/Helpers/ErrorHandler.cs
+// Centralized user-visible dialogs + encrypted diagnostic logging via LogRepository.
+// - Works before Configure(): shows dialogs, skips logging if _logs is null.
+// - After Configure(...): also writes encrypted logs.
+// - Adds InfoTitled(title, message, ...) and WarnTitled(title, message, ...) to keep popup titles consistent.
+
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -16,13 +21,9 @@ namespace Utilities.Helpers
 {
     public enum ErrorSeverity { Info, Warning, Error, Critical }
 
-    /// <summary>
-    /// Centralized user-visible error handling + encrypted diagnostic logging via LogRepository.
-    /// Call Configure(...) once after DB/key setup to enable logging.
-    /// </summary>
     public static class ErrorHandler
     {
-        // ===== Dependencies (injected) =====
+        // ===== Dependencies (injected post-login) =====
         private static LogRepository? _logs;
         private static Func<string>? _sessionIdProvider;
         private static string _appVersion = "unknown";
@@ -47,7 +48,7 @@ namespace Utilities.Helpers
         // ===== Public API =====
 
         /// <summary>
-        /// Show a safe MessageBox and (optionally) log encrypted details via LogRepository.
+        /// Critical/error dialog with optional encrypted logging.
         /// </summary>
         public static ErrorResult Abend(
             Exception ex,
@@ -67,7 +68,7 @@ namespace Utilities.Helpers
             string location = $"{fileShort}.{member}():{line}";
             string errorType = ex.GetType().Name;
 
-            // ---- User-facing message (no secrets, no full paths) ----
+            // ---- User-facing message (safe) ----
             var sb = new StringBuilder()
                 .AppendLine(contextMessage)
                 .AppendLine($"Type: {errorType}")
@@ -89,7 +90,7 @@ namespace Utilities.Helpers
                 icon
             );
 
-            // ---- Encrypted logging (fire-and-forget) ----
+            // ---- Encrypted logging (best-effort) ----
             if (log && _logs is not null)
             {
                 try
@@ -121,7 +122,6 @@ namespace Utilities.Helpers
                     string? sessionId = _sessionIdProvider?.Invoke();
                     string stackHash = ShortHash(ex.ToString() ?? $"{errorType}:{location}");
 
-                    // Do not await; never block UI nor throw
                     _ = _logs.LogAsync(
                         level: MapLevel(severity),
                         source: location,
@@ -134,11 +134,112 @@ namespace Utilities.Helpers
                 }
                 catch
                 {
-                    // Swallow: error handler must never throw
+                    // swallow: handler must never throw
                 }
             }
 
             return new ErrorResult { ActivityId = activityId, UserChoice = result, Severity = severity };
+        }
+
+        /// <summary>Info dialog (title = "Info"). Logs at Info if configured.</summary>
+        public static void Info(
+            string message,
+            string stage = "unspecified",
+            [CallerMemberName] string member = "",
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0)
+        {
+            InfoTitled("Info", message, stage, member, file, line);
+        }
+
+        /// <summary>Info dialog with custom title. Logs at Info if configured.</summary>
+        public static void InfoTitled(
+            string title,
+            string message,
+            string stage = "unspecified",
+            [CallerMemberName] string member = "",
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0)
+        {
+            WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Info" : title, WpfButtons.OK, WpfImage.Information);
+
+            if (_logs is null) return; // safe before Configure()
+            try
+            {
+                var location = $"{SafeFileName(file)}.{member}():{line}";
+                var payload = new
+                {
+                    title = Redact(title),
+                    message = Redact(message),
+                    stage,
+                    severity = ErrorSeverity.Info.ToString(),
+                    caller = new { member, file, line, location },
+                    environment = new
+                    {
+                        utc = DateTime.UtcNow,
+                        machine = Environment.MachineName,
+                        processId = Environment.ProcessId,
+                        os = Environment.OSVersion?.ToString(),
+                        appVersion = _appVersion
+                    }
+                };
+
+                _ = _logs.LogAsync(
+                    level: LogLevel.Info,
+                    source: location,
+                    eventCode: "INFO",
+                    payloadObject: payload,
+                    isCrash: false,
+                    sessionId: _sessionIdProvider?.Invoke(),
+                    stackHash: null
+                );
+            }
+            catch { /* never throw */ }
+        }
+
+        /// <summary>Warning dialog with custom title. Logs at Warn if configured.</summary>
+        public static void WarnTitled(
+            string title,
+            string message,
+            string stage = "unspecified",
+            [CallerMemberName] string member = "",
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0)
+        {
+            WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Warning" : title, WpfButtons.OK, WpfImage.Warning);
+
+            if (_logs is null) return; // safe before Configure()
+            try
+            {
+                var location = $"{SafeFileName(file)}.{member}():{line}";
+                var payload = new
+                {
+                    title = Redact(title),
+                    message = Redact(message),
+                    stage,
+                    severity = ErrorSeverity.Warning.ToString(),
+                    caller = new { member, file, line, location },
+                    environment = new
+                    {
+                        utc = DateTime.UtcNow,
+                        machine = Environment.MachineName,
+                        processId = Environment.ProcessId,
+                        os = Environment.OSVersion?.ToString(),
+                        appVersion = _appVersion
+                    }
+                };
+
+                _ = _logs.LogAsync(
+                    level: LogLevel.Warn,
+                    source: location,
+                    eventCode: "WARN",
+                    payloadObject: payload,
+                    isCrash: false,
+                    sessionId: _sessionIdProvider?.Invoke(),
+                    stackHash: null
+                );
+            }
+            catch { /* never throw */ }
         }
 
         /// <summary>Try wrapper for actions. Returns false on exception.</summary>
@@ -222,49 +323,6 @@ namespace Utilities.Helpers
                 }
                 finally { e.SetObserved(); }
             };
-        }
-
-        /// <summary>Simple info dialog (also logs Info).</summary>
-        public static void Info(
-            string message,
-            string stage = "unspecified",
-            [CallerMemberName] string member = "",
-            [CallerFilePath] string file = "",
-            [CallerLineNumber] int line = 0)
-        {
-            WpfMessageBox.Show(message, "Info", WpfButtons.OK, WpfImage.Information);
-
-            if (_logs is null) return;
-            try
-            {
-                var location = $"{SafeFileName(file)}.{member}():{line}";
-                var payload = new
-                {
-                    message = Redact(message),
-                    stage,
-                    severity = ErrorSeverity.Info.ToString(),
-                    caller = new { member, file, line, location },
-                    environment = new
-                    {
-                        utc = DateTime.UtcNow,
-                        machine = Environment.MachineName,
-                        processId = Environment.ProcessId,
-                        os = Environment.OSVersion?.ToString(),
-                        appVersion = _appVersion
-                    }
-                };
-
-                _ = _logs.LogAsync(
-                    level: LogLevel.Info,
-                    source: location,
-                    eventCode: "INFO",
-                    payloadObject: payload,
-                    isCrash: false,
-                    sessionId: _sessionIdProvider?.Invoke(),
-                    stackHash: null
-                );
-            }
-            catch { /* never throw */ }
         }
 
         // ===== Helpers =====

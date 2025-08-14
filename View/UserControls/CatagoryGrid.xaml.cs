@@ -41,7 +41,7 @@ namespace MWPV.View.UserControls
         {
             if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
             {
-                System.Windows.MessageBox.Show($"Button 1 clicked: {data.strCategory1}");
+                //System.Windows.MessageBox.Show($"Button 1 clicked: {data.strCategory1}");
                 CategoryItemClicked?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -49,7 +49,7 @@ namespace MWPV.View.UserControls
         {
             if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
             {
-                System.Windows.MessageBox.Show($"Button 2 clicked: {data.strCategory2}");
+                //System.Windows.MessageBox.Show($"Button 2 clicked: {data.strCategory2}");
                 CategoryItemClicked?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -57,7 +57,7 @@ namespace MWPV.View.UserControls
         {
             if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
             {
-                System.Windows.MessageBox.Show($"Button 3 clicked: {data.strCategory3}");
+                //System.Windows.MessageBox.Show($"Button 3 clicked: {data.strCategory3}");
                 CategoryItemClicked?.Invoke(this, EventArgs.Empty);
             }
         }

@@ -7,14 +7,17 @@ using System.Text;
 using Utilities.Helpers;
 using Utilities.Security;
 using Utilities.Sql;
+using Utilities.Diagnostics; // EarlyLoginFailures
 
 namespace Utilities.Security
 {
     /// <summary>
     /// First-run provisioning and ongoing secure loading utilities:
     /// - Creates the local MWPV folder + encrypted DB from schema.
-    /// - Builds the encrypted 7z key archive from the SQL folder.
+    /// - Builds the encrypted key archive from the SQL folder.
     /// - Centralizes keyset creation/loading via <see cref="KeyProvisioner"/>.
+    /// - Verifies key archives in a format-agnostic but strict way
+    ///   (must be encrypted, must contain DB_Password.txt and keyset.json).
     /// </summary>
     internal class ServiceSetUp
     {
@@ -22,9 +25,6 @@ namespace Utilities.Security
         private const string Key_KeyFile = "KeyFile";
         private const string Key_DbPwPath = "DB_Password_Path";
         private const string Key_DbConnNoPw = "DB_String";
-
-        // NOTE: ensure this path is valid on the target machine
-        private static readonly string sevenZipLibraryPath = @"C:\Users\pgmrd\My Drive\MWPV\MWPV\7z.dll";
 
         /// <summary>
         /// Creates the local MWPV folder and initializes the encrypted database from schema.
@@ -103,7 +103,7 @@ namespace Utilities.Security
         }
 
         /// <summary>
-        /// Builds/overwrites the encrypted key archive (7z) from the SQL folder.
+        /// Builds/overwrites the encrypted key archive from the SQL folder.
         /// Before compressing, ensures <c>keyset.json</c> exists (via <see cref="KeyProvisioner"/>) so the archive contains the full keyset.
         /// After compressing, securely deletes the folder contents.
         /// </summary>
@@ -132,16 +132,11 @@ namespace Utilities.Security
 
             try
             {
-                if (!File.Exists(sevenZipLibraryPath))
-                    throw new FileNotFoundException("7z.dll not found at specified path.", sevenZipLibraryPath);
-
                 if (string.IsNullOrWhiteSpace(strKeyFilePath) || string.IsNullOrWhiteSpace(strKeyFilePW))
                     return "Missing KeyFile path or password.";
 
                 if (!Directory.Exists(strDirectoryToCompress))
                     return "The source directory to compress does not exist.";
-
-                SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
 
                 string[] files = Directory.GetFiles(strDirectoryToCompress, "*.*", SearchOption.TopDirectoryOnly);
                 if (files.Length == 0)
@@ -201,23 +196,71 @@ namespace Utilities.Security
         }
 
         /// <summary>
-        /// Verifies the key archive password by attempting to open the 7z and read metadata.
+        /// Verifies the key archive/password by opening the archive, requiring that
+        /// ALL entries are encrypted, and confirming both sentinel files exist:
+        /// - DB_Password.txt (via DatabaseHelper.DbPasswordKey)
+        /// - keyset.json
+        /// Accepts any container the 7z runtime can open (7z/zip/…); extension doesn’t matter.
         /// </summary>
-        /// <returns><c>true</c> for valid password/archive; <c>false</c> for wrong password or invalid/corrupt file.</returns>
         public static bool VerifyKeyFilePW(string archivePath, string password)
         {
             try
             {
-                SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
-                using (var extractor = new SevenZipExtractor(archivePath, password))
+                using var extractor = new SevenZipExtractor(archivePath, password);
+
+                var files = extractor.ArchiveFileData
+                    .Where(f => !f.IsDirectory)
+                    .ToList();
+
+                if (files.Count == 0)
                 {
-                    _ = extractor.ArchiveFileData.FirstOrDefault(); // force a read
-                    return true;
+                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, "Archive contains no files.");
+                    return false;
                 }
+
+                // Require encryption on every file (rejects plain ZIPs or unencrypted content)
+                if (!files.All(f => f.Encrypted))
+                {
+                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, "Archive entries are not encrypted.");
+                    return false;
+                }
+
+                bool Has(string name) =>
+                    files.Any(f =>
+                        string.Equals(f.FileName, name, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileName(f.FileName), name, StringComparison.OrdinalIgnoreCase));
+
+                bool hasPwFile = Has(DatabaseHelper.DbPasswordKey); // "DB_Password.txt"
+                bool hasKeyset = Has("keyset.json");
+
+                if (!hasPwFile || !hasKeyset)
+                {
+                    var missing = string.Join(", ",
+                        new[] { (!hasPwFile ? DatabaseHelper.DbPasswordKey : null), (!hasKeyset ? "keyset.json" : null) }
+                        .Where(x => x is not null));
+
+                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"Missing required file(s): {missing}");
+                    return false;
+                }
+
+                return true; // all checks passed
             }
-            catch (SevenZipException) { return false; }     // wrong password or corrupt
-            catch (ArgumentException) { return false; }     // invalid file type
-            catch { return false; }                         // any other fatal error
+            catch (SevenZip.SevenZipException ex)
+            {
+                // wrong password OR not a valid/compliant archive
+                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"SevenZipException: {ex.Message}");
+                return false;
+            }
+            catch (ArgumentException ex)
+            {
+                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"ArgumentException: {ex.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"Unexpected: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
             finally
             {
                 SensitiveDataCleaner.WipeSensitiveStrings(ref password, ref archivePath);
@@ -233,8 +276,6 @@ namespace Utilities.Security
         {
             try
             {
-                SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
-
                 string strKeyFile = SecureEncryptedDataStore.GetString(Key_KeyFile);
 
                 char[] keyPwChars = null;
@@ -350,8 +391,6 @@ namespace Utilities.Security
         /// </summary>
         public static byte[] LoadKeyFromArchiveAsBytes(string name)
         {
-            SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
-
             string archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
             if (string.IsNullOrWhiteSpace(archive) || !File.Exists(archive)) return null;
 
@@ -387,8 +426,6 @@ namespace Utilities.Security
         /// </summary>
         public static void SaveKeyToArchive(string name, byte[] bytes)
         {
-            SevenZipBase.SetLibraryPath(sevenZipLibraryPath);
-
             string archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
             if (string.IsNullOrWhiteSpace(archive))
                 throw new InvalidOperationException("Key file path is not set.");

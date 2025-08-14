@@ -7,11 +7,11 @@ A) Wire logging SQL scripts (no hardcoded SQL)  — TODO
    [x] Add Logs_Insert_V2.sql, Logs_Select_Recent.sql, Logs_Init.sql, Logs_Indexes.sql to key archive.
    [x] Load scripts into SecureEncryptedDataStore at startup (keys = filenames).
    [x] Add SchemaBootstrap.EnsureLogsSchema(openConn) call post-unlock (runs Init + Indexes idempotently).
-   [ ] Update LogRepository.GetRecentAsync to use Logs_Select_Recent.sql (fallback to inline only if missing).
-   [ ] (Optional) Cache insert SQL text at construction; warn in DEBUG if any script is missing.
+   [x] Update LogRepository.GetRecentAsync to use Logs_Select_Recent.sql (fallback to inline only if missing).
+   [p] (Optional) Cache insert SQL text at construction; warn in DEBUG if any script is missing.
 
-B) Early-log ingestion pipeline  — TODO
-   [ ] Define parameterized .elog format (+ version tag).
+B) Early-log ingestion pipeline  — I
+   [x] Define parameterized .elog format (+ version tag).
    [ ] Batch ingest: single transaction (~200 entries max).
    [ ] Dedupe: prefer LogGuid; else content hash.
    [ ] Final secure-delete sweep of %LOCALAPPDATA%\MWPV\early after PendingCount()==0.

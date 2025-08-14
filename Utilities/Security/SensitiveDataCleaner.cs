@@ -158,7 +158,7 @@ namespace Utilities.Security
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Failed to securely wipe string", stage: "wipe-string-error", severity: ErrorSeverity.Error);
+                ErrorHandler.Abend(ex, "Failed to securely wipe string", stage: "wipe-string-error");
             }
         }
 
@@ -294,7 +294,7 @@ namespace Utilities.Security
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "SecureDeleteAllFiles failed", stage: stage, severity: ErrorSeverity.Error);
+                ErrorHandler.Abend(ex, "SecureDeleteAllFiles failed", stage: stage);
             }
         }
 
@@ -423,7 +423,7 @@ namespace Utilities.Security
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Secure delete failed", stage: stage, severity: ErrorSeverity.Error);
+                ErrorHandler.Abend(ex, "Secure delete failed", stage: stage);
                 return false;
             }
             finally
@@ -461,6 +461,7 @@ namespace Utilities.Security
             }
             catch (Exception ex)
             {
+                // Intentionally Warning: directories left behind aren't sensitive once files are wiped.
                 ErrorHandler.Abend(ex, "SecureDeleteDirectory failed", stage: "remove-dirs", severity: ErrorSeverity.Warning);
             }
         }

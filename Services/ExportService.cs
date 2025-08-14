@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Utilities.Helpers;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace Utilities.Services
@@ -16,6 +17,8 @@ namespace Utilities.Services
         /// 1) forcing a FULL WAL checkpoint (flushes -wal into main db),
         /// 2) performing a safe file copy of the main DB.
         /// No decryption occurs; the copy stays encrypted.
+        /// 
+        /// All user prompts and notifications route through ErrorHandler.* for consistency & logging.
         /// </summary>
         public static async Task<bool> ExportEncryptedDbAsync(
             string dbPath,
@@ -25,7 +28,11 @@ namespace Utilities.Services
         {
             if (string.IsNullOrWhiteSpace(dbPath) || !File.Exists(dbPath))
             {
-                System.Windows.MessageBox.Show("Database file not found.", "Export", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                ErrorHandler.InfoTitled(
+                    title: "Export",
+                    message: "Database file not found.\n\n(This error has been logged.)",
+                    stage: "ExportService.DBMissing"
+                );
                 return false;
             }
 
@@ -56,18 +63,18 @@ namespace Utilities.Services
                 // 3) Copy the main DB (preserves encryption because we are not touching contents)
                 await CopyFileWithRetryAsync(dbPath, dest, overwrite: true, ct);
 
-                // 4) Optional: if you keep the DB in a custom folder, ensure parent exists at dest (handled by SaveFileDialog)
-                System.Windows.MessageBox.Show("Encrypted database exported successfully.", "Export", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                // 4) Notify success via centralized helper
+                ErrorHandler.InfoTitled("Export", "Encrypted database exported successfully.", stage: "ExportService.DB");
                 return true;
             }
             catch (OperationCanceledException)
             {
-                System.Windows.MessageBox.Show("Export canceled.", "Export", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                ErrorHandler.InfoTitled("Export", "Export canceled.", stage: "ExportService.DB");
                 return false;
             }
             catch (Exception ex)
             {
-                Utilities.Helpers.ErrorHandler.Abend(ex, "Failed to export encrypted database", stage: "export", severity: Utilities.Helpers.ErrorSeverity.Error);
+                ErrorHandler.Abend(ex, "Failed to export encrypted database", stage: "ExportService.DB");
                 return false;
             }
         }
@@ -79,7 +86,11 @@ namespace Utilities.Services
         {
             if (string.IsNullOrWhiteSpace(keyArchivePath) || !File.Exists(keyArchivePath))
             {
-                System.Windows.MessageBox.Show("Key archive not found.", "Export", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                ErrorHandler.InfoTitled(
+                    title: "Export",
+                    message: "Key archive not found.\n\n(This error has been logged.)",
+                    stage: "ExportService.KeyMissing"
+                );
                 return false;
             }
 
@@ -95,12 +106,12 @@ namespace Utilities.Services
             try
             {
                 await CopyFileWithRetryAsync(keyArchivePath, sfd.FileName, overwrite: true, ct);
-                System.Windows.MessageBox.Show("Key archive exported successfully.", "Export", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                ErrorHandler.InfoTitled("Export", "Key archive exported successfully.", stage: "ExportService.Key");
                 return true;
             }
             catch (Exception ex)
             {
-                Utilities.Helpers.ErrorHandler.Abend(ex, "Failed to export key archive", stage: "export-key", severity: Utilities.Helpers.ErrorSeverity.Error);
+                ErrorHandler.Abend(ex, "Failed to export key archive", stage: "ExportService.Key");
                 return false;
             }
         }
