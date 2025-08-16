@@ -16,29 +16,39 @@
 
         <!-- Left: Categories -->
         <DockPanel Grid.Column="0" Margin="8,8,8,8" LastChildFill="True">
-            <TextBlock DockPanel.Dock="Top" Text="Categories"
-                 FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Categories"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,8"/>
+            <StackPanel DockPanel.Dock="Top"
+                        Orientation="Horizontal"
+                        Margin="0,0,0,8">
                 <Button x:Name="btnAddCategory"
-                Content="Add Category"
-                Click="btnAddCategory_Click"
-                Style="{StaticResource AddCategoryButton}"
-                MinWidth="120"/>
+                        Content="Add Category"
+                        Click="btnAddCategory_Click"
+                        Style="{StaticResource DialogPrimary}"
+                        MinWidth="120"/>
             </StackPanel>
             <uc:CategoryGrid x:Name="CategoryGrid"/>
         </DockPanel>
 
         <!-- Right: Items -->
         <DockPanel Grid.Column="1" Margin="8,8,8,8" LastChildFill="True">
-            <TextBlock DockPanel.Dock="Top" Text="Items"
-                 FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Items"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,8"/>
+            <StackPanel DockPanel.Dock="Top"
+                        Orientation="Horizontal"
+                        Margin="0,0,0,8">
                 <!-- starts collapsed; you’ll show it when a category is clicked -->
                 <Button x:Name="btnAddCategoryItem"
-                Content="Add Item"
-                Style="{StaticResource AddCategoryItemButton}"
-                MinWidth="120"
-                Visibility="Collapsed"/>
+                        Content="Add Item"
+                        Style="{StaticResource DialogPrimary}"
+                        MinWidth="120"
+                        Visibility="Collapsed"/>
             </StackPanel>
             <ContentControl x:Name="CategoryItemsHost"/>
         </DockPanel>

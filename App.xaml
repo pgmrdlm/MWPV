@@ -3,13 +3,34 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- ===== Merge shared theme resources ===== -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Load shared button styles (relative URI; same assembly) -->
+                <!-- Buttons (primary/secondary/title-bar with hover/press states) -->
                 <ResourceDictionary Source="Themes/Buttons/Buttons.xaml"/>
-                <!-- If you ever move styles to another assembly, use pack URI:
+                <!-- If you move styles to another assembly, use pack URI like:
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
                 -->
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- ===== App-wide polish (safe defaults) ===== -->
+            <!-- Make all windows crisp & consistent -->
+            <Style TargetType="{x:Type Window}">
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                <Setter Property="UseLayoutRounding" Value="True"/>
+            </Style>
+
+            <!-- Improve text readability across the app -->
+            <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+            </Style>
+
+            <!-- Optional: default tooltip styling (subtle, readable) -->
+            <Style TargetType="{x:Type ToolTip}">
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                <Setter Property="Padding" Value="8,6"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
