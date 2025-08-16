@@ -7,7 +7,6 @@ using System.Text;
 using Utilities.Helpers;
 using Utilities.Security;
 using Utilities.Sql;
-using Utilities.Diagnostics; // EarlyLoginFailures
 
 namespace Utilities.Security
 {
@@ -16,8 +15,7 @@ namespace Utilities.Security
     /// - Creates the local MWPV folder + encrypted DB from schema.
     /// - Builds the encrypted key archive from the SQL folder.
     /// - Centralizes keyset creation/loading via <see cref="KeyProvisioner"/>.
-    /// - Verifies key archives in a format-agnostic but strict way
-    ///   (must be encrypted, must contain DB_Password.txt and keyset.json).
+    /// - Verifier is delegated to <see cref="KeyArchiveVerifier"/> (pure; no logging).
     /// </summary>
     internal class ServiceSetUp
     {
@@ -65,7 +63,7 @@ namespace Utilities.Security
 
             try
             {
-                using (var conn = DatabaseHelper.GetAppOpenConnection())
+                using (var conn = DatabaseHelper.OpenConnection())
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = strDB_Create;
@@ -196,76 +194,11 @@ namespace Utilities.Security
         }
 
         /// <summary>
-        /// Verifies the key archive/password by opening the archive, requiring that
-        /// ALL entries are encrypted, and confirming both sentinel files exist:
-        /// - DB_Password.txt (via DatabaseHelper.DbPasswordKey)
-        /// - keyset.json
-        /// Accepts any container the 7z runtime can open (7z/zip/…); extension doesn’t matter.
+        /// Compatibility wrapper. Prefer <see cref="KeyArchiveVerifier.VerifyPasswordAndSentinels(string, string)"/>.
         /// </summary>
+        [Obsolete("Use KeyArchiveVerifier.VerifyPasswordAndSentinels(...) instead.")]
         public static bool VerifyKeyFilePW(string archivePath, string password)
-        {
-            try
-            {
-                using var extractor = new SevenZipExtractor(archivePath, password);
-
-                var files = extractor.ArchiveFileData
-                    .Where(f => !f.IsDirectory)
-                    .ToList();
-
-                if (files.Count == 0)
-                {
-                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, "Archive contains no files.");
-                    return false;
-                }
-
-                // Require encryption on every file (rejects plain ZIPs or unencrypted content)
-                if (!files.All(f => f.Encrypted))
-                {
-                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, "Archive entries are not encrypted.");
-                    return false;
-                }
-
-                bool Has(string name) =>
-                    files.Any(f =>
-                        string.Equals(f.FileName, name, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(Path.GetFileName(f.FileName), name, StringComparison.OrdinalIgnoreCase));
-
-                bool hasPwFile = Has(DatabaseHelper.DbPasswordKey); // "DB_Password.txt"
-                bool hasKeyset = Has("keyset.json");
-
-                if (!hasPwFile || !hasKeyset)
-                {
-                    var missing = string.Join(", ",
-                        new[] { (!hasPwFile ? DatabaseHelper.DbPasswordKey : null), (!hasKeyset ? "keyset.json" : null) }
-                        .Where(x => x is not null));
-
-                    EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"Missing required file(s): {missing}");
-                    return false;
-                }
-
-                return true; // all checks passed
-            }
-            catch (SevenZip.SevenZipException ex)
-            {
-                // wrong password OR not a valid/compliant archive
-                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"SevenZipException: {ex.Message}");
-                return false;
-            }
-            catch (ArgumentException ex)
-            {
-                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"ArgumentException: {ex.Message}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, $"Unexpected: {ex.GetType().Name}: {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                SensitiveDataCleaner.WipeSensitiveStrings(ref password, ref archivePath);
-            }
-        }
+            => KeyArchiveVerifier.VerifyPasswordAndSentinels(archivePath, password);
 
         /// <summary>
         /// Loads a text file (e.g., SQL or the DB password file) from the encrypted key archive into the secure store.
@@ -327,9 +260,9 @@ namespace Utilities.Security
                     SensitiveDataCleaner.WipeString(ref strKeyPW);
                 }
             }
-            catch (SevenZipException ex)
+            catch (SevenZipException)
             {
-                EarlyLoginFailures.Record(EarlyFailType.KeyfileMissingOrCorrupt, ex.Message);
+                // wrong password / invalid archive — let caller surface/log
                 return "error";
             }
             catch (Exception ex)
@@ -356,7 +289,7 @@ namespace Utilities.Security
         }
 
         /// <summary>
-        /// Future use: ensures keyset.json exists inside the encrypted archive and loads keys into the session.
+        /// Ensures keyset.json exists inside the encrypted archive and loads keys into the session.
         /// Typically not needed after first run unless migrating legacy archives.
         /// </summary>
         public static void EnsureKeySetFromArchive()

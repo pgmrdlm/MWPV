@@ -1,86 +1,108 @@
 ﻿// App.xaml.cs
 // Purpose:
-//   - Single-instance gate, SQLCipher init, early crash handling.
+//   - Strict single-instance (Mutex + EventWaitHandle) with bring-to-front.
+//   - SQLCipher & 7-Zip init, early crash handling.
 //   - Run SetupPasswordAndKeyFile first, then wire encrypted logging.
-//   - Replace any direct MessageBox.Show with ErrorHandler.InfoTitled for consistency.
-//
-// Why this change:
-//   Using ErrorHandler ensures *all* user-facing popups go through one place,
-//   and (once configured) those events get logged securely too. It keeps titles
-//   consistent and avoids ad-hoc MessageBox calls scattered around the app.
+//   - All popups via ErrorHandler for consistency.
+// Notes:
+//   - Do NOT assign EarlyLoginFailures.StoreDir (read-only). Ensure it exists with Directory.CreateDirectory(..).
+//   - Use EarlyLoginFailures.PendingCount (property).
+//   - FlushToDb signature: (writeDbLog: ..., deleteFile: ...).
+//   - SevenZip init is best-effort via Utilities.Helpers.SevenZipHelper (non-fatal).
 
-using MWPV.Services;                        // LogRepository
-using SQLitePCL;                             // SQLCipher init
-using System;                                // Guid
-using System.IO;                             // Path, Directory
-using System.Reflection;                     // App version
-using System.Security.Principal;             // User SID for mutex
-using System.Threading;                      // Mutex
-using System.Windows;                        // Application, Window
-using Utilities.Helpers;                     // DatabaseHelper, ErrorHandler
-using Utilities.Diagnostics;                 // EarlyLoginFailures
-using Utilities.Security;                    // Batteries_V2, EarlyLoginFailures, SecureLogService, SensitiveDataCleaner
+using MWPV.Services;                        // LogRepository (has its own LogLevel type)
+using SQLitePCL;                            // SQLCipher init
+using System;                               // Guid
+using System.IO;                            // Path, Directory
+using System.Linq;                          // FirstOrDefault over Current.Windows
+using System.Reflection;                    // App version
+using System.Security.Principal;            // User SID for mutex
+using System.Threading;                     // Mutex, EventWaitHandle, Thread
+using System.Windows;                       // Window, MessageBoxImage
+using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
+using Utilities.Diagnostics;                // EarlyLoginFailures
+using Utilities.Security;                   // Batteries_V2, SecureLogService, SensitiveDataCleaner
 #if DEBUG
-using System.Diagnostics;                    // Debug
+using System.Diagnostics;                   // Debug
 #endif
+
+// --- Disambiguation aliases ---
+using WpfApp = System.Windows.Application;
+using SecLogLevel = Utilities.Security.LogLevel;
 
 namespace MWPV
 {
-    public partial class App : System.Windows.Application
+    public partial class App : WpfApp
     {
-        private static Mutex _singleInstanceMutex;
+        // ---- single-instance plumbing ----
+        private static Mutex? _singleInstanceMutex;
+        private static bool _ownsSingleInstanceMutex;              // track ownership to avoid ReleaseMutex crash
+        private static EventWaitHandle? _instanceSignal;           // auto-reset event: wake first instance to focus
+        private static Thread? _signalListenerThread;
+        private static volatile bool _shutdownListener;
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            // --- Single instance per user/session ---
-            bool createdNew;
+            // --- Strict single instance per *user* (Local\ + SID) ---
             string userSid = WindowsIdentity.GetCurrent()?.User?.Value ?? "UnknownUser";
             string mutexName = $@"Local\MWPV_{userSid}";
-            _singleInstanceMutex = new Mutex(initiallyOwned: true, name: mutexName, createdNew: out createdNew);
-            if (!createdNew)
+            string eventName = $@"Local\MWPV_Signal_{userSid}";
+
+            _singleInstanceMutex = new Mutex(initiallyOwned: true, name: mutexName, createdNew: out bool createdNew);
+            _ownsSingleInstanceMutex = createdNew;
+
+            if (!_ownsSingleInstanceMutex)
             {
-                // (Changed) Use centralized helper instead of MessageBox.Show
-                ErrorHandler.InfoTitled("Already running", "MWPV is already running.", stage: "single-instance");
-                Current.Shutdown();
+                // Another instance exists -> signal it to bring its window to front, then exit.
+                try
+                {
+                    using var existing = EventWaitHandle.OpenExisting(eventName);
+                    existing.Set();
+                }
+                catch
+                {
+                    ErrorHandler.InfoTitled("Already running", "MWPV is already running.", stage: "single-instance");
+                }
+                WpfApp.Current?.Shutdown();
                 return;
             }
 
-            // --- SQLCipher runtime init ---
-            Batteries_V2.Init();
+            // We are the primary instance: create & start the signal listener.
+            _instanceSignal = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+            _signalListenerThread = new Thread(InstanceSignalListener)
+            {
+                IsBackground = true,
+                Name = "MWPV.InstanceSignalListener"
+            };
+            _signalListenerThread.Start();
 
-            // --- SevenZip runtime init ---
-            SevenZipHelper.ConfigureLibraryPath();
-
-            // --- Register global error handlers early (UI won't crash even before DB setup) ---
+            // --- Runtime init (SQLCipher, SevenZip, global error handlers) ---
+            Batteries_V2.Init();                   // SQLCipher
+            SevenZipHelper.ConfigureLibraryPath(); // best-effort, non-fatal
             ErrorHandler.RegisterGlobalHandlers(this);
 
             base.OnStartup(e);
 
-            // Optional: set explicit early store dir (defaults to %LOCALAPPDATA%\MWPV\early if not set)
-            EarlyLoginFailures.StoreDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MWPV", "early");
+            // Ensure early store directory exists (read-only property)
             Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
 
-            // Run setup to create/open encrypted DB + key (this must set up the password store)
-            Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            // --- Run setup to create/open encrypted DB + key ---
+            WpfApp.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var setupWindow = new Utilities.Security.SetupPasswordAndKeyFile();
             bool? ok = setupWindow.ShowDialog();
 
             if (ok == true)
             {
-                // --- Configure encrypted logging (no schema creation; will fail if Logs is missing) ---
+                // --- Configure encrypted logging ---
                 try
                 {
                     string appVersion =
                         (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
                         .GetName().Version?.ToString() ?? "unknown";
 
-                    // Stable session id per app run
-                    string sessionId = Guid.NewGuid().ToString("N");
+                    string sessionId = Guid.NewGuid().ToString("N"); // per-run session id
 
-                    // Prefer factory so no raw connection string is kept around
-                    var logs = new LogRepository(DatabaseHelper.GetAppOpenConnection, appVersion);
+                    var logs = new LogRepository(DatabaseHelper.OpenConnection, appVersion);
 
                     ErrorHandler.Configure(
                         logs,
@@ -88,13 +110,12 @@ namespace MWPV
                         appVersion: appVersion
                     );
 
-                    // Initialize SecureLogService so we can log pending early failures
-                    SecureLogService.Initialize(DatabaseHelper.GetAppOpenConnection, appVersion, "MWPV");
+                    SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
 
-                    // Re-register so unhandled exceptions from here on also get logged
+                    // Re-register to ensure unhandled exceptions get logged too
                     ErrorHandler.RegisterGlobalHandlers(this);
 
-                    // (Optional) sweep stray unpacked SQL files on startup
+                    // Optional: sweep any unpacked SQL files
                     try
                     {
                         var sqlDir = Path.Combine(
@@ -104,91 +125,162 @@ namespace MWPV
                     }
                     catch { /* best-effort */ }
 
-                    // --- Quiet notify + flush any pre-DB failures now that DB + logger are live ---
+                    // --- Flush any pre-DB failures now that DB + logger are live ---
                     if (EarlyLoginFailures.HasPending())
                     {
-                        // Log-only (no UI popup)
                         SecureLogService.WriteAsync(
-                            Utilities.Security.LogLevel.Info,
-                            new { pending = EarlyLoginFailures.PendingCount(), dir = EarlyLoginFailures.StoreDir },
+                            SecLogLevel.Info,
+                            new { pending = EarlyLoginFailures.PendingCount, dir = EarlyLoginFailures.StoreDir },
                             eventCode: "EARLY_LOGIN_FAILURES_PENDING",
                             source: "post-login"
                         ).GetAwaiter().GetResult();
 
-                        // Set quarantine dir once
-                        var earlyDir = EarlyLoginFailures.StoreDir;
-                        var quarantineDir = Path.Combine(earlyDir, "quarantine");
-                        Directory.CreateDirectory(quarantineDir);
-
-                        // Write a log row per pending .elog, then securely delete each file (via quarantine)
                         EarlyLoginFailures.FlushToDb(
                             writeDbLog: (utc, type, detail) =>
                                 SecureLogService.WriteAsync(
-                                    level: Utilities.Security.LogLevel.Info,
+                                    level: SecLogLevel.Info,
                                     payload: new { earlyFail = type.ToString(), detail, occurredUtc = utc },
                                     eventCode: "EARLY_LOGIN_FAILURE",
                                     source: "SetupPasswordAndKeyFile"
-                                ).GetAwaiter().GetResult(),  // wait so we only delete on success
+                                ).GetAwaiter().GetResult(),  // bool
 
-                            secureFileDelete: path =>
+                            deleteFile: path =>
                             {
+                                try
+                                {
 #if DEBUG
-                                // Breadcrumb: which file are we deleting?
-                                SecureLogService.WriteAsync(
-                                    Utilities.Security.LogLevel.Info,
-                                    new { path },
-                                    eventCode: "EARLY_ELOG_DELETE_ATTEMPT",
-                                    source: "EarlyLoginIngest"
-                                ).GetAwaiter().GetResult();
+                                    SecureLogService.WriteAsync(
+                                        SecLogLevel.Info,
+                                        new { path },
+                                        eventCode: "EARLY_ELOG_DELETE_ATTEMPT",
+                                        source: "EarlyLoginIngest"
+                                    ).GetAwaiter().GetResult();
 #endif
-                                var res = SensitiveDataCleaner.QuarantineThenSecureDelete(
-                                    srcPath: path,
-                                    quarantineDir: quarantineDir,
-                                    overwritePasses: 1,
-                                    maxRetries: 5
-                                );
-
+                                    SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1);
 #if DEBUG
-                                SecureLogService.WriteAsync(
-                                    res.Success ? Utilities.Security.LogLevel.Info : Utilities.Security.LogLevel.Warn,
-                                    res.Success ? new { path } : new { path, res.Error, res.Detail },
-                                    eventCode: res.Success ? "EARLY_ELOG_DELETED" : "EARLY_ELOG_DELETE_FAILED",
-                                    source: "EarlyLoginIngest"
-                                ).GetAwaiter().GetResult();
+                                    SecureLogService.WriteAsync(
+                                        SecLogLevel.Info,
+                                        new { path },
+                                        eventCode: "EARLY_ELOG_DELETED",
+                                        source: "EarlyLoginIngest"
+                                    ).GetAwaiter().GetResult();
 #endif
-                                return res.Success;
+                                    return true;
+                                }
+                                catch (Exception ex)
+                                {
+#if DEBUG
+                                    SecureLogService.WriteAsync(
+                                        SecLogLevel.Warn,
+                                        new { path, ex = ex.Message },
+                                        eventCode: "EARLY_ELOG_DELETE_FAILED",
+                                        source: "EarlyLoginIngest"
+                                    ).GetAwaiter().GetResult();
+#endif
+                                    return false;
+                                }
                             }
                         );
                     }
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
-                    // Don’t block startup if logging wiring fails
+                    // Do not block startup on logging issues
                     ErrorHandler.Abend(ex,
                         "Failed to initialize encrypted logging",
                         stage: "startup-logging",
                         severity: ErrorSeverity.Warning,
-                        icon: System.Windows.MessageBoxImage.Warning,
+                        icon: MessageBoxImage.Warning,
                         log: false);
                 }
 
                 // --- Launch main window ---
                 var mainWindow = new MainWindow();
-                Current.MainWindow = mainWindow;
-                Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                WpfApp.Current.MainWindow = mainWindow;
+                WpfApp.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
                 mainWindow.Show();
             }
             else
             {
-                Current.Shutdown();
+                WpfApp.Current.Shutdown();
+            }
+        }
+
+        private void InstanceSignalListener()
+        {
+            try
+            {
+                while (!_shutdownListener && _instanceSignal is not null)
+                {
+                    _instanceSignal.WaitOne();
+                    if (_shutdownListener) break;
+
+                    // Marshal to UI thread to bring the existing instance to front
+                    try { Dispatcher?.BeginInvoke(new Action(BringExistingInstanceToFront)); }
+                    catch { /* never throw on listener thread */ }
+                }
+            }
+            catch
+            {
+                // swallow listener errors; single-instance must not crash the app
+            }
+        }
+
+        private void BringExistingInstanceToFront()
+        {
+            // Prefer the setup window if it's open; otherwise MainWindow or any visible window.
+            Window? w =
+                WpfApp.Current.Windows.OfType<Utilities.Security.SetupPasswordAndKeyFile>()
+                    .FirstOrDefault(win => win.IsVisible)
+                ?? WpfApp.Current.MainWindow
+                ?? WpfApp.Current.Windows.Cast<Window>().FirstOrDefault(win => win.IsVisible);
+
+            if (w == null) return;
+
+            try
+            {
+                if (w.WindowState == WindowState.Minimized)
+                    w.WindowState = WindowState.Normal;
+
+                bool originalTopmost = w.Topmost;
+                w.Topmost = true;
+                w.Activate();
+                w.Topmost = originalTopmost;
+                w.Focus();
+            }
+            catch
+            {
+                // ignore activation failures
             }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            _singleInstanceMutex?.ReleaseMutex();
-            _singleInstanceMutex?.Dispose();
-            _singleInstanceMutex = null;
+            _shutdownListener = true;
+
+            try { _instanceSignal?.Set(); } catch { /* wake listener */ }
+            try { _instanceSignal?.Dispose(); } catch { }
+            _instanceSignal = null;
+
+            try
+            {
+                // Only release if THIS process acquired the mutex at startup
+                if (_ownsSingleInstanceMutex && _singleInstanceMutex is not null)
+                {
+                    _singleInstanceMutex.ReleaseMutex();
+                }
+            }
+            catch
+            {
+                // If we somehow don't own it here, ignore (defensive)
+            }
+            finally
+            {
+                try { _singleInstanceMutex?.Dispose(); } catch { }
+                _singleInstanceMutex = null;
+                _ownsSingleInstanceMutex = false;
+            }
+
             base.OnExit(e);
         }
     }

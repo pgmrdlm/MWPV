@@ -8,9 +8,9 @@ using Microsoft.Data.Sqlite;          // Microsoft provider (ok to keep even if 
 
 using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
-using Utilities.Security;             // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp
+using Utilities.Security;             // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
-using MWPV.Services;                  // LogRepository, LogLevel
+using MWPV.Services;                  // LogRepository
 
 namespace Utilities.Security
 {
@@ -19,18 +19,17 @@ namespace Utilities.Security
     /// - First run: user picks archive path (any extension), sets a password; we create DB, build encrypted archive,
     ///   and store the canonical DB password file + keyset.json inside it.
     /// - Subsequent runs: user selects an existing archive and enters its password.
-    ///   We verify with <see cref="ServiceSetUp.VerifyKeyFilePW"/> which requires:
-    ///   (a) entries are encrypted, and (b) sentinel files exist (DB_Password.txt + keyset.json).
+    ///   We verify with KeyArchiveVerifier (strict: encrypted + sentinels present).
     ///   On failure, we create an early log (.elog) and show a friendly message.
     /// After success we load SQL from the archive, verify must-have scripts, ensure Logs schema,
     /// and (in DEBUG) run a small smoke test.
     /// </summary>
     public partial class SetupPasswordAndKeyFile : Window
     {
-        // 🔑 SecureEncryptedDataStore key names
-        private const string Key_DBPassword = "DB_Password.txt"; // matches the file name inside the archive
-        private const string Key_KeyFile = "KeyFile";         // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";           // sensitive password
+        // 🔑 SecureEncryptedDataStore key names (match files/keys inside the archive)
+        private const string Key_DBPassword = "DB_Password.txt"; // matches file inside the archive
+        private const string Key_KeyFile = "KeyFile";            // non-sensitive path
+        private const string Key_KeyPW = "KeyPW";                // sensitive password
 
         // Full path to local encrypted database
         private readonly string localAppDataPath = Path.Combine(
@@ -43,7 +42,7 @@ namespace Utilities.Security
         {
             InitializeComponent();
 
-            // keep max/restore glyph in sync if you added the custom title bar
+            // Keep max/restore glyph in sync if custom titlebar is present
             try
             {
                 UpdateMaxGlyph();
@@ -51,7 +50,7 @@ namespace Utilities.Security
             }
             catch { /* safe if glyph not present */ }
 
-            // If database already exists, hide verification fields and change button label
+            // Existing install: hide verify field, switch button wording
             if (File.Exists(localAppDataPath))
             {
                 VerifyPasswordRow.Height = new GridLength(0);
@@ -65,7 +64,7 @@ namespace Utilities.Security
         {
             if (File.Exists(localAppDataPath))
             {
-                // Existing DB: user is selecting an existing key file (extension-agnostic)
+                // Existing DB: choose an existing encrypted key archive (any extension acceptable)
                 var openFileDialog = new Microsoft.Win32.OpenFileDialog
                 {
                     Title = "Select your encrypted key archive",
@@ -77,13 +76,11 @@ namespace Utilities.Security
                 };
 
                 if (openFileDialog.ShowDialog() == true)
-                {
                     tbKeyFile.Text = openFileDialog.FileName;
-                }
             }
             else
             {
-                // No DB: user is creating a new key file (let them choose any extension)
+                // First run: choose where to create the archive
                 var saveDialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Title = "Save your encrypted key archive",
@@ -95,9 +92,7 @@ namespace Utilities.Security
                 };
 
                 if (saveDialog.ShowDialog() == true)
-                {
                     tbKeyFile.Text = saveDialog.FileName;
-                }
             }
         }
 
@@ -126,15 +121,15 @@ namespace Utilities.Security
                 SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars); // datastore wipes pwChars
                 SensitiveDataCleaner.WipeString(ref password);           // drop original string ref
 
-                // Generate and store a secure database password — char[] only until storage
+                // Generate and store DB password — char[] only until storage
                 char[] newPassword = null;
                 SecurePassword.Generate(ref newPassword, 32);
-
                 SecureEncryptedDataStore.SetNoWipe(Key_DBPassword, newPassword);
                 SensitiveDataCleaner.WipeCharArray(newPassword);
 
                 // Setup DB and key file
                 var service = new ServiceSetUp();
+
                 string resultDb = service.SetUpDataBase();
                 if (string.Equals(resultDb, "error", StringComparison.OrdinalIgnoreCase))
                 {
@@ -176,7 +171,7 @@ namespace Utilities.Security
                 try
                 {
                     // Strict verify: encrypted entries + sentinel files (DB_Password.txt & keyset.json)
-                    isCorrect = ServiceSetUp.VerifyKeyFilePW(fullPath, password);
+                    isCorrect = KeyArchiveVerifier.VerifyPasswordAndSentinels(fullPath, password);
                 }
                 catch (Exception ex)
                 {
@@ -186,7 +181,6 @@ namespace Utilities.Security
                         $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
                     );
 
-                    // Friendly notice for the user (elog will be ingested after login succeeds)
                     ErrorHandler.InfoTitled("Key File Verification",
                         "Error verifying key file.\n\n(This error has been logged.)",
                         "KeyFileVerify");
@@ -203,7 +197,6 @@ namespace Utilities.Security
                         $"Invalid key-file password or unsupported/unencrypted archive. Path='{fullPath ?? tbKeyFile.Text}'"
                     );
 
-                    // Consistent helper popup
                     ErrorHandler.InfoTitled("Key File Verification",
                         "Invalid Key File Password or invalid key file selected.\n\n(This error has been logged.)",
                         "KeyFileVerify");
@@ -258,14 +251,13 @@ namespace Utilities.Security
             }
 
             // 🧱 Ensure Logs schema exists (Init + Indexes), idempotent.
-            // Uses your DatabaseHelper to open an already-keyed connection.
             try
             {
                 using var openConn = DatabaseHelper.OpenConnection();
                 SchemaBootstrap.EnsureLogsSchema(openConn);
 
 #if DEBUG
-                // 🔎 DEBUG-only smoke test: read categories + insert a log
+                // 🔎 DEBUG-only smoke test
                 SmokeTester.Run();
 #endif
             }
@@ -279,7 +271,7 @@ namespace Utilities.Security
                 );
             }
 
-            // Success: keyfile password verified and DB connection is open
+            // After successful unlock/setup, ingest any pending early logs
             if (EarlyLoginFailures.HasPending())
             {
                 ErrorHandler.InfoTitled(
@@ -288,13 +280,13 @@ namespace Utilities.Security
                     "EarlyLogin.Ingest"
                 );
 
-                // Use LogRepository so FlushToDb knows success and deletes files on success
                 var repo = new LogRepository(
-                    Utilities.Helpers.DatabaseHelper.OpenConnection,
+                    DatabaseHelper.OpenConnection,
                     Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "dev"
                 );
 
                 EarlyLoginFailures.FlushToDb(
+                    // insertToDb
                     (utc, type, detail) =>
                         repo.LogAsync(
                             level: MWPV.Services.LogLevel.Info,
@@ -304,9 +296,14 @@ namespace Utilities.Security
                             isCrash: false,
                             sessionId: null,
                             stackHash: null
-                        ).GetAwaiter().GetResult() > 0,   // convert inserted row id -> success
+                        ).GetAwaiter().GetResult() > 0,
 
-                    path => { SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1); return true; }
+                    // deleteFile (secure)
+                    path =>
+                    {
+                        SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1);
+                        return true;
+                    }
                 );
             }
 
@@ -346,13 +343,9 @@ namespace Utilities.Security
             try
             {
                 if (e.ClickCount == 2)
-                {
                     ToggleMaxRestore();
-                }
                 else
-                {
                     DragMove();
-                }
             }
             catch { /* ignore drag exceptions */ }
         }

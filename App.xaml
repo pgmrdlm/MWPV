@@ -1,4 +1,15 @@
 ﻿<Application x:Class="MWPV.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Load shared button styles (relative URI; same assembly) -->
+                <ResourceDictionary Source="Themes/Buttons/Buttons.xaml"/>
+                <!-- If you ever move styles to another assembly, use pack URI:
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
+                -->
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>

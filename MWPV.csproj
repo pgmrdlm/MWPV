@@ -1,48 +1,56 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
 
-  <ItemGroup>
-    <None Remove="sql\SelectCatagories.sql" />
-  </ItemGroup>
+		<!-- Runtime/bitness -->
+		<PlatformTarget>x64</PlatformTarget>
+		<Prefer32Bit>false</Prefer32Bit>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <COMReference Include="{215d64d2-031c-33c7-96e3-61794cd1ee61}">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>4</VersionMinor>
-      <VersionMajor>2</VersionMajor>
-      <Guid>215d64d2-031c-33c7-96e3-61794cd1ee61</Guid>
-    </COMReference>
-  </ItemGroup>
+	<!-- Keep your embedded SQL (you’re embedding + copying; leaving behavior unchanged) -->
+	<ItemGroup>
+		<None Remove="sql\SelectCatagories.sql" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="sql\SelectCatagories.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
+	<!-- Removed COMReference for System_Windows_Forms (caused MSB3290) -->
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.7" />
-    <PackageReference Include="PasswordGenerator" Version="2.1.0" />
-    <PackageReference Include="SevenZipSharp" Version="0.64.0" />
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
-  </ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Include="sql\SelectCatagories.sql">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</EmbeddedResource>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="DataAccess\" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.7" />
+		<PackageReference Include="PasswordGenerator" Version="2.1.0" />
+		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
+		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Update="7z.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	<ItemGroup>
+		<Folder Include="DataAccess\" />
+	</ItemGroup>
+
+	<!-- Make sure 7z.dll ships in both bin\ and publish\ -->
+	<ItemGroup>
+		<None Update="7z.dll">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
+		</None>
+
+		<!-- Optional: ship 7-Zip license if you include the DLL -->
+		<!--
+    <None Include="License-7zip.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </None>
-  </ItemGroup>
+    -->
+	</ItemGroup>
 
 </Project>
