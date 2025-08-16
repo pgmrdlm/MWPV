@@ -2,6 +2,7 @@
 using System.IO;
 using System.Reflection;              // for app version
 using System.Windows;
+using System.Windows.Input;           // for MouseButtonEventArgs
 
 using Microsoft.Data.Sqlite;          // Microsoft provider (ok to keep even if not used directly here)
 
@@ -41,6 +42,14 @@ namespace Utilities.Security
         public SetupPasswordAndKeyFile()
         {
             InitializeComponent();
+
+            // keep max/restore glyph in sync if you added the custom title bar
+            try
+            {
+                UpdateMaxGlyph();
+                this.StateChanged += (_, __) => UpdateMaxGlyph();
+            }
+            catch { /* safe if glyph not present */ }
 
             // If database already exists, hide verification fields and change button label
             if (File.Exists(localAppDataPath))
@@ -328,6 +337,54 @@ namespace Utilities.Security
             }
 
             return true;
+        }
+
+        // ===== Custom title bar handlers (safe no-ops if you didn't add XAML bits) =====
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                if (e.ClickCount == 2)
+                {
+                    ToggleMaxRestore();
+                }
+                else
+                {
+                    DragMove();
+                }
+            }
+            catch { /* ignore drag exceptions */ }
+        }
+
+        private void MinButton_Click(object sender, RoutedEventArgs e)
+            => SystemCommands.MinimizeWindow(this);
+
+        private void MaxRestoreButton_Click(object sender, RoutedEventArgs e)
+            => ToggleMaxRestore();
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+            => SystemCommands.CloseWindow(this);
+
+        private void ToggleMaxRestore()
+        {
+            if (WindowState == WindowState.Maximized)
+                SystemCommands.RestoreWindow(this);
+            else
+                SystemCommands.MaximizeWindow(this);
+            UpdateMaxGlyph();
+        }
+
+        // Swap □ (E922) / ⇱ (E923) if you named the TextBlock "TbMaxGlyph" in XAML
+        private void UpdateMaxGlyph()
+        {
+            try
+            {
+                var tb = this.FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
+                if (tb != null)
+                    tb.Text = (WindowState == WindowState.Maximized) ? "\uE923" : "\uE922";
+            }
+            catch { /* fine if glyph not present */ }
         }
     }
 }

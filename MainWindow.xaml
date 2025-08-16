@@ -1,34 +1,90 @@
-﻿<Window x:Class="MWPV.MainWindow"
+﻿<!-- MainWindow.xaml — title bar only; caption buttons clickable in chrome -->
+<Window x:Class="MWPV.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MWPV"
         xmlns:userControls="clr-namespace:MWPV.View.UserControls"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
-        Title="MWPV - My Windows Password Vault">
-    
-    <Grid  Background="Bisque">
-        
+        Title="MWPV - My Windows Password Vault"
+        WindowStyle="None"
+        ResizeMode="CanResize">
+
+    <!-- Borderless drag/resize -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="36"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Grid Background="Bisque">
         <Grid.RowDefinitions>
-            <!--Menu Bar-->
+            <!-- NEW: Title Bar -->
+            <RowDefinition Height="36"/>
+            <!-- Menu Bar -->
             <RowDefinition Height="20"/>
-            <!--Pannel-->
+            <!-- Panel -->
             <RowDefinition Height="Auto"/>
-            <!--Status-->
+            <!-- Status -->
             <RowDefinition Height="20"/>
         </Grid.RowDefinitions>
-        
-        <userControls:MenuBar 
-            Grid.Row="0"
-        />
-        <userControls:Panel 
-            x:Name="Panel" 
-            Grid.Row="1"
-        />
-        
-        <!-- Footer 
-        <Rectangle Grid.Row="2" Fill="green" />-->
-        
+
+        <!-- TITLE BAR (new) -->
+        <Border Grid.Row="0" Background="#810000">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Drag area + window title -->
+                <Grid MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown"
+                      MouseRightButtonUp="TitleBar_OnMouseRightButtonUp">
+                    <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"/>
+                </Grid>
+
+                <!-- Caption buttons (now hit-testable in chrome) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <!-- Minimize -->
+                    <Button Width="46" Height="36" Background="Transparent" BorderThickness="0"
+                            Click="Minimize_Click" ToolTip="Minimize"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="White"
+                                   Text="&#xE921;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+
+                    <!-- Max/Restore -->
+                    <Button x:Name="MaxRestoreButton" Width="46" Height="36" Background="Transparent" BorderThickness="0"
+                            Click="MaxRestore_Click" ToolTip="Maximize"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <TextBlock x:Name="TbMaxGlyph" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="White"
+                                   Text="&#xE922;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+
+                    <!-- Close -->
+                    <Button Width="46" Height="36" Background="Transparent" BorderThickness="0"
+                            Click="Close_Click" ToolTip="Close"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="White"
+                                   Text="&#xE8BB;" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Your original controls, just shifted down one row -->
+        <userControls:MenuBar Grid.Row="1"/>
+        <userControls:Panel x:Name="Panel" Grid.Row="2"/>
+
+        <!-- Footer
+        <Rectangle Grid.Row="3" Fill="green"/> -->
     </Grid>
 </Window>
