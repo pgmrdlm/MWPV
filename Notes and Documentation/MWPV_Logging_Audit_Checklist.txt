@@ -1,0 +1,98 @@
+MWPV Logging Audit Checklist
+
+A concise reference to verify that all important events are logged, including pre-DB cases,
+with no sensitive data exposure, updated for portable LogPayloadKey usage and scripted SQL.
+
+1) Coverage
+
+Startup: App launch, service wiring, config load.
+
+SetupPasswordAndKeyFile: success, cancel, wrong/missing key file.
+
+DB Open/Close: normal and failed attempts.
+
+Category CRUD: add, update, delete, duplicates.
+
+Export/Backup/Restore: start, success, failure.
+
+Abend & Exceptions: all unhandled errors.
+
+Shutdown: normal and abnormal.
+
+2) Hooks & Standards
+
+Use central async logger for all post-DB events.
+
+Early-log writer for key-file failures (encrypted with LogPayloadKey).
+
+Log before showing UI error dialogs.
+
+Include EventId, Severity, Source, UserAction, CorrelationId.
+
+Mask/truncate sensitive values.
+
+3) Pre‑Login Logging
+
+Encrypted payload with LogPayloadKey: timestamp, reason, masked hints.
+
+Stored in %LOCALAPPDATA%/MWPV/early-logs/*.elog.
+
+On next good login: scan → ingest to DB → show non-blocking notice → securely delete.
+
+4) Schema & Helpers
+
+Logs table: Id, TimestampUtc, Severity, EventId, Source, Message, DetailsJson, CorrelationId, Version.
+
+Version indicates which key/encryption method was used.
+
+Helpers: LogEntry DTO, LogMasking.MaskSensitive(), Correlation.BeginScope().
+
+All log-related SQL (schema, queries) stored in individual .sql files inside encrypted 7z archive,
+loaded into SecureEncryptedDataStore at runtime.
+
+5) Tests
+
+Wrong key-file password → .elog created (LogPayloadKey) & ingested.
+
+Forced Abend → DB log with stack.
+
+Export to read-only → failure log.
+
+Duplicate category add → info/warn log.
+
+Abnormal shutdown → reason logged.
+
+Decrypt both new LogPayloadKey logs and any older machine-bound logs until retired.
+
+6) Secure Deletion & Retention
+
+Overwrite + delete early logs.
+
+DB log retention (e.g., 90 days) + purge.
+
+Limit DetailsJson size.
+
+7) UI/UX
+
+Non-blocking notice for prior errors.
+
+Log viewer filters: date, severity, event id, search.
+
+8) Quality
+
+Clear, actionable entries.
+
+Avoid duplicates.
+
+Await async logs where order matters.
+
+9) Housekeeping
+
+README section on logging must mention:
+ - LogPayloadKey
+ - SQL script storage in encrypted archive
+ - No direct hardcoding of queries in source
+
+Dev mode: echo logs to debug output.
+
+Unit tests for masking, early-log ingestion, and versioned decryption.
