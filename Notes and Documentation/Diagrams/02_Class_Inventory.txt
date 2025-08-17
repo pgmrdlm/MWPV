@@ -1,0 +1,20 @@
+MWPV Diagram Input — Class Inventory
+====================================
+For each important class, one block like this:
+
+Namespace.ClassName
+- Role: (short description)
+- Key Methods: (comma-separated or lines)
+- DependsOn: (other classes it calls)
+- UsedBy: (optional)
+- Notes: (optional)
+
+Example:
+Utilities.Security.KeyProvisioning
+- Role: Create/load DbPassword, LogPayloadKey, UserSecretsKey; create-if-missing; load into SecureEncryptedDataStore
+- Key Methods: Initialize(), CreateIfMissing(), LoadIntoStore()
+- DependsOn: SecureEncryptedDataStore, SevenZipHelper, DPAPIHelper
+- UsedBy: App startup
+- Notes: temp buffers wiped on all paths
+
+Add as many blocks as you want:

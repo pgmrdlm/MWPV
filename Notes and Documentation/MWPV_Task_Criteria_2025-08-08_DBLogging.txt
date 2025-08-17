@@ -1,0 +1,58 @@
+MWPV – Task Criteria Breakdown
+Last updated: 2025-08-08 23:31
+Author: Inspector Gadget (ChatGPT)
+
+Task 1 – Export During Debugging
+Goal:
+    Enable a DEBUG-only hotkey to export encrypted DB without creating plaintext copies.
+Criteria:
+    - Hotkey works only in DEBUG build (e.g., Ctrl+Alt+I).
+    - Export directory auto-created: %LOCALAPPDATA%\MWPV\DebugExports\{yyyyMMdd-HHmm}.
+    - DB copied as-is (encrypted) or packaged in password-protected 7z.
+    - Manifest.json includes timestamp, version, schema version, file hash (no secrets).
+    - Any generated passwords handled as char[], wiped after use.
+    - No temp plaintext files; zero File.WriteAllText for sensitive data.
+Status: Pending.
+
+Task 2 – Encrypted Logging (Database Table)
+Goal:
+    Implement encrypted logging stored directly in the secure SQLCipher database, avoiding external log files.
+Criteria:
+    - Dedicated `Logs` table in the encrypted DB with columns:
+        Id (PK), Timestamp, Level, EventId, Area, Message, Tags.
+    - All inserts go directly to the encrypted DB; no plaintext logs on disk.
+    - Rotation handled via SQL (DELETE rows older than N days or exceeding N rows).
+    - Logging disabled by default; enable through in-memory flag or encrypted config.
+    - Optional export tool (dev-only) can SELECT from table and save to decrypted JSON or CSV.
+    - Encrypted DB provides confidentiality; no separate AES encryption layer needed for log entries.
+Status: Pending.
+
+Task 3 – SecureMemoryTracker
+Goal:
+    Central registry to track/wipe sensitive buffers on demand for reuse in Security.Utility.dll.
+Criteria:
+    - API supports: Register(buffer, label, category), TryWipe(label/category), WipeAll().
+    - Supports char[], byte[], SecureString.
+    - Uses WeakReference to avoid extending object lifetimes.
+    - Integration points: KeyPW, DB_Password, temp decrypt buffers.
+Status: Pending / optional.
+
+Task 4 – Normal & Abnormal Shutdown Cleanup
+Goal:
+    Ensure complete cleanup of sensitive data on both graceful and unexpected termination.
+Criteria:
+    - Hooks in App.OnExit, Window.Closing, ProcessExit, UnhandledException.
+    - Sequence: wipe UI controls, call SecureMemoryTracker.WipeAll(), close DB, flush logs.
+    - Failsafe timer triggers wipe if main thread hangs.
+    - Works when app is killed from Task Manager (within ProcessExit limits).
+Status: Pending.
+
+Task 5 – CategoryGrid Overlay: Add Category
+Goal:
+    Implement inline category add overlay, integrated with current data refresh logic.
+Criteria:
+    - XAML overlay visibility bound to VM property (IsAddingCategory).
+    - Duplicate category validation in VM with error feedback.
+    - On save: add via service → panel updates source list → UI refresh.
+    - Sensitive inputs handled with char[]; wiped on cancel/save.
+Status: Pending.
