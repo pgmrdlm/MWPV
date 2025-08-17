@@ -1,5 +1,0 @@
-TODO LIST - 20250810
---------------------------
-1. (No active coding tasks today - schema adjustments and planning done)
-2. Prepare for tomorrow's memory tracker, shutdown cleanup, and UI work.
-3. Organize notes and archive older ToDo files.
