@@ -244,5 +244,45 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- =========================
+         Item (purple – for category items)
+         ========================= -->
+    <LinearGradientBrush x:Key="ItemNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6A0DAD" Offset="0"/>
+        <GradientStop Color="#D1B3FF" Offset="0.5"/>
+        <GradientStop Color="#6A0DAD" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="ItemHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#7F26C9" Offset="0"/>
+        <GradientStop Color="#E0CCFF" Offset="0.5"/>
+        <GradientStop Color="#7F26C9" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="ItemPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#4B007F" Offset="0"/>
+        <GradientStop Color="#C2A3FF" Offset="0.5"/>
+        <GradientStop Color="#4B007F" Offset="1"/>
+    </LinearGradientBrush>
+
+    <Style x:Key="ItemPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
+        <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
+        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+ 
 
 </ResourceDictionary>
