@@ -3,20 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- ===== Merge shared theme resources ===== -->
+
+            <!-- ===== Merge theme resources (buttons, title buttons, dialog buttons) ===== -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Buttons (primary/secondary/title-bar with hover/press states) -->
+                <!-- Same-assembly reference -->
                 <ResourceDictionary Source="Themes/Buttons/Buttons.xaml"/>
-                <!-- If you move styles to another assembly, use pack URI like:
-                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
-                -->
+                <!-- If moved to another assembly, use:
+        <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
+        -->
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- ===== Common brushes you can reuse anywhere ===== -->
+            <SolidColorBrush x:Key="BrandMaroon" Color="#8B0000"/>
+            <SolidColorBrush x:Key="DialogBackgroundBrush" Color="Bisque"/>
+            <CornerRadius   x:Key="DialogCornerRadius">8</CornerRadius>
 
             <!-- ===== App-wide polish (safe defaults) ===== -->
             <!-- Make all windows crisp & consistent -->
             <Style TargetType="{x:Type Window}">
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="UseLayoutRounding" Value="True"/>
+                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
             </Style>
 
             <!-- Improve text readability across the app -->
@@ -26,11 +34,15 @@
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
             </Style>
 
-            <!-- Optional: default tooltip styling (subtle, readable) -->
+            <!-- Subtle, readable tooltips -->
             <Style TargetType="{x:Type ToolTip}">
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="Padding" Value="8,6"/>
             </Style>
+
+            <!-- (Optional) If you want a default Button look everywhere, uncomment:
+      <Style TargetType="{x:Type Button}" BasedOn="{StaticResource DialogSecondary}"/>
+      -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>
