@@ -1,29 +1,17 @@
 ﻿using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using System;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Text.RegularExpressions;
-using System.Windows;
-using Utilities.Helpers;
-using Utilities.Security;
+using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
+using Utilities.Security;  // InputGuards
 
 namespace MWPV.Services
 {
     public static class CategoryService
     {
-        //private static readonly string sourceDir = "C:\\Users\\pgmrd\\My Drive\\MWPV\\MWPV\\sql";
-        //private static readonly string _path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "sql");
-        //`private static readonly string _connectionString;
-        //private static readonly string _sqlQuery;
-        //private static readonly string _sqlInsert;
-        //private static readonly string _sqlCatagoryExists;
-
-        //static CategoryService()
-
-
         public static ObservableCollection<Catagories> LoadCatagories()
         {
-            var catagories = new ObservableCollection<Catagories>();
+            var rows = new ObservableCollection<Catagories>();
             string stage = "init";
 
             try
@@ -39,18 +27,27 @@ namespace MWPV.Services
                 cmd.CommandText = selectSql;
 
                 stage = "execute-reader";
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
+                using var r = cmd.ExecuteReader();
+
+                // Cache ordinals once
+                int iCol1 = r.GetOrdinal("Col1");
+                int iCol2 = r.GetOrdinal("Col2");
+                int iCol3 = r.GetOrdinal("Col3");
+                int iDes1 = r.GetOrdinal("Des1");
+                int iDes2 = r.GetOrdinal("Des2");
+                int iDes3 = r.GetOrdinal("Des3");
+
+                while (r.Read())
                 {
                     stage = "materialize-row";
-                    catagories.Add(new Catagories
+                    rows.Add(new Catagories
                     {
-                        strCategory1 = reader["Col1"] is not DBNull ? reader["Col1"].ToString() : "",
-                        strCategory2 = reader["Col2"] is not DBNull ? reader["Col2"].ToString() : "",
-                        strCategory3 = reader["Col3"] is not DBNull ? reader["Col3"].ToString() : "",
-                        strCategoryToolTip1 = reader["Des1"] is not DBNull ? reader["Des1"].ToString() : "",
-                        strCategoryToolTip2 = reader["Des2"] is not DBNull ? reader["Des2"].ToString() : "",
-                        strCategoryToolTip3 = reader["Des3"] is not DBNull ? reader["Des3"].ToString() : ""
+                        strCategory1 = r.IsDBNull(iCol1) ? "" : r.GetString(iCol1),
+                        strCategory2 = r.IsDBNull(iCol2) ? "" : r.GetString(iCol2),
+                        strCategory3 = r.IsDBNull(iCol3) ? "" : r.GetString(iCol3),
+                        strCategoryToolTip1 = r.IsDBNull(iDes1) ? "" : r.GetString(iDes1),
+                        strCategoryToolTip2 = r.IsDBNull(iDes2) ? "" : r.GetString(iDes2),
+                        strCategoryToolTip3 = r.IsDBNull(iDes3) ? "" : r.GetString(iDes3),
                     });
                 }
             }
@@ -59,52 +56,40 @@ namespace MWPV.Services
                 ErrorHandler.Abend(ex, "Error during database initialization", stage: stage);
             }
 
-            return catagories;
+            return rows;
         }
 
-
-
-        public static void InsertCategory(string newCategory, string newDescription)
+        public static void InsertCategory(string newCategory, string? newDescription)
         {
-            if (newCategory == null)
+            if (newCategory is null)
                 throw new ArgumentNullException(nameof(newCategory));
 
-            // ---- Normalize inputs ----
-            string name = newCategory.Trim();
+            // Defensive re-validation (centralized rules)
+            var check = InputGuards.ValidateCategoryName(newCategory, 4, 17);
+            if (!check.IsValid)
+                throw new ArgumentException(check.Error ?? "Invalid category name.", nameof(newCategory));
 
-            if (name.Length < 4)
-                throw new ArgumentException("Category name must be at least 4 characters.", nameof(newCategory));
-            if (name.Length > 17)
-                throw new ArgumentException("Category name must be 17 characters or fewer.", nameof(newCategory));
-
-            // Strip control chars (except CR/LF/TAB)
-            name = Regex.Replace(name, @"[\p{C}&&[^\r\n\t]]", string.Empty);
-
-            string desc = (newDescription ?? string.Empty).Trim();
-            if (desc.Length > 512) desc = desc.Substring(0, 512);
-            desc = Regex.Replace(desc, @"[\p{C}&&[^\r\n\t]]", string.Empty);
-
-            // Ensure non-empty description
+            // Normalize free text (caps length, strips control chars, forbids <, >, | by default)
+            string? desc = InputGuards.NormalizeFreeText(newDescription, 512);
             if (string.IsNullOrWhiteSpace(desc))
-                desc = name;
+                desc = check.CleanName; // never store empty tooltip
 
-            // ---- Load SQL ----
             string insertSql = SecureEncryptedDataStore.GetString("InsertCatagory.sql");
             if (string.IsNullOrWhiteSpace(insertSql))
                 throw new InvalidOperationException("InsertCatagory.sql was not found or is empty.");
 
-            // ---- Execute ----
             using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var tx = conn.BeginTransaction();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = insertSql;
 
-            cmd.Parameters.AddWithValue("@catagoryname", name);
+            cmd.Transaction = tx;
+            cmd.CommandText = insertSql;
+            cmd.Parameters.AddWithValue("@catagoryname", check.CleanName);
             cmd.Parameters.AddWithValue("@description", desc);
 
             cmd.ExecuteNonQuery();
+            tx.Commit();
         }
-
-
 
         public static bool DoesCatagoryExist(string categoryName)
         {
@@ -118,10 +103,8 @@ namespace MWPV.Services
             cmd.CommandText = sql;
             cmd.Parameters.AddWithValue("@catagoryname", categoryName.Trim());
 
-            var scalar = cmd.ExecuteScalar();           // EXISTS -> boxed long 0/1
+            object? scalar = cmd.ExecuteScalar(); // EXPECT: 0/1
             return scalar != null && Convert.ToInt64(scalar) == 1;
         }
-
-
     }
 }

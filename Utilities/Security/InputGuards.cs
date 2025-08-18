@@ -1,155 +1,118 @@
-﻿// Utilities/Security/InputGuards.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Utilities.Security
 {
     /// <summary>
-    /// Centralized, side-effect-free input validation/sanitization.
-    /// Two overloads of Validate():
-    ///   • Strict (names/passwords)  -> Validate(string?, int minLen, int maxLen, …)
-    ///   • Freeform (descriptions)   -> Validate(string?, int maxLen, bool allowLineBreaks, …)
-    ///
-    /// Also char[]/ReadOnlySpan<char> overload for secrets (no string concat).
-    /// Returns a ValidationResult with IsValid, Clean, and Error.
+    /// Centralized input validation & normalization for names and free text.
+    /// - Category/item names: stricter (forbid quotes, angle brackets, pipe, etc.)
+    /// - Free text: collapses whitespace, strips control chars, optionally forbids a small set (e.g., '<', '>')
     /// </summary>
     public static class InputGuards
     {
-        // Collapses any run of whitespace to a single space
+        // collapse any whitespace run to a single space
         private static readonly Regex CollapseSpaces = new(@"\s+", RegexOptions.Compiled);
 
-        // Strip all control chars except CR/LF/TAB
+        // remove ALL control chars except CR/LF/TAB
         private static readonly Regex StripControl = new(@"[\p{C}&&[^\r\n\t]]", RegexOptions.Compiled);
 
-        // Default forbidden set for strict inputs (names/passwords)
-        private static readonly char[] DefaultForbiddenStrict =
-            new[] { '\'', '\"', ';', '\\', '`', '<', '>', '|' };
+        // base forbidden characters for "names"
+        private static readonly char[] ForbiddenBase = new[] { '\'', '\"', ';', '\\', '`', '<', '>', '|' };
 
-        // Default forbidden set for freeform inputs (keep angle brackets blocked)
-        private static readonly char[] DefaultForbiddenFreeform =
-            new[] { '<', '>', '`', '|' };
-
-        /* ---------------- Result type ---------------- */
-
-        public readonly struct ValidationResult
+        public readonly struct NameCheck
         {
             public bool IsValid { get; }
-            public string? Clean { get; }
+            public string CleanName { get; }
             public string? Error { get; }
 
-            public ValidationResult(bool ok, string? clean, string? error)
+            public NameCheck(bool ok, string name, string? error)
             {
-                IsValid = ok; Clean = clean; Error = error;
+                IsValid = ok;
+                CleanName = name;
+                Error = error;
             }
+
+            public static NameCheck Ok(string name) => new(true, name, null);
+            public static NameCheck Fail(string message) => new(false, string.Empty, message);
         }
 
-        /* ---------------- Strict: names / passwords ---------------- */
-
-        public static ValidationResult Validate(
-            string? text,
+        /// <summary>
+        /// Validate a category/item name.
+        /// </summary>
+        public static NameCheck ValidateCategoryName(
+            string raw,
             int minLen,
             int maxLen,
-            ReadOnlySpan<char> extraForbidden = default,
-            IEnumerable<string>? bannedTerms = null)
+            string? extraAllowed = null,                 // chars to *unblock* from ForbiddenBase (e.g., ".," if ever desired)
+            IEnumerable<string>? bannedNames = null)     // optional banned-name list
         {
-            // Normalize (do NOT mutate caller's text)
-            string s = NormalizeForSingleLine(text);
+            if (raw is null)
+                return NameCheck.Fail("Name is required.");
 
-            // Length checks first (friendly messages)
-            if (s.Length < minLen)
-                return Fail($"Must be at least {minLen} characters long.");
-            if (s.Length > maxLen)
-                return Fail($"Must be {maxLen} characters or fewer.");
-
-            // Forbidden characters
-            if (ContainsAny(s, DefaultForbiddenStrict) || ContainsAny(s, extraForbidden))
-                return Fail("Contains characters that aren’t allowed (e.g., quotes, angle brackets, pipe).");
-
-            // Banned terms (case-insensitive)
-            if (bannedTerms != null && bannedTerms.Any(bt => bt != null && s.Equals(bt, StringComparison.OrdinalIgnoreCase)))
-                return Fail("That value isn’t allowed. Please choose a different one.");
-
-            return Ok(s);
-        }
-
-        // Secret/Password overload that avoids string allocation of the original input
-        public static ValidationResult Validate(
-            ReadOnlySpan<char> secret,
-            int minLen,
-            int maxLen,
-            ReadOnlySpan<char> extraForbidden = default,
-            IEnumerable<string>? bannedTerms = null)
-        {
-            // Copy into a temp normalized string (we must for regex/length rules)
-            string s = NormalizeForSingleLine(new string(secret));
-
-            if (s.Length < minLen)
-                return Fail($"Must be at least {minLen} characters long.");
-            if (s.Length > maxLen)
-                return Fail($"Must be {maxLen} characters or fewer.");
-
-            if (ContainsAny(s, DefaultForbiddenStrict) || ContainsAny(s, extraForbidden))
-                return Fail("Contains characters that aren’t allowed (e.g., quotes, angle brackets, pipe).");
-
-            if (bannedTerms != null && bannedTerms.Any(bt => bt != null && s.Equals(bt, StringComparison.OrdinalIgnoreCase)))
-                return Fail("That value isn’t allowed. Please choose a different one.");
-
-            return Ok(s);
-        }
-
-        /* ---------------- Freeform: descriptions / notes ---------------- */
-
-        public static ValidationResult Validate(
-            string? text,
-            int maxLen,
-            bool allowLineBreaks,
-            ReadOnlySpan<char> extraForbidden = default)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return Ok(null); // treat blank as null
-
-            string s = text.Trim();
-            s = CollapseSpaces.Replace(s, " ");
-            s = StripControl.Replace(s, string.Empty);
-
-            // Optionally remove CR/LF if not allowed
-            if (!allowLineBreaks)
-                s = s.Replace("\r", "").Replace("\n", "");
-
-            if (s.Length > maxLen)
-                s = s.Substring(0, maxLen);
-
-            if (ContainsAny(s, DefaultForbiddenFreeform) || ContainsAny(s, extraForbidden))
-                return Fail("Contains characters that aren’t allowed in description (e.g., angle brackets, pipe).");
-
-            return Ok(string.IsNullOrWhiteSpace(s) ? null : s);
-        }
-
-        /* ---------------- Helpers ---------------- */
-
-        private static string NormalizeForSingleLine(string? raw)
-        {
-            if (string.IsNullOrEmpty(raw)) return string.Empty;
             string s = raw.Trim();
             s = CollapseSpaces.Replace(s, " ");
             s = StripControl.Replace(s, string.Empty);
-            s = s.Replace("\r", " ").Replace("\n", " "); // force single line
-            return s;
+
+            if (s.Length < minLen)
+                return NameCheck.Fail($"Category name must be at least {minLen} characters.");
+            if (s.Length > maxLen)
+                return NameCheck.Fail($"Category name must be {maxLen} characters or fewer.");
+
+            var forbidden = BuildForbidden(extraAllowed);
+            if (s.IndexOfAny(forbidden) >= 0)
+                return NameCheck.Fail("Category name contains characters that aren’t allowed (e.g., quotes, angle brackets, pipe).");
+
+            if (bannedNames != null && bannedNames.Contains(s, StringComparer.OrdinalIgnoreCase))
+                return NameCheck.Fail("That category name isn’t allowed. Please choose a different name.");
+
+            return NameCheck.Ok(s);
         }
 
-        private static bool ContainsAny(string s, ReadOnlySpan<char> chars)
+        /// <summary>
+        /// Normalize free-form text: trim, collapse spaces, strip control chars,
+        /// drop a small "forbidden" set (default: &lt; &gt; |), and cap length.
+        /// </summary>
+        public static string? NormalizeFreeText(string? raw, int maxLen, string? extraAllowed = null)
         {
-            for (int i = 0; i < chars.Length; i++)
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            string s = raw.Trim();
+            s = CollapseSpaces.Replace(s, " ");
+            s = StripControl.Replace(s, string.Empty);
+
+            // Remove forbidden characters from free-text (default: <, >, |)
+            var forbidden = BuildForbiddenForFreeText(extraAllowed); // default forbids '<', '>', '|'
+            if (forbidden.Length > 0)
             {
-                if (s.IndexOf(chars[i]) >= 0) return true;
+                s = new string(s.Where(ch => Array.IndexOf(forbidden, ch) < 0).ToArray());
             }
-            return false;
+
+            if (maxLen > 0 && s.Length > maxLen)
+                s = s.Substring(0, maxLen);
+
+            return string.IsNullOrWhiteSpace(s) ? null : s;
         }
 
-        private static ValidationResult Ok(string? clean) => new(true, clean, null);
-        private static ValidationResult Fail(string msg) => new(false, null, msg);
+        // Build forbidden set for names, optionally "unblocking" characters in extraAllowed
+        private static char[] BuildForbidden(string? extraAllowed)
+        {
+            if (string.IsNullOrEmpty(extraAllowed)) return ForbiddenBase;
+            var allow = extraAllowed.ToHashSet();
+            return ForbiddenBase.Where(c => !allow.Contains(c)).ToArray();
+        }
+
+        // For free text we default to a MUCH smaller forbidden set (just the “dangerous” trio).
+        // Pass extraAllowed: ".," etc. if you ever add more to this set in the future.
+        private static char[] BuildForbiddenForFreeText(string? extraAllowed)
+        {
+            var baseSet = new[] { '<', '>', '|' }; // keep it tiny for UX; commas/periods stay allowed by default
+            if (string.IsNullOrEmpty(extraAllowed)) return baseSet;
+
+            var allow = extraAllowed.ToHashSet();
+            return baseSet.Where(c => !allow.Contains(c)).ToArray();
+        }
     }
 }

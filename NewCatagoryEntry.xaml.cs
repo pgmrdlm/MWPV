@@ -2,7 +2,7 @@ using MWPV.Services;
 using System;
 using System.Windows;
 using System.Windows.Input;
-using Utilities.Security;   // <- new centralized guards
+using Utilities.Security;   // centralized input guards
 
 namespace MWPV
 {
@@ -23,24 +23,26 @@ namespace MWPV
             ClearError();
 
             // NAME: strict rules (min 4, max 17)
-            var nameRes = InputGuards.Validate(tbCategoryName?.Text, 4, 17);
+            var nameRes = InputGuards.ValidateCategoryName(tbCategoryName?.Text, minLen: 4, maxLen: 17);
             if (!nameRes.IsValid)
             {
                 FailAndFocus(nameRes.Error ?? "Invalid category name.");
                 return;
             }
-            string name = nameRes.Clean!;
+            string name = nameRes.CleanName!;
 
-            // DESCRIPTION: freeform (max 512, allow line breaks)
-            var descRes = InputGuards.Validate(tbCategoryDescription?.Text, 512, allowLineBreaks: true);
-            if (!descRes.IsValid)
+            // DESCRIPTION: freeform (max 512, allow line breaks).
+            // We still block a small set of dangerous symbols for tooltips/labels.
+            string rawDesc = tbCategoryDescription?.Text ?? string.Empty;
+            if (ContainsForbiddenFreeText(rawDesc))
             {
-                Fail(descRes.Error ?? "Invalid description.");
+                Fail("Contains characters that aren’t allowed in description (e.g., angle brackets, pipe).");
                 tbCategoryDescription?.Focus();
                 return;
             }
-
-            string? description = string.IsNullOrWhiteSpace(descRes.Clean) ? name : descRes.Clean;
+            string? description = InputGuards.NormalizeFreeText(rawDesc, 512);
+            if (string.IsNullOrWhiteSpace(description))
+                description = name; // never store empty tooltip
 
             // Duplicate check (case-insensitive at DB layer)
             try
@@ -61,9 +63,9 @@ namespace MWPV
             try
             {
                 CategoryService.InsertCategory(name, description);
-
                 _mainWindow.Panel.RefreshCategoryGrid();
-                try { this.DialogResult = true; } catch { }
+
+                try { this.DialogResult = true; } catch { /* not shown as dialog */ }
                 this.Close();
             }
             catch (Exception ex)
@@ -79,7 +81,9 @@ namespace MWPV
             {
                 if (e.ClickCount == 2)
                 {
-                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                    WindowState = WindowState == WindowState.Maximized
+                        ? WindowState.Normal
+                        : WindowState.Maximized;
                 }
                 else if (e.ButtonState == MouseButtonState.Pressed)
                 {
@@ -126,5 +130,27 @@ namespace MWPV
         }
 
         private void Fail(string message) => ShowError(message);
+
+        // Keep UI message consistent with server-side rules; tighten/loosen as needed.
+        private static bool ContainsForbiddenFreeText(string? s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            foreach (char c in s)
+            {
+                switch (c)
+                {
+                    case '<':
+                    case '>':
+                    case '|':
+                    case '`':
+                    case '\\':
+                    case '\'':
+                    case '\"':
+                    case ';':
+                        return true;
+                }
+            }
+            return false;
+        }
     }
 }
