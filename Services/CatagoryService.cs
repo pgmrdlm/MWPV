@@ -2,6 +2,7 @@
 using MWPV.Models;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using Utilities.Helpers;
 using Utilities.Security;
@@ -63,20 +64,46 @@ namespace MWPV.Services
 
 
 
-        public static void InsertCategory(string newCategory)
+        public static void InsertCategory(string newCategory, string newDescription)
         {
-            if (string.IsNullOrWhiteSpace(newCategory))
-                throw new ArgumentException("Category name must not be empty.", nameof(newCategory));
+            if (newCategory == null)
+                throw new ArgumentNullException(nameof(newCategory));
 
+            // ---- Normalize inputs ----
+            string name = newCategory.Trim();
+
+            if (name.Length < 4)
+                throw new ArgumentException("Category name must be at least 4 characters.", nameof(newCategory));
+            if (name.Length > 17)
+                throw new ArgumentException("Category name must be 17 characters or fewer.", nameof(newCategory));
+
+            // Strip control chars (except CR/LF/TAB)
+            name = Regex.Replace(name, @"[\p{C}&&[^\r\n\t]]", string.Empty);
+
+            string desc = (newDescription ?? string.Empty).Trim();
+            if (desc.Length > 512) desc = desc.Substring(0, 512);
+            desc = Regex.Replace(desc, @"[\p{C}&&[^\r\n\t]]", string.Empty);
+
+            // Ensure non-empty description
+            if (string.IsNullOrWhiteSpace(desc))
+                desc = name;
+
+            // ---- Load SQL ----
             string insertSql = SecureEncryptedDataStore.GetString("InsertCatagory.sql");
+            if (string.IsNullOrWhiteSpace(insertSql))
+                throw new InvalidOperationException("InsertCatagory.sql was not found or is empty.");
 
+            // ---- Execute ----
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = insertSql;
-            cmd.Parameters.AddWithValue("@catagoryname", newCategory.Trim());
+
+            cmd.Parameters.AddWithValue("@catagoryname", name);
+            cmd.Parameters.AddWithValue("@description", desc);
 
             cmd.ExecuteNonQuery();
         }
+
 
 
         public static bool DoesCatagoryExist(string categoryName)
