@@ -1,18 +1,14 @@
 using MWPV.Services;
 using System;
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
+using Utilities.Security;   // <- new centralized guards
 
 namespace MWPV
 {
     public partial class NewCategoryEntry : Window
     {
         private readonly MainWindow _mainWindow;
-
-        // Block control chars except CR/LF/TAB
-        private static readonly Regex _invalidNameChars =
-            new Regex(@"[\p{C}&&[^\r\n\t]]", RegexOptions.Compiled);
 
         public NewCategoryEntry(MainWindow mainWindow)
         {
@@ -26,31 +22,39 @@ namespace MWPV
         {
             ClearError();
 
-            // Normalize inputs
-            string name = (tbCategoryName.Text ?? string.Empty).Trim();
-            string? description = NormalizeDescription(tbCategoryDescription?.Text);
+            // NAME: strict rules (min 4, max 17)
+            var nameRes = InputGuards.Validate(tbCategoryName?.Text, 4, 17);
+            if (!nameRes.IsValid)
+            {
+                FailAndFocus(nameRes.Error ?? "Invalid category name.");
+                return;
+            }
+            string name = nameRes.Clean!;
 
-            // If no description provided, default to the category name (avoid empty tooltips)
-            if (string.IsNullOrWhiteSpace(description))
-                description = name;
+            // DESCRIPTION: freeform (max 512, allow line breaks)
+            var descRes = InputGuards.Validate(tbCategoryDescription?.Text, 512, allowLineBreaks: true);
+            if (!descRes.IsValid)
+            {
+                Fail(descRes.Error ?? "Invalid description.");
+                tbCategoryDescription?.Focus();
+                return;
+            }
 
-            // --- Validations ---
-            if (name.Length < 4) { if (Fail("Category name must be at least 4 characters.")) return; }
-            if (name.Length > 17) { if (Fail("Category name must be 17 characters or fewer.")) return; }
-            if (_invalidNameChars.IsMatch(name))
-            { if (Fail("Category name contains invalid characters.")) return; }
+            string? description = string.IsNullOrWhiteSpace(descRes.Clean) ? name : descRes.Clean;
 
-            // Duplicate check (case-insensitive via SQL)
+            // Duplicate check (case-insensitive at DB layer)
             try
             {
                 if (CategoryService.DoesCatagoryExist(name))
                 {
-                    if (Fail("Category already exists. Please enter a different name.")) return;
+                    FailAndFocus("Category already exists. Please enter a different name.");
+                    return;
                 }
             }
             catch (Exception ex)
             {
-                if (Fail($"Error checking duplicates: {ex.Message}")) return;
+                FailAndFocus($"Error checking duplicates: {ex.Message}");
+                return;
             }
 
             // Insert
@@ -58,9 +62,8 @@ namespace MWPV
             {
                 CategoryService.InsertCategory(name, description);
 
-                // Refresh and close
                 _mainWindow.Panel.RefreshCategoryGrid();
-                try { this.DialogResult = true; } catch { /* not shown as dialog */ }
+                try { this.DialogResult = true; } catch { }
                 this.Close();
             }
             catch (Exception ex)
@@ -69,28 +72,26 @@ namespace MWPV
             }
         }
 
-        // Drag the custom title bar (same pattern as password window)
+        // Title bar drag/max/restore
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             try
             {
                 if (e.ClickCount == 2)
                 {
-                    WindowState = WindowState == WindowState.Maximized
-                        ? WindowState.Normal
-                        : WindowState.Maximized;
+                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
                 }
                 else if (e.ButtonState == MouseButtonState.Pressed)
                 {
                     DragMove();
                 }
             }
-            catch { /* ignore drag exceptions */ }
+            catch { }
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            try { this.DialogResult = false; } catch { /* not a dialog; ignore */ }
+            try { this.DialogResult = false; } catch { }
             this.Close();
         }
 
@@ -100,28 +101,10 @@ namespace MWPV
             tbCategoryName?.SelectAll();
         }
 
-        private void tbCategoryName_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-            => ClearError();
-
-        private void tbCategoryDescription_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-            => ClearError();
+        private void tbCategoryName_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => ClearError();
+        private void tbCategoryDescription_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => ClearError();
 
         /* ---------------- HELPERS ---------------- */
-
-        private static string? NormalizeDescription(string? raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return null;
-
-            string s = raw.Trim();
-
-            // Enforce max length (keep in sync with UI/DB policy)
-            if (s.Length > 512) s = s.Substring(0, 512);
-
-            // Remove control chars except CR/LF/TAB
-            s = Regex.Replace(s, @"[\p{C}&&[^\r\n\t]]", string.Empty);
-
-            return string.IsNullOrWhiteSpace(s) ? null : s;
-        }
 
         private void ClearError()
         {
@@ -135,11 +118,13 @@ namespace MWPV
             txtErrorMessage.Visibility = Visibility.Visible;
         }
 
-        // Allows terse: if (Fail("msg")) return;
-        private bool Fail(string message)
+        private void FailAndFocus(string message)
         {
             ShowError(message);
-            return true;
+            tbCategoryName?.Focus();
+            tbCategoryName?.SelectAll();
         }
+
+        private void Fail(string message) => ShowError(message);
     }
 }
