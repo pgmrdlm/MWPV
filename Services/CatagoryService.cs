@@ -1,14 +1,34 @@
 ﻿using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
+using System.Collections.Generic;          // KeyNotFoundException
 using System.Collections.ObjectModel;
-using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
-using Utilities.Security;  // InputGuards
+using Utilities.Helpers;                   // DatabaseHelper, ErrorHandler
+using Utilities.Security;                  // SecureEncryptedDataStore, InputGuards
 
 namespace MWPV.Services
 {
     public static class CategoryService
     {
+        // Try multiple keys (handles Catagory/Categories spelling drift).
+        private static string GetSqlEither(params string[] keys)
+        {
+            foreach (var k in keys)
+            {
+                try
+                {
+                    var s = SecureEncryptedDataStore.GetString(k);
+                    if (!string.IsNullOrWhiteSpace(s))
+                        return s;
+                }
+                catch (KeyNotFoundException)
+                {
+                    // try next
+                }
+            }
+            throw new KeyNotFoundException($"SQL text not found. Tried keys: {string.Join(", ", keys)}");
+        }
+
         public static ObservableCollection<Catagories> LoadCatagories()
         {
             var rows = new ObservableCollection<Catagories>();
@@ -17,7 +37,8 @@ namespace MWPV.Services
             try
             {
                 stage = "get-sql";
-                string selectSql = SecureEncryptedDataStore.GetString("SelectCatagories.sql");
+                // Accept both spellings; prefer the legacy key first
+                string selectSql = GetSqlEither("SelectCatagories.sql", "SelectCategories.sql");
 
                 stage = "open-connection";
                 using var conn = DatabaseHelper.GetAppOpenConnection();
@@ -29,7 +50,7 @@ namespace MWPV.Services
                 stage = "execute-reader";
                 using var r = cmd.ExecuteReader();
 
-                // Cache ordinals once
+                // Expecting these exact names from your existing SQL
                 int iCol1 = r.GetOrdinal("Col1");
                 int iCol2 = r.GetOrdinal("Col2");
                 int iCol3 = r.GetOrdinal("Col3");
@@ -69,14 +90,13 @@ namespace MWPV.Services
             if (!check.IsValid)
                 throw new ArgumentException(check.Error ?? "Invalid category name.", nameof(newCategory));
 
-            // Normalize free text (caps length, strips control chars, forbids <, >, | by default)
+            // Normalize free text
             string? desc = InputGuards.NormalizeFreeText(newDescription, 512);
             if (string.IsNullOrWhiteSpace(desc))
-                desc = check.CleanName; // never store empty tooltip
+                desc = check.CleanName;
 
-            string insertSql = SecureEncryptedDataStore.GetString("InsertCatagory.sql");
-            if (string.IsNullOrWhiteSpace(insertSql))
-                throw new InvalidOperationException("InsertCatagory.sql was not found or is empty.");
+            // Legacy first, future-proof second
+            string insertSql = GetSqlEither("InsertCatagory.sql", "InsertCategory.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var tx = conn.BeginTransaction();
@@ -96,15 +116,16 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(categoryName))
                 return false;
 
-            string sql = SecureEncryptedDataStore.GetString("CatagoryExists.sql");
+            string sql = GetSqlEither("CatagoryExists.sql", "CategoryExists.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
             cmd.Parameters.AddWithValue("@catagoryname", categoryName.Trim());
 
-            object? scalar = cmd.ExecuteScalar(); // EXPECT: 0/1
-            return scalar != null && Convert.ToInt64(scalar) == 1;
+            object? scalar = cmd.ExecuteScalar(); // expect 0/1
+            try { return Convert.ToInt64(scalar) == 1; }
+            catch { return false; }
         }
     }
 }

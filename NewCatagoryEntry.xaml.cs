@@ -2,7 +2,9 @@ using MWPV.Services;
 using System;
 using System.Windows;
 using System.Windows.Input;
-using Utilities.Security;   // centralized input guards
+using System.Windows.Media;                 // VisualTreeHelper
+using Utilities.Security;                  // centralized input guards
+// NOTE: no "using MWPV.View.UserControls;" to avoid Panel ambiguity
 
 namespace MWPV
 {
@@ -32,9 +34,8 @@ namespace MWPV
             string name = nameRes.CleanName!;
 
             // DESCRIPTION: freeform (max 512, allow line breaks).
-            // We still block a small set of dangerous symbols for tooltips/labels.
             string rawDesc = tbCategoryDescription?.Text ?? string.Empty;
-            if (ContainsForbiddenFreeText(rawDesc))
+            if (ContainsForbiddenFreeText(rawDesc))   // TODO: replace with InputGuards on merge
             {
                 Fail("Contains characters that aren’t allowed in description (e.g., angle brackets, pipe).");
                 tbCategoryDescription?.Focus();
@@ -63,10 +64,17 @@ namespace MWPV
             try
             {
                 CategoryService.InsertCategory(name, description);
-                _mainWindow.Panel.RefreshCategoryGrid();
 
+                // Close first, then refresh the left panel’s category grid.
                 try { this.DialogResult = true; } catch { /* not shown as dialog */ }
                 this.Close();
+
+                // Refresh after the window closes to avoid focus/timing glitches.
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var panel = TryGetPanelFromMainWindow(_mainWindow);
+                    panel?.RefreshCategoryGrid();
+                }), System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (Exception ex)
             {
@@ -131,7 +139,7 @@ namespace MWPV
 
         private void Fail(string message) => ShowError(message);
 
-        // Keep UI message consistent with server-side rules; tighten/loosen as needed.
+        // TEMP guard; replace with InputGuards on merge.
         private static bool ContainsForbiddenFreeText(string? s)
         {
             if (string.IsNullOrEmpty(s)) return false;
@@ -151,6 +159,57 @@ namespace MWPV
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// Try to obtain the left-side Panel control hosted in MainWindow.
+        /// </summary>
+        private static MWPV.View.UserControls.Panel? TryGetPanelFromMainWindow(MainWindow mw)
+        {
+            if (mw == null) return null;
+
+            // 1) Public property named Panel (common pattern)
+            try
+            {
+                var prop = typeof(MainWindow).GetProperty("Panel");
+                if (prop != null)
+                {
+                    var val = prop.GetValue(mw) as MWPV.View.UserControls.Panel;
+                    if (val != null) return val;
+                }
+            }
+            catch { }
+
+            // 2) Find by element name "Panel" in the namescope
+            try
+            {
+                var byName = mw.FindName("Panel") as MWPV.View.UserControls.Panel;
+                if (byName != null) return byName;
+            }
+            catch { }
+
+            // 3) Visual tree crawl for first Panel instance
+            try
+            {
+                return FindChild<MWPV.View.UserControls.Panel>(mw);
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static T? FindChild<T>(DependencyObject? parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T tChild) return tChild;
+                var result = FindChild<T>(child);
+                if (result != null) return result;
+            }
+            return null;
         }
     }
 }

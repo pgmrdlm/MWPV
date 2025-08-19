@@ -1,135 +1,49 @@
-﻿<UserControl x:Class="MWPV.View.UserControls.CategoryGrid"
+﻿<UserControl x:Class="MWPV.View.UserControls.CatagoryGrid"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:MWPV.Converters"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="400"
+             d:DesignWidth="640"
+             Background="Transparent">
 
-    <UserControl.Resources>
-        <!-- Only the converter is needed locally now -->
-        <local:StringNullOrEmptyToVisibilityConverter x:Key="StringEmptyToVisibility" />
-    </UserControl.Resources>
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-    <Grid>
-        <!-- Category button grid -->
-        <DataGrid ItemsSource="{Binding BoundCatagories}"
-                  AutoGenerateColumns="False"
-                  Name="CategoryDataGrid"
-                  CanUserAddRows="False"
-                  GridLinesVisibility="None"
-                  HeadersVisibility="None"
-                  BorderThickness="0"
-                  Background="Transparent"
-                  RowBackground="Transparent"
-                  HorizontalAlignment="Stretch"
-                  ColumnWidth="*"
-                  SelectionMode="Single"
-                  SelectionUnit="Cell"
-                  AlternatingRowBackground="{x:Null}">
-            <DataGrid.Resources>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="Foreground" Value="Black"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                    <Setter Property="OverridesDefaultStyle" Value="True"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="DataGridCell">
-                                <Border Background="{TemplateBinding Background}">
-                                    <ContentPresenter/>
-                                </Border>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </DataGrid.Resources>
+        <!-- Collapsible add-panel (shown/hidden from code-behind) -->
+        <Border x:Name="AddPanel"
+                Grid.Row="0"
+                Visibility="Collapsed"
+                Margin="0,0,0,8"
+                Padding="16"
+                CornerRadius="{StaticResource DialogCornerRadius}"
+                Background="{StaticResource DialogBackgroundBrush}">
+            <StackPanel>
+                <TextBlock Text="Hello World"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,12"/>
+                <Button x:Name="btnSubmitAddCategory"
+                        Content="Submit"
+                        Click="SubmitAddCategory_Click"
+                        Style="{StaticResource DialogPrimary}"
+                        MinWidth="240"/>
+            </StackPanel>
+        </Border>
 
-            <DataGrid.Columns>
-                <!-- Category 1 -->
-                <DataGridTemplateColumn>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding strCategory1}"
-                                    Click="Button1_Click"
-                                    Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
-                                    Visibility="{Binding strCategory1, Converter={StaticResource StringEmptyToVisibility}}"
-                                    ToolTipService.ShowDuration="8000"
-                                    ToolTipService.InitialShowDelay="200"
-                                    ToolTipService.Placement="Right">
-                                <Button.ToolTip>
-                                    <!-- Use global ToolTip style; just bind text -->
-                                    <TextBlock Text="{Binding strCategoryToolTip1}"
-                                               Width="200"
-                                               TextWrapping="Wrap"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="Black"/>
-                                </Button.ToolTip>
-                            </Button>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-
-                <!-- Category 2 -->
-                <DataGridTemplateColumn>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding strCategory2}"
-                                    Click="Button2_Click"
-                                    Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
-                                    Visibility="{Binding strCategory2, Converter={StaticResource StringEmptyToVisibility}}"
-                                    ToolTipService.ShowDuration="8000"
-                                    ToolTipService.InitialShowDelay="200"
-                                    ToolTipService.Placement="Right">
-                                <Button.ToolTip>
-                                    <TextBlock Text="{Binding strCategoryToolTip2}"
-                                               Width="200"
-                                               TextWrapping="Wrap"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="Black"/>
-                                </Button.ToolTip>
-                            </Button>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-
-                <!-- Category 3 -->
-                <DataGridTemplateColumn>
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding strCategory3}"
-                                    Click="Button3_Click"
-                                    Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
-                                    Visibility="{Binding strCategory3, Converter={StaticResource StringEmptyToVisibility}}"
-                                    ToolTipService.ShowDuration="8000"
-                                    ToolTipService.InitialShowDelay="200"
-                                    ToolTipService.Placement="Right">
-                                <Button.ToolTip>
-                                    <TextBlock Text="{Binding strCategoryToolTip3}"
-                                               Width="200"
-                                               TextWrapping="Wrap"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="Black"/>
-                                </Button.ToolTip>
-                            </Button>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Scrollable grid of category pills (buttons are added from code-behind) -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Background="Transparent">
+            <!-- The negative left margin offsets the left PillMargin so the first column aligns flush -->
+            <UniformGrid x:Name="ButtonsHost"
+                         Columns="3"
+                         Margin="-6,0,0,0"/>
+        </ScrollViewer>
     </Grid>
 </UserControl>

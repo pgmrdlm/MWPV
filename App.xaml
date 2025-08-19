@@ -4,45 +4,61 @@
     <Application.Resources>
         <ResourceDictionary>
 
-            <!-- ===== Merge theme resources (buttons, title buttons, dialog buttons) ===== -->
+            <!-- ========= Merge app-wide theme resources ========= -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Same-assembly reference -->
-                <ResourceDictionary Source="Themes/Buttons/Buttons.xaml"/>
-                <!-- If moved to another assembly, use:
-        <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
-        -->
+                <!-- Same-assembly resource dictionary -->
+                <ResourceDictionary Source="Themes/Buttons/Buttons.xaml" />
+                <!-- If Buttons.xaml moves to another assembly, use:
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml" />
+                -->
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- ===== Common brushes you can reuse anywhere ===== -->
-            <SolidColorBrush x:Key="BrandMaroon" Color="#8B0000"/>
-            <SolidColorBrush x:Key="DialogBackgroundBrush" Color="Bisque"/>
+            <!-- ========= Common brushes / tokens ========= -->
+            <SolidColorBrush x:Key="BrandMaroon" Color="#8B0000" />
+            <SolidColorBrush x:Key="DialogBackgroundBrush" Color="Bisque" />
+            <SolidColorBrush x:Key="PanelBackgroundBrush" Color="Transparent" />
             <CornerRadius   x:Key="DialogCornerRadius">8</CornerRadius>
 
-            <!-- ===== App-wide polish (safe defaults) ===== -->
-            <!-- Make all windows crisp & consistent -->
+            <!-- ========= Safe app-wide defaults ========= -->
+            <!-- Windows: crisp rendering everywhere -->
             <Style TargetType="{x:Type Window}">
-                <Setter Property="SnapsToDevicePixels" Value="True"/>
-                <Setter Property="UseLayoutRounding" Value="True"/>
-                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
-                <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="UseLayoutRounding"   Value="True" />
+                <Setter Property="TextOptions.TextRenderingMode"  Value="ClearType" />
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             </Style>
 
-            <!-- Improve text readability across the app -->
+            <!-- Text: consistent readability -->
             <Style TargetType="{x:Type TextBlock}">
-                <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
-                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
-                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="TextOptions.TextRenderingMode"  Value="ClearType" />
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             </Style>
 
-            <!-- Subtle, readable tooltips -->
+            <!-- ToolTips: subtle & readable -->
             <Style TargetType="{x:Type ToolTip}">
-                <Setter Property="SnapsToDevicePixels" Value="True"/>
-                <Setter Property="Padding" Value="8,6"/>
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="Padding" Value="8,6" />
             </Style>
 
-            <!-- (Optional) If you want a default Button look everywhere, uncomment:
-      <Style TargetType="{x:Type Button}" BasedOn="{StaticResource DialogSecondary}"/>
-      -->
+            <!-- DataGrid: transparent, tidy rows, virtualization on -->
+            <Style TargetType="{x:Type DataGrid}">
+                <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="GridLinesVisibility" Value="None" />
+                <Setter Property="HeadersVisibility" Value="Column" />
+                <Setter Property="RowHeaderWidth" Value="0" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="EnableRowVirtualization" Value="True" />
+                <Setter Property="EnableColumnVirtualization" Value="True" />
+                <Setter Property="AlternationCount" Value="0" />
+                <Setter Property="RowHeight" Value="28" />
+                <Setter Property="MinRowHeight" Value="24" />
+            </Style>
+
+            <!-- If you want a default button look globally, uncomment:
+            <Style TargetType="{x:Type Button}" BasedOn="{StaticResource DialogSecondary}" />
+            -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

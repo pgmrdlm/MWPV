@@ -4,18 +4,15 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:uc="clr-namespace:MWPV.View.UserControls"
-             mc:Ignorable="d"
-             d:DesignHeight="600" d:DesignWidth="1000">
-
+             mc:Ignorable="d">
     <Grid>
-        <!-- 50/50 columns, no splitter -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" MinWidth="220"/>
             <ColumnDefinition Width="*" MinWidth="300"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Left: Categories -->
-        <DockPanel Grid.Column="0" Margin="8,8,8,8" LastChildFill="True">
+        <!-- Left -->
+        <DockPanel Grid.Column="0" Margin="8" LastChildFill="True">
             <TextBlock DockPanel.Dock="Top"
                        Text="Categories"
                        FontSize="14"
@@ -30,11 +27,13 @@
                         Style="{StaticResource DialogPrimary}"
                         MinWidth="120"/>
             </StackPanel>
-            <uc:CategoryGrid x:Name="CategoryGrid"/>
+
+            <!-- Keep this as CatagoryGrid (intentional spelling) -->
+            <uc:CatagoryGrid x:Name="CategoryGrid"/>
         </DockPanel>
 
-        <!-- Right: Items -->
-        <DockPanel Grid.Column="1" Margin="8,8,8,8" LastChildFill="True">
+        <!-- Right -->
+        <DockPanel Grid.Column="1" Margin="8" LastChildFill="True">
             <TextBlock DockPanel.Dock="Top"
                        Text="Items"
                        FontSize="14"
@@ -43,7 +42,6 @@
             <StackPanel DockPanel.Dock="Top"
                         Orientation="Horizontal"
                         Margin="0,0,0,8">
-                <!-- starts collapsed; you’ll show it when a category is clicked -->
                 <Button x:Name="btnAddCategoryItem"
                         Content="Add Item"
                         Style="{StaticResource DialogPrimary}"

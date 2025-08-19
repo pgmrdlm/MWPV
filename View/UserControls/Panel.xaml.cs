@@ -1,62 +1,63 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace MWPV.View.UserControls
 {
-    /// <summary>
-    /// Interaction logic for Panel.xaml
-    /// </summary>
-    public partial class Panel : System.Windows.Controls.UserControl
+    public partial class Panel : UserControl
     {
         public Panel()
         {
             InitializeComponent();
-            CategoryGrid.CategoryItemClicked += CategoryGrid_CategoryItemClicked;
-            CategoryGrid.RefreshCategoryGrid();  // <-- REQUIRED TO LOAD DATA
+            Loaded += Panel_Loaded;
+            Unloaded += Panel_Unloaded;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Click += btnAddCategoryItem_Click;
         }
-        public void RefreshCategoryGrid()
+
+        private void Panel_Loaded(object sender, RoutedEventArgs e)
         {
-            CategoryGrid.RefreshCategoryGrid(); // calls the Refresh method in your CategoryGrid user control
+            // subscribe safely (avoid dup)
+            if (CategoryGrid != null)
+            {
+                CategoryGrid.CategoryPillClicked -= OnCategoryPillClicked;
+                CategoryGrid.CategoryPillClicked += OnCategoryPillClicked;
+                CategoryGrid.RefreshCategoryGrid();
+            }
         }
-        private void CategoryGrid_CategoryItemClicked(object sender, EventArgs e)
+
+        private void Panel_Unloaded(object? sender, RoutedEventArgs e)
         {
-            btnAddCategoryItem.Visibility = Visibility.Visible;
+            if (CategoryGrid != null)
+                CategoryGrid.CategoryPillClicked -= OnCategoryPillClicked;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Click -= btnAddCategoryItem_Click;
         }
+
+        // Left: Add Category
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
-            var mainWindow = Window.GetWindow(this) as MainWindow;
-            if (mainWindow != null)
+            CategoryGrid?.ShowAddPanel();
+        }
+
+        // Fired when a category pill is clicked
+        private void OnCategoryPillClicked(object? sender, object row)
+        {
+            btnAddCategoryItem.Visibility = Visibility.Visible;
+            CategoryItemsHost.Content = new TextBlock
             {
-                var categoryWindow = new NewCategoryEntry(mainWindow);
-                categoryWindow.Owner = mainWindow;
+                Text = row?.ToString() ?? "Item list placeholder",
+                Margin = new Thickness(8)
+            };
+        }
 
-                bool? result = categoryWindow.ShowDialog(); // Modal window
-
-                if (result == true)
-                {
-                    // Refresh CatagoryGrid after a category is added
-                    RefreshCategoryGrid();
-                }
-            }
-            // Create and show the category entry window
-            //var entryWindow = new NewCategoryEntry();
-
-
-
-
+        // Right: Add Item (stub)
+        private void btnAddCategoryItem_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Add Item clicked (stub).");
         }
     }
-
 }

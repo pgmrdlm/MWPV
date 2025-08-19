@@ -1,68 +1,170 @@
-﻿using MWPV.Models;
-using MWPV.Services;
-using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections;
+using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace MWPV.View.UserControls
 {
-    /// <summary>
-    /// Interaction logic for CategoryGrid.xaml
-    /// </summary>
-    public partial class CategoryGrid : System.Windows.Controls.UserControl
-
+    public partial class CatagoryGrid : UserControl
     {
-        public event EventHandler CategoryItemClicked;
-        // ObservableCollection to hold the categories 20:59 added by the user
-        public ObservableCollection<Catagories> BoundCatagories { get; set; } = new ObservableCollection<Catagories>(); 
-        public CategoryGrid()
+        // >>> Event the Panel listens to <<<
+        public event EventHandler<object>? CategoryPillClicked;
+
+        public CatagoryGrid()
         {
             InitializeComponent();
-            // added by the user 20:59
-            this.DataContext = this; // Important: bind the DataContext 
+            Loaded += OnLoaded;
         }
-        //added by the user 20:59
+
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[CatagoryGrid.Loaded] calling RefreshCategoryGrid()");
+#endif
+            RefreshCategoryGrid();
+        }
+
+        /// <summary>Rebuild the pill buttons from the current categories (fan-out 1–3 per row).</summary>
         public void RefreshCategoryGrid()
         {
-            BoundCatagories.Clear();
-            var catagories = CategoryService.LoadCatagories();
-            foreach (var cat in catagories)
+            try
             {
-                BoundCatagories.Add(cat);
+#if DEBUG
+                Debug.WriteLine("[CatagoryGrid.Refresh] ENTER");
+#endif
+                ButtonsHost.Children.Clear();
+
+                foreach (var row in QueryCategories())
+                {
+                    // Try your canonical names first
+                    AddPillIfPresent(row, "strCategory1", "strCategoryToolTip1");
+                    AddPillIfPresent(row, "strCategory2", "strCategoryToolTip2");
+                    AddPillIfPresent(row, "strCategory3", "strCategoryToolTip3");
+
+                    // Legacy Col/Des fallback
+                    AddPillIfPresent(row, "Col1", "Des1");
+                    AddPillIfPresent(row, "Col2", "Des2");
+                    AddPillIfPresent(row, "Col3", "Des3");
+
+                    // Generic fallbacks
+                    AddPillIfPresent(row, "Cat1", "Desc");
+                    AddPillIfPresent(row, "Name", "Description");
+                    AddPillIfPresent(row, "CatName", "Description");
+                    AddPillIfPresent(row, "CatagoryName", "Description");
+                    AddPillIfPresent(row, "Title", "Tooltip");
+                    AddPillIfPresent(row, "Category", "Tooltip");
+                }
+
+#if DEBUG
+                Debug.WriteLine($"[CatagoryGrid.Refresh] EXIT — ButtonsHost.Children={ButtonsHost.Children.Count}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[CatagoryGrid.Refresh] ERROR: " + ex);
+#endif
             }
         }
 
-        //public void RefreshCategoryGrid()
-        // {
-        //     var BoundCatagories = CategoryService.LoadCatagories();
-        //     this.CategoryDataGrid.ItemsSource = BoundCatagories;
-        // }
+        /// <summary>Show/Hide the inline “add” panel.</summary>
+        public void ShowAddPanel() => AddPanel.Visibility = Visibility.Visible;
+        public void HideAddPanel() => AddPanel.Visibility = Visibility.Collapsed;
 
-        private void Button1_Click(object sender, RoutedEventArgs e)
+        private void SubmitAddCategory_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
-            {
-                //System.Windows.MessageBox.Show($"Button 1 clicked: {data.strCategory1}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
-            }
+#if DEBUG
+            Debug.WriteLine("[CatagoryGrid] SubmitAddCategory_Click — toggling back to grid");
+#endif
+            HideAddPanel();
         }
-        private void Button2_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
-            {
-                //System.Windows.MessageBox.Show($"Button 2 clicked: {data.strCategory2}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
-            }
-        }
-        private void Button3_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
-            {
-                //System.Windows.MessageBox.Show($"Button 3 clicked: {data.strCategory3}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
-            }
-        }
-        
 
+        // ---------- helpers ----------
 
+        private void AddPillIfPresent(object row, string titleProp, string? tipProp = null)
+        {
+            string title = GetString(row, titleProp);
+            if (string.IsNullOrWhiteSpace(title))
+                return;
+
+            string? tip = string.IsNullOrWhiteSpace(tipProp) ? null : GetStringOrNull(row, tipProp);
+
+            var btn = new Button
+            {
+                Content = title,
+                ToolTip = string.IsNullOrWhiteSpace(tip) ? null : tip
+            };
+
+            if (TryFindResource("CategoryPill") is Style pillStyle)
+                btn.Style = pillStyle;
+
+            // make long text behave
+            btn.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+            btn.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
+
+            // >>> raise event when clicked <<<
+            btn.Click += (_, __) => CategoryPillClicked?.Invoke(this, row);
+
+            ButtonsHost.Children.Add(btn);
+        }
+
+        /// <summary>
+        /// Try a few likely method names on CategoryService:
+        /// SelectCatagories / LoadCatagories / SelectCategories / GetCategories (public static, parameterless)
+        /// </summary>
+        private static IEnumerable QueryCategories()
+        {
+            var t = typeof(MWPV.Services.CategoryService);
+            MethodInfo? m =
+                t.GetMethod("SelectCatagories", BindingFlags.Public | BindingFlags.Static) ??
+                t.GetMethod("LoadCatagories", BindingFlags.Public | BindingFlags.Static) ??
+                t.GetMethod("SelectCategories", BindingFlags.Public | BindingFlags.Static) ??
+                t.GetMethod("GetCategories", BindingFlags.Public | BindingFlags.Static);
+
+            if (m == null)
+            {
+#if DEBUG
+                Debug.WriteLine("[CatagoryGrid.QueryCategories] No compatible method found on CategoryService.");
+#endif
+                return Array.Empty<object>();
+            }
+
+            try
+            {
+                var result = m.Invoke(null, null);
+                return (result as IEnumerable) ?? Array.Empty<object>();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[CatagoryGrid.QueryCategories] Invoke failed: " + ex);
+#endif
+                return Array.Empty<object>();
+            }
+        }
+
+        private static string GetString(object obj, string name)
+        {
+            var p = obj.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (p != null && p.PropertyType == typeof(string))
+            {
+                var s = (string?)p.GetValue(obj);
+                if (!string.IsNullOrWhiteSpace(s)) return s!;
+            }
+            return string.Empty;
+        }
+
+        private static string? GetStringOrNull(object obj, string name)
+        {
+            var p = obj.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (p != null && p.PropertyType == typeof(string))
+            {
+                var s = (string?)p.GetValue(obj);
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+            return null;
+        }
     }
 }
