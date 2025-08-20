@@ -13,7 +13,7 @@
     </UserControl.Resources>
 
     <Grid>
-        <!-- Category button grid -->
+        <!-- Category button grid (defaults visible) -->
         <DataGrid ItemsSource="{Binding BoundCatagories}"
                   AutoGenerateColumns="False"
                   Name="CategoryDataGrid"
@@ -123,5 +123,27 @@
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
+
+        <!-- Inline Hello World (hidden by default; does not alter your 3 columns) -->
+        <Border x:Name="HelloWorldInline"
+                Visibility="Collapsed"
+                Background="#FFF7F7FF"
+                BorderBrush="#22000000"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12"
+                Margin="8"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <StackPanel>
+                <TextBlock Text="Hello World"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <Button Content="Submit"
+                        Style="{StaticResource DialogPrimary}"/>
+                <!-- No Click handler yet by design -->
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

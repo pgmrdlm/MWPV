@@ -1,62 +1,114 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace MWPV.View.UserControls
 {
     /// <summary>
     /// Interaction logic for Panel.xaml
     /// </summary>
-    public partial class Panel : System.Windows.Controls.UserControl
+    public partial class Panel : UserControl
     {
+        private AddCatagoryInline? _addCatagoryInline;
+
         public Panel()
         {
             InitializeComponent();
+
+            // Wire up CategoryGrid events and load data (REQUIRED TO LOAD DATA)
             CategoryGrid.CategoryItemClicked += CategoryGrid_CategoryItemClicked;
-            CategoryGrid.RefreshCategoryGrid();  // <-- REQUIRED TO LOAD DATA
+            CategoryGrid.RefreshCategoryGrid();
+
+            // Ensure default view is the Catagory grid
+            ShowCategoryGrid();
+
+            // Initialize inline add-cat host
+            InitializeAddCatagoryInline();
         }
+
+        /// <summary>
+        /// External callers can refresh the catagory grid.
+        /// </summary>
         public void RefreshCategoryGrid()
         {
-            CategoryGrid.RefreshCategoryGrid(); // calls the Refresh method in your CategoryGrid user control
+            CategoryGrid.RefreshCategoryGrid();
         }
-        private void CategoryGrid_CategoryItemClicked(object sender, EventArgs e)
+
+        /// <summary>
+        /// When a category item is clicked inside the grid, reveal the "Add Item" button.
+        /// </summary>
+        private void CategoryGrid_CategoryItemClicked(object? sender, EventArgs e)
         {
-            btnAddCategoryItem.Visibility = Visibility.Visible;
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Visibility = Visibility.Visible;
         }
+
+        /// <summary>
+        /// Add Category clicked:
+        /// Collapse the Catagory grid and show the inline AddCatagoryInline control.
+        /// </summary>
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
-            var mainWindow = Window.GetWindow(this) as MainWindow;
-            if (mainWindow != null)
+            ShowAddCatagory();
+        }
+
+        // --- View toggles (keep control local to Panel) ---
+
+        private void ShowAddCatagory()
+        {
+            if (AddCatagoryHost != null)
+                AddCatagoryHost.Visibility = Visibility.Visible;
+
+            if (CategoryGrid != null)
+                CategoryGrid.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowCategoryGrid()
+        {
+            if (AddCatagoryHost != null)
+                AddCatagoryHost.Visibility = Visibility.Collapsed;
+
+            if (CategoryGrid != null)
+                CategoryGrid.Visibility = Visibility.Visible;
+        }
+
+        // --- Host content management ---
+
+        private void InitializeAddCatagoryInline()
+        {
+            if (AddCatagoryContent == null)
+                return;
+
+            // Clean up old instance if reinitializing
+            if (_addCatagoryInline != null)
             {
-                var categoryWindow = new NewCategoryEntry(mainWindow);
-                categoryWindow.Owner = mainWindow;
-
-                bool? result = categoryWindow.ShowDialog(); // Modal window
-
-                if (result == true)
-                {
-                    // Refresh CatagoryGrid after a category is added
-                    RefreshCategoryGrid();
-                }
+                _addCatagoryInline.Submitted -= AddCatagoryInline_Submitted;
+                _addCatagoryInline.Canceled -= AddCatagoryInline_Canceled;
             }
-            // Create and show the category entry window
-            //var entryWindow = new NewCategoryEntry();
 
+            _addCatagoryInline = new AddCatagoryInline();
+            _addCatagoryInline.Submitted += AddCatagoryInline_Submitted;
+            _addCatagoryInline.Canceled += AddCatagoryInline_Canceled;
 
+            AddCatagoryContent.Content = _addCatagoryInline;
+        }
 
+        private void AddCatagoryInline_Submitted(object? sender, CatagorySubmittedEventArgs e)
+        {
+            // DB insert already happened inside AddCatagoryInline
+            ShowCategoryGrid();
+            RefreshCategoryGrid();
 
+            // reset inline form for next time
+            _addCatagoryInline?.ResetForm();
+        }
+
+        private void AddCatagoryInline_Canceled(object? sender, EventArgs e)
+        {
+            ShowCategoryGrid();
+
+            // reset inline form so it's clean next time
+            _addCatagoryInline?.ResetForm();
         }
     }
-
 }

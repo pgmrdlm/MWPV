@@ -14,13 +14,14 @@
             <ColumnDefinition Width="*" MinWidth="300"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Left: Categories -->
-        <DockPanel Grid.Column="0" Margin="8,8,8,8" LastChildFill="True">
+        <!-- Left: Categories (FLUSH LEFT) -->
+        <DockPanel Grid.Column="0" Margin="0,8,8,8" LastChildFill="True">
             <TextBlock DockPanel.Dock="Top"
                        Text="Categories"
                        FontSize="14"
                        FontWeight="SemiBold"
                        Margin="0,0,0,8"/>
+
             <StackPanel DockPanel.Dock="Top"
                         Orientation="Horizontal"
                         Margin="0,0,0,8">
@@ -29,7 +30,21 @@
                         Click="btnAddCategory_Click"
                         Style="{StaticResource DialogPrimary}"/>
             </StackPanel>
+
+            <!-- Default view: Catagory grid (visible by default) -->
             <uc:CategoryGrid x:Name="CategoryGrid"/>
+
+            <!-- Inline Add Catagory host (flush; no padding/border/background) -->
+            <Border x:Name="AddCatagoryHost"
+                    Visibility="Collapsed"
+                    Background="Transparent"
+                    BorderBrush="{x:Null}"
+                    BorderThickness="0"
+                    CornerRadius="0"
+                    Padding="0"
+                    Margin="0">
+                <ContentControl x:Name="AddCatagoryContent" />
+            </Border>
         </DockPanel>
 
         <!-- Right: Items -->
@@ -39,6 +54,7 @@
                        FontSize="14"
                        FontWeight="SemiBold"
                        Margin="0,0,0,8"/>
+
             <StackPanel DockPanel.Dock="Top"
                         Orientation="Horizontal"
                         Margin="0,0,0,8">
@@ -48,6 +64,7 @@
                         Style="{StaticResource DialogPrimary}"
                         Visibility="Collapsed"/>
             </StackPanel>
+
             <ContentControl x:Name="CategoryItemsHost"/>
         </DockPanel>
     </Grid>

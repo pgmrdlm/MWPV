@@ -1,5 +1,6 @@
-// MainWindow.xaml.cs — full rewrite (adds only title bar plumbing; keeps your original logic)
+// MainWindow.xaml.cs — popup removed; routes menu to inline Add Catagory
 using System;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using Utilities.Helpers;
@@ -19,7 +20,6 @@ namespace MWPV
             InitializeComponent();
             this.Visibility = Visibility.Visible;
             this.WindowState = WindowState.Normal;
-            // Refresh is now handled by Panel
 
             // Title bar glyph sync (no override of OnStateChanged to keep Hot Reload happy)
             UpdateMaxRestoreGlyph();
@@ -43,15 +43,40 @@ namespace MWPV
 #endif
         }
 
+        /// <summary>
+        /// Menu: Tools -> Add Category (previously opened popup).
+        /// Now routes to the inline Add Catagory hosted inside the left Panel.
+        /// </summary>
         private void OpenCategoryEntry_Click(object sender, RoutedEventArgs e)
         {
-            var categoryWindow = new NewCategoryEntry(this);
-            categoryWindow.Owner = this;
-            categoryWindow.ShowDialog();
-
-            if (categoryWindow.DialogResult == true)
+            try
             {
-                Panel.RefreshCategoryGrid();
+                if (Panel == null) return;
+
+                // Preferred: call a public method if you add one later
+                //   public void ShowAddCatagoryInline() => (internally calls ShowAddCatagory)
+                var pub = Panel.GetType().GetMethod("ShowAddCatagoryInline",
+                    BindingFlags.Instance | BindingFlags.Public);
+                if (pub != null)
+                {
+                    pub.Invoke(Panel, null);
+                    return;
+                }
+
+                // Fallback: call the existing private method via reflection
+                var priv = Panel.GetType().GetMethod("ShowAddCatagory",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                if (priv != null)
+                {
+                    priv.Invoke(Panel, null);
+                    return;
+                }
+
+                // Last resort: do nothing (user can press the "Add Category" button on the left)
+            }
+            catch
+            {
+                // Keep silent: menu action should never crash the app
             }
         }
 
