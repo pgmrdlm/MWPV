@@ -1,0 +1,45 @@
+To do list - merge add catagory into catgory grid
+
+01). Cleanup(delete) unneeded branches. 02). Zip up all code and upload
+to gadget 03). create new git branch called - Standardize style of
+button lenght and height. 04). Zip up all code file. 05). Gadget review
+first the code to standardize all code to have buttons use the same
+height and width for buttons. 06). Make these changes for standard
+height and width of buttons. This includes the existing add new catagory
+popup xaml and back end code.
+*** This is the ONLY changes that should be done. No would be nice
+changes. *** Do not change my catagory spelling 07). Tests and verify
+changes work accross existing app windows. Login, panel, catagory grid,
+and new catagory window. 08). When tests past. Push, merge, and delete
+the “Delete all references in code for windows forms” branch 09). Review
+and update code for any reference to windows form. Update and delete.
+*** Do not change any spelling of Catagory *** This is a list of what
+you previously sugested should be reviewed with regard to windows forms
+removal. MWPV.sln, MWPV.csproj App.xaml
+View/UserControls/CatagoryGrid.xaml, CatagoryGrid.xaml.cs
+View/UserControls/Panel.xaml, Panel.xaml.cs
+Utilities/Helpers/ErrorHandler.cs Utilities/Security/* (only if
+referenced at startup) Themes/Buttons/Buttons.xaml
+Services/CategoryService.cs
+
+10). Test all code. 11). Push, merge, and delete “Delete all references
+in code for windows forms” branch *** Might want to set a tag here.
+Think about it. 12). Create new branch “merge into catagorygrid new
+hello world grid”. 10). Review uploaded code to make this change. *****
+Gaurd rails on these changes. - No changing at any time of existing
+spelling of catagory grid. - Existing Catagory grid should default to
+being shown as soon as main window displays. - Always use new standard
+style for buttons for width and height. - Try like hell not to change
+anything in the existing grid for catagories. 11). Consider renaming the
+existing newcatagory xaml and backend code so no longer gets picked up
+in compiles. Allow us to not change it at all. restore to backup if we
+have to roll back. We also do not have to have switch at panel level for
+switching back. 12). Do hellow world changes to I assume are app, panel,
+catagory grid, hopefully not theme buttons. 12a). Add catagory button in
+panel is clicked, it colapses existing catragory grid and displays hello
+world new part of grid. 12b). Submit button in hellow world part of grid
+is clicked, the hello world colapses and detail catagory grid is
+displayed. 13). If chasing our tail occurs. 1 hour limit here. roll
+back, and think again. 14). If we actually get hello world to work,
+push, merge, delete branch. *** consider setting a tag. 15). Write up
+task plan to update hello world with new catagory
