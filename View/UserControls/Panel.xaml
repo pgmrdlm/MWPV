@@ -27,8 +27,7 @@
                 <Button x:Name="btnAddCategory"
                         Content="Add Category"
                         Click="btnAddCategory_Click"
-                        Style="{StaticResource DialogPrimary}"
-                        MinWidth="120"/>
+                        Style="{StaticResource DialogPrimary}"/>
             </StackPanel>
             <uc:CategoryGrid x:Name="CategoryGrid"/>
         </DockPanel>
@@ -43,11 +42,10 @@
             <StackPanel DockPanel.Dock="Top"
                         Orientation="Horizontal"
                         Margin="0,0,0,8">
-                <!-- starts collapsed; you’ll show it when a category is clicked -->
+                <!-- Starts collapsed; you’ll show it when a category is clicked -->
                 <Button x:Name="btnAddCategoryItem"
                         Content="Add Item"
                         Style="{StaticResource DialogPrimary}"
-                        MinWidth="120"
                         Visibility="Collapsed"/>
             </StackPanel>
             <ContentControl x:Name="CategoryItemsHost"/>

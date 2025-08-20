@@ -28,6 +28,7 @@
                   SelectionMode="Single"
                   SelectionUnit="Cell"
                   AlternatingRowBackground="{x:Null}">
+
             <DataGrid.Resources>
                 <Style TargetType="DataGridCell">
                     <Setter Property="Background" Value="Transparent"/>
@@ -55,9 +56,6 @@
                             <Button Content="{Binding strCategory1}"
                                     Click="Button1_Click"
                                     Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
                                     Visibility="{Binding strCategory1, Converter={StaticResource StringEmptyToVisibility}}"
                                     ToolTipService.ShowDuration="8000"
                                     ToolTipService.InitialShowDelay="200"
@@ -83,9 +81,6 @@
                             <Button Content="{Binding strCategory2}"
                                     Click="Button2_Click"
                                     Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
                                     Visibility="{Binding strCategory2, Converter={StaticResource StringEmptyToVisibility}}"
                                     ToolTipService.ShowDuration="8000"
                                     ToolTipService.InitialShowDelay="200"
@@ -110,9 +105,6 @@
                             <Button Content="{Binding strCategory3}"
                                     Click="Button3_Click"
                                     Style="{StaticResource CategoryPill}"
-                                    Width="130"
-                                    Height="20"
-                                    Margin="2"
                                     Visibility="{Binding strCategory3, Converter={StaticResource StringEmptyToVisibility}}"
                                     ToolTipService.ShowDuration="8000"
                                     ToolTipService.InitialShowDelay="200"

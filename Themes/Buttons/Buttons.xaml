@@ -3,6 +3,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- =========================
+         Global button size knobs
+         ========================= -->
+    <sys:Double x:Key="StdButtonWidth"
+                xmlns:sys="clr-namespace:System;assembly=mscorlib">130</sys:Double>
+    <sys:Double x:Key="StdButtonHeight"
+                xmlns:sys="clr-namespace:System;assembly=mscorlib">20</sys:Double>
+
+    <!-- =========================
          Shared Brushes & Colors
          ========================= -->
 
@@ -87,8 +95,8 @@
          Base Rounded Template
          ========================= -->
     <Style x:Key="RoundedButtonBase" TargetType="Button">
-        <Setter Property="Width" Value="130"/>
-        <Setter Property="Height" Value="20"/>
+        <Setter Property="Width" Value="{StaticResource StdButtonWidth}"/>
+        <Setter Property="Height" Value="{StaticResource StdButtonHeight}"/>
         <Setter Property="Margin" Value="2"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="Foreground" Value="Black"/>
@@ -193,7 +201,6 @@
         <Setter Property="Background" Value="{StaticResource NavNormalBrush}"/>
         <Setter Property="BorderBrush" Value="#20000000"/>
         <Setter Property="Foreground" Value="Black"/>
-        <!-- changed from White -->
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -210,7 +217,7 @@
     </Style>
 
     <!-- =========================
-         Title Bar Glyph Button
+         Title Bar Glyph Button (doesn't inherit base size)
          ========================= -->
     <Style x:Key="TitleButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
@@ -244,6 +251,7 @@
             </Setter.Value>
         </Setter>
     </Style>
+
     <!-- =========================
          Item (purple – for category items)
          ========================= -->
@@ -283,6 +291,5 @@
             </Trigger>
         </Style.Triggers>
     </Style>
- 
 
 </ResourceDictionary>
