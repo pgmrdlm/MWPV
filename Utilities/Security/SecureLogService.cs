@@ -1,11 +1,9 @@
-﻿// Utilities/Security/SecureLogService.cs
-using System;
+﻿using System;
 using System.Data;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Utilities.Logging;        // LogSeverity
-using Utilities.Helpers;        // (for DatabaseHelper.OpenConnection if needed)
 using Utilities.Security;       // SecureEncryptedDataStore
 
 namespace Utilities.Security
@@ -19,17 +17,12 @@ namespace Utilities.Security
         private static Func<SqliteConnection>? _connectionFactory;
         private static string _appVersion = "unknown";
         private static string _machineId = Environment.MachineName;
-        private static readonly JsonSerializerOptions _json = new JsonSerializerOptions
-        {
-            WriteIndented = false
-        };
+        private static readonly JsonSerializerOptions _json = new() { WriteIndented = false };
 
         // Session id (fallback if the host doesn’t pass one in payload)
         private static readonly string _sessionId = Guid.NewGuid().ToString("N");
 
-        /// <summary>
-        /// Call once at startup.
-        /// </summary>
+        /// <summary>Call once at startup.</summary>
         public static void Initialize(
             Func<SqliteConnection> connectionFactory,
             string appVersion,
@@ -82,7 +75,10 @@ namespace Utilities.Security
             // REQUIRED parameters (match your script exactly)
             Add(cmd, "@WhenUtc", DbType.DateTime, when);
             Add(cmd, "@CreatedUtc", DbType.DateTime, created);
-            Add(cmd, "@Level", DbType.Int32, (int)level);
+
+            // IMPORTANT: DB expects TEXT level with a CHECK constraint
+            Add(cmd, "@Level", DbType.String, MapLevel(level));
+
             Add(cmd, "@Source", DbType.String, source ?? "App");
             Add(cmd, "@EventCode", DbType.String, string.IsNullOrWhiteSpace(eventCode) ? "EVENT_0" : eventCode);
             Add(cmd, "@SessionId", DbType.String, _sessionId);
@@ -96,6 +92,16 @@ namespace Utilities.Security
             await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
         }
 
+        private static string MapLevel(LogSeverity level) => level switch
+        {
+            LogSeverity.Debug => "DEBUG",
+            LogSeverity.Info => "INFO",
+            LogSeverity.Warn => "WARN",
+            LogSeverity.Error => "ERROR",
+            LogSeverity.Critical => "FATAL",   // schema expects FATAL, not CRITICAL
+            _ => "INFO"
+        };
+
         private static void Add(SqliteCommand cmd, string name, DbType type, object? value)
         {
             var p = cmd.CreateParameter();
@@ -106,4 +112,3 @@ namespace Utilities.Security
         }
     }
 }
-    

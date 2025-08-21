@@ -1,4 +1,5 @@
 Security + Logging Wrap Up — Master Checklist
+(Last updated: 2025-08-21 18:29:34)
 =============================================
 
 1) Logging Tasks
@@ -29,7 +30,7 @@ Security + Logging Wrap Up — Master Checklist
 
 4) Hooks & Standards
 --------------------
-- Use central async logger for all post-DB events
+[x] Use central async logger for all post-DB events
 - Early-log writer for key-file failures (encrypted with LogPayloadKey)
 - Log before showing UI error dialogs
 - Include EventId, Severity, Source, UserAction, CorrelationId
@@ -80,7 +81,7 @@ Security + Logging Wrap Up — Master Checklist
     - LogPayloadKey
     - SQL script storage in encrypted archive
     - No direct hardcoding of queries in source
-[ ] Dev mode: echo logs to debug output
+[x] Dev mode: echo logs to debug output
 [ ] Unit tests for masking, early-log ingestion, and versioned decryption
 
 Milestones
