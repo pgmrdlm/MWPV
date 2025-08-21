@@ -1,8 +1,7 @@
 ﻿using Microsoft.Data.Sqlite;
 using System;
 using System.IO;
-using Utilities.Security;     // SecureEncryptedDataStore, SensitiveDataCleaner, SecureLogService
-using Utilities.Logging;      // LogSeverity, LogEventIds
+using Utilities.Security;     // SecureEncryptedDataStore, SensitiveDataCleaner
 
 namespace Utilities.Helpers
 {
@@ -86,77 +85,38 @@ namespace Utilities.Helpers
         /// <summary>
         /// Open an application DB connection (read/write/create) using the stored password.
         /// Returns an OPEN SqliteConnection. Caller is responsible for disposing it.
-        /// Logs attempt/success/failure (best-effort; never throws on logging).
+        /// IMPORTANT: This method performs **no logging** to avoid recursion with SecureLogService.
         /// </summary>
         public static SqliteConnection GetAppOpenConnection()
         {
             var dbPath = GetAppDbPath();
-
-            // Log attempt (best-effort)
-            TryLog(LogSeverity.Info, LogEventIds.DbOpenAttempt, "Open connection attempt", new { path = dbPath });
-
             SqliteConnection? conn = null;
-            try
+
+            WithDatabasePasswordString(pw =>
             {
-                WithDatabasePasswordString(pw =>
+                var csb = new SqliteConnectionStringBuilder
                 {
-                    var csb = new SqliteConnectionStringBuilder
-                    {
-                        DataSource = dbPath,
-                        Mode = SqliteOpenMode.ReadWriteCreate,
-                        // NOTE: Requires Microsoft.Data.Sqlite build with encryption/SQLCipher support.
-                        Password = pw
-                    };
+                    DataSource = dbPath,
+                    Mode = SqliteOpenMode.ReadWriteCreate,
+                    // NOTE: Requires Microsoft.Data.Sqlite build with encryption/SQLCipher support.
+                    Password = pw
+                };
 
-                    conn = new SqliteConnection(csb.ToString());
-                    conn.Open();
+                conn = new SqliteConnection(csb.ToString());
+                conn.Open();
 
-                    // Optional PRAGMAs:
-                    // using var cmd = conn.CreateCommand();
-                    // cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
-                    // cmd.ExecuteNonQuery();
-                });
+                // Centralized PRAGMAs (optional):
+                // using var cmd = conn.CreateCommand();
+                // cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
+                // cmd.ExecuteNonQuery();
+            });
 
-                // Log success
-                TryLog(LogSeverity.Info, LogEventIds.DbOpenSucceeded, "Connection opened", new { path = dbPath });
-                return conn!;
-            }
-            catch (Exception ex)
-            {
-                // Log failure (include exception summary)
-                TryLog(
-                    LogSeverity.Error,
-                    LogEventIds.DbOpenFailed,
-                    "Connection failed",
-                    new { path = dbPath, exType = ex.GetType().Name, exMessage = ex.Message }
-                );
-
-                // Preserve original behavior: propagate failure to caller
-                throw;
-            }
+            return conn!;
         }
 
         /// <summary>
         /// Convenience alias so call sites can use DatabaseHelper.OpenConnection().
         /// </summary>
         public static SqliteConnection OpenConnection() => GetAppOpenConnection();
-
-        // ---- internal: safe logging wrapper ----
-        private static void TryLog(LogSeverity level, int eventId, string message, object? payload = null)
-        {
-            try
-            {
-                _ = SecureLogService.WriteAsync(
-                    level: level,
-                    payload: new { message, details = payload },
-                    eventId: eventId,
-                    source: "DatabaseHelper"
-                );
-            }
-            catch
-            {
-                // never throw from logging
-            }
-        }
     }
 }

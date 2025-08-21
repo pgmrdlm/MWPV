@@ -1,8 +1,8 @@
 ﻿// Utilities/Helpers/ErrorHandler.cs
-// Centralized user-visible dialogs + encrypted diagnostic logging via SecureLogService.
-// - Works before Configure(): shows dialogs; logging uses SecureLogService (which is safe to call even if not inited).
-// - After Configure(...): includes app version/session id details in payloads.
-// - Adds InfoTitled(title, message, ...) and WarnTitled(title, message, ...) to keep popup titles consistent.
+// Centralized user-visible dialogs + encrypted diagnostic logging via LogRepository.
+// - Safe before Configure(): shows dialogs, skips logging if _logs is null.
+// - After Configure(...): writes encrypted logs too.
+// - Flood protection for background task popups (UnobservedTaskException).
 
 using System;
 using System.IO;
@@ -12,10 +12,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-using MWPV.Services;                              // LogRepository (kept in signature for compatibility)
-using Utilities.Security;                          // SecureLogService
-using Utilities.Logging;                           // LogSeverity, LogEventIds
-using WpfMessageBox = System.Windows.MessageBox;   // Alias for clarity
+using MWPV.Services;                              // LogRepository, LogLevel
+using WpfMessageBox = System.Windows.MessageBox;  // alias for clarity
 using WpfImage = System.Windows.MessageBoxImage;
 using WpfButtons = System.Windows.MessageBoxButton;
 
@@ -25,15 +23,24 @@ namespace Utilities.Helpers
 
     public static class ErrorHandler
     {
-        // ===== Optional dependencies (injected post-login) =====
-        private static LogRepository? _logs;                // no longer used for writes; kept for compatibility
+        // ===== Dependencies (injected post-login) =====
+        private static LogRepository? _logs;
         private static Func<string>? _sessionIdProvider;
         private static string _appVersion = "unknown";
+
+        // register-once guard
+        private static bool _handlersRegistered;
+
+        // background popup flood protection
+        private static readonly object _bgLock = new();
+        private static DateTime _bgLastShownUtc;
+        private static bool _bgPopupVisible;
+        private static readonly TimeSpan _bgMinInterval = TimeSpan.FromSeconds(5);
 
         /// <summary>Call once after DB/key setup succeeds.</summary>
         public static void Configure(LogRepository logs, Func<string>? sessionIdProvider = null, string? appVersion = null)
         {
-            _logs = logs; // retained for compatibility with existing Configure() call sites
+            _logs = logs ?? throw new ArgumentNullException(nameof(logs));
             _sessionIdProvider = sessionIdProvider;
             if (!string.IsNullOrWhiteSpace(appVersion))
                 _appVersion = appVersion!;
@@ -50,7 +57,7 @@ namespace Utilities.Helpers
         // ===== Public API =====
 
         /// <summary>
-        /// Critical/error dialog with encrypted logging (best-effort; never throws).
+        /// Critical/error dialog with optional encrypted logging.
         /// </summary>
         public static ErrorResult Abend(
             Exception ex,
@@ -92,8 +99,8 @@ namespace Utilities.Helpers
                 icon
             );
 
-            // ---- Encrypted logging (best-effort; never throws) ----
-            if (log)
+            // ---- Encrypted logging (best-effort) ----
+            if (log && _logs is not null)
             {
                 try
                 {
@@ -103,49 +110,56 @@ namespace Utilities.Helpers
                         stage,
                         severity = severity.ToString(),
                         caller = new { member, file, line, location },
+                        exception = new
+                        {
+                            type = errorType,
+                            message = Redact(ex.Message),
+                            stackTrace = ex.StackTrace
+                        },
                         environment = new
                         {
                             utc = DateTime.UtcNow,
                             machine = Environment.MachineName,
                             processId = Environment.ProcessId,
                             os = Environment.OSVersion?.ToString(),
-                            appVersion = _appVersion,
-                            sessionId = _sessionIdProvider?.Invoke()
+                            appVersion = _appVersion
                         },
                         activityId
                     };
 
-                    // Route via SecureLogService with numeric EventId
-                    _ = SecureLogService.WriteAsync(
-                        level: MapSeverity(severity),
-                        payload: payload,
-                        eventId: (int)LogEventIds.Abend,
+                    string eventCode = $"ABEND_{stage}".ToUpperInvariant();
+                    string? sessionId = _sessionIdProvider?.Invoke();
+                    string stackHash = ShortHash(ex.ToString() ?? $"{errorType}:{location}");
+
+                    _ = _logs.LogAsync(
+                        level: MapLevel(severity),
                         source: location,
-                        ex: ex,
-                        isCrash: severity >= ErrorSeverity.Critical
+                        eventCode: eventCode,
+                        payloadObject: payload,
+                        isCrash: severity >= ErrorSeverity.Critical,
+                        sessionId: sessionId,
+                        stackHash: stackHash
                     );
                 }
                 catch
                 {
-                    // swallow: handler must never throw
+                    // never throw
                 }
             }
 
             return new ErrorResult { ActivityId = activityId, UserChoice = result, Severity = severity };
         }
 
-        /// <summary>Info dialog (title = "Info"). Logs at Info.</summary>
+        /// <summary>Info dialog (title = "Info"). Logs at Info if configured.</summary>
         public static void Info(
             string message,
             string stage = "unspecified",
             [CallerMemberName] string member = "",
             [CallerFilePath] string file = "",
             [CallerLineNumber] int line = 0)
-        {
-            InfoTitled("Info", message, stage, member, file, line);
-        }
+            => InfoTitled("Info", message, stage, member, file, line);
 
-        /// <summary>Info dialog with custom title. Logs at Info.</summary>
+        /// <summary>Info dialog with custom title. Logs at Info if configured.</summary>
         public static void InfoTitled(
             string title,
             string message,
@@ -156,6 +170,7 @@ namespace Utilities.Helpers
         {
             WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Info" : title, WpfButtons.OK, WpfImage.Information);
 
+            if (_logs is null) return;
             try
             {
                 var location = $"{SafeFileName(file)}.{member}():{line}";
@@ -172,22 +187,24 @@ namespace Utilities.Helpers
                         machine = Environment.MachineName,
                         processId = Environment.ProcessId,
                         os = Environment.OSVersion?.ToString(),
-                        appVersion = _appVersion,
-                        sessionId = _sessionIdProvider?.Invoke()
+                        appVersion = _appVersion
                     }
                 };
 
-                _ = SecureLogService.WriteAsync(
-                    level: LogSeverity.Info,
-                    payload: payload,
-                    eventId: null,
-                    source: location
+                _ = _logs.LogAsync(
+                    level: LogLevel.Info,
+                    source: location,
+                    eventCode: "INFO",
+                    payloadObject: payload,
+                    isCrash: false,
+                    sessionId: _sessionIdProvider?.Invoke(),
+                    stackHash: null
                 );
             }
             catch { /* never throw */ }
         }
 
-        /// <summary>Warning dialog with custom title. Logs at Warn.</summary>
+        /// <summary>Warning dialog with custom title. Logs at Warn if configured.</summary>
         public static void WarnTitled(
             string title,
             string message,
@@ -198,6 +215,7 @@ namespace Utilities.Helpers
         {
             WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Warning" : title, WpfButtons.OK, WpfImage.Warning);
 
+            if (_logs is null) return;
             try
             {
                 var location = $"{SafeFileName(file)}.{member}():{line}";
@@ -214,16 +232,18 @@ namespace Utilities.Helpers
                         machine = Environment.MachineName,
                         processId = Environment.ProcessId,
                         os = Environment.OSVersion?.ToString(),
-                        appVersion = _appVersion,
-                        sessionId = _sessionIdProvider?.Invoke()
+                        appVersion = _appVersion
                     }
                 };
 
-                _ = SecureLogService.WriteAsync(
-                    level: LogSeverity.Warn,
-                    payload: payload,
-                    eventId: null,
-                    source: location
+                _ = _logs.LogAsync(
+                    level: LogLevel.Warn,
+                    source: location,
+                    eventCode: "WARN",
+                    payloadObject: payload,
+                    isCrash: false,
+                    sessionId: _sessionIdProvider?.Invoke(),
+                    stackHash: null
                 );
             }
             catch { /* never throw */ }
@@ -278,9 +298,12 @@ namespace Utilities.Helpers
             }
         }
 
-        /// <summary>Register global handlers so unhandled exceptions go through here.</summary>
+        /// <summary>Register global handlers so unhandled exceptions go through here (idempotent).</summary>
         public static void RegisterGlobalHandlers(System.Windows.Application app)
         {
+            if (_handlersRegistered) return;
+            _handlersRegistered = true;
+
             if (app != null)
             {
                 app.DispatcherUnhandledException += (s, e) =>
@@ -297,6 +320,7 @@ namespace Utilities.Helpers
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
                 var ex = e.ExceptionObject as Exception ?? new Exception("Unknown unhandled exception");
+                // Domain unhandled — still show a dialog, then allow normal termination.
                 Abend(ex, "Unhandled domain exception", stage: "appdomain",
                       severity: ErrorSeverity.Critical, buttons: WpfButtons.OK, icon: WpfImage.Error, log: true);
             };
@@ -305,14 +329,118 @@ namespace Utilities.Helpers
             {
                 try
                 {
-                    Abend(e.Exception, "Unobserved task exception", stage: "taskscheduler",
-                          severity: ErrorSeverity.Error, buttons: WpfButtons.OK, icon: WpfImage.Warning, log: true);
+                    var flat = e.Exception?.Flatten();
+                    if (flat != null)
+                    {
+                        foreach (var inner in flat.InnerExceptions)
+                            LogBackgroundTaskFault(inner);
+                    }
+                    else if (e.Exception != null)
+                    {
+                        LogBackgroundTaskFault(e.Exception);
+                    }
+
+                    NotifyBackgroundFaultOnce();
                 }
-                finally { e.SetObserved(); }
+                finally
+                {
+                    // Prevent finalizer thread from rethrowing
+                    e.SetObserved();
+                }
             };
         }
 
-        // ===== Helpers =====
+        // ===== Background helpers =====
+
+        private static void LogBackgroundTaskFault(Exception ex)
+        {
+            if (_logs is null) return;
+
+            try
+            {
+                string? sessionId = _sessionIdProvider?.Invoke();
+                var payload = new
+                {
+                    message = "Background task faulted",
+                    exception = new
+                    {
+                        type = ex.GetType().FullName,
+                        message = Redact(ex.Message),
+                        stackTrace = ex.StackTrace
+                    },
+                    environment = new
+                    {
+                        utc = DateTime.UtcNow,
+                        machine = Environment.MachineName,
+                        processId = Environment.ProcessId,
+                        os = Environment.OSVersion?.ToString(),
+                        appVersion = _appVersion
+                    }
+                };
+
+                _ = _logs.LogAsync(
+                    level: LogLevel.Error,
+                    source: "taskscheduler",
+                    eventCode: "TASK_FAULT",
+                    payloadObject: payload,
+                    isCrash: false,
+                    sessionId: sessionId,
+                    stackHash: ShortHash(ex.ToString() ?? ex.Message ?? "taskfault")
+                );
+            }
+            catch
+            {
+                // never throw from logging
+            }
+        }
+
+        private static void NotifyBackgroundFaultOnce()
+        {
+            try
+            {
+                bool shouldShow;
+                lock (_bgLock)
+                {
+                    var now = DateTime.UtcNow;
+                    shouldShow = !_bgPopupVisible && (now - _bgLastShownUtc) >= _bgMinInterval;
+                    if (shouldShow)
+                    {
+                        _bgPopupVisible = true;
+                        _bgLastShownUtc = now;
+                    }
+                }
+
+                if (!shouldShow) return;
+
+                var app = System.Windows.Application.Current;
+                void show()
+                {
+                    try
+                    {
+                        WpfMessageBox.Show(
+                            "A background task faulted (details in logs).",
+                            "Background Task Error",
+                            WpfButtons.OK,
+                            WpfImage.Warning);
+                    }
+                    finally
+                    {
+                        lock (_bgLock) { _bgPopupVisible = false; }
+                    }
+                }
+
+                if (app?.Dispatcher != null)
+                    app.Dispatcher.BeginInvoke(new Action(show));
+                else
+                    show();
+            }
+            catch
+            {
+                lock (_bgLock) { _bgPopupVisible = false; }
+            }
+        }
+
+        // ===== Shared helpers =====
 
         private static string SafeFileName(string path)
             => string.IsNullOrWhiteSpace(path) ? "UnknownFile" : Path.GetFileNameWithoutExtension(path);
@@ -327,20 +455,19 @@ namespace Utilities.Helpers
                 _ => WpfImage.Error
             };
 
-        private static LogSeverity MapSeverity(ErrorSeverity s) =>
+        private static LogLevel MapLevel(ErrorSeverity s) =>
             s switch
             {
-                ErrorSeverity.Info => LogSeverity.Info,
-                ErrorSeverity.Warning => LogSeverity.Warn,
-                ErrorSeverity.Error => LogSeverity.Error,
-                ErrorSeverity.Critical => LogSeverity.Critical,
-                _ => LogSeverity.Error
+                ErrorSeverity.Info => LogLevel.Info,
+                ErrorSeverity.Warning => LogLevel.Warn,
+                ErrorSeverity.Error => LogLevel.Error,
+                ErrorSeverity.Critical => LogLevel.Critical,
+                _ => LogLevel.Error
             };
 
         private static string ShortHash(string s)
         {
             using var sha = System.Security.Cryptography.SHA256.Create();
-            // 8 hex chars is enough to bucket similar stacks without leaking too much
             return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(s))).Substring(0, 8);
         }
 
@@ -348,7 +475,6 @@ namespace Utilities.Helpers
         private static string? Redact(string? s)
         {
             if (string.IsNullOrEmpty(s)) return s;
-            // match: password: foo, key=bar, token abc, secret:xxx, etc.
             return Regex.Replace(
                 s,
                 @"(?i)(password|pass|pw|key|token|secret)\s*([:=]\s*|\s+)\S+",

@@ -3,7 +3,7 @@ Security + Logging Wrap Up — Master Checklist
 
 1) Logging Tasks
 ----------------
-[ ] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
+[x] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
 [ ] Batch ingest early logs in a single transaction (~200 entries)
 [ ] Dedupe by LogGuid or content hash
 [ ] Final secure-delete sweep of %LOCALAPPDATA%/MWPV/early after PendingCount==0
@@ -59,7 +59,7 @@ Security + Logging Wrap Up — Master Checklist
 
 8) Secure Deletion & Retention
 ------------------------------
-[ ] Overwrite + delete early logs
+[x] Overwrite + delete early logs
 [ ] DB log retention (e.g., 90 days) + purge
 [ ] Limit DetailsJson size
 

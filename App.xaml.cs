@@ -14,14 +14,14 @@ using System.Windows;
 using Utilities.Diagnostics;                // EarlyLoginFailures
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
 using Utilities.Security;                   // SecureLogService, SensitiveDataCleaner
-using Utilities.Logging;                    // LogEventIds, LogSeverity (ids only used via wrappers)
+using Utilities.Logging;                    // LogEventIds, LogSeverity
 #if DEBUG
 using System.Diagnostics;
 #endif
 
 // Disambiguation aliases
 using WpfApp = System.Windows.Application;
-using SecLogLevel = Utilities.Security.LogLevel;
+using SecLogLevel = Utilities.Logging.LogSeverity;
 
 namespace MWPV
 {
@@ -103,7 +103,6 @@ namespace MWPV
                 SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
                 ErrorHandler.RegisterGlobalHandlers(this); // re-hook after logger live
 
-                // Dev echo
 #if DEBUG
                 Debug.WriteLine($"[LOG] Initialized encrypted logging v{appVersion}, session {sessionId}");
 #endif
@@ -127,6 +126,7 @@ namespace MWPV
                 // Ingest any early failures now that DB is ready
                 if (EarlyLoginFailures.HasPending())
                 {
+                    // Simple info note
                     SecureLogService.WriteAsync(
                         SecLogLevel.Info,
                         new { pending = EarlyLoginFailures.PendingCount, dir = EarlyLoginFailures.StoreDir, sessionId },
@@ -134,14 +134,26 @@ namespace MWPV
                         source: "post-login"
                     ).GetAwaiter().GetResult();
 
+                    // Flush files → DB
                     EarlyLoginFailures.FlushToDb(
                         writeDbLog: (utc, type, detail) =>
-                            SecureLogService.WriteAsync(
-                                SecLogLevel.Info,
-                                new { earlyFail = type.ToString(), detail, occurredUtc = utc, sessionId },
-                                eventCode: "EARLY_LOGIN_FAILURE",
-                                source: "SetupPasswordAndKeyFile"
-                            ).GetAwaiter().GetResult(),
+                        {
+                            try
+                            {
+                                SecureLogService.WriteAsync(
+                                    SecLogLevel.Info,
+                                    new { earlyFail = type.ToString(), detail, occurredUtc = utc, sessionId },
+                                    eventCode: "EARLY_LOGIN_FAILURE",
+                                    source: "SetupPasswordAndKeyFile",
+                                    whenUtc: utc
+                                ).GetAwaiter().GetResult();
+                                return true; // indicate success to the ingester
+                            }
+                            catch
+                            {
+                                return false; // let the ingester decide what to do
+                            }
+                        },
                         deleteFile: path =>
                         {
                             try
