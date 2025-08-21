@@ -9,30 +9,24 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Utilities.Logging; // LogSeverity, LogEventIds
 
 namespace Utilities.Security
 {
+    // Kept for backward compatibility with existing callers (e.g., App alias).
     public enum LogLevel { Debug, Info, Warn, Error, Fatal }
 
     /// <summary>
-    /// Secure, parameterized logging to the local encrypted SQLite database.
-    /// - Payloads are JSON encrypted with AES-GCM using provisioned LogPayloadKey.
-    /// - New rows are tagged with PayloadVer and KeySetVersion for forward compatibility.
-    /// - SQL templates (e.g., "Logs_Insert_V2.sql") are loaded from SecureEncryptedDataStore,
-    ///   with a generic version-aware resolver that picks the highest available "…_V#.sql" or falls back to "… .sql".
+    /// Encrypted, parameterized logging to the app's SQLite DB.
+    /// - Payloads are JSON, encrypted via AES-GCM with LogPayloadKey (fallback: legacy machine-bound key).
+    /// - SQL is loaded from SecureEncryptedDataStore (version-aware resolver: Logs_Insert_V{n}.sql).
+    /// - Binds only parameters that exist in the selected SQL (safe across schema versions).
     /// </summary>
     public static class SecureLogService
     {
-        /// <summary>
-        /// Logical (base) name for the insert template. The resolver will look for:
-        ///   - "Logs_Insert_V{n}.sql" (highest n wins), then
-        ///   - "Logs_Insert.sql"
-        /// </summary>
         private const string InsertBaseName = "Logs_Insert";
 
-        /// <summary>
-        /// Bump when payload format or key policy changes.
-        /// </summary>
+        /// <summary>Bump when payload format or key policy changes.</summary>
         private const int PayloadVer = 2;
 
         private static Func<SqliteConnection>? _openAppConnection;
@@ -46,25 +40,35 @@ namespace Utilities.Security
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
-        /// <summary>
-        /// Initialize the service. Call once after the database is ready.
-        /// </summary>
-        public static void Initialize(Func<SqliteConnection> openAppConnection,
-                                      string? appVersion = null,
-                                      string? defaultSource = null)
+        public static void Initialize(
+            Func<SqliteConnection> openAppConnection,
+            string? appVersion = null,
+            string? defaultSource = null)
         {
             _openAppConnection = openAppConnection ?? throw new ArgumentNullException(nameof(openAppConnection));
             _appVersion = string.IsNullOrWhiteSpace(appVersion)
                 ? (Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "0.0.0")
                 : appVersion!;
-            if (!string.IsNullOrWhiteSpace(defaultSource)) _defaultSource = defaultSource!;
+            if (!string.IsNullOrWhiteSpace(defaultSource))
+                _defaultSource = defaultSource!;
             _sessionId = Guid.NewGuid().ToString("N");
         }
 
-        /// <summary>
-        /// Write a log row. Never throws; returns false on failure.
-        /// </summary>
-        public static async Task<bool> WriteAsync(
+        // ---------------------- Public write APIs ----------------------
+
+        // New API using Utilities.Logging.LogSeverity + optional numeric EventId
+        public static Task<bool> WriteAsync(
+            LogSeverity level,
+            object? payload = null,
+            int? eventId = null,
+            string? source = null,
+            Exception? ex = null,
+            bool isCrash = false,
+            CancellationToken ct = default)
+            => WriteCoreAsync(Map(level), payload, eventId, eventCode: null, source, ex, isCrash, ct);
+
+        // Back-compat API (string eventCode and old enum)
+        public static Task<bool> WriteAsync(
             LogLevel level,
             object? payload = null,
             string? eventCode = null,
@@ -72,15 +76,29 @@ namespace Utilities.Security
             Exception? ex = null,
             bool isCrash = false,
             CancellationToken ct = default)
+            => WriteCoreAsync(level, payload, eventId: null, eventCode, source, ex, isCrash, ct);
+
+        // ---------------------- Core implementation ----------------------
+
+        private static async Task<bool> WriteCoreAsync(
+            LogLevel level,
+            object? payload,
+            int? eventId,
+            string? eventCode,
+            string? source,
+            Exception? ex,
+            bool isCrash,
+            CancellationToken ct)
         {
             if (_openAppConnection is null) return false;
 
             byte[]? plain = null;
             try
             {
-                // Compose JSON payload (include exception details if provided)
-                var body = ex == null ? payload :
-                    new
+                // Compose JSON payload (+ exception if present)
+                var body = ex == null
+                    ? payload
+                    : new
                     {
                         payload,
                         exception = new
@@ -95,40 +113,45 @@ namespace Utilities.Security
                 plain = Encoding.UTF8.GetBytes(json);
                 byte[] encBlob = EncryptPayload(plain);
 
-                // Normalize inputs
                 string levelText = level.ToString().ToUpperInvariant(); // DEBUG|INFO|WARN|ERROR|FATAL
                 string src = string.IsNullOrWhiteSpace(source) ? _defaultSource : source!;
                 string machId = ComputeMachineIdHash();
                 string stackHash = ex?.StackTrace is string st ? Sha256Hex(st) : "";
 
-                // Resolve the insert SQL from the secure store (version-aware)
+                // Resolve SQL
                 string? sql = ResolveSqlTemplate(InsertBaseName);
                 if (string.IsNullOrWhiteSpace(sql))
-                    return false; // template missing → skip quietly
+                    return false;
 
                 using var cn = _openAppConnection();
                 using var cmd = cn.CreateCommand();
                 cmd.CommandText = sql;
 
-                // Bind parameters expected by Logs_Insert_V2.sql (current schema)
-                cmd.Parameters.AddWithValue("@CreatedUtc", DateTime.UtcNow.ToString("o")); // TEXT ISO-8601
-                cmd.Parameters.AddWithValue("@Level", levelText ?? "");
-                cmd.Parameters.AddWithValue("@Source", (object?)src ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@EventCode", (object?)eventCode ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@SessionId", (object?)_sessionId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@MachineId", (object?)machId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@AppVersion", (object?)_appVersion ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@IsCrash", isCrash ? 1 : 0);
+                // Bind with tolerant/synonym helpers
+                AddFirstMatch(cmd, sql, new[] { "@CreatedUtc", "@TimestampUtc" }, DateTime.UtcNow.ToString("o"));
+                AddFirstMatch(cmd, sql, new[] { "@Level", "@Severity" }, levelText);
+                AddFirstMatch(cmd, sql, new[] { "@Source" }, src);
 
-                var p = cmd.CreateParameter();
-                p.ParameterName = "@Payload";
-                p.SqliteType = SqliteType.Blob;
-                p.Value = (object?)encBlob ?? Array.Empty<byte>();
-                cmd.Parameters.Add(p);
+                if (eventId.HasValue)
+                    AddIfPresent(cmd, sql, "@EventId", eventId.Value);
+                if (!string.IsNullOrWhiteSpace(eventCode))
+                    AddIfPresent(cmd, sql, "@EventCode", eventCode);
 
-                cmd.Parameters.AddWithValue("@PayloadFmt", "json+aesgcm");
-                cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
+                AddFirstMatch(cmd, sql, new[] { "@SessionId", "@CorrelationId" }, _sessionId);
+                AddIfPresent(cmd, sql, "@MachineId", machId);
+                AddIfPresent(cmd, sql, "@AppVersion", _appVersion);
+                AddIfPresent(cmd, sql, "@IsCrash", isCrash ? 1 : 0);
 
+                AddBlobIfPresent(cmd, sql, "@Payload", encBlob);
+                AddIfPresent(cmd, sql, "@PayloadFmt", "json+aesgcm");
+
+                // Versioning / key metadata (only if the SQL expects them)
+                AddIfPresent(cmd, sql, "@PayloadVer", PayloadVer);
+                AddIfPresent(cmd, sql, "@KeySetVersion", CurrentKeySetVersion());
+
+                // Optional stack correlation
+                if (!string.IsNullOrEmpty(stackHash))
+                    AddIfPresent(cmd, sql, "@StackHash", stackHash);
 
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 return true;
@@ -144,18 +167,26 @@ namespace Utilities.Security
             }
         }
 
-        // ---------- SQL template resolution ----------
+        private static LogLevel Map(LogSeverity s) => s switch
+        {
+            LogSeverity.Debug => LogLevel.Debug,
+            LogSeverity.Info => LogLevel.Info,
+            LogSeverity.Warn => LogLevel.Warn,
+            LogSeverity.Error => LogLevel.Error,
+            LogSeverity.Critical => LogLevel.Fatal,
+            _ => LogLevel.Info
+        };
+
+        // ---------------------- SQL template resolution ----------------------
 
         /// <summary>
         /// Resolve a SQL template by base name from SecureEncryptedDataStore.
-        /// Looks for "{base}.sql" and "{base}_V{n}.sql" (highest n wins), case-insensitive.
-        /// Returns null if nothing is found.
+        /// Tries "{base}.sql" then scans for highest "{base}_V{n}.sql".
         /// </summary>
         public static string? ResolveSqlTemplate(string baseName)
         {
             if (string.IsNullOrWhiteSpace(baseName)) return null;
 
-            // Fast path: exact "{base}.sql"
             string exact = baseName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
                 ? baseName
                 : baseName + ".sql";
@@ -164,8 +195,6 @@ namespace Utilities.Security
             if (!string.IsNullOrWhiteSpace(exactSql))
                 return exactSql;
 
-            // Versioned scan: "{base}_V{n}.sql" → pick highest n
-            // Example: "Logs_Insert_V2.sql", "Logs_Insert_V3.sql"
             var keys = SecureEncryptedDataStore.Keys();
             if (keys is null) return null;
 
@@ -191,16 +220,13 @@ namespace Utilities.Security
             return bestKey is null ? null : SecureEncryptedDataStore.GetString(bestKey);
         }
 
-        // ---------- AES-GCM helpers ----------
+        // ---------------------- AES-GCM helpers ----------------------
 
-        /// <summary>
-        /// Encrypts the payload with AES-GCM using the provisioned LogPayloadKey.
-        /// Layout: IV(12) | CIPHERTEXT | TAG(16).
-        /// </summary>
+        /// <summary>Encrypt payload with AES-GCM using provisioned LogPayloadKey. Layout: IV(12)|CIPHERTEXT|TAG(16).</summary>
         private static byte[] EncryptPayload(ReadOnlySpan<byte> plaintext)
         {
-            byte[] key = GetLogKey();            // provisioned AES-256 key (or legacy fallback)
-            byte[] iv = new byte[12];           // 96-bit nonce
+            byte[] key = GetLogKey();
+            byte[] iv = new byte[12];
             RandomNumberGenerator.Fill(iv);
 
             byte[] ciphertext = new byte[plaintext.Length];
@@ -221,28 +247,22 @@ namespace Utilities.Security
             return blob;
         }
 
-        /// <summary>
-        /// Returns the current KeySetVersion from the secure store (defaults to 1).
-        /// </summary>
         private static int CurrentKeySetVersion()
         {
             var s = SecureEncryptedDataStore.GetString("KeySetVersion");
             return int.TryParse(s, out var v) && v > 0 ? v : 1;
         }
 
-        /// <summary>
-        /// Gets the provisioned LogPayloadKey from the secure store; falls back to legacy machine-bound derivation.
-        /// </summary>
         private static byte[] GetLogKey()
         {
             if (SecureEncryptedDataStore.HasKey("LogPayloadKey"))
                 return SecureEncryptedDataStore.GetBytes("LogPayloadKey");
 
-            // Legacy fallback so older installs still work (machine-bound)
+            // Legacy fallback (machine-bound)
             return DeriveKey32();
         }
 
-        // ---------- Legacy key material (fallback) ----------
+        // ---------------------- Legacy key material (fallback) ----------------------
 
         private static byte[] DeriveKey32()
         {
@@ -298,6 +318,39 @@ namespace Utilities.Security
                 return serial.ToString("X8");
             }
             catch { return null; }
+        }
+
+        // ---------------------- Parameter helpers ----------------------
+
+        private static bool SqlHasParam(string sql, string paramName)
+            => sql?.IndexOf(paramName, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        private static void AddIfPresent(SqliteCommand cmd, string sql, string name, object? value)
+        {
+            if (!SqlHasParam(sql, name)) return;
+            cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        }
+
+        private static void AddBlobIfPresent(SqliteCommand cmd, string sql, string name, byte[] blob)
+        {
+            if (!SqlHasParam(sql, name)) return;
+            var p = cmd.CreateParameter();
+            p.ParameterName = name;
+            p.SqliteType = SqliteType.Blob;
+            p.Value = blob ?? Array.Empty<byte>();
+            cmd.Parameters.Add(p);
+        }
+
+        private static void AddFirstMatch(SqliteCommand cmd, string sql, string[] names, object? value)
+        {
+            foreach (var n in names)
+            {
+                if (SqlHasParam(sql, n))
+                {
+                    cmd.Parameters.AddWithValue(n, value ?? DBNull.Value);
+                    return;
+                }
+            }
         }
     }
 }

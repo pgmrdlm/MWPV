@@ -14,6 +14,7 @@ using System.Windows;
 using Utilities.Diagnostics;                // EarlyLoginFailures
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
 using Utilities.Security;                   // SecureLogService, SensitiveDataCleaner
+using Utilities.Logging;                    // LogEventIds, LogSeverity (ids only used via wrappers)
 #if DEBUG
 using System.Diagnostics;
 #endif
@@ -84,14 +85,13 @@ namespace MWPV
             }
 
             // --- configure encrypted logging (non-fatal if it fails) ---
+            string sessionId = Guid.NewGuid().ToString("N");
+            string appVersion =
+                (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
+                .GetName().Version?.ToString() ?? "unknown";
+
             try
             {
-                string appVersion =
-                    (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
-                    .GetName().Version?.ToString() ?? "unknown";
-
-                string sessionId = Guid.NewGuid().ToString("N");
-
                 var logs = new LogRepository(DatabaseHelper.OpenConnection, appVersion);
 
                 ErrorHandler.Configure(
@@ -103,6 +103,11 @@ namespace MWPV
                 SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
                 ErrorHandler.RegisterGlobalHandlers(this); // re-hook after logger live
 
+                // Dev echo
+#if DEBUG
+                Debug.WriteLine($"[LOG] Initialized encrypted logging v{appVersion}, session {sessionId}");
+#endif
+
                 // Sweep any unpacked SQL files (best effort)
                 try
                 {
@@ -113,12 +118,18 @@ namespace MWPV
                 }
                 catch { /* ignore */ }
 
+                // Standardized startup log
+                LogInfo("App", "Startup (post-setup)", LogEventIds.AppStart, new { version = appVersion, sessionId });
+
+                // Prove DB connectivity explicitly and log result
+                TryProbeDb();
+
                 // Ingest any early failures now that DB is ready
                 if (EarlyLoginFailures.HasPending())
                 {
                     SecureLogService.WriteAsync(
                         SecLogLevel.Info,
-                        new { pending = EarlyLoginFailures.PendingCount, dir = EarlyLoginFailures.StoreDir },
+                        new { pending = EarlyLoginFailures.PendingCount, dir = EarlyLoginFailures.StoreDir, sessionId },
                         eventCode: "EARLY_LOGIN_FAILURES_PENDING",
                         source: "post-login"
                     ).GetAwaiter().GetResult();
@@ -127,7 +138,7 @@ namespace MWPV
                         writeDbLog: (utc, type, detail) =>
                             SecureLogService.WriteAsync(
                                 SecLogLevel.Info,
-                                new { earlyFail = type.ToString(), detail, occurredUtc = utc },
+                                new { earlyFail = type.ToString(), detail, occurredUtc = utc, sessionId },
                                 eventCode: "EARLY_LOGIN_FAILURE",
                                 source: "SetupPasswordAndKeyFile"
                             ).GetAwaiter().GetResult(),
@@ -182,6 +193,52 @@ namespace MWPV
             Current.MainWindow = main;
             Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
             main.Show();
+        }
+
+        // --- small centralized wrappers to carry your numeric EventIds via SecureLogService ---
+        private static void LogInfo(string source, string message, int eventId, object? details = null)
+            => Log(SecLogLevel.Info, source, message, eventId, details);
+
+        private static void LogWarn(string source, string message, int eventId, object? details = null)
+            => Log(SecLogLevel.Warn, source, message, eventId, details);
+
+        private static void LogError(string source, string message, int eventId, object? details = null)
+            => Log(SecLogLevel.Error, source, message, eventId, details);
+
+        private static void Log(SecLogLevel level, string source, string message, int eventId, object? details)
+        {
+            try
+            {
+                // Keep your string eventCode style, but include numeric EventId in the payload
+                SecureLogService.WriteAsync(
+                    level,
+                    new { eventId, message, details },
+                    eventCode: $"EVENT_{eventId}",
+                    source: source ?? "App"
+                ).GetAwaiter().GetResult();
+
+#if DEBUG
+                Debug.WriteLine($"[LOG {level}] {source} #{eventId} {message}");
+#endif
+            }
+            catch
+            {
+                // Intentionally swallow to avoid recursive logging/abends.
+            }
+        }
+
+        private static void TryProbeDb()
+        {
+            try
+            {
+                using var _ = DatabaseHelper.GetAppOpenConnection();
+                LogInfo("DB", "Connection opened", LogEventIds.DbOpenSucceeded);
+            }
+            catch (Exception ex)
+            {
+                LogError("DB", "Connection failed", LogEventIds.DbOpenFailed,
+                    new { exType = ex.GetType().Name, exMessage = ex.Message });
+            }
         }
 
         private void InstanceSignalListener()

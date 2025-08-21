@@ -1,7 +1,7 @@
 ﻿// Utilities/Helpers/ErrorHandler.cs
-// Centralized user-visible dialogs + encrypted diagnostic logging via LogRepository.
-// - Works before Configure(): shows dialogs, skips logging if _logs is null.
-// - After Configure(...): also writes encrypted logs.
+// Centralized user-visible dialogs + encrypted diagnostic logging via SecureLogService.
+// - Works before Configure(): shows dialogs; logging uses SecureLogService (which is safe to call even if not inited).
+// - After Configure(...): includes app version/session id details in payloads.
 // - Adds InfoTitled(title, message, ...) and WarnTitled(title, message, ...) to keep popup titles consistent.
 
 using System;
@@ -12,8 +12,10 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-using MWPV.Services;                              // LogRepository, LogLevel
-using WpfMessageBox = System.Windows.MessageBox;  // Alias for clarity
+using MWPV.Services;                              // LogRepository (kept in signature for compatibility)
+using Utilities.Security;                          // SecureLogService
+using Utilities.Logging;                           // LogSeverity, LogEventIds
+using WpfMessageBox = System.Windows.MessageBox;   // Alias for clarity
 using WpfImage = System.Windows.MessageBoxImage;
 using WpfButtons = System.Windows.MessageBoxButton;
 
@@ -23,15 +25,15 @@ namespace Utilities.Helpers
 
     public static class ErrorHandler
     {
-        // ===== Dependencies (injected post-login) =====
-        private static LogRepository? _logs;
+        // ===== Optional dependencies (injected post-login) =====
+        private static LogRepository? _logs;                // no longer used for writes; kept for compatibility
         private static Func<string>? _sessionIdProvider;
         private static string _appVersion = "unknown";
 
         /// <summary>Call once after DB/key setup succeeds.</summary>
         public static void Configure(LogRepository logs, Func<string>? sessionIdProvider = null, string? appVersion = null)
         {
-            _logs = logs ?? throw new ArgumentNullException(nameof(logs));
+            _logs = logs; // retained for compatibility with existing Configure() call sites
             _sessionIdProvider = sessionIdProvider;
             if (!string.IsNullOrWhiteSpace(appVersion))
                 _appVersion = appVersion!;
@@ -48,7 +50,7 @@ namespace Utilities.Helpers
         // ===== Public API =====
 
         /// <summary>
-        /// Critical/error dialog with optional encrypted logging.
+        /// Critical/error dialog with encrypted logging (best-effort; never throws).
         /// </summary>
         public static ErrorResult Abend(
             Exception ex,
@@ -90,8 +92,8 @@ namespace Utilities.Helpers
                 icon
             );
 
-            // ---- Encrypted logging (best-effort) ----
-            if (log && _logs is not null)
+            // ---- Encrypted logging (best-effort; never throws) ----
+            if (log)
             {
                 try
                 {
@@ -101,35 +103,26 @@ namespace Utilities.Helpers
                         stage,
                         severity = severity.ToString(),
                         caller = new { member, file, line, location },
-                        exception = new
-                        {
-                            type = errorType,
-                            message = Redact(ex.Message),
-                            stackTrace = ex.StackTrace
-                        },
                         environment = new
                         {
                             utc = DateTime.UtcNow,
                             machine = Environment.MachineName,
                             processId = Environment.ProcessId,
                             os = Environment.OSVersion?.ToString(),
-                            appVersion = _appVersion
+                            appVersion = _appVersion,
+                            sessionId = _sessionIdProvider?.Invoke()
                         },
                         activityId
                     };
 
-                    string eventCode = $"ABEND_{stage}".ToUpperInvariant();
-                    string? sessionId = _sessionIdProvider?.Invoke();
-                    string stackHash = ShortHash(ex.ToString() ?? $"{errorType}:{location}");
-
-                    _ = _logs.LogAsync(
-                        level: MapLevel(severity),
+                    // Route via SecureLogService with numeric EventId
+                    _ = SecureLogService.WriteAsync(
+                        level: MapSeverity(severity),
+                        payload: payload,
+                        eventId: (int)LogEventIds.Abend,
                         source: location,
-                        eventCode: eventCode,
-                        payloadObject: payload,
-                        isCrash: severity >= ErrorSeverity.Critical,
-                        sessionId: sessionId,
-                        stackHash: stackHash
+                        ex: ex,
+                        isCrash: severity >= ErrorSeverity.Critical
                     );
                 }
                 catch
@@ -141,7 +134,7 @@ namespace Utilities.Helpers
             return new ErrorResult { ActivityId = activityId, UserChoice = result, Severity = severity };
         }
 
-        /// <summary>Info dialog (title = "Info"). Logs at Info if configured.</summary>
+        /// <summary>Info dialog (title = "Info"). Logs at Info.</summary>
         public static void Info(
             string message,
             string stage = "unspecified",
@@ -152,7 +145,7 @@ namespace Utilities.Helpers
             InfoTitled("Info", message, stage, member, file, line);
         }
 
-        /// <summary>Info dialog with custom title. Logs at Info if configured.</summary>
+        /// <summary>Info dialog with custom title. Logs at Info.</summary>
         public static void InfoTitled(
             string title,
             string message,
@@ -163,7 +156,6 @@ namespace Utilities.Helpers
         {
             WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Info" : title, WpfButtons.OK, WpfImage.Information);
 
-            if (_logs is null) return; // safe before Configure()
             try
             {
                 var location = $"{SafeFileName(file)}.{member}():{line}";
@@ -180,24 +172,22 @@ namespace Utilities.Helpers
                         machine = Environment.MachineName,
                         processId = Environment.ProcessId,
                         os = Environment.OSVersion?.ToString(),
-                        appVersion = _appVersion
+                        appVersion = _appVersion,
+                        sessionId = _sessionIdProvider?.Invoke()
                     }
                 };
 
-                _ = _logs.LogAsync(
-                    level: LogLevel.Info,
-                    source: location,
-                    eventCode: "INFO",
-                    payloadObject: payload,
-                    isCrash: false,
-                    sessionId: _sessionIdProvider?.Invoke(),
-                    stackHash: null
+                _ = SecureLogService.WriteAsync(
+                    level: LogSeverity.Info,
+                    payload: payload,
+                    eventId: null,
+                    source: location
                 );
             }
             catch { /* never throw */ }
         }
 
-        /// <summary>Warning dialog with custom title. Logs at Warn if configured.</summary>
+        /// <summary>Warning dialog with custom title. Logs at Warn.</summary>
         public static void WarnTitled(
             string title,
             string message,
@@ -208,7 +198,6 @@ namespace Utilities.Helpers
         {
             WpfMessageBox.Show(message, string.IsNullOrWhiteSpace(title) ? "Warning" : title, WpfButtons.OK, WpfImage.Warning);
 
-            if (_logs is null) return; // safe before Configure()
             try
             {
                 var location = $"{SafeFileName(file)}.{member}():{line}";
@@ -225,18 +214,16 @@ namespace Utilities.Helpers
                         machine = Environment.MachineName,
                         processId = Environment.ProcessId,
                         os = Environment.OSVersion?.ToString(),
-                        appVersion = _appVersion
+                        appVersion = _appVersion,
+                        sessionId = _sessionIdProvider?.Invoke()
                     }
                 };
 
-                _ = _logs.LogAsync(
-                    level: LogLevel.Warn,
-                    source: location,
-                    eventCode: "WARN",
-                    payloadObject: payload,
-                    isCrash: false,
-                    sessionId: _sessionIdProvider?.Invoke(),
-                    stackHash: null
+                _ = SecureLogService.WriteAsync(
+                    level: LogSeverity.Warn,
+                    payload: payload,
+                    eventId: null,
+                    source: location
                 );
             }
             catch { /* never throw */ }
@@ -340,14 +327,14 @@ namespace Utilities.Helpers
                 _ => WpfImage.Error
             };
 
-        private static LogLevel MapLevel(ErrorSeverity s) =>
+        private static LogSeverity MapSeverity(ErrorSeverity s) =>
             s switch
             {
-                ErrorSeverity.Info => LogLevel.Info,
-                ErrorSeverity.Warning => LogLevel.Warn,
-                ErrorSeverity.Error => LogLevel.Error,
-                ErrorSeverity.Critical => LogLevel.Critical,
-                _ => LogLevel.Error
+                ErrorSeverity.Info => LogSeverity.Info,
+                ErrorSeverity.Warning => LogSeverity.Warn,
+                ErrorSeverity.Error => LogSeverity.Error,
+                ErrorSeverity.Critical => LogSeverity.Critical,
+                _ => LogSeverity.Error
             };
 
         private static string ShortHash(string s)
