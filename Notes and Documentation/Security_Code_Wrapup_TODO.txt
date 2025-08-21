@@ -1,0 +1,28 @@
+Security Code Wrap Up — TODO List
+================================
+
+[ ] **Finish Logging**
+    - [ ] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
+    - [ ] Batch ingest early logs in a single transaction (~200 entries)
+    - [ ] Dedupe by LogGuid or content hash
+    - [ ] Final secure-delete sweep of `%LOCALAPPDATA%/MWPV/early` after PendingCount==0
+    - [ ] Quarantine logic: DPAPI unprotect retry ×3; quarantine if still failing
+
+[ ] **Core Security Polishing**
+    - [ ] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
+    - [ ] Confirm PayloadVer + KeySetVersion bump
+    - [ ] Add password strength meter to SetupPasswordAndKeyFile
+    - [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)
+    - [ ] Confirm all sensitive temp files are DPAPI-protected or securely wiped
+
+[ ] **Milestone 2**
+    - [ ] Ingest early log test: bad password → .elog created; good login → ingested; early folder empty
+    - [ ] Quarantine test: simulate DPAPI failure → file quarantined; WARN logged
+
+[ ] **Milestone 3**
+    - [ ] Run through 200+ fake .elog files → single transaction, perf OK
+    - [ ] Verify App.Logout row logged on normal exit (Debug + Release)
+
+Notes:
+- Each [ ] box can be manually ticked in your editor.
+- Review first → implement → tag checkpoint.

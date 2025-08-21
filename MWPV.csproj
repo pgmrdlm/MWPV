@@ -14,6 +14,7 @@
 
 	<!-- Keep your embedded SQL (you’re embedding + copying; leaving behavior unchanged) -->
 	<ItemGroup>
+		<None Remove="Assets\Icons\MWPV_TitleBarIcon_16by16.ico" />
 		<None Remove="sql\SelectCatagories.sql" />
 	</ItemGroup>
 
@@ -34,6 +35,12 @@
 
 	<ItemGroup>
 		<Folder Include="DataAccess\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="Assets\Icons\MWPV_TitleBarIcon_16by16.ico">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Resource>
 	</ItemGroup>
 
 	<!-- Make sure 7z.dll ships in both bin\ and publish\ -->

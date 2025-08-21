@@ -1,68 +1,90 @@
 ﻿using MWPV.Models;
 using MWPV.Services;
+using System;
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace MWPV.View.UserControls
 {
     /// <summary>
     /// Interaction logic for CategoryGrid.xaml
     /// </summary>
-    public partial class CategoryGrid : System.Windows.Controls.UserControl
-
+    public partial class CategoryGrid : UserControl
     {
-        public event EventHandler CategoryItemClicked;
-        // ObservableCollection to hold the categories 20:59 added by the user
-        public ObservableCollection<Catagories> BoundCatagories { get; set; } = new ObservableCollection<Catagories>(); 
+        public event EventHandler? CategoryItemClicked;
+
+        // ObservableCollection to hold the categories
+        public ObservableCollection<Catagories> BoundCatagories { get; set; } = new ObservableCollection<Catagories>();
+
         public CategoryGrid()
         {
             InitializeComponent();
-            // added by the user 20:59
-            this.DataContext = this; // Important: bind the DataContext 
+            this.DataContext = this;
+
+            // Also wire when the visual tree is ready (e.g., to access named elements)
+            this.Loaded += CategoryGrid_Loaded;
         }
-        //added by the user 20:59
+
+        private void CategoryGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            EnsureInternalWiring();
+        }
+
+        /// <summary>
+        /// Ensure internal event wiring (idempotent). Safe to call anytime.
+        /// Wires SelectionChanged on the data grid if present.
+        /// </summary>
+        public void EnsureInternalWiring()
+        {
+            // If your XAML has a DataGrid named "CategoryDataGrid", wire its SelectionChanged
+            var grid = this.FindName("CategoryDataGrid") as DataGrid;
+            if (grid != null)
+            {
+                grid.SelectionChanged -= CategoryDataGrid_SelectionChanged;
+                grid.SelectionChanged += CategoryDataGrid_SelectionChanged;
+            }
+        }
+
         public void RefreshCategoryGrid()
         {
             BoundCatagories.Clear();
             var catagories = CategoryService.LoadCatagories();
             foreach (var cat in catagories)
-            {
                 BoundCatagories.Add(cat);
-            }
         }
 
-        //public void RefreshCategoryGrid()
-        // {
-        //     var BoundCatagories = CategoryService.LoadCatagories();
-        //     this.CategoryDataGrid.ItemsSource = BoundCatagories;
-        // }
+        // --- Button click handlers inside the grid/list ---
 
         private void Button1_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
-            {
-                //System.Windows.MessageBox.Show($"Button 1 clicked: {data.strCategory1}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
-            }
+            RaiseCategorySelected();
         }
+
         private void Button2_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
-            {
-                //System.Windows.MessageBox.Show($"Button 2 clicked: {data.strCategory2}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
-            }
+            RaiseCategorySelected();
         }
+
         private void Button3_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement fe && fe.DataContext is Catagories data)
+            RaiseCategorySelected();
+        }
+
+        // --- Selection change handler (covers row clicks, keyboard nav, etc.) ---
+
+        private void CategoryDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Only fire if a real category is selected
+            if ((sender as DataGrid)?.SelectedItem is Catagories)
             {
-                //System.Windows.MessageBox.Show($"Button 3 clicked: {data.strCategory3}");
-                CategoryItemClicked?.Invoke(this, EventArgs.Empty);
+                RaiseCategorySelected();
             }
         }
-        
 
-
+        private void RaiseCategorySelected()
+        {
+            CategoryItemClicked?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

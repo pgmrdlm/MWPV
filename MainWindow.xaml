@@ -1,5 +1,6 @@
 ﻿<!-- MainWindow.xaml — title bar only; caption buttons clickable in chrome -->
 <Window x:Class="MWPV.MainWindow"
+        Icon="/Assets/Icons/MWPV_TitleBarIcon_16by16.ico"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -22,7 +23,7 @@
 
     <Grid Background="Bisque">
         <Grid.RowDefinitions>
-            <!-- NEW: Title Bar -->
+            <!-- Title Bar -->
             <RowDefinition Height="36"/>
             <!-- Menu Bar -->
             <RowDefinition Height="20"/>
@@ -32,27 +33,41 @@
             <RowDefinition Height="20"/>
         </Grid.RowDefinitions>
 
-        <!-- TITLE BAR (new) -->
+        <!-- TITLE BAR -->
         <Border Grid.Row="0" Background="#810000">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <!-- icon -->
+                    <ColumnDefinition Width="28"/>
+                    <!-- title / drag area -->
                     <ColumnDefinition Width="*"/>
+                    <!-- caption buttons -->
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- App icon (visible in custom chrome) -->
+                <Image Grid.Column="0"
+                       Width="16" Height="16"
+                       Margin="6,0,6,0"
+                       VerticalAlignment="Center"
+                       Source="/Assets/Icons/MWPV_TitleBarIcon_16by16.ico"
+                       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                       shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
+
                 <!-- Drag area + window title -->
-                <Grid MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown"
+                <Grid Grid.Column="1"
+                      MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown"
                       MouseRightButtonUp="TitleBar_OnMouseRightButtonUp">
                     <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
-                               Margin="10,0,0,0"
+                               Margin="0,0,0,0"
                                VerticalAlignment="Center"
                                Foreground="White"
                                FontWeight="SemiBold"
                                TextTrimming="CharacterEllipsis"/>
                 </Grid>
 
-                <!-- Caption buttons (now hit-testable in chrome) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <!-- Caption buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <!-- Minimize -->
                     <Button Width="46" Height="36" Background="Transparent" BorderThickness="0"
                             Click="Minimize_Click" ToolTip="Minimize"
@@ -80,7 +95,7 @@
             </Grid>
         </Border>
 
-        <!-- Your original controls, just shifted down one row -->
+        <!-- Your original controls, shifted down one row -->
         <userControls:MenuBar Grid.Row="1"/>
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>
 
