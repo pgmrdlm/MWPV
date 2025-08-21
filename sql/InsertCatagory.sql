@@ -1,5 +1,6 @@
 -- InsertCatagory.sql
--- Simple insert for a new category.
+-- Inserts a new category with optional Description.
 -- Assumes CatagoryExists.sql has already checked for duplicates (case-insensitive).
-INSERT INTO Catagory (Catagory_Name, IsActive)
-VALUES (@catagoryname, 1);
+
+INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+VALUES (@catagoryname, @description, 1);
