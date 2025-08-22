@@ -1,252 +1,227 @@
-﻿// Utilities/Diagnostics/EarlyLoginFailures.cs
-// Modular early-login failure capture with compatibility shims:
-// - DPAPI-protected .elog files under %LOCALAPPDATA%\MWPV\early
-// - Dedupe by content hash; quarantine on failure
-// - Compatibility members restored: StoreDir, PendingCount (property), FlushToDb(writeDbLog: ...),
-//   EarlyFailType.KeyfileMissingOrCorrupt
-
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;       // ProtectedData, SHA256
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 
 namespace Utilities.Diagnostics
 {
-    public enum EarlyFailType
-    {
-        InvalidPasswordOrKeyFile = 1001,
-        KeyFileVerifyError = 1002,
-        KeyfileMissingOrCorrupt = 1003   // <-- compatibility with existing call sites
-    }
-
+    /// <summary>
+    /// Writes and manages pre-login *.elog files in:
+    ///   %LOCALAPPDATA%\MWPV\early\
+    ///
+    /// File format (v1):
+    ///   MWPV-ELOG|v1
+    ///   content-type: application/json; charset=utf-8
+    ///
+    ///   {json payload}
+    ///
+    /// JSON payload shape (example):
+    ///   { "version":1,"utc":"2025-08-22T14:49:22.993Z","type":"invalid-password-or-keyfile",
+    ///     "sessionId":"<hex>","machine":"MYPC","userSid":"...","userName":"...","details":"..." }
+    /// </summary>
     public static class EarlyLoginFailures
     {
-        // ---- Constants / paths ------------------------------------------------
-        private const string AppFolderName = "MWPV";
-        private const string EarlyFolderName = "early";
-        private const string QuarantineSubdir = "quarantine";
-        private const string FileExt = ".elog";
+        // ----- locations -----
+        public static readonly string StoreDir =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
 
-        private static readonly byte[] OptionalEntropy = Encoding.UTF8.GetBytes("MWPV:EarlyLog:v1");
+        public static readonly string QuarantineDir =
+            Path.Combine(StoreDir, "quarantine");
 
-        /// <summary>Compatibility: path to the early-store directory.</summary>
-        public static string StoreDir
+        // Session Id for this process (hex). App can overwrite if desired.
+        public static string SessionId { get; set; } = NewSessionId();
+
+        // File header constants
+        private const string V1Header = "MWPV-ELOG|v1";
+        private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+        static EarlyLoginFailures()
         {
-            get
-            {
-                var baseDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppFolderName);
-                return Path.Combine(baseDir, EarlyFolderName);
-            }
+            try { Directory.CreateDirectory(StoreDir); } catch { /* swallow */ }
+            try { Directory.CreateDirectory(QuarantineDir); } catch { /* swallow */ }
         }
 
-        /// <summary>Compatibility: pending file count as a property.</summary>
-        public static int PendingCount
+        /// <summary>Used by UI to decide whether to show the post-login “ingesting early files” notice.</summary>
+        public static bool HasPending()
         {
-            get
-            {
-                try
-                {
-                    if (!Directory.Exists(StoreDir)) return 0;
-                    return Directory.EnumerateFiles(StoreDir, $"*{FileExt}").Count();
-                }
-                catch { return 0; }
-            }
+            try { return Directory.EnumerateFiles(StoreDir, "*.elog", SearchOption.TopDirectoryOnly).Any(); }
+            catch { return false; }
         }
 
-        // ---- Public API -------------------------------------------------------
+        /// <summary>Enumerate pending *.elog paths (sorted by name/time ascending).</summary>
+        public static IEnumerable<string> EnumeratePendingPaths()
+        {
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(StoreDir, "*.elog", SearchOption.TopDirectoryOnly); }
+            catch { yield break; }
+
+            foreach (var f in files.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                yield return f;
+        }
 
         /// <summary>
-        /// Write a DPAPI-protected early-failure record. Returns full file path.
-        /// Dedupe: if an identical record exists (by content hash), this is a no-op.
+        /// Record an early failure event. Returns path on success, or null on total failure (never throws).
         /// </summary>
-        public static string Record(EarlyFailType type, string detail, Exception? ex = null)
-        {
-            EnsureFolders(out var earlyDir, out _);
-
-            var env = EarlyLogEnvelope.Create(type, detail, ex);
-
-            // Canonical JSON for hashing & storage (stable property order)
-            var json = JsonSerializer.Serialize(env, JsonOpts);
-            var hashHex = Sha256Hex(json);
-
-            // Already captured? skip
-            var existing = Directory.EnumerateFiles(earlyDir, $"*_{hashHex}_*{FileExt}").FirstOrDefault();
-            if (existing != null) return existing;
-
-            var now = DateTime.UtcNow;
-            var name = $"{now:yyyyMMdd_HHmmss_fff}_{hashHex}_{Guid.NewGuid():N}{FileExt}";
-            var path = Path.Combine(earlyDir, name);
-
-            var plaintext = Encoding.UTF8.GetBytes(json);
-            var ciphertext = Protect(plaintext);
-
-            File.WriteAllBytes(path, ciphertext);
-            return path;
-        }
-
-        /// <summary>True if any .elog files exist.</summary>
-        public static bool HasPending() => PendingCount > 0;
-
-        /// <summary>
-        /// Decrypts and ingests all .elog files (compat signature: named arg 'writeDbLog' supported).
-        /// - writeDbLog: (utc, type, detail) => true if DB insert succeeded (use your LogRepository).
-        /// - deleteFile: path => true if securely deleted.
-        /// Files that fail decrypt/parse/insert are quarantined with a suffix reason.
-        /// </summary>
-        public static void FlushToDb(
-            Func<DateTime, EarlyFailType, string, bool> writeDbLog,
-            Func<string, bool> deleteFile)
-        {
-            if (writeDbLog == null) throw new ArgumentNullException(nameof(writeDbLog));
-            if (deleteFile == null) throw new ArgumentNullException(nameof(deleteFile));
-
-            EnsureFolders(out var earlyDir, out var quarantineDir);
-
-            foreach (var file in Directory.EnumerateFiles(earlyDir, $"*{FileExt}"))
-            {
-                try
-                {
-                    var bytes = File.ReadAllBytes(file);
-                    var plain = Unprotect(bytes);
-
-                    var env = JsonSerializer.Deserialize<EarlyLogEnvelope>(plain, JsonOpts);
-                    if (env == null)
-                        throw new InvalidDataException("Failed to parse EarlyLogEnvelope.");
-
-                    // Combine detail + exception (if present) for payload convenience
-                    var detail = env.Detail ?? string.Empty;
-                    if (!string.IsNullOrWhiteSpace(env.Exception))
-                        detail = string.IsNullOrWhiteSpace(detail) ? env.Exception! : $"{detail}\n{env.Exception}";
-
-                    if (writeDbLog(env.CreatedUtc, env.Type, detail))
-                    {
-                        // Caller performs secure delete
-                        if (!deleteFile(file))
-                        {
-                            // Fallback best-effort secure delete (still okay if your deleter already handled it)
-                            SecureDelete(file);
-                        }
-                    }
-                    else
-                    {
-                        Quarantine(file, quarantineDir, "insert-failed");
-                    }
-                }
-                catch (CryptographicException)
-                {
-                    Quarantine(file, quarantineDir, "dpapi-decrypt-failed");
-                }
-                catch (JsonException)
-                {
-                    Quarantine(file, quarantineDir, "json-parse-failed");
-                }
-                catch
-                {
-                    Quarantine(file, quarantineDir, "ingest-exception");
-                }
-            }
-        }
-
-        // ---- Internals --------------------------------------------------------
-
-        private static void EnsureFolders(out string earlyDir, out string quarantineDir)
-        {
-            var baseDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppFolderName);
-
-            earlyDir = Path.Combine(baseDir, EarlyFolderName);
-            quarantineDir = Path.Combine(earlyDir, QuarantineSubdir);
-
-            Directory.CreateDirectory(earlyDir);
-            Directory.CreateDirectory(quarantineDir);
-        }
-
-        private static byte[] Protect(byte[] data) =>
-            ProtectedData.Protect(data, OptionalEntropy, DataProtectionScope.CurrentUser);
-
-        private static byte[] Unprotect(byte[] data) =>
-            ProtectedData.Unprotect(data, OptionalEntropy, DataProtectionScope.CurrentUser);
-
-        private static string Sha256Hex(string text)
-        {
-            using var sha = SHA256.Create();
-            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text));
-            var sb = new StringBuilder(hash.Length * 2);
-            foreach (var b in hash) sb.Append(b.ToString("x2"));
-            return sb.ToString();
-        }
-
-        private static void Quarantine(string file, string quarantineDir, string reason)
+        public static string? Record(EarlyFailType type, string? message = null, Exception? ex = null, object? extra = null)
         {
             try
             {
-                var name = Path.GetFileNameWithoutExtension(file);
-                var dest = Path.Combine(quarantineDir, $"{name}__{reason}{FileExt}");
-                File.Move(file, dest, overwrite: true);
+                Directory.CreateDirectory(StoreDir);
+
+                var nowUtc = DateTime.UtcNow;
+                using var id = WindowsIdentity.GetCurrent();
+
+                var payload = new EarlyFailureV1
+                {
+                    version = 1,
+                    utc = nowUtc.ToString("O"),
+                    type = ToSlug(type),
+                    sessionId = SessionId,
+                    machine = Environment.MachineName,
+                    userSid = id?.User?.Value,
+                    userName = id?.Name,
+                    details = string.IsNullOrWhiteSpace(message) ? DefaultMessage(type) : message!,
+                    exception = ex?.ToString(),
+                    extra = extra
+                };
+
+                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                {
+                    WriteIndented = false,
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                });
+
+                // Stable name: timestamp + type + short content hash
+                var sig = ToHex(SHA256.HashData(Utf8NoBom.GetBytes(json)));
+                var name = $"{nowUtc:yyyyMMddTHHmmssfff}_{payload.type}_{sig[..12]}.elog";
+                var path = Path.Combine(StoreDir, name);
+
+                using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                using var sw = new StreamWriter(fs, Utf8NoBom) { NewLine = "\r\n" };
+
+                sw.WriteLine(V1Header);
+                sw.WriteLine("content-type: application/json; charset=utf-8");
+                sw.WriteLine();
+                sw.WriteLine(json);
+
+                return path;
             }
             catch
             {
-                // leave it in place to avoid silent loss
+                // Best-effort fallback to temp
+                try
+                {
+                    var temp = Path.Combine(Path.GetTempPath(), "MWPV", "early");
+                    Directory.CreateDirectory(temp);
+                    var path = Path.Combine(temp, $"fallback_{DateTime.UtcNow:yyyyMMddTHHmmssfff}.elog");
+                    File.WriteAllText(path, V1Header + "\r\ncontent-type: application/json; charset=utf-8\r\n\r\n{}", Utf8NoBom);
+                    return path;
+                }
+                catch { return null; }
             }
         }
 
         /// <summary>
-        /// Best-effort secure delete: overwrite with zeros then delete.
-        /// Your caller should supply SensitiveDataCleaner.SecureFileDelete; this is a fallback.
+        /// Move a bad/suspect .elog to quarantine (best-effort). If provided, writes a ".reason.txt" sibling.
         /// </summary>
-        private static void SecureDelete(string path)
+        public static void TryQuarantine(string sourcePath, string? reason = null)
         {
             try
             {
-                var len = new FileInfo(path).Length;
-                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None))
-                {
-                    var zero = new byte[64 * 1024];
-                    long remaining = len;
-                    while (remaining > 0)
-                    {
-                        var chunk = (int)Math.Min(remaining, zero.Length);
-                        fs.Write(zero, 0, chunk);
-                        remaining -= chunk;
-                    }
-                    fs.Flush(true);
-                }
+                if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath)) return;
+
+                Directory.CreateDirectory(QuarantineDir);
+
+                var name = Path.GetFileNameWithoutExtension(sourcePath);
+                var ext = Path.GetExtension(sourcePath);
+
+                var dest = Path.Combine(QuarantineDir, $"{name}{ext}");
+                int i = 1;
+                while (File.Exists(dest))
+                    dest = Path.Combine(QuarantineDir, $"{name}_{i++}{ext}");
+
+                File.Move(sourcePath, dest);
+
+                if (!string.IsNullOrWhiteSpace(reason))
+                    File.WriteAllText(dest + ".reason.txt", reason, Utf8NoBom);
             }
-            catch { /* ignore */ }
-            try { File.Delete(path); } catch { /* ignore */ }
+            catch { /* swallow */ }
         }
 
-        private static readonly JsonSerializerOptions JsonOpts = new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
+        /// <summary>Alias kept for older call sites.</summary>
+        public static void Quarantine(string sourcePath, string? reason = null) => TryQuarantine(sourcePath, reason);
 
-        // ---- Envelope DTO -----------------------------------------------------
-        private sealed class EarlyLogEnvelope
-        {
-            public DateTime CreatedUtc { get; set; }
-            public EarlyFailType Type { get; set; }
-            public string? Detail { get; set; }
-            public string? Exception { get; set; }
-            public int Version { get; set; } = 1;
+        // ----- helpers -----
 
-            public static EarlyLogEnvelope Create(EarlyFailType type, string detail, Exception? ex)
+        private static string ToSlug(EarlyFailType t)
+        {
+            // kebab-case from enum name: FooBar -> foo-bar ; InvalidPasswordOrKeyFile -> invalid-password-or-keyfile
+            var s = t.ToString();
+            var sb = new StringBuilder(s.Length + 8);
+            for (int i = 0; i < s.Length; i++)
             {
-                return new EarlyLogEnvelope
+                char c = s[i];
+                if (char.IsUpper(c))
                 {
-                    CreatedUtc = DateTime.UtcNow,
-                    Type = type,
-                    Detail = detail,
-                    Exception = ex?.ToString(),
-                    Version = 1
-                };
+                    if (i > 0 && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
+                        sb.Append('-');
+                    sb.Append(char.ToLowerInvariant(c));
+                }
+                else if (c == '_' || c == ' ')
+                {
+                    sb.Append('-');
+                }
+                else sb.Append(c);
             }
+            return sb.ToString();
+        }
+
+        private static string DefaultMessage(EarlyFailType t) =>
+            t switch
+            {
+                EarlyFailType.InvalidPasswordOrKeyFile => "Invalid Key File Password or invalid key file selected.",
+                EarlyFailType.KeyFileVerifyError => "Key file verification error.",
+                EarlyFailType.KeyfileMissingOrCorrupt => "Key file missing or corrupt.",
+                _ => t.ToString()
+            };
+
+        private static string NewSessionId()
+        {
+            Span<byte> buf = stackalloc byte[16];
+            RandomNumberGenerator.Fill(buf);
+            return ToHex(buf);
+        }
+
+        private static string ToHex(ReadOnlySpan<byte> bytes)
+        {
+            char[] c = new char[bytes.Length * 2];
+            int i = 0;
+            foreach (byte b in bytes)
+            {
+                c[i++] = GetHexNibble(b >> 4);
+                c[i++] = GetHexNibble(b & 0xF);
+            }
+            return new string(c);
+
+            static char GetHexNibble(int v) => (char)(v < 10 ? '0' + v : 'a' + (v - 10));
+        }
+
+        private sealed class EarlyFailureV1
+        {
+            public int version { get; set; }
+            public string utc { get; set; } = default!;
+            public string type { get; set; } = default!;
+            public string sessionId { get; set; } = default!;
+            public string machine { get; set; } = default!;
+            public string? userSid { get; set; }
+            public string? userName { get; set; }
+            public string? details { get; set; }
+            public string? exception { get; set; }
+            public object? extra { get; set; }
         }
     }
 }

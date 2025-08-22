@@ -10,6 +10,7 @@ using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
 using Utilities.Security;             // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
+using EDT = Utilities.Diagnostics.EarlyFailType;
 
 namespace Utilities.Security
 {
@@ -176,10 +177,12 @@ namespace Utilities.Security
                 catch (Exception ex)
                 {
                     // EARLY LOG POINT #1 - verification threw (unexpected)
+                    // line ~180
                     EarlyLoginFailures.Record(
-                        EarlyFailType.KeyFileVerifyError,
+                        EDT.KeyFileVerifyError,
                         $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
                     );
+
 
                     ErrorHandler.InfoTitled("Key File Verification",
                         "Error verifying key file.\n\n(This error has been logged.)",
@@ -189,11 +192,11 @@ namespace Utilities.Security
                     return;
                 }
 
+                // ✅ WRONG PASSWORD / WRONG FILE: no 'ex' here
                 if (!isCorrect)
                 {
-                    // EARLY LOG POINT #2 - wrong password / wrong or unencrypted file / missing sentinels
                     EarlyLoginFailures.Record(
-                        EarlyFailType.InvalidPasswordOrKeyFile,
+                        EDT.InvalidPasswordOrKeyFile,
                         $"Invalid key-file password or unsupported/unencrypted archive. Path='{fullPath ?? tbKeyFile.Text}'"
                     );
 
@@ -205,6 +208,7 @@ namespace Utilities.Security
                     tbErrorMessage.Visibility = Visibility.Visible;
                     return;
                 }
+
 
                 // Store verified key file path (non-sensitive) and password (sensitive)
                 SecureEncryptedDataStore.SetString(Key_KeyFile, fullPath);

@@ -25,8 +25,8 @@ using System.Data.Common;                   // for DbCommand (debug helpers)
 // Disambiguation aliases
 using WpfApp = System.Windows.Application;
 using SecLogLevel = Utilities.Logging.LogSeverity;
+// avoid ambiguity with MWPV.Services.EarlyLogIngestor
 using EarlyLogIngestor = Utilities.Diagnostics.EarlyLogIngestor;
-
 
 namespace MWPV
 {
@@ -107,7 +107,7 @@ namespace MWPV
                     appVersion: appVersion
                 );
 
-                // IMPORTANT: Initialize before any SecureLogService.WriteAsync calls
+                // Initialize secure logger before any WriteAsync calls
                 SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
 
                 // re-hook after logger live (so global handlers can write securely)
@@ -141,9 +141,21 @@ namespace MWPV
                 DebugDumpRecentLogs(take: 20, crashesOnly: false);
 #endif
 
-                // --- ingest any early .elog files now that encrypted logging is live ---
+                // --- user-facing notice + ingest any early .elog files now that encrypted logging is live ---
                 try
                 {
+                    if (EarlyLoginFailures.HasPending())
+                    {
+                        // ✅ Visible to the user (security posture + courtesy)
+                        ErrorHandler.InfoTitled(
+                            "Login Notice",
+                            "Previous login failures were detected on this device.\n\n" +
+                            "Details will now be ingested into the secure log.\n" +
+                            "This event has been logged.",
+                            "EarlyLogin.Ingest"
+                        );
+                    }
+
                     var res = EarlyLogIngestor.IngestAllEarlyLogsTransactional(DatabaseHelper.OpenConnection);
 
                     if (res.Inserted + res.Deduped + res.Quarantined + res.Deleted + res.Errors > 0)
