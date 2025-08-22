@@ -283,6 +283,9 @@ namespace MWPV
                 AddOptionalParameter(cmd, "@Limit", take);
                 AddOptionalParameter(cmd, "@CrashesOnly", crashesOnly ? 1 : 0);
 
+                // Ensure @FromUtc exists (NULL is allowed; SQL checks IS NULL)
+                AddOptionalParameter(cmd, "@FromUtc", DBNull.Value);
+
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
                 {
