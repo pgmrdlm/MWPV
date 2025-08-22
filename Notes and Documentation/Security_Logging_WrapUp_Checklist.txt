@@ -1,9 +1,10 @@
 Security + Logging Wrap Up — Master Checklist
+(Last updated: 2025-08-21 21:12:14Z)
 =============================================
 
 1) Logging Tasks
 ----------------
-[ ] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
+[x] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
 [ ] Batch ingest early logs in a single transaction (~200 entries)
 [ ] Dedupe by LogGuid or content hash
 [ ] Final secure-delete sweep of %LOCALAPPDATA%/MWPV/early after PendingCount==0
@@ -29,7 +30,7 @@ Security + Logging Wrap Up — Master Checklist
 
 4) Hooks & Standards
 --------------------
-- Use central async logger for all post-DB events
+[x] Use central async logger for all post-DB events
 - Early-log writer for key-file failures (encrypted with LogPayloadKey)
 - Log before showing UI error dialogs
 - Include EventId, Severity, Source, UserAction, CorrelationId
@@ -43,7 +44,7 @@ Security + Logging Wrap Up — Master Checklist
 
 6) Schema & Helpers
 -------------------
-- Logs table: Id, TimestampUtc, Severity, EventId, Source, Message, DetailsJson, CorrelationId, Version
+- Logs table: Id, WhenUtc, CreatedUtc, Level, Source, EventCode, SessionId, MachineId, AppVersion, IsCrash, Payload, PayloadFmt, StackHash
 - Version indicates which key/encryption method was used
 - Helpers: LogEntry DTO, LogMasking.MaskSensitive(), Correlation.BeginScope()
 - All log-related SQL (schema, queries) stored in individual .sql files inside encrypted 7z archive, loaded into SecureEncryptedDataStore at runtime
@@ -59,8 +60,8 @@ Security + Logging Wrap Up — Master Checklist
 
 8) Secure Deletion & Retention
 ------------------------------
-[ ] Overwrite + delete early logs
-[ ] DB log retention (e.g., 90 days) + purge
+[x] Overwrite + delete early logs
+[x] DB log retention (90 days) + startup purge hooked up (observed: "[LOG Purge] ... retentionDays=90")
 [ ] Limit DetailsJson size
 
 9) UI/UX
@@ -80,8 +81,22 @@ Security + Logging Wrap Up — Master Checklist
     - LogPayloadKey
     - SQL script storage in encrypted archive
     - No direct hardcoding of queries in source
-[ ] Dev mode: echo logs to debug output
+[x] Dev mode: echo logs to debug output
 [ ] Unit tests for masking, early-log ingestion, and versioned decryption
+
+Open bug today
+--------------
+• DEBUG-only helper App.DebugDumpRecentLogs() fails with: Must add values for the following parameters: @FromUtc
+  Cause: Updated Logs_Select_Recent.sql now expects @FromUtc; helper didn’t bind it when NULL.
+  Fix options (choose one and keep it consistent):
+    A) Always add @FromUtc with DBNull.Value (preferred for DEBUG helper).
+    B) Change the SQL to "(@FromUtc IS NULL OR CreatedUtc >= @FromUtc)" AND ensure the code always adds the parameter (even if NULL).
+
+Next-session quick start
+------------------------
+1) Apply tiny fix in App.DebugDumpRecentLogs(): add parameter @FromUtc = DBNull.Value (or a recent cutoff) **unconditionally**.
+2) Re-run smoke test; verify the debug log-dump shows rows and no parameter error.
+3) If time permits, wire optional UI log viewer filters.
 
 Milestones
 ----------

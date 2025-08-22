@@ -1,7 +1,8 @@
 ﻿using Microsoft.Data.Sqlite;
 using System;
 using System.IO;
-using Utilities.Security;
+using System.Threading.Tasks;
+using Utilities.Security;     // SecureEncryptedDataStore, SensitiveDataCleaner
 
 namespace Utilities.Helpers
 {
@@ -12,9 +13,7 @@ namespace Utilities.Helpers
         // Do NOT rename or strip ".txt".
         public const string DbPasswordKey = "DB_Password.txt";
 
-        /// <summary>
-        /// %LOCALAPPDATA%/MWPV/MWPV.db
-        /// </summary>
+        /// <summary>%LOCALAPPDATA%/MWPV/MWPV.db</summary>
         public static string GetAppDbPath()
         {
             return Path.Combine(
@@ -23,9 +22,7 @@ namespace Utilities.Helpers
                 "MWPV.db");
         }
 
-        /// <summary>
-        /// Optional convenience: %LOCALAPPDATA%/MWPV/sql
-        /// </summary>
+        /// <summary>Optional convenience: %LOCALAPPDATA%/MWPV/sql</summary>
         public static string GetSqlFolderPath()
         {
             return Path.Combine(
@@ -44,7 +41,6 @@ namespace Utilities.Helpers
             if (password == null || password.Length == 0)
                 throw new ArgumentException("Password must not be empty.", nameof(password));
 
-            // Store and wipe the provided char[] inside the datastore
             SecureEncryptedDataStore.SetAndWipe(DbPasswordKey, password);
         }
 
@@ -65,8 +61,8 @@ namespace Utilities.Helpers
         {
             if (use == null) throw new ArgumentNullException(nameof(use));
 
-            char[] pwChars = null;
-            string pwString = null;
+            char[]? pwChars = null;
+            string? pwString = null;
             try
             {
                 pwChars = ReadDatabasePassword();
@@ -85,32 +81,57 @@ namespace Utilities.Helpers
 
         /// <summary>
         /// Open an application DB connection (read/write/create) using the stored password.
-        /// Returns an OPEN SqliteConnection. Caller is responsible for disposing it.
+        /// Returns an **OPEN** SqliteConnection. Caller is responsible for disposing it.
+        /// IMPORTANT: This method performs **no logging** to avoid recursion with SecureLogService.
         /// </summary>
         public static SqliteConnection GetAppOpenConnection()
         {
             var dbPath = GetAppDbPath();
-            SqliteConnection conn = null;
+
+            // Make sure the folder exists; avoids surprises on first run.
+            var dir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            SqliteConnection? conn = null;
+            Exception? captured = null;
 
             WithDatabasePasswordString(pw =>
             {
-                var csb = new SqliteConnectionStringBuilder
+                try
                 {
-                    DataSource = dbPath,
-                    Mode = SqliteOpenMode.ReadWriteCreate,
-                    // NOTE: This relies on a build of Microsoft.Data.Sqlite that supports encryption.
-                    // If you’re using SQLCipher, ensure the native bits are present.
-                    Password = pw
-                };
+                    var csb = new SqliteConnectionStringBuilder
+                    {
+                        DataSource = dbPath,
+                        Mode = SqliteOpenMode.ReadWriteCreate,
+                        // NOTE: Requires Microsoft.Data.Sqlite build with SQLCipher support.
+                        Password = pw
+                    };
 
-                conn = new SqliteConnection(csb.ToString());
-                conn.Open();
+                    // Create + open a fresh connection every call.
+                    conn = new SqliteConnection(csb.ToString());
+                    conn.Open();
 
-                // Centralized PRAGMAs (optional):
-                // using var cmd = conn.CreateCommand();
-                // cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
-                // cmd.ExecuteNonQuery();
+                    // Centralized PRAGMAs (security + integrity).
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+PRAGMA foreign_keys = ON;
+PRAGMA secure_delete = ON;      -- overwrite deleted content
+PRAGMA journal_mode = WAL;      -- performance; WAL is encrypted under SQLCipher
+";
+                    cmd.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    captured = ex;
+                }
             });
+
+            if (captured != null)
+                throw captured;
+
+            if (conn == null)
+                throw new InvalidOperationException("Failed to open encrypted database connection.");
 
             return conn;
         }
@@ -119,5 +140,23 @@ namespace Utilities.Helpers
         /// Convenience alias so call sites can use DatabaseHelper.OpenConnection().
         /// </summary>
         public static SqliteConnection OpenConnection() => GetAppOpenConnection();
+
+        /// <summary>
+        /// Safe pattern helper: creates, opens, and disposes a connection around your work.
+        /// Ensures we always close after use.
+        /// </summary>
+        public static async Task<T> WithConnectionAsync<T>(Func<SqliteConnection, Task<T>> work)
+        {
+            if (work == null) throw new ArgumentNullException(nameof(work));
+            await using var conn = GetAppOpenConnection();
+            return await work(conn);
+        }
+
+        public static async Task WithConnectionAsync(Func<SqliteConnection, Task> work)
+        {
+            if (work == null) throw new ArgumentNullException(nameof(work));
+            await using var conn = GetAppOpenConnection();
+            await work(conn);
+        }
     }
 }

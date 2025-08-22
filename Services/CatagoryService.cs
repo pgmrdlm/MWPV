@@ -2,13 +2,17 @@
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
-using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
-using Utilities.Security;  // InputGuards
+using Utilities.Helpers;    // DatabaseHelper, ErrorHandler
+using Utilities.Security;   // SecureEncryptedDataStore, SensitiveDataCleaner, InputGuards, SecureLogService
+using Utilities.Logging;    // LogSeverity, LogEventIds
 
 namespace MWPV.Services
 {
     public static class CategoryService
     {
+        /// <summary>
+        /// Loads categories using SelectCatagories.sql (encrypted asset).
+        /// </summary>
         public static ObservableCollection<Catagories> LoadCatagories()
         {
             var rows = new ObservableCollection<Catagories>();
@@ -16,17 +20,17 @@ namespace MWPV.Services
 
             try
             {
-                stage = "get-sql";
+                stage = "load-sql";
                 string selectSql = SecureEncryptedDataStore.GetString("SelectCatagories.sql");
 
-                stage = "open-connection";
+                stage = "open-conn";
                 using var conn = DatabaseHelper.GetAppOpenConnection();
 
-                stage = "prepare-command";
+                stage = "prep-cmd";
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = selectSql;
 
-                stage = "execute-reader";
+                stage = "exec-reader";
                 using var r = cmd.ExecuteReader();
 
                 // Cache ordinals once
@@ -39,7 +43,6 @@ namespace MWPV.Services
 
                 while (r.Read())
                 {
-                    stage = "materialize-row";
                     rows.Add(new Catagories
                     {
                         strCategory1 = r.IsDBNull(iCol1) ? "" : r.GetString(iCol1),
@@ -53,44 +56,67 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Error during database initialization", stage: stage);
+                ErrorHandler.Abend(ex, "Error loading categories", stage: stage);
             }
 
             return rows;
         }
 
+        /// <summary>
+        /// Inserts a new category if it doesn't already exist.
+        /// - Validates/normalizes name & description.
+        /// - Duplicate → warn log and no-op.
+        /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription)
         {
             if (newCategory is null)
                 throw new ArgumentNullException(nameof(newCategory));
 
-            // Defensive re-validation (centralized rules)
-            var check = InputGuards.ValidateCategoryName(newCategory, 4, 17);
+            // Validate / normalize
+            var check = InputGuards.ValidateCategoryName(newCategory, minLen: 4, maxLen: 17);
             if (!check.IsValid)
                 throw new ArgumentException(check.Error ?? "Invalid category name.", nameof(newCategory));
 
-            // Normalize free text (caps length, strips control chars, forbids <, >, | by default)
-            string? desc = InputGuards.NormalizeFreeText(newDescription, 512);
+            string cleanName = check.CleanName;
+            string? desc = InputGuards.NormalizeFreeText(newDescription, maxLen: 512);
             if (string.IsNullOrWhiteSpace(desc))
-                desc = check.CleanName; // never store empty tooltip
+                desc = cleanName; // never store empty tooltip
+
+            // Duplicate guard
+            if (DoesCatagoryExist(cleanName))
+            {
+                _ = SecureLogService.WriteAsync(
+                    level: LogSeverity.Warn,
+                    payload: new { name = cleanName, reason = "duplicate" },
+                    eventCode: "CATEGORY_DUPLICATE",
+                    source: "CategoryService.InsertCategory"
+                );
+                return;
+            }
 
             string insertSql = SecureEncryptedDataStore.GetString("InsertCatagory.sql");
             if (string.IsNullOrWhiteSpace(insertSql))
-                throw new InvalidOperationException("InsertCatagory.sql was not found or is empty.");
+                throw new InvalidOperationException("InsertCatagory.sql not found or empty.");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var tx = conn.BeginTransaction();
-            using var cmd = conn.CreateCommand();
 
+            using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = insertSql;
-            cmd.Parameters.AddWithValue("@catagoryname", check.CleanName);
+            cmd.Parameters.AddWithValue("@catagoryname", cleanName);
             cmd.Parameters.AddWithValue("@description", desc);
 
             cmd.ExecuteNonQuery();
             tx.Commit();
+
+            // (Optional) info log on success (kept quiet to reduce noise)
+            //_ = SecureLogService.WriteAsync(LogSeverity.Info, new { name = cleanName }, "CATEGORY_ADDED", "CategoryService.InsertCategory");
         }
 
+        /// <summary>
+        /// Checks existence using CatagoryExists.sql. Returns true if exists.
+        /// </summary>
         public static bool DoesCatagoryExist(string categoryName)
         {
             if (string.IsNullOrWhiteSpace(categoryName))
@@ -103,7 +129,7 @@ namespace MWPV.Services
             cmd.CommandText = sql;
             cmd.Parameters.AddWithValue("@catagoryname", categoryName.Trim());
 
-            object? scalar = cmd.ExecuteScalar(); // EXPECT: 0/1
+            object? scalar = cmd.ExecuteScalar(); // expect 0 or 1
             return scalar != null && Convert.ToInt64(scalar) == 1;
         }
     }
