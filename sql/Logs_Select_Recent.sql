@@ -1,5 +1,9 @@
 -- Logs_Select_Recent.sql
--- params: @CrashesOnly INTEGER (NULL|0|1), @FromUtc TEXT or NULL (ISO8601), @Limit INTEGER
+-- params:
+--   @CrashesOnly  INTEGER  (NULL|0|1)   -- 1 => only ERROR/FATAL, else all
+--   @FromUtc      TEXT     (ISO8601) or NULL
+--   @Limit        INTEGER  (required; if NULL/<=0 defaults to 50)
+
 SELECT
     Id,
     WhenUtc,
@@ -14,7 +18,17 @@ SELECT
     PayloadFmt,
     StackHash
 FROM Logs
-WHERE (@CrashesOnly IS NULL OR @CrashesOnly = 0 OR Level IN ('ERROR','FATAL'))
-  AND (@FromUtc IS NULL OR CreatedUtc >= @FromUtc)
+WHERE
+    -- If @CrashesOnly = 1, restrict to ERROR/FATAL; otherwise allow all
+    ( @CrashesOnly IS NULL
+      OR @CrashesOnly = 0
+      OR Level IN ('ERROR','FATAL') )
+  AND
+    -- If @FromUtc is provided, filter by CreatedUtc >= @FromUtc
+    ( @FromUtc IS NULL
+      OR CreatedUtc >= @FromUtc )
 ORDER BY CreatedUtc DESC
-LIMIT @Limit;
+LIMIT CASE
+          WHEN @Limit IS NULL OR @Limit <= 0 THEN 50
+          ELSE @Limit
+      END;

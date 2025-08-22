@@ -11,10 +11,12 @@ using System.Reflection;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows;
-using Utilities.Diagnostics;                // EarlyLoginFailures
+
+using Utilities.Diagnostics;                // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
 using Utilities.Security;                   // SecureLogService, SensitiveDataCleaner, SecureEncryptedDataStore
 using Utilities.Logging;                    // LogEventIds, LogSeverity
+
 #if DEBUG
 using System.Diagnostics;
 using System.Data.Common;                   // for DbCommand (debug helpers)
@@ -23,6 +25,8 @@ using System.Data.Common;                   // for DbCommand (debug helpers)
 // Disambiguation aliases
 using WpfApp = System.Windows.Application;
 using SecLogLevel = Utilities.Logging.LogSeverity;
+using EarlyLogIngestor = Utilities.Diagnostics.EarlyLogIngestor;
+
 
 namespace MWPV
 {
@@ -73,7 +77,7 @@ namespace MWPV
 
             base.OnStartup(e);
 
-            // Ensure early-failure directory exists
+            // Ensure early-failure directory exists (for pre-login .elog files)
             Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
 
             // --- run password/key setup before showing MainWindow ---
@@ -103,8 +107,11 @@ namespace MWPV
                     appVersion: appVersion
                 );
 
+                // IMPORTANT: Initialize before any SecureLogService.WriteAsync calls
                 SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
-                ErrorHandler.RegisterGlobalHandlers(this); // re-hook after logger live
+
+                // re-hook after logger live (so global handlers can write securely)
+                ErrorHandler.RegisterGlobalHandlers(this);
 
 #if DEBUG
                 Debug.WriteLine($"[LOG] Initialized encrypted logging v{appVersion}, session {sessionId}");
@@ -134,66 +141,29 @@ namespace MWPV
                 DebugDumpRecentLogs(take: 20, crashesOnly: false);
 #endif
 
-                // Ingest any early failures now that DB is ready
-                if (EarlyLoginFailures.HasPending())
+                // --- ingest any early .elog files now that encrypted logging is live ---
+                try
+                {
+                    var res = EarlyLogIngestor.IngestAllEarlyLogsTransactional(DatabaseHelper.OpenConnection);
+
+                    if (res.Inserted + res.Deduped + res.Quarantined + res.Deleted + res.Errors > 0)
+                    {
+                        SecureLogService.WriteAsync(
+                            SecLogLevel.Info,
+                            new { res.Inserted, res.Deduped, res.Quarantined, res.Deleted, res.Errors, sessionId },
+                            eventCode: "EARLY_INGEST_SUMMARY",
+                            source: "App.Startup"
+                        ).GetAwaiter().GetResult();
+                    }
+                }
+                catch (Exception exIngest)
                 {
                     SecureLogService.WriteAsync(
-                        SecLogLevel.Info,
-                        new { pending = EarlyLoginFailures.PendingCount, dir = EarlyLoginFailures.StoreDir, sessionId },
-                        eventCode: "EARLY_LOGIN_FAILURES_PENDING",
-                        source: "post-login"
+                        SecLogLevel.Warn,
+                        new { ex = exIngest.Message },
+                        eventCode: "EARLY_INGEST_FAILED",
+                        source: "App.Startup"
                     ).GetAwaiter().GetResult();
-
-                    EarlyLoginFailures.FlushToDb(
-                        writeDbLog: (utc, type, detail) =>
-                        {
-                            try
-                            {
-                                SecureLogService.WriteAsync(
-                                    SecLogLevel.Info,
-                                    new { earlyFail = type.ToString(), detail, occurredUtc = utc, sessionId },
-                                    eventCode: "EARLY_LOGIN_FAILURE",
-                                    source: "SetupPasswordAndKeyFile",
-                                    whenUtc: utc
-                                ).GetAwaiter().GetResult();
-                                return true;
-                            }
-                            catch
-                            {
-                                return false;
-                            }
-                        },
-                        deleteFile: path =>
-                        {
-                            try
-                            {
-#if DEBUG
-                                SecureLogService.WriteAsync(
-                                    SecLogLevel.Info, new { path },
-                                    eventCode: "EARLY_ELOG_DELETE_ATTEMPT", source: "EarlyLoginIngest"
-                                ).GetAwaiter().GetResult();
-#endif
-                                SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1);
-#if DEBUG
-                                SecureLogService.WriteAsync(
-                                    SecLogLevel.Info, new { path },
-                                    eventCode: "EARLY_ELOG_DELETED", source: "EarlyLoginIngest"
-                                ).GetAwaiter().GetResult();
-#endif
-                                return true;
-                            }
-                            catch (Exception ex)
-                            {
-#if DEBUG
-                                SecureLogService.WriteAsync(
-                                    SecLogLevel.Warn, new { path, ex = ex.Message },
-                                    eventCode: "EARLY_ELOG_DELETE_FAILED", source: "EarlyLoginIngest"
-                                ).GetAwaiter().GetResult();
-#endif
-                                return false;
-                            }
-                        }
-                    );
                 }
             }
             catch (Exception ex)

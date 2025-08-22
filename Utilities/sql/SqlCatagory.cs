@@ -27,7 +27,8 @@ namespace Utilities.Sql
             "Logs_LastInsertId.sql",        // NEW
             "MWPV_DB_Create.sql",
             "SelectCatagories.sql",
-            "Logs_Purge_OlderThan.sql"
+            "Logs_Purge_OlderThan.sql",
+            "Logs_Exists_BySig.sql"
         };
 
         // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.

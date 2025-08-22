@@ -1,38 +1,38 @@
 ﻿using System;
 using System.IO;
-using System.Reflection;              // for app version
+using System.Reflection;              // (ok if not used after your edits)
 using System.Windows;
-using System.Windows.Input;           // for MouseButtonEventArgs
+using System.Windows.Input;
 
-using Microsoft.Data.Sqlite;          // Microsoft provider (ok to keep even if not used directly here)
+using Microsoft.Data.Sqlite;          // ok if not used directly here
 
 using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
 using Utilities.Security;             // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
-using MWPV.Services;                  // LogRepository
 
 namespace Utilities.Security
 {
     /// <summary>
     /// Setup dialog that handles both first-run provisioning and subsequent logins.
-    /// - First run: user picks archive path (any extension), sets a password; we create DB, build encrypted archive,
-    ///   and store the canonical DB password file + keyset.json inside it.
-    /// - Subsequent runs: user selects an existing archive and enters its password.
-    ///   We verify with KeyArchiveVerifier (strict: encrypted + sentinels present).
-    ///   On failure, we create an early log (.elog) and show a friendly message.
-    /// After success we load SQL from the archive, verify must-have scripts, ensure Logs schema,
-    /// and (in DEBUG) run a small smoke test.
+    /// Responsibilities:
+    ///  - First run: create DB, build encrypted archive, stash DB password + keyset in the archive.
+    ///  - Subsequent runs: verify an existing encrypted archive + password using sentinel files.
+    ///  - Load SQL catalog from the archive and ensure Logs schema exists.
+    ///  - (DEBUG) run a small smoke test.
+    ///
+    /// IMPORTANT: No secure DB logging or early-log ingestion is done here.
+    ///            App.OnStartup performs SecureLogService.Initialize and then ingests early logs.
     /// </summary>
     public partial class SetupPasswordAndKeyFile : Window
     {
         // 🔑 SecureEncryptedDataStore key names (match files/keys inside the archive)
-        private const string Key_DBPassword = "DB_Password.txt"; // matches file inside the archive
-        private const string Key_KeyFile = "KeyFile";            // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";                // sensitive password
+        private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
+        private const string Key_KeyFile = "KeyFile";          // non-sensitive path
+        private const string Key_KeyPW = "KeyPW";            // sensitive password
 
         // Full path to local encrypted database
-        private readonly string localAppDataPath = Path.Combine(
+        private readonly string _localDbPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MWPV",
             "MWPV.db"
@@ -46,12 +46,12 @@ namespace Utilities.Security
             try
             {
                 UpdateMaxGlyph();
-                this.StateChanged += (_, __) => UpdateMaxGlyph();
+                StateChanged += (_, __) => UpdateMaxGlyph();
             }
-            catch { /* safe if glyph not present */ }
+            catch { /* fine if glyph not present */ }
 
             // Existing install: hide verify field, switch button wording
-            if (File.Exists(localAppDataPath))
+            if (File.Exists(_localDbPath))
             {
                 VerifyPasswordRow.Height = new GridLength(0);
                 lblVerifyPassword.Visibility = Visibility.Collapsed;
@@ -62,7 +62,7 @@ namespace Utilities.Security
 
         private void btnCreateKeyFile_Click(object sender, RoutedEventArgs e)
         {
-            if (File.Exists(localAppDataPath))
+            if (File.Exists(_localDbPath))
             {
                 // Existing DB: choose an existing encrypted key archive (any extension acceptable)
                 var openFileDialog = new Microsoft.Win32.OpenFileDialog
@@ -98,11 +98,11 @@ namespace Utilities.Security
 
         private void btnSubmit_Click(object sender, RoutedEventArgs e)
         {
-            string password = pbPassword.Password;          // NOTE: string; plan to migrate to SecureString/char[] later
+            string password = pbPassword.Password;          // NOTE: string; future: SecureString/char[]
             string verifyPassword = pbVerifyPassword.Password;
             string fullPath = null;
 
-            if (!File.Exists(localAppDataPath))
+            if (!File.Exists(_localDbPath))
             {
                 // --- First run (DB doesn't exist) ---
                 if (!ValidateFirstRunInputs(password, verifyPassword, out string inputError))
@@ -245,8 +245,8 @@ namespace Utilities.Security
                 );
 
                 // Abort setup cleanly so startup can exit without throwing
-                this.DialogResult = false;
-                this.Close();
+                DialogResult = false;
+                Close();
                 return;
             }
 
@@ -271,51 +271,15 @@ namespace Utilities.Security
                 );
             }
 
-            // After successful unlock/setup, ingest any pending early logs
-            if (EarlyLoginFailures.HasPending())
-            {
-                ErrorHandler.InfoTitled(
-                    "Login Notice",
-                    "Previous login failures were detected and will be logged.",
-                    "EarlyLogin.Ingest"
-                );
-
-                var repo = new LogRepository(
-                    DatabaseHelper.OpenConnection,
-                    Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "dev"
-                );
-
-                EarlyLoginFailures.FlushToDb(
-                    // insertToDb
-                    (utc, type, detail) =>
-                        repo.LogAsync(
-                            level: MWPV.Services.LogLevel.Info,
-                            source: "SetupPasswordAndKeyFile",
-                            eventCode: "EARLY_LOGIN_FAILURE",
-                            payloadObject: new { earlyFail = type.ToString(), detail, occurredUtc = utc },
-                            isCrash: false,
-                            sessionId: null,
-                            stackHash: null
-                        ).GetAwaiter().GetResult() > 0,
-
-                    // deleteFile (secure)
-                    path =>
-                    {
-                        SensitiveDataCleaner.SecureFileDelete(path, overwritePasses: 1);
-                        return true;
-                    }
-                );
-            }
+            // NOTE: Early .elog ingestion happens in App.OnStartup *after* SecureLogService.Initialize.
 
             // ✅ Close the form
-            this.DialogResult = true;
-            this.Close();
+            DialogResult = true;
+            Close();
         }
 
         private void btnCancel_Click(object sender, RoutedEventArgs e)
-        {
-            this.Close();
-        }
+            => Close();
 
         private bool ValidateFirstRunInputs(string password, string verifyPassword, out string error)
         {
@@ -336,7 +300,7 @@ namespace Utilities.Security
             return true;
         }
 
-        // ===== Custom title bar handlers (safe no-ops if you didn't add XAML bits) =====
+        // ===== Custom title bar handlers (safe no-ops if not present in XAML) =====
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -373,7 +337,7 @@ namespace Utilities.Security
         {
             try
             {
-                var tb = this.FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
+                var tb = FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
                 if (tb != null)
                     tb.Text = (WindowState == WindowState.Maximized) ? "\uE923" : "\uE922";
             }
