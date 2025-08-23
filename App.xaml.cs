@@ -304,6 +304,7 @@ namespace MWPV
         private static void LogWarn(string source, string message, int eventId, object? details = null)
             => Log(SecLogLevel.Warn, source, message, eventId, details);
 
+
         private static void LogError(string source, string message, int eventId, object? details = null)
             => Log(SecLogLevel.Error, source, message, eventId, details);
 

@@ -12,7 +12,7 @@ Security + Logging Wrap Up — Master Checklist
 
 2) Core Security Polishing
 --------------------------
-[ ] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
+[X] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
 [ ] Confirm PayloadVer + KeySetVersion bump
 [ ] Add password strength meter to SetupPasswordAndKeyFile
 [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)

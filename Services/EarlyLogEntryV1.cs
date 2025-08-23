@@ -1,187 +1,326 @@
-﻿// MWPV/Services/EarlyLogEntryV1.cs
+﻿// MWPV/Services/EarlyLogEntryV1.cs  (DEDUP FOCUSED REWRITE)
+// Scope: Only dedup helpers & file utilities. Ingestion logic is considered complete elsewhere.
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
-using Utilities.Sql;             // SecureSql.Require(...)
-using Utilities.Security;        // SecureEncryptedDataStore
 
 namespace MWPV.Services
 {
     /// <summary>
-    /// Development writer for "early" logs using the canonical Logs v2 schema.
-    /// Payload is encrypted with AES-256-GCM using LogPayloadKey and stored as:
-    ///     nonce(12) | ciphertext(N) | tag(16)   in the Payload (BLOB) column
-    /// PayloadFmt is "gcm-json-v1".
-    /// 
+    /// POCO model for an early-log entry persisted as plaintext JSON (*.elog).
     /// Notes:
-    /// - During development, schema/version is always treated as 1 (see DDL).
-    /// - This class intentionally mirrors LogRepository’s write path so both
-    ///   produce identical payloads.
+    /// - Dedupe prefers logGuid when present; falls back to a content hash.
+    /// - Payload can be an arbitrary JSON object or string; for hashing we canonicalize JSON.
     /// </summary>
     public sealed class EarlyLogEntryV1
     {
-        // ----- Basic fields you likely already had on early entries -----
-        public DateTime WhenUtc { get; set; } = DateTime.UtcNow;
-        public string Level { get; set; } = "INFO"; // TRACE|DEBUG|INFO|WARN|ERROR|FATAL|WARNING
-        public string? Source { get; set; }
-        public string? EventCode { get; set; }
-        public string SessionId { get; set; } = "";
-        public string? MachineId { get; set; } = "";
-        public string AppVersion { get; set; } = "";
-        public bool IsCrash { get; set; }
-        public string? StackHash { get; set; }
+        public int ver { get; set; } = 1;
+        public string logGuid { get; set; } = "";      // optional but preferred for dedupe
+        public DateTime whenUtc { get; set; }
+        public string level { get; set; } = "INFO";
+        public string source { get; set; } = "app";
+        public string eventCode { get; set; } = "GENERAL";
+        public string sessionId { get; set; } = "";
+        public string machineId { get; set; } = "";
+        public string appVersion { get; set; } = "";
+        public bool isCrash { get; set; } = false;
+        public string payloadFmt { get; set; } = "json";
+        public object payload { get; set; } = "";
 
-        /// <summary>
-        /// The "clear" object to be JSON-serialized (or a raw JSON string).
-        /// This is what we encrypt before inserting to the DB.
-        /// </summary>
-        public object? PayloadObject { get; set; }
-
-        // -----------------------------------------------------------------
-        // Single-row insert
-        // -----------------------------------------------------------------
-        public async Task<long> InsertAsync(SqliteConnection openConnection)
+        public static EarlyLogEntryV1 FromJson(string json)
         {
-            if (openConnection == null) throw new ArgumentNullException(nameof(openConnection));
-
-            string insertSql;
-            string lastIdSql;
-            try
+            var opts = new JsonSerializerOptions
             {
-                insertSql = SecureSql.Require("Logs_Insert_V2.sql");
-                lastIdSql = SecureSql.Require("Logs_LastInsertId.sql");
-            }
-            catch
-            {
-                // Scripts not loaded — non-fatal in dev
-                return 0L;
-            }
-
-            // Build the clear JSON
-            var json = PayloadObject switch
-            {
-                null => "",
-                string s => s,
-                _ => JsonSerializer.Serialize(PayloadObject, new JsonSerializerOptions { WriteIndented = false })
+                PropertyNameCaseInsensitive = true
             };
-            var clearBytes = Encoding.UTF8.GetBytes(json);
+            var e = JsonSerializer.Deserialize<EarlyLogEntryV1>(json, opts) ?? new EarlyLogEntryV1();
+            // sanitize
+            if (e.whenUtc == default) e.whenUtc = DateTime.UtcNow;
+            e.level = string.IsNullOrWhiteSpace(e.level) ? "INFO" : e.level.Trim();
+            e.source = string.IsNullOrWhiteSpace(e.source) ? "app" : e.source.Trim();
+            e.eventCode = string.IsNullOrWhiteSpace(e.eventCode) ? "GENERAL" : e.eventCode.Trim();
+            e.sessionId = e.sessionId?.Trim() ?? "";
+            e.machineId = e.machineId?.Trim() ?? "";
+            e.appVersion = e.appVersion?.Trim() ?? "";
+            e.payloadFmt = string.IsNullOrWhiteSpace(e.payloadFmt) ? "json" : e.payloadFmt.Trim().ToLowerInvariant();
+            e.logGuid = e.logGuid?.Trim() ?? "";
+            return e;
+        }
+    }
 
-            // Encrypt → nonce|cipher|tag blob
-            var encryptedBlob = CryptoLogCodec.Encrypt(clearBytes);
-
-            using (var cmd = openConnection.CreateCommand())
+    /// <summary>
+    /// Dedupe utilities for early logs (one-file-at-a-time).
+    /// No DB writes here. Callers may supply DB-lookup delegates to short-circuit duplicates already ingested.
+    /// </summary>
+    public static class EarlyLogDedupe
+    {
+        // %LOCALAPPDATA%\MWPV\early
+        public static string EarlyDir
+        {
+            get
             {
-                cmd.CommandText = insertSql;
-
-                cmd.Parameters.AddWithValue("@WhenUtc", WhenUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"));
-                cmd.Parameters.AddWithValue("@CreatedUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
-                cmd.Parameters.AddWithValue("@Level", NormalizeLevel(Level));
-                cmd.Parameters.AddWithValue("@Source", Source ?? string.Empty);
-                cmd.Parameters.AddWithValue("@EventCode", EventCode ?? string.Empty);
-                cmd.Parameters.AddWithValue("@SessionId", SessionId ?? string.Empty);
-                cmd.Parameters.AddWithValue("@MachineId", MachineId ?? string.Empty);
-                cmd.Parameters.AddWithValue("@AppVersion", AppVersion ?? string.Empty);
-                cmd.Parameters.AddWithValue("@IsCrash", IsCrash ? 1 : 0);
-
-                var p = cmd.CreateParameter();
-                p.ParameterName = "@Payload";
-                p.SqliteType = SqliteType.Blob;
-                p.Value = encryptedBlob ?? Array.Empty<byte>();
-                cmd.Parameters.Add(p);
-
-                cmd.Parameters.AddWithValue("@PayloadFmt", "gcm-json-v1");
-                cmd.Parameters.AddWithValue("@StackHash", (object?)StackHash ?? DBNull.Value);
-
-                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                return Path.Combine(root, "MWPV", "early");
             }
-
-            using var idCmd = openConnection.CreateCommand();
-            idCmd.CommandText = lastIdSql;
-            var idObj = await idCmd.ExecuteScalarAsync().ConfigureAwait(false);
-            return idObj is long id ? id : Convert.ToInt64(idObj ?? 0L);
         }
 
-        // -----------------------------------------------------------------
-        // Batch ingest helper: runs all inserts in one transaction.
-        // -----------------------------------------------------------------
-        public static async Task<int> IngestAsync(IEnumerable<EarlyLogEntryV1> entries, Func<SqliteConnection> openConnectionFactory)
+        private static string DedupeDir => Path.Combine(EarlyDir, "dedup");
+        private static string QuarantineDir => Path.Combine(EarlyDir, "quarantine");
+        private static string IndexDir => Path.Combine(EarlyDir, ".dedupe");
+        private static string IndexPath => Path.Combine(IndexDir, "index.json");
+
+        private sealed class DedupeIndex
         {
-            if (entries == null) throw new ArgumentNullException(nameof(entries));
-            if (openConnectionFactory == null) throw new ArgumentNullException(nameof(openConnectionFactory));
+            public HashSet<string> SeenGuids { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            public HashSet<string> SeenHashes { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
-            int count = 0;
-            using var cn = openConnectionFactory();
-            await cn.OpenAsync().ConfigureAwait(false);
-
-            using var tx = cn.BeginTransaction();
+        private static DedupeIndex LoadIndex()
+        {
             try
             {
-                foreach (var e in entries)
+                Directory.CreateDirectory(IndexDir);
+                if (File.Exists(IndexPath))
                 {
-                    await e.InsertAsync(cn).ConfigureAwait(false);
-                    count++;
+                    var json = File.ReadAllText(IndexPath, Encoding.UTF8);
+                    var idx = JsonSerializer.Deserialize<DedupeIndex>(json);
+                    if (idx != null) return idx;
                 }
-                tx.Commit();
+            }
+            catch { }
+            return new DedupeIndex();
+        }
+
+        private static void SaveIndex(DedupeIndex idx)
+        {
+            try
+            {
+                Directory.CreateDirectory(IndexDir);
+                var json = JsonSerializer.Serialize(idx, new JsonSerializerOptions { WriteIndented = false });
+                File.WriteAllText(IndexPath, json, Encoding.UTF8);
+            }
+            catch { }
+        }
+
+        public static string ComputeContentHash(string filePath)
+        {
+            try
+            {
+                string json = File.ReadAllText(filePath, Encoding.UTF8).Trim();
+                var entry = EarlyLogEntryV1.FromJson(json);
+
+                string payloadNorm = CanonicalizePayload(entry.payload, entry.payloadFmt);
+                var core = new
+                {
+                    entry.ver,
+                    entry.level,
+                    entry.source,
+                    entry.eventCode,
+                    entry.sessionId,
+                    entry.machineId,
+                    entry.appVersion,
+                    entry.isCrash,
+                    entry.payloadFmt,
+                    payload = payloadNorm
+                };
+                string canonical = JsonSerializer.Serialize(core);
+                return Sha256Hex(Encoding.UTF8.GetBytes(canonical));
             }
             catch
             {
-                try { tx.Rollback(); } catch { /* ignore */ }
-                throw;
+                return Sha256Hex(File.ReadAllBytes(filePath));
             }
-            return count;
         }
 
-        private static string NormalizeLevel(string? level)
+        private static string CanonicalizePayload(object payload, string fmt)
         {
-            var s = (level ?? "INFO").Trim().ToUpperInvariant();
-            return s switch
+            if (payload is null) return "";
+            try
             {
-                "TRACE" => "TRACE",
-                "DEBUG" => "DEBUG",
-                "INFO" => "INFO",
-                "WARN" => "WARN",
-                "WARNING" => "WARNING",
-                "ERROR" => "ERROR",
-                "FATAL" => "FATAL",
-                "CRITICAL" => "FATAL",
-                _ => "INFO"
+                if (fmt?.Equals("json", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    string payloadJson = payload is JsonElement je
+                        ? je.GetRawText()
+                        : (payload is string s ? s : JsonSerializer.Serialize(payload));
+
+                    using var doc = JsonDocument.Parse(payloadJson);
+                    return JsonSerializer.Serialize(doc.RootElement);
+                }
+                return payload is string sp ? sp.Trim() : JsonSerializer.Serialize(payload);
+            }
+            catch
+            {
+                return payload?.ToString() ?? "";
+            }
+        }
+
+        private static string Sha256Hex(ReadOnlySpan<byte> data)
+        {
+            Span<byte> hash = stackalloc byte[32];
+            using var sha = SHA256.Create();
+            sha.TryComputeHash(data, hash, out _);
+            var sb = new StringBuilder(64);
+            foreach (var b in hash) sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
+            return sb.ToString();
+        }
+
+        public sealed class DedupResult
+        {
+            public bool IsDuplicate { get; init; }
+            public string? Reason { get; init; }
+            public string? GuidUsed { get; init; }
+            public string? HashUsed { get; init; }
+            public string? DispositionPath { get; init; }
+        }
+
+        public static DedupResult DedupOne(
+            string filePath,
+            Func<string, bool>? existsByGuid = null,
+            Func<string, bool>? existsByHash = null)
+        {
+            var fi = new FileInfo(filePath);
+            if (!fi.Exists) return new DedupResult { IsDuplicate = false, Reason = "not_found" };
+
+            string raw;
+            try { raw = File.ReadAllText(filePath, Encoding.UTF8); }
+            catch
+            {
+                return Quarantine(fi, "io_error");
+            }
+
+            EarlyLogEntryV1? entry = null;
+            try { entry = EarlyLogEntryV1.FromJson(raw); }
+            catch { }
+
+            string? guid = entry?.logGuid;
+            string hash = ComputeContentHash(filePath);
+
+            if (!string.IsNullOrWhiteSpace(guid) && existsByGuid != null)
+            {
+                try
+                {
+                    if (existsByGuid(guid!))
+                    {
+                        return MoveDuplicate(fi, guid, hash, "db_guid");
+                    }
+                }
+                catch { }
+            }
+            if (existsByHash != null)
+            {
+                try
+                {
+                    if (existsByHash(hash))
+                    {
+                        return MoveDuplicate(fi, guid, hash, "db_hash");
+                    }
+                }
+                catch { }
+            }
+
+            var index = LoadIndex();
+            if (!string.IsNullOrWhiteSpace(guid) && index.SeenGuids.Contains(guid!))
+            {
+                return MoveDuplicate(fi, guid, hash, "index_guid");
+            }
+            if (index.SeenHashes.Contains(hash))
+            {
+                return MoveDuplicate(fi, guid, hash, "index_hash");
+            }
+
+            if (!string.IsNullOrWhiteSpace(guid))
+            {
+                var dup = Directory.EnumerateFiles(fi.DirectoryName ?? EarlyDir, "*.elog", SearchOption.TopDirectoryOnly)
+                    .Where(p => !Path.GetFileName(p).Equals(fi.Name, StringComparison.OrdinalIgnoreCase))
+                    .Select(p => TryReadGuid(p))
+                    .FirstOrDefault(g => string.Equals(g, guid, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(dup))
+                {
+                    return MoveDuplicate(fi, guid, hash, "sibling_guid");
+                }
+            }
+            var hashMatch = Directory.EnumerateFiles(fi.DirectoryName ?? EarlyDir, "*.elog", SearchOption.TopDirectoryOnly)
+                .Where(p => !Path.GetFileName(p).Equals(fi.Name, StringComparison.OrdinalIgnoreCase))
+                .Select(p => (p, ComputeContentHash(p)))
+                .FirstOrDefault(t => t.Item2 == hash);
+            if (!string.IsNullOrEmpty(hashMatch.p))
+            {
+                return MoveDuplicate(fi, guid, hash, "sibling_hash");
+            }
+
+            if (!string.IsNullOrWhiteSpace(guid)) index.SeenGuids.Add(guid!);
+            index.SeenHashes.Add(hash);
+            SaveIndex(index);
+
+            return new DedupResult
+            {
+                IsDuplicate = false,
+                Reason = "unique",
+                GuidUsed = guid,
+                HashUsed = hash,
+                DispositionPath = fi.FullName
             };
         }
 
-        // === Minimal AES-GCM helper mirroring LogRepository ===
-        private static class CryptoLogCodec
+        private static DedupResult MoveDuplicate(FileInfo fi, string? guidUsed, string hashUsed, string reason)
         {
-            private static byte[] GetLogKey()
+            try
             {
-                if (!SecureEncryptedDataStore.HasKey("LogPayloadKey"))
-                    throw new InvalidOperationException("LogPayloadKey not loaded into SecureEncryptedDataStore.");
-                var key = SecureEncryptedDataStore.GetBytes("LogPayloadKey");
-                if (key == null || key.Length != 32)
-                    throw new InvalidOperationException("LogPayloadKey is missing or not 32 bytes.");
-                return key;
+                Directory.CreateDirectory(DedupeDir);
+                var dest = Path.Combine(DedupeDir, fi.Name);
+                if (File.Exists(dest)) File.Delete(dest);
+                fi.MoveTo(dest);
+                return new DedupResult
+                {
+                    IsDuplicate = true,
+                    Reason = reason,
+                    GuidUsed = guidUsed,
+                    HashUsed = hashUsed,
+                    DispositionPath = dest
+                };
             }
-
-            public static byte[] Encrypt(byte[] plaintext)
+            catch
             {
-                plaintext ??= Array.Empty<byte>();
-                var key = GetLogKey();
-                var iv = RandomNumberGenerator.GetBytes(12);
-                var ct = new byte[plaintext.Length];
-                var tag = new byte[16];
-
-                using var gcm = new AesGcm(key);
-                gcm.Encrypt(iv, plaintext, ct, tag);
-
-                var blob = new byte[iv.Length + ct.Length + tag.Length];
-                Buffer.BlockCopy(iv, 0, blob, 0, iv.Length);
-                Buffer.BlockCopy(ct, 0, blob, iv.Length, ct.Length);
-                Buffer.BlockCopy(tag, 0, blob, iv.Length + ct.Length, tag.Length);
-                return blob;
+                return new DedupResult { IsDuplicate = true, Reason = "move_failed", GuidUsed = guidUsed, HashUsed = hashUsed };
             }
+        }
+
+        private static DedupResult Quarantine(FileInfo fi, string reason)
+        {
+            try
+            {
+                Directory.CreateDirectory(QuarantineDir);
+                var dest = Path.Combine(QuarantineDir, fi.Name);
+                if (File.Exists(dest)) File.Delete(dest);
+                fi.MoveTo(dest);
+                return new DedupResult { IsDuplicate = true, Reason = "quarantine:" + reason, DispositionPath = dest };
+            }
+            catch
+            {
+                return new DedupResult { IsDuplicate = true, Reason = "quarantine_failed" };
+            }
+        }
+
+        private static string? TryReadGuid(string path)
+        {
+            try
+            {
+                var json = File.ReadAllText(path, Encoding.UTF8);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("logGuid", out var guidEl))
+                {
+                    var s = guidEl.GetString();
+                    return string.IsNullOrWhiteSpace(s) ? null : s!.Trim();
+                }
+            }
+            catch { }
+            return null;
         }
     }
 }
