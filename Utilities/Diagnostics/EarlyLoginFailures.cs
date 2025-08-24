@@ -2,35 +2,30 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
-using System.Security.Cryptography;
+using System.Threading;
+using IOPath = System.IO.Path;
 
 namespace Utilities.Diagnostics
 {
+    // Back-compat: keep EarlyFailType at namespace scope so existing call sites
+    // like Utilities.Diagnostics.EarlyFailType continue to compile.
+   
     /// <summary>
     /// Writes and manages pre-login *.elog files in:
-    ///   %LOCALAPPDATA%\MWPV\early\
-    ///
-    /// File format (v1):
-    ///   MWPV-ELOG|v1
-    ///   content-type: application/json; charset=utf-8
-    ///
-    ///   {json payload}
-    ///
-    /// JSON payload shape (example):
-    ///   { "version":1,"utc":"2025-08-22T14:49:22.993Z","type":"invalid-password-or-keyfile",
-    ///     "sessionId":"<hex>","machine":"MYPC","userSid":"...","userName":"...","details":"..." }
+    ///   %LOCALAPPDATA%\\MWPV\\early\\
     /// </summary>
     public static class EarlyLoginFailures
     {
-        // ----- locations -----
+        // Storage roots
         public static readonly string StoreDir =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
+            IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
 
         public static readonly string QuarantineDir =
-            Path.Combine(StoreDir, "quarantine");
+            IOPath.Combine(StoreDir, "quarantine");
 
         // Session Id for this process (hex). App can overwrite if desired.
         public static string SessionId { get; set; } = NewSessionId();
@@ -41,37 +36,29 @@ namespace Utilities.Diagnostics
 
         static EarlyLoginFailures()
         {
-            try { Directory.CreateDirectory(StoreDir); } catch { /* swallow */ }
-            try { Directory.CreateDirectory(QuarantineDir); } catch { /* swallow */ }
+            try { Directory.CreateDirectory(StoreDir); } catch { }
+            try { Directory.CreateDirectory(QuarantineDir); } catch { }
         }
 
-        /// <summary>Used by UI to decide whether to show the post-login “ingesting early files” notice.</summary>
         public static bool HasPending()
         {
             try { return Directory.EnumerateFiles(StoreDir, "*.elog", SearchOption.TopDirectoryOnly).Any(); }
             catch { return false; }
         }
 
-        /// <summary>Enumerate pending *.elog paths (sorted by name/time ascending).</summary>
         public static IEnumerable<string> EnumeratePendingPaths()
         {
             IEnumerable<string> files;
             try { files = Directory.EnumerateFiles(StoreDir, "*.elog", SearchOption.TopDirectoryOnly); }
             catch { yield break; }
-
             foreach (var f in files.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 yield return f;
         }
 
-        /// <summary>
-        /// Record an early failure event. Returns path on success, or null on total failure (never throws).
-        /// </summary>
         public static string? Record(EarlyFailType type, string? message = null, Exception? ex = null, object? extra = null)
         {
             try
             {
-                Directory.CreateDirectory(StoreDir);
-
                 var nowUtc = DateTime.UtcNow;
                 using var id = WindowsIdentity.GetCurrent();
 
@@ -95,39 +82,40 @@ namespace Utilities.Diagnostics
                     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
                 });
 
-                // Stable name: timestamp + type + short content hash
                 var sig = ToHex(SHA256.HashData(Utf8NoBom.GetBytes(json)));
                 var name = $"{nowUtc:yyyyMMddTHHmmssfff}_{payload.type}_{sig[..12]}.elog";
-                var path = Path.Combine(StoreDir, name);
+                var path = IOPath.Combine(StoreDir, name);
 
-                using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-                using var sw = new StreamWriter(fs, Utf8NoBom) { NewLine = "\r\n" };
-
-                sw.WriteLine(V1Header);
-                sw.WriteLine("content-type: application/json; charset=utf-8");
-                sw.WriteLine();
-                sw.WriteLine(json);
+                using (var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+                using (var sw = new StreamWriter(fs, Utf8NoBom) { NewLine = "\r\n" })
+                {
+                    sw.WriteLine(V1Header);
+                    sw.WriteLine("content-type: application/json; charset=utf-8");
+                    sw.WriteLine();
+                    sw.WriteLine(json);
+                }
 
                 return path;
             }
             catch
             {
-                // Best-effort fallback to temp
                 try
                 {
-                    var temp = Path.Combine(Path.GetTempPath(), "MWPV", "early");
+                    var temp = IOPath.Combine(IOPath.GetTempPath(), "MWPV", "early");
                     Directory.CreateDirectory(temp);
-                    var path = Path.Combine(temp, $"fallback_{DateTime.UtcNow:yyyyMMddTHHmmssfff}.elog");
-                    File.WriteAllText(path, V1Header + "\r\ncontent-type: application/json; charset=utf-8\r\n\r\n{}", Utf8NoBom);
+                    var path = IOPath.Combine(temp, $"fallback_{DateTime.UtcNow:yyyyMMddTHHmmssfff}.elog");
+
+                    var header = V1Header + "\r\n";
+                    var contentType = "content-type: application/json; charset=utf-8\r\n";
+                    var body = "\r\n{}";
+
+                    File.WriteAllText(path, header + contentType + body, Utf8NoBom);
                     return path;
                 }
                 catch { return null; }
             }
         }
 
-        /// <summary>
-        /// Move a bad/suspect .elog to quarantine (best-effort). If provided, writes a ".reason.txt" sibling.
-        /// </summary>
         public static void TryQuarantine(string sourcePath, string? reason = null)
         {
             try
@@ -136,58 +124,71 @@ namespace Utilities.Diagnostics
 
                 Directory.CreateDirectory(QuarantineDir);
 
-                var name = Path.GetFileNameWithoutExtension(sourcePath);
-                var ext = Path.GetExtension(sourcePath);
+                var name = IOPath.GetFileNameWithoutExtension(sourcePath);
+                var ext = IOPath.GetExtension(sourcePath);
 
-                var dest = Path.Combine(QuarantineDir, $"{name}{ext}");
+                var dest = IOPath.Combine(QuarantineDir, $"{name}{ext}");
                 int i = 1;
                 while (File.Exists(dest))
-                    dest = Path.Combine(QuarantineDir, $"{name}_{i++}{ext}");
+                    dest = IOPath.Combine(QuarantineDir, $"{name}_{i++}{ext}");
 
                 File.Move(sourcePath, dest);
 
                 if (!string.IsNullOrWhiteSpace(reason))
                     File.WriteAllText(dest + ".reason.txt", reason, Utf8NoBom);
+
+                try
+                {
+                    var fi = new FileInfo(dest);
+                    var manifest = new
+                    {
+                        utc = DateTime.UtcNow.ToString("O"),
+                        machine = Environment.MachineName,
+                        sessionId = SessionId,
+                        originalPath = sourcePath,
+                        quarantinedPath = dest,
+                        size = fi.Exists ? fi.Length : 0,
+                        lastWriteUtc = fi.Exists ? fi.LastWriteTimeUtc.ToString("O") : null,
+                        sha256 = fi.Exists ? Sha256HexForFile(dest) : null,
+                        reason = reason
+                    };
+                    var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(dest + ".manifest.json", json, Utf8NoBom);
+                }
+                catch { }
             }
-            catch { /* swallow */ }
+            catch { }
         }
 
-        /// <summary>Alias kept for older call sites.</summary>
         public static void Quarantine(string sourcePath, string? reason = null) => TryQuarantine(sourcePath, reason);
 
-        // ----- helpers -----
-
-        private static string ToSlug(EarlyFailType t)
+        public static bool TryDpapiUnprotect(ReadOnlySpan<byte> protectedBytes, out byte[] plaintext, out string? errorSummary, int maxAttempts = 3)
         {
-            // kebab-case from enum name: FooBar -> foo-bar ; InvalidPasswordOrKeyFile -> invalid-password-or-keyfile
-            var s = t.ToString();
-            var sb = new StringBuilder(s.Length + 8);
-            for (int i = 0; i < s.Length; i++)
+            plaintext = Array.Empty<byte>();
+            errorSummary = null;
+            if (protectedBytes.IsEmpty) return true;
+            Exception? last = null;
+            for (int attempt = 1; attempt <= Math.Max(1, maxAttempts); attempt++)
             {
-                char c = s[i];
-                if (char.IsUpper(c))
+                try
                 {
-                    if (i > 0 && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
-                        sb.Append('-');
-                    sb.Append(char.ToLowerInvariant(c));
+                    plaintext = ProtectedData.Unprotect(protectedBytes.ToArray(), optionalEntropy: null, scope: DataProtectionScope.CurrentUser);
+                    return true;
                 }
-                else if (c == '_' || c == ' ')
-                {
-                    sb.Append('-');
-                }
-                else sb.Append(c);
+                catch (CryptographicException ex) { last = ex; Thread.Sleep(50 * attempt); }
+                catch (Exception ex) { last = ex; Thread.Sleep(50 * attempt); }
             }
-            return sb.ToString();
+            if (last != null) errorSummary = $"{last.GetType().Name}: {last.Message}";
+            return false;
         }
 
-        private static string DefaultMessage(EarlyFailType t) =>
-            t switch
-            {
-                EarlyFailType.InvalidPasswordOrKeyFile => "Invalid Key File Password or invalid key file selected.",
-                EarlyFailType.KeyFileVerifyError => "Key file verification error.",
-                EarlyFailType.KeyfileMissingOrCorrupt => "Key file missing or corrupt.",
-                _ => t.ToString()
-            };
+        private static string DefaultMessage(EarlyFailType t) => t switch
+        {
+            EarlyFailType.InvalidPasswordOrKeyFile => "Invalid Key File Password or invalid key file selected.",
+            EarlyFailType.KeyFileVerifyError => "Key file verification error.",
+            EarlyFailType.KeyfileMissingOrCorrupt => "Key file missing or corrupt.",
+            _ => t.ToString()
+        };
 
         private static string NewSessionId()
         {
@@ -206,8 +207,38 @@ namespace Utilities.Diagnostics
                 c[i++] = GetHexNibble(b & 0xF);
             }
             return new string(c);
-
             static char GetHexNibble(int v) => (char)(v < 10 ? '0' + v : 'a' + (v - 10));
+        }
+
+        private static string Sha256HexForFile(string path)
+        {
+            try
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                return ToHex(SHA256.HashData(fs));
+            }
+            catch { return string.Empty; }
+        }
+
+        private static string ToSlug(EarlyFailType t)
+        {
+            var s = t.ToString();
+            var sb = new StringBuilder(s.Length + 8);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (char.IsUpper(c))
+                {
+                    if (i > 0 && (char.IsLower(s[i - 1]) || (i + 1 < s.Length && char.IsLower(s[i + 1]))))
+                        sb.Append('-');
+                    sb.Append(char.ToLowerInvariant(c));
+                }
+                else
+                {
+                    sb.Append(c == '_' ? '-' : c);
+                }
+            }
+            return sb.ToString();
         }
 
         private sealed class EarlyFailureV1

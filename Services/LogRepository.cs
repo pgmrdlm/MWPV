@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Utilities.Sql;             // SecureSql
 using Utilities.Security;        // SecureEncryptedDataStore
 
@@ -16,10 +18,8 @@ namespace MWPV.Services
 
     /// <summary>
     /// Writes encrypted rows into Logs (v2 schema).
-    /// Dev payload format: AES-256-GCM, raw bytes stored in Payload as:
-    ///     nonce(12) | ciphertext(N) | tag(16)
-    /// PayloadFmt: "gcm-json-v1"
-    /// NOTE: During development, schema/version is always treated as 1 (see DDL).
+    /// Payload format: AES-256-GCM, raw bytes stored in Payload as: nonce(12) | ciphertext(N) | tag(16)
+    /// PayloadFmt: "gcm-json-v1". No legacy dual-decrypt.
     /// </summary>
     public sealed class LogRepository
     {
@@ -58,7 +58,7 @@ namespace MWPV.Services
         /// Serialize payloadObject to JSON (or pass-through if string), encrypt with LogPayloadKey (AES-GCM),
         /// and insert a log row. Returns inserted Id or 0 on script-missing.
         /// </summary>
-        public async System.Threading.Tasks.Task<long> LogAsync(
+        public async Task<long> LogAsync(
             LogLevel level,
             string source,
             string eventCode,
@@ -68,7 +68,8 @@ namespace MWPV.Services
             string? stackHash = null,
             string? correlationId = null, // reserved
             int payloadVer = 1,           // reserved (always 1 in dev)
-            int keySetVersion = 1)        // reserved (always 1 in dev)
+            int keySetVersion = 1,        // reserved (always 1 in dev)
+            CancellationToken cancel = default)
         {
             string? insertSql = null;
             string? lastIdSql = null;
@@ -86,7 +87,7 @@ namespace MWPV.Services
             // Build plaintext JSON payload
             string json = payloadObject switch
             {
-                null => "",
+                null => string.Empty,
                 string s => s,
                 _ => JsonSerializer.Serialize(payloadObject,
                         new JsonSerializerOptions { WriteIndented = false })
@@ -111,14 +112,15 @@ namespace MWPV.Services
             };
 
             using var cn = Open();
-            if (_openConnection == null) await cn.OpenAsync().ConfigureAwait(false);
+            if (_openConnection == null) await cn.OpenAsync(cancel).ConfigureAwait(false);
 
             using (var cmd = cn.CreateCommand())
             {
                 cmd.CommandText = insertSql!;
 
-                cmd.Parameters.AddWithValue("@WhenUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
-                cmd.Parameters.AddWithValue("@CreatedUtc", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+                string nowIso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                cmd.Parameters.AddWithValue("@WhenUtc", nowIso);
+                cmd.Parameters.AddWithValue("@CreatedUtc", nowIso);
                 cmd.Parameters.AddWithValue("@Level", levelText);
                 cmd.Parameters.AddWithValue("@Source", safeSource);
                 cmd.Parameters.AddWithValue("@EventCode", safeEventCode);
@@ -138,12 +140,12 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@PayloadFmt", "gcm-json-v1");
                 cmd.Parameters.AddWithValue("@StackHash", (object?)stackHash ?? DBNull.Value);
 
-                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                await cmd.ExecuteNonQueryAsync(cancel).ConfigureAwait(false);
             }
 
             using var idCmd = cn.CreateCommand();
             idCmd.CommandText = lastIdSql!;
-            var idObj = await idCmd.ExecuteScalarAsync().ConfigureAwait(false);
+            var idObj = await idCmd.ExecuteScalarAsync(cancel).ConfigureAwait(false);
             return idObj is long id ? id : Convert.ToInt64(idObj ?? 0L);
         }
 
@@ -151,7 +153,7 @@ namespace MWPV.Services
         /// DEBUG helper: fetch recent logs and return decrypted JSON text.
         /// Tolerates both encrypted BLOB (nonce|ct|tag) and legacy TEXT payloads (early-ingest).
         /// </summary>
-        public async System.Threading.Tasks.Task<(long Id, string Json)[]> GetRecentAsync(int count = 50, bool crashesOnly = false)
+        public async Task<(long Id, string Json)[]> GetRecentAsync(int count = 50, bool crashesOnly = false, CancellationToken cancel = default)
         {
             var list = new List<(long, string)>();
             string? selectSql = null;
@@ -159,30 +161,23 @@ namespace MWPV.Services
             catch { return list.ToArray(); } // script missing — return empty
 
             using var cn = Open();
-            if (_openConnection == null) await cn.OpenAsync().ConfigureAwait(false);
+            if (_openConnection == null) await cn.OpenAsync(cancel).ConfigureAwait(false);
 
             using var cmd = cn.CreateCommand();
             cmd.CommandText = selectSql!;
             cmd.Parameters.AddWithValue("@Limit", count);
             cmd.Parameters.AddWithValue("@CrashesOnly", crashesOnly ? 1 : (object)DBNull.Value);
-            // Optional: @FromUtc can be bound by caller via different overload, omitted here.
 
-            using var rd = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
-            // Try to locate payload column robustly
+            using var rd = await cmd.ExecuteReaderAsync(cancel).ConfigureAwait(false);
             int payloadOrd = -1;
             try { payloadOrd = rd.GetOrdinal("Payload"); } catch { /* fall back */ }
 
-            while (await rd.ReadAsync().ConfigureAwait(false))
+            while (await rd.ReadAsync(cancel).ConfigureAwait(false))
             {
                 long id = 0;
-                try
-                {
-                    // Id is usually the first column
-                    id = rd.GetInt64(0);
-                }
-                catch { /* best effort */ }
+                try { id = rd.GetInt64(0); } catch { /* best effort */ }
 
-                string json = "";
+                string json = string.Empty;
                 try
                 {
                     object cell;
@@ -192,7 +187,6 @@ namespace MWPV.Services
                     }
                     else
                     {
-                        // Fallback: choose first BLOB-looking column, else first string
                         object chosen = null;
                         for (int i = 0; i < rd.FieldCount; i++)
                         {
@@ -200,7 +194,7 @@ namespace MWPV.Services
                             if (val is byte[]) { chosen = val; break; }
                             if (chosen == null && val is string) chosen = val;
                         }
-                        cell = chosen ?? "";
+                        cell = chosen ?? string.Empty;
                     }
 
                     if (cell is byte[] blob && blob.Length >= 12 + 16)
@@ -210,13 +204,12 @@ namespace MWPV.Services
                     }
                     else if (cell is string s)
                     {
-                        // legacy/plain payload
-                        json = s;
+                        json = s; // legacy/plain payload
                     }
                 }
                 catch
                 {
-                    json = "";
+                    json = string.Empty;
                 }
 
                 list.Add((id, json));
@@ -232,7 +225,7 @@ namespace MWPV.Services
             public static string GetStableMachineId()
             {
                 using var sha = SHA256.Create();
-                var data = Encoding.UTF8.GetBytes($"{GetSystemDriveSerial() ?? ""}|{GetMachineGuid() ?? ""}");
+                var data = Encoding.UTF8.GetBytes($"{GetSystemDriveSerial() ?? string.Empty}|{GetMachineGuid() ?? string.Empty}");
                 return Convert.ToHexString(sha.ComputeHash(data)).Substring(0, 16);
             }
 
@@ -240,7 +233,7 @@ namespace MWPV.Services
             {
                 try
                 {
-                    using var rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography");
+                    using var rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\\Microsoft\\Cryptography");
                     return rk?.GetValue("MachineGuid") as string;
                 }
                 catch { return null; }
@@ -262,7 +255,7 @@ namespace MWPV.Services
                 try
                 {
                     uint serial, maxCompLen, fsFlags;
-                    bool ok = GetVolumeInformationW(@"C:\", null, 0, out serial, out maxCompLen, out fsFlags, null, 0);
+                    bool ok = GetVolumeInformationW(@"C:\\", null, 0, out serial, out maxCompLen, out fsFlags, null, 0);
                     if (!ok) return null;
                     return serial.ToString("X8");
                 }
@@ -288,7 +281,7 @@ namespace MWPV.Services
 
             public static byte[] Encrypt(byte[] plaintext)
             {
-                if (plaintext == null) plaintext = Array.Empty<byte>();
+                plaintext ??= Array.Empty<byte>();
                 byte[] key = GetLogKey();
                 byte[] iv = RandomNumberGenerator.GetBytes(12);
                 byte[] ct = new byte[plaintext.Length];

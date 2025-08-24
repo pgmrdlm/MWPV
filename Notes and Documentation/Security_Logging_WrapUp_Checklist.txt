@@ -6,7 +6,7 @@ Security + Logging Wrap Up — Master Checklist
 ----------------
 [x] Verify Logs_Insert_V2.sql loads from SqlCatalog (no hardcoded SQL)
 [X] Batch ingest early logs in a single transaction (~200 entries)
-[ ] Dedupe by LogGuid or content hash
+[x] Dedupe by LogGuid or content hash
 [x] Final secure-delete sweep of %LOCALAPPDATA%/MWPV/early after PendingCount==0
 [ ] Quarantine logic: DPAPI unprotect retry ×3; quarantine if still failing
 
