@@ -8,12 +8,12 @@ Security + Logging Wrap Up — Master Checklist
 [X] Batch ingest early logs in a single transaction (~200 entries)
 [x] Dedupe by LogGuid or content hash
 [x] Final secure-delete sweep of %LOCALAPPDATA%/MWPV/early after PendingCount==0
-[ ] Quarantine logic: DPAPI unprotect retry ×3; quarantine if still failing
+[X] Quarantine logic: DPAPI unprotect retry ×3; quarantine if still failing
 
 2) Core Security Polishing
 --------------------------
 [X] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
-[ ] Confirm PayloadVer + KeySetVersion bump
+[X] Confirm PayloadVer + KeySetVersion bump
 [ ] Add password strength meter to SetupPasswordAndKeyFile
 [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)
 [ ] Confirm all sensitive temp files are DPAPI-protected or securely wiped

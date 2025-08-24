@@ -21,6 +21,7 @@ namespace Utilities.Diagnostics
     {
         public sealed class Result
         {
+            public int Found { get; init; }
             public int Inserted { get; init; }
             public int Deduped { get; init; }        // (reserved for future)
             public int Quarantined { get; init; }
@@ -42,9 +43,24 @@ namespace Utilities.Diagnostics
             // Prove DB is reachable (best effort).
             try { using var _ = openConnectionFactory?.Invoke(); } catch { /* ignore */ }
 
+            // Snapshot the files up front (so summary 'Found' is deterministic)
+            var pending = new List<string>(EarlyLoginFailures.EnumeratePendingPaths());
+            int found = pending.Count;
+
+            // If nothing to do, log a specific marker so we can see the check occurred.
+            if (found == 0)
+            {
+                TryLog(LogSeverity.Warn, "EARLY_INGEST_EMPTY", new
+                {
+                    dir = EarlyLoginFailures.StoreDir,
+                    whenUtc = DateTime.UtcNow
+                });
+                return new Result { Found = 0 };
+            }
+
             int inserted = 0, deduped = 0, quarantined = 0, deleted = 0, errors = 0;
 
-            foreach (var path in EarlyLoginFailures.EnumeratePendingPaths())
+            foreach (var path in pending)
             {
                 try
                 {
@@ -93,14 +109,41 @@ namespace Utilities.Diagnostics
                 }
             }
 
+            // Emit a single roll-up record so validation is easy later.
+            TryLog(LogSeverity.Info, "EARLY_INGEST_SUMMARY", new
+            {
+                dir = EarlyLoginFailures.StoreDir,
+                found,
+                inserted,
+                deduped,
+                quarantined,
+                deleted,
+                errors,
+                whenUtc = DateTime.UtcNow
+            });
+
             return new Result
             {
+                Found = found,
                 Inserted = inserted,
                 Deduped = deduped,
                 Quarantined = quarantined,
                 Deleted = deleted,
                 Errors = errors
             };
+        }
+
+        private static void TryLog(LogSeverity level, string eventCode, object payload)
+        {
+            try
+            {
+                SecureLogService.WriteAsync(level, payload, eventCode: eventCode, source: "EarlyIngest")
+                    .GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // best-effort; never let logging break ingest
+            }
         }
 
         private static void Quarantine(string path, string? why = null)
