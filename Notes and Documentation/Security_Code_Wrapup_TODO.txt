@@ -11,7 +11,7 @@ Security Code Wrap Up — TODO List
 [ ] **Core Security Polishing**
     - [ ] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
     - [ ] Confirm PayloadVer + KeySetVersion bump
-    - [ ] Add password strength meter to SetupPasswordAndKeyFile
+    - [ ] Add password strength meter to AppEntryWindow
     - [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)
     - [ ] Confirm all sensitive temp files are DPAPI-protected or securely wiped
 

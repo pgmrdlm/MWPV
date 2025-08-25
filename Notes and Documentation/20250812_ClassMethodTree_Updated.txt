@@ -226,8 +226,8 @@ namespace Utilities.Security
     - if()
     - catch()
     - catch()
-  class SetupPasswordAndKeyFile
-    - SetupPasswordAndKeyFile()
+  class AppEntryWindow
+    - AppEntryWindow()
     - if()
     - btnCreateKeyFile_Click()
     - if()

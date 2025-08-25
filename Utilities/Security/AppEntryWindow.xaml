@@ -1,4 +1,4 @@
-﻿<Window x:Class="Utilities.Security.SetupPasswordAndKeyFile"
+﻿<Window x:Class="Utilities.Security.AppEntryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         Icon="/Assets/Icons/MWPV_TitleBarIcon_16by16.ico"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

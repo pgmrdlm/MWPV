@@ -29,7 +29,7 @@ TODO LIST – 2025-08-12 (Updated)
 
 4) Kill the double-emit  — CLOSED
    [ ] No duplicate emits observed in tests; monitor only.
-   [ ] Two log entries for bad password (SetupPasswordAndKeyFile + VerifyKeyFilePW).
+   [ ] Two log entries for bad password (AppEntryWindow + VerifyKeyFilePW).
    [ ] Keep only one canonical emitter; skip if already early-logged for same LogGuid.
 
 5) Post-login DB logging changes  — TODO

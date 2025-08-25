@@ -7,7 +7,7 @@ with no sensitive data exposure, updated for portable LogPayloadKey usage and sc
 
 Startup: App launch, service wiring, config load.
 
-SetupPasswordAndKeyFile: success, cancel, wrong/missing key file.
+AppEntryWindow: success, cancel, wrong/missing key file.
 
 DB Open/Close: normal and failed attempts.
 

@@ -4,7 +4,7 @@ Describe the big boxes you want in the high‑level diagram.
 Format: <ModuleName> : <What it owns / responsibilities>
 
 Examples:
-- UI : WPF views, dialogs, and controls (MainWindow, AddCategory overlay, SetupPasswordAndKeyFile)
+- UI : WPF views, dialogs, and controls (MainWindow, AddCategory overlay, AppEntryWindow)
 - Services : App-facing services for categories, logging, export
 - Security : Key provisioning, SecureEncryptedDataStore, memory wiping
 - Data : Database helpers, SQL script loader, migrations

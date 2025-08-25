@@ -38,14 +38,14 @@ Security + Logging Wrap Up — Master Checklist
 --------------------------
 [ ] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
 [ ] Confirm PayloadVer + KeySetVersion bump
-[ ] Add password strength meter to SetupPasswordAndKeyFile
+[ ] Add password strength meter to AppEntryWindow
 [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)
 [ ] Confirm all sensitive temp files are DPAPI-protected or securely wiped
 
 3) Coverage (Audit Reference)
 -----------------------------
 - Startup: App launch, service wiring, config load
-- SetupPasswordAndKeyFile: success, cancel, wrong/missing key file
+- AppEntryWindow: success, cancel, wrong/missing key file
 - DB Open/Close: normal and failed attempts
 - Category CRUD: add, update, delete, duplicates
 - Export/Backup/Restore: start, success, failure

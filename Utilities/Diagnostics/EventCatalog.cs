@@ -27,7 +27,7 @@ namespace Utilities.Diagnostics
             public string Version { get; init; } = CurrentVersion; // e.g., "elog-v1"
             public string EventCode { get; init; } = "";           // e.g., "EARLY_LOGIN_FAILURE"
             public DateTime OccurredUtc { get; init; } = DateTime.UtcNow;
-            public string Source { get; init; } = "";              // e.g., "SetupPasswordAndKeyFile"
+            public string Source { get; init; } = "";              // e.g., "AppEntryWindow"
             public string? SessionId { get; init; }                // optional
             public Guid? LogGuid { get; init; }                    // preferred dedupe key
             public string Payload { get; init; } = "";             // JSON string

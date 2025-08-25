@@ -112,7 +112,7 @@ namespace MWPV
             // --- run password/key setup before showing MainWindow ---
             Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            var setupWindow = new Utilities.Security.SetupPasswordAndKeyFile();
+            var setupWindow = new Utilities.Security.AppEntryWindow();
             bool? ok = setupWindow.ShowDialog();
             if (ok != true)
             {
@@ -393,7 +393,7 @@ namespace MWPV
         {
             // Prefer setup window if visible; otherwise MainWindow; otherwise any visible window.
             Window? w =
-                Current.Windows.OfType<Utilities.Security.SetupPasswordAndKeyFile>()
+                Current.Windows.OfType<Utilities.Security.AppEntryWindow>()
                     .FirstOrDefault(win => win.IsVisible)
                 ?? Current.MainWindow
                 ?? Current.Windows.Cast<Window>().FirstOrDefault(win => win.IsVisible);

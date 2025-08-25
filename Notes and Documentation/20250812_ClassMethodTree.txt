@@ -181,9 +181,9 @@ namespace Utilities.Security
     - public string SetUpDataBase()
     - public string SetUpKeyFile()
     - static bool VerifyKeyFilePW(string archivePath, string password)
-  partial class SetupPasswordAndKeyFile : Window
-    - public SetupPasswordAndKeyFile()
-    - public SetupPasswordAndKeyFile()
+  partial class AppEntryWindow : Window
+    - public AppEntryWindow()
+    - public AppEntryWindow()
     - private bool ValidateFirstRunInputs(string password, string verifyPassword, out string error)
     - private void btnCancel_Click(object sender, RoutedEventArgs e)
     - private void btnCreateKeyFile_Click(object sender, RoutedEventArgs e)

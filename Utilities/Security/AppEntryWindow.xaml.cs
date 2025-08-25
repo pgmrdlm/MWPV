@@ -27,7 +27,7 @@ namespace Utilities.Security
     /// IMPORTANT: No secure DB logging or early-log ingestion is done here.
     ///            App.OnStartup performs SecureLogService.Initialize and then ingests early logs.
     /// </summary>
-    public partial class SetupPasswordAndKeyFile : Window
+    public partial class AppEntryWindow : Window
     {
         // 🔑 SecureEncryptedDataStore key names (match files/keys inside the archive)
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
@@ -41,7 +41,7 @@ namespace Utilities.Security
             "MWPV.db"
         );
 
-        public SetupPasswordAndKeyFile()
+        public AppEntryWindow()
         {
             InitializeComponent();
 
@@ -145,7 +145,7 @@ namespace Utilities.Security
                     {
                         ErrorHandler.InfoTitled("Setup",
                             "Database creation failed.\n\n(This error has been logged.)",
-                            "SetupPasswordAndKeyFile/SetUpDataBase");
+                            "AppEntryWindow/SetUpDataBase");
                         return;
                     }
 
@@ -154,7 +154,7 @@ namespace Utilities.Security
                     {
                         ErrorHandler.InfoTitled("Setup",
                             "Key archive creation failed.\n\n(This error has been logged.)",
-                            "SetupPasswordAndKeyFile/SetUpKeyFile");
+                            "AppEntryWindow/SetUpKeyFile");
                         return;
                     }
                 }
