@@ -6,16 +6,16 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 
-using Utilities.Logging;   // LogSeverity
-using Utilities.Security;  // SecureLogService (writes encrypted log)
+using Utilities.Logging;    // LogSeverity
+using Utilities.Security;   // SecureLogService, SensitiveDataCleaner
 
 namespace Utilities.Diagnostics
 {
     /// <summary>
-    /// Parses plaintext “early” login failure files from <see cref="EarlyLoginFailures.StoreDir"/>
-    /// and writes them into the encrypted log via <see cref="SecureLogService"/>.
-    /// Any unreadable or malformed files are moved into
-    /// <see cref="EarlyLoginFailures.QuarantineDir"/>.
+    /// Ingests plaintext “early” failure files from <see cref="EarlyLoginFailures.StoreDir"/>
+    /// into the encrypted log (<see cref="SecureLogService"/>).
+    /// Unreadable/malformed files are moved to <see cref="EarlyLoginFailures.QuarantineDir"/>.
+    /// Successfully consumed files are securely deleted and empty source folders are pruned.
     /// </summary>
     public static class EarlyLogIngestor
     {
@@ -23,31 +23,24 @@ namespace Utilities.Diagnostics
         {
             public int Found { get; init; }
             public int Inserted { get; init; }
-            public int Deduped { get; init; }        // (reserved for future)
+            public int Deduped { get; init; }        // reserved for future
             public int Quarantined { get; init; }
-            public int Deleted { get; init; }        // files removed from the “early” folder after ingest
+            public int Deleted { get; init; }        // files removed from the “early” store after ingest
             public int Errors { get; init; }
         }
 
         /// <summary>
-        /// Ingest all pending “.elog” files. This method does not depend on any
-        /// schema-specific SQL; it writes via <see cref="SecureLogService"/>.
+        /// Ingest all pending “.elog” files. Writes via <see cref="SecureLogService"/> only (no schema SQL).
+        /// If <paramref name="openConnectionFactory"/> is provided, it’s touched first as a reachability probe.
         /// </summary>
-        /// <param name="openConnectionFactory">
-        /// Optional factory to prove DB access before ingest (e.g., DatabaseHelper.OpenConnection).
-        /// The ingestor writes via <see cref="SecureLogService"/> so the connection is not used
-        /// for inserts, but we touch it to surface connectivity problems early.
-        /// </param>
         public static Result IngestAllEarlyLogsTransactional(Func<DbConnection>? openConnectionFactory = null)
         {
-            // Prove DB is reachable (best effort).
+            // Best-effort: prove DB reachability early so we fail fast rather than eating files.
             try { using var _ = openConnectionFactory?.Invoke(); } catch { /* ignore */ }
 
-            // Snapshot the files up front (so summary 'Found' is deterministic)
+            // Snapshot upfront for deterministic 'Found'.
             var pending = new List<string>(EarlyLoginFailures.EnumeratePendingPaths());
             int found = pending.Count;
-
-            // If nothing to do, log a specific marker so we can see the check occurred.
             if (found == 0)
             {
                 TryLog(LogSeverity.Warn, "EARLY_INGEST_EMPTY", new
@@ -68,10 +61,10 @@ namespace Utilities.Diagnostics
                     {
                         Quarantine(path, $"parse_failed:{reason}");
                         quarantined++;
+                        TryPruneParentIfEmpty(path);
                         continue;
                     }
 
-                    // Build one compact object to persist.
                     var evt = new
                     {
                         tsUtc = payload.tsUtc,
@@ -80,36 +73,34 @@ namespace Utilities.Diagnostics
                         machine = payload.machine,
                         appVersion = payload.appVersion,
                         message = payload.message,
-                        details = payload.details, // already parsed from JSON if present
+                        details = payload.details,   // boxed JSON if present
                         file = Path.GetFileName(path),
-                        rawJson,                     // store original JSON string for audit
+                        rawJson,                     // keep original JSON for audit trail
                         source = "EARLY_LOGIN"
                     };
 
-                    // Write into encrypted log. If this throws, we leave the file in place.
+                    // Write to encrypted log; on failure we keep the file to retry later.
                     SecureLogService.WriteAsync(
                         LogSeverity.Info,
                         evt,
                         eventCode: "EARLY_LOGIN_EVENT",
-                        source: "EarlyIngest")
-                        .GetAwaiter().GetResult();
+                        source: "EarlyIngest").GetAwaiter().GetResult();
 
-                    // If we reached here, we consider it ingested → delete the source.
-                    TryDeleteFile(path);
+                    // Consumed => securely delete the plaintext source.
+                    TrySecureDeleteFile(path);
                     inserted++;
                     deleted++;
+                    TryPruneParentIfEmpty(path);
                 }
                 catch (Exception ex)
                 {
 #if DEBUG
-                    Debug.WriteLine($"[EARLY_INGEST] ERROR for '{path}': {ex.Message}");
+                    Debug.WriteLine($"[EARLY_INGEST] ERROR for '{path}': {ex.GetType().Name} {ex.Message}");
 #endif
-                    // Leave the file in place so we can retry later.
-                    errors++;
+                    errors++; // leave file for a later attempt
                 }
             }
 
-            // Emit a single roll-up record so validation is easy later.
             TryLog(LogSeverity.Info, "EARLY_INGEST_SUMMARY", new
             {
                 dir = EarlyLoginFailures.StoreDir,
@@ -133,6 +124,8 @@ namespace Utilities.Diagnostics
             };
         }
 
+        // ----------------- helpers -----------------
+
         private static void TryLog(LogSeverity level, string eventCode, object payload)
         {
             try
@@ -142,7 +135,7 @@ namespace Utilities.Diagnostics
             }
             catch
             {
-                // best-effort; never let logging break ingest
+                // best-effort — never fail ingestion due to logging issues
             }
         }
 
@@ -157,17 +150,51 @@ namespace Utilities.Diagnostics
             }
             catch
             {
-                // swallow; quarantine is best-effort
+                // best-effort
             }
         }
 
-        private static void TryDeleteFile(string path)
+        private static void TrySecureDeleteFile(string path)
         {
-            try { File.Delete(path); }
-            catch { /* best-effort */ }
+            try
+            {
+                SensitiveDataCleaner.SecureFileDelete(
+                    path,
+                    overwritePasses: 1,
+                    shredName: true,
+                    finalZeroPass: true);
+            }
+            catch
+            {
+                try { File.Delete(path); } catch { /* ignore */ }
+            }
         }
 
-        // ---------- parsing ----------
+        private static void TryPruneParentIfEmpty(string path)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(path);
+                if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return;
+
+                using var e = Directory.EnumerateFileSystemEntries(dir).GetEnumerator();
+                if (!e.MoveNext())
+                {
+                    SensitiveDataCleaner.SecureDeleteDirectory(
+                        dir,
+                        overwritePasses: 1,
+                        shredNames: true,
+                        finalZeroPass: false,
+                        removeDirectories: true);
+                }
+            }
+            catch
+            {
+                // best-effort
+            }
+        }
+
+        // ----------------- parsing -----------------
 
         private sealed class EarlyPayload
         {
@@ -181,21 +208,20 @@ namespace Utilities.Diagnostics
         }
 
         /// <summary>
-        /// Try to parse supported early file formats.
+        /// Supported formats:
+        ///  # V1 (preferred):
+        ///     MWPV-ELOG|v1
+        ///     content-type: application/json; charset=utf-8
         ///
-        /// # V1 (preferred; produced by EarlyLoginFailures.cs):
-        ///   MWPV-ELOG|v1
-        ///   content-type: application/json; charset=utf-8
+        ///     {json}
         ///
-        ///   {json}
+        ///     JSON fields (optional): utc, type, userSid, machine, appVersion, message, details, exception, extra
         ///
-        /// JSON fields (we read what’s present): utc, type, userSid, machine, appVersion, message, details, exception, extra
-        ///
-        /// # Legacy (best-effort):
-        ///   MWPV_ELOG_V2
-        ///   key=value
-        ///   ...
-        ///   json={...}
+        ///  # Legacy:
+        ///     MWPV_ELOG_V2
+        ///     key=value
+        ///     ...
+        ///     json={...}
         /// </summary>
         private static bool TryParseEarlyFile(
             string path,
@@ -224,7 +250,6 @@ namespace Utilities.Diagnostics
                 return false;
             }
 
-            // Normalize line endings for header parsing
             var lines = SplitLines(text);
             if (lines.Count == 0)
             {
@@ -232,25 +257,23 @@ namespace Utilities.Diagnostics
                 return false;
             }
 
-            // --- Detect format ---
             var first = lines[0].Trim();
-
             if (first.Equals("MWPV-ELOG|v1", StringComparison.OrdinalIgnoreCase))
             {
-                return TryParseV1(text, lines, out payload, out rawJson, out reason);
+                return TryParseV1(lines, out payload, out rawJson, out reason);
             }
             else if (first.StartsWith("MWPV_ELOG_", StringComparison.OrdinalIgnoreCase))
             {
-                return TryParseLegacy(text, lines, out payload, out rawJson, out reason);
+                return TryParseLegacy(lines, out payload, out rawJson, out reason);
             }
 
             reason = "bad_header";
             return false;
         }
 
-        // V1: header line, optional "content-type: ..." line(s), blank line, then JSON (possibly multi-line)
+        // V1: header line, optional "content-type: ..." lines, blank line, then JSON (possibly multi-line).
+        // We rebuild the JSON from lines after the first blank line (no LINQ).
         private static bool TryParseV1(
-            string fullText,
             List<string> lines,
             out EarlyPayload payload,
             out string rawJson,
@@ -260,38 +283,25 @@ namespace Utilities.Diagnostics
             rawJson = "";
             reason = "";
 
-            // Find the first blank line after the header block; everything after is JSON
             int blankIndex = -1;
             for (int i = 1; i < lines.Count; i++)
             {
                 if (lines[i].Trim().Length == 0) { blankIndex = i; break; }
             }
-            if (blankIndex < 0)
+            if (blankIndex < 0 || blankIndex == lines.Count - 1)
             {
-                reason = "missing_blank_after_header";
+                reason = "json_missing";
                 return false;
             }
 
-            // Re-scan full text to extract substring after that blank line precisely
-            // Count chars through end-of-line for the blankIndex-th line
-            int charPos = 0;
-            int currentLine = 0;
-            using (var sr = new StringReader(fullText))
+            // Rebuild JSON from the remaining lines to avoid CR/LF position math.
+            var sb = new StringBuilder();
+            for (int i = blankIndex + 1; i < lines.Count; i++)
             {
-                string? line;
-                while ((line = sr.ReadLine()) is not null)
-                {
-                    charPos += line.Length;
-                    // account for newline (we’ll assume CRLF or LF; add 1 and adjust if CRLF)
-                    charPos += 1;
-                    if (currentLine == blankIndex)
-                        break;
-                    currentLine++;
-                }
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(lines[i]);
             }
-
-            // Defensive trim of any leading whitespace/newlines
-            var jsonText = fullText.Substring(charPos).Trim();
+            var jsonText = sb.ToString().Trim();
             if (jsonText.Length == 0)
             {
                 reason = "json_missing";
@@ -305,34 +315,32 @@ namespace Utilities.Diagnostics
 
                 var root = doc.RootElement;
 
-                // map fields
                 DateTime tsUtc = DateTime.UtcNow;
                 if (root.TryGetProperty("utc", out var utcEl) &&
                     utcEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(utcEl.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
+                    DateTime.TryParse(utcEl.GetString(), null,
+                        System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
                 {
                     tsUtc = parsed.ToUniversalTime();
                 }
 
                 string type = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == JsonValueKind.String
-                    ? (tEl.GetString() ?? "unknown")
-                    : "unknown";
+                    ? (tEl.GetString() ?? "unknown") : "unknown";
 
                 string userSid = root.TryGetProperty("userSid", out var sidEl) && sidEl.ValueKind == JsonValueKind.String
-                    ? (sidEl.GetString() ?? "UnknownUser")
-                    : "UnknownUser";
+                    ? (sidEl.GetString() ?? "UnknownUser") : "UnknownUser";
 
                 string machine = root.TryGetProperty("machine", out var mEl) && mEl.ValueKind == JsonValueKind.String
-                    ? (mEl.GetString() ?? Environment.MachineName)
-                    : Environment.MachineName;
+                    ? (mEl.GetString() ?? Environment.MachineName) : Environment.MachineName;
 
                 string appVersion = root.TryGetProperty("appVersion", out var avEl) && avEl.ValueKind == JsonValueKind.String
-                    ? (avEl.GetString() ?? "unknown")
-                    : "unknown";
+                    ? (avEl.GetString() ?? "unknown") : "unknown";
 
-                string message = root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
-                    ? (msgEl.GetString() ?? "")
-                    : (root.TryGetProperty("details", out var detMsgEl) && detMsgEl.ValueKind == JsonValueKind.String ? detMsgEl.GetString() ?? "" : "");
+                string message =
+                    (root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
+                        ? msgEl.GetString() ?? ""
+                        : (root.TryGetProperty("details", out var detMsgEl) && detMsgEl.ValueKind == JsonValueKind.String
+                            ? detMsgEl.GetString() ?? "" : ""));
 
                 object? detailsObj = null;
                 if (root.TryGetProperty("details", out var detEl))
@@ -363,7 +371,6 @@ namespace Utilities.Diagnostics
         //   ...
         //   json={...}
         private static bool TryParseLegacy(
-            string _fullText,
             List<string> lines,
             out EarlyPayload payload,
             out string rawJson,
@@ -387,10 +394,11 @@ namespace Utilities.Diagnostics
                     break; // json is last; ignore anything after
                 }
 
-                var eq = line.IndexOf('=');
+                int eq = line.IndexOf('=');
                 if (eq <= 0) continue;
-                var key = line[..eq].Trim();
-                var val = line[(eq + 1)..].Trim();
+
+                string key = line.Substring(0, eq).Trim();
+                string val = line.Substring(eq + 1).Trim();
                 kv[key] = val;
             }
 
@@ -409,30 +417,36 @@ namespace Utilities.Diagnostics
                 DateTime tsUtc = DateTime.UtcNow;
                 if (root.TryGetProperty("tsUtc", out var tsEl) &&
                     tsEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(tsEl.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
+                    DateTime.TryParse(tsEl.GetString(), null,
+                        System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
                 {
                     tsUtc = parsed.ToUniversalTime();
                 }
 
-                string type = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == JsonValueKind.String
-                    ? (tEl.GetString() ?? "unknown")
-                    : (kv.TryGetValue("type", out var kvType) ? kvType : "unknown");
+                string type =
+                    (root.TryGetProperty("type", out var tEl) && tEl.ValueKind == JsonValueKind.String
+                        ? tEl.GetString() ?? "unknown"
+                        : (kv.TryGetValue("type", out var kvType) ? kvType : "unknown"));
 
-                string userSid = root.TryGetProperty("userSid", out var sidEl) && sidEl.ValueKind == JsonValueKind.String
-                    ? (sidEl.GetString() ?? "UnknownUser")
-                    : (kv.TryGetValue("userSid", out var kvSid) ? kvSid : "UnknownUser");
+                string userSid =
+                    (root.TryGetProperty("userSid", out var sidEl) && sidEl.ValueKind == JsonValueKind.String
+                        ? sidEl.GetString() ?? "UnknownUser"
+                        : (kv.TryGetValue("userSid", out var kvSid) ? kvSid : "UnknownUser"));
 
-                string machine = root.TryGetProperty("machine", out var mEl) && mEl.ValueKind == JsonValueKind.String
-                    ? (mEl.GetString() ?? Environment.MachineName)
-                    : (kv.TryGetValue("machine", out var kvM) ? kvM : Environment.MachineName);
+                string machine =
+                    (root.TryGetProperty("machine", out var mEl) && mEl.ValueKind == JsonValueKind.String
+                        ? mEl.GetString() ?? Environment.MachineName
+                        : (kv.TryGetValue("machine", out var kvM) ? kvM : Environment.MachineName));
 
-                string appVersion = root.TryGetProperty("appVersion", out var avEl) && avEl.ValueKind == JsonValueKind.String
-                    ? (avEl.GetString() ?? "unknown")
-                    : (kv.TryGetValue("appVersion", out var kvV) ? kvV : "unknown");
+                string appVersion =
+                    (root.TryGetProperty("appVersion", out var avEl) && avEl.ValueKind == JsonValueKind.String
+                        ? avEl.GetString() ?? "unknown"
+                        : (kv.TryGetValue("appVersion", out var kvV) ? kvV : "unknown"));
 
-                string message = root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
-                    ? (msgEl.GetString() ?? "")
-                    : (kv.TryGetValue("message", out var kvMsg) ? kvMsg : "");
+                string message =
+                    (root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
+                        ? msgEl.GetString() ?? ""
+                        : (kv.TryGetValue("message", out var kvMsg) ? kvMsg : ""));
 
                 object? detailsObj = null;
                 if (root.TryGetProperty("details", out var detEl))
@@ -468,14 +482,10 @@ namespace Utilities.Diagnostics
                     if (el.TryGetDouble(out var d)) return d;
                     return el.ToString();
                 case JsonValueKind.True:
-                case JsonValueKind.False:
-                    return el.GetBoolean();
+                case JsonValueKind.False: return el.GetBoolean();
                 case JsonValueKind.Object:
-                case JsonValueKind.Array:
-                    // Keep the original JSON text for nested content.
-                    return el.GetRawText();
-                default:
-                    return el.ToString();
+                case JsonValueKind.Array: return el.GetRawText(); // preserve nested JSON
+                default: return el.ToString();
             }
         }
 

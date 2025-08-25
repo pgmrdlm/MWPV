@@ -1,59 +1,69 @@
-﻿using Microsoft.Data.Sqlite;
-using SevenZip;
+﻿using SevenZip;
 using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Utilities.Helpers;
-using Utilities.Security;
-using Utilities.Sql;
+
+using Utilities.Helpers;   // ErrorHandler
+using Utilities.Security;  // SecureEncryptedDataStore, SensitiveDataCleaner
+using Utilities.Sql;       // DatabaseHelper
 
 namespace Utilities.Security
 {
     /// <summary>
-    /// First-run provisioning and ongoing secure loading utilities:
-    /// - Creates the local MWPV folder + encrypted DB from schema.
-    /// - Builds the encrypted key archive from the SQL folder.
-    /// - Centralizes keyset creation/loading via <see cref="KeyProvisioner"/>.
-    /// - Verifier is delegated to <see cref="KeyArchiveVerifier"/> (pure; no logging).
+    /// First-run provisioning and secure loading utilities.
+    /// Responsibilities:
+    ///   • Create local MWPV folder + encrypted DB from schema.
+    ///   • Build the encrypted key archive from the SQL staging folder.
+    ///   • Ensure app keyset exists (via KeyProvisioner) and is loaded.
+    ///   • Read/write individual files in the encrypted archive.
+    /// Security:
+    ///   • DB password staged to %TEMP% under the canonical file name, then packed and securely deleted.
+    ///   • SQL staging folder files are securely wiped, then the folder is removed (name shredding).
     /// </summary>
     internal class ServiceSetUp
     {
-        private const string Key_KeyPW = "KeyPW";
-        private const string Key_KeyFile = "KeyFile";
-        private const string Key_DbPwPath = "DB_Password_Path";
-        private const string Key_DbConnNoPw = "DB_String";
+        #region Constants / Keys
+
+        private const string Key_KeyPW = "KeyPW";              // char[]
+        private const string Key_KeyFile = "KeyFile";            // string (path)
+        private const string Key_DbPwPath = "DB_Password_Path";   // string (temp plaintext path)
+        private const string Key_DbConnNoPw = "DB_String";          // string (conn string without pw)
+
+        private static string LocalRoot =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV");
+
+        private static string SqlFolder => Path.Combine(LocalRoot, "sql");
+        private static string DbPath => Path.Combine(LocalRoot, "MWPV.db");
+
+        #endregion
+
+        #region Database setup
 
         /// <summary>
-        /// Creates the local MWPV folder and initializes the encrypted database from schema.
-        /// Also writes a temp plaintext copy of the DB password (canonical filename) so the key archive can pack it.
+        /// Ensures local root + SQL staging folder exist, initializes DB from
+        /// <c>.../sql/MWPV_DB_Create.sql</c>, stages the DB password to %TEMP% under the
+        /// canonical filename (for packing), and caches the passwordless connection string.
         /// </summary>
-        /// <returns>Root MWPV folder path, or "error" on failure.</returns>
+        /// <returns>Local root path on success; "error" on failure.</returns>
         public string SetUpDataBase()
         {
-            string strMWPV_Folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MWPV"
-            );
-
             try
             {
-                if (!Directory.Exists(strMWPV_Folder))
-                    Directory.CreateDirectory(strMWPV_Folder);
+                Directory.CreateDirectory(LocalRoot);
+                Directory.CreateDirectory(SqlFolder); // created here; later wiped by SetUpKeyFile()
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Unable to create MWPV local folder.");
+                ErrorHandler.Abend(ex, "Unable to create MWPV local folders.");
                 return "error";
             }
 
-            string strMWPV_DB = Path.Combine(strMWPV_Folder, "MWPV.db");
-            string strDB_Create = null;
-
+            string schemaSql = null!;
             try
             {
-                var schemaPath = Path.Combine(strMWPV_Folder, "sql", "MWPV_DB_Create.sql");
-                strDB_Create = File.ReadAllText(schemaPath, Encoding.UTF8);
+                var schemaPath = Path.Combine(SqlFolder, "MWPV_DB_Create.sql");
+                schemaSql = File.ReadAllText(schemaPath, Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -63,29 +73,29 @@ namespace Utilities.Security
 
             try
             {
-                using (var conn = DatabaseHelper.OpenConnection())
-                using (var cmd = conn.CreateCommand())
+                using (var cn = DatabaseHelper.OpenConnection())
+                using (var cmd = cn.CreateCommand())
                 {
-                    cmd.CommandText = strDB_Create;
+                    cmd.CommandText = schemaSql;
                     cmd.ExecuteNonQuery();
                 }
 
-                // Temp location for the DB password under the canonical filename (consumed by SetUpKeyFile)
-                string tempPasswordPath = Path.Combine(Path.GetTempPath(), DatabaseHelper.DbPasswordKey);
+                // Stage DB password to %TEMP% using canonical filename so it’s included in the archive.
+                var tempPwPath = Path.Combine(Path.GetTempPath(), DatabaseHelper.DbPasswordKey);
                 try
                 {
                     DatabaseHelper.WithDatabasePasswordString(pw =>
                     {
-                        File.WriteAllText(tempPasswordPath, pw, Encoding.UTF8);
-                        SecureEncryptedDataStore.SetString(Key_DbPwPath, tempPasswordPath);
+                        File.WriteAllText(tempPwPath, pw, Encoding.UTF8);
+                        SecureEncryptedDataStore.SetString(Key_DbPwPath, tempPwPath);
                     });
                 }
                 finally
                 {
-                    SensitiveDataCleaner.WipeString(ref tempPasswordPath);
+                    SensitiveDataCleaner.WipeString(ref tempPwPath);
                 }
 
-                SecureEncryptedDataStore.SetString(Key_DbConnNoPw, $"Data Source={strMWPV_DB}");
+                SecureEncryptedDataStore.SetString(Key_DbConnNoPw, $"Data Source={DbPath}");
             }
             catch (Exception ex)
             {
@@ -94,75 +104,75 @@ namespace Utilities.Security
             }
             finally
             {
-                SensitiveDataCleaner.WipeString(ref strDB_Create);
+                SensitiveDataCleaner.WipeString(ref schemaSql);
             }
 
-            return strMWPV_Folder;
+            return LocalRoot;
         }
 
+        #endregion
+
+        #region Archive build (staging -> encrypted 7z)
+
         /// <summary>
-        /// Builds/overwrites the encrypted key archive from the SQL folder.
-        /// Before compressing, ensures <c>keyset.json</c> exists (via <see cref="KeyProvisioner"/>) so the archive contains the full keyset.
-        /// After compressing, securely deletes the folder contents.
+        /// Builds (or rebuilds) the encrypted key archive from the plain <c>.../sql</c> folder.
+        /// Steps:
+        ///   1) Copy staged DB password from %TEMP% into staging (canonical file name).
+        ///   2) Ensure keyset.json exists in staging (and load keys).
+        ///   3) Securely delete any existing archive.
+        ///   4) Create new encrypted archive (AES-256, header encryption).
+        ///   5) Securely wipe all files in staging, then remove the directory (name shredding).
         /// </summary>
-        /// <returns>Success message with archive path, or "error: ..." on failure.</returns>
+        /// <returns>Success message with archive path, or "Error ..." text.</returns>
         public string SetUpKeyFile()
         {
-            string strDirectoryToCompress = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MWPV", "sql"
-            );
+            string archivePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
 
-            string strKeyFilePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
-
-            // Key archive password (from secure store)
-            char[] keyFilePwChars = null;
-            string strKeyFilePW = null;
+            char[] pwChars = null;
+            string pw = null;
             try
             {
-                keyFilePwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                strKeyFilePW = new string(keyFilePwChars);
+                pwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
+                pw = new string(pwChars ?? Array.Empty<char>());
             }
             finally
             {
-                if (keyFilePwChars != null) SensitiveDataCleaner.WipeCharArray(keyFilePwChars);
+                if (pwChars != null) SensitiveDataCleaner.WipeCharArray(pwChars);
             }
 
             try
             {
-                if (string.IsNullOrWhiteSpace(strKeyFilePath) || string.IsNullOrWhiteSpace(strKeyFilePW))
+                if (string.IsNullOrWhiteSpace(archivePath) || string.IsNullOrWhiteSpace(pw))
                     return "Missing KeyFile path or password.";
 
-                if (!Directory.Exists(strDirectoryToCompress))
+                if (!Directory.Exists(SqlFolder))
                     return "The source directory to compress does not exist.";
 
-                string[] files = Directory.GetFiles(strDirectoryToCompress, "*.*", SearchOption.TopDirectoryOnly);
-                if (files.Length == 0)
-                    return "No files found to compress.";
-
-                // 1) Place canonical DB password file into the SQL folder so it gets packed
-                string strtmppwfile = SecureEncryptedDataStore.GetString(Key_DbPwPath);
-                if (!string.IsNullOrWhiteSpace(strtmppwfile) && File.Exists(strtmppwfile))
+                // 1) Bring staged DB password into the folder so it gets packed.
+                var tempPw = SecureEncryptedDataStore.GetString(Key_DbPwPath);
+                if (!string.IsNullOrWhiteSpace(tempPw) && File.Exists(tempPw))
                 {
-                    File.Copy(strtmppwfile, Path.Combine(strDirectoryToCompress, DatabaseHelper.DbPasswordKey), true);
-                    SensitiveDataCleaner.SecureFileDelete(strtmppwfile);
+                    File.Copy(tempPw, Path.Combine(SqlFolder, DatabaseHelper.DbPasswordKey), overwrite: true);
+                    SensitiveDataCleaner.SecureFileDelete(tempPw);
                 }
 
-                // 2) Ensure the keyset exists *in the folder* before we compress (so keyset.json is included in the archive)
-                EnsureKeySetForFirstRun_Folder(strDirectoryToCompress);
+                // 2) Ensure keyset.json exists (and load keys to SEDS) before zipping.
+                EnsureKeySetForFirstRun_Folder(SqlFolder);
 
-                // 3) If there is an older archive, best-effort secure delete it first
-                if (!string.IsNullOrWhiteSpace(strKeyFilePath) && File.Exists(strKeyFilePath))
+                // 3) Securely remove any older archive (best-effort).
+                if (File.Exists(archivePath))
                 {
                     SensitiveDataCleaner.SecureFileDelete(
-                        strKeyFilePath,
+                        archivePath,
                         overwritePasses: 1,
                         shredName: true,
-                        finalZeroPass: true
-                    );
+                        finalZeroPass: true);
                 }
 
-                // 4) Build encrypted archive from the folder
+                // 4) Build encrypted archive from staging files.
+                var files = Directory.GetFiles(SqlFolder, "*.*", SearchOption.TopDirectoryOnly);
+                if (files.Length == 0) return "No files found to compress.";
+
                 var compressor = new SevenZipCompressor
                 {
                     ArchiveFormat = OutArchiveFormat.SevenZip,
@@ -172,98 +182,124 @@ namespace Utilities.Security
                     ZipEncryptionMethod = ZipEncryptionMethod.Aes256,
                     PreserveDirectoryRoot = true
                 };
+                compressor.CompressFilesEncrypted(archivePath, pw, files);
 
-                files = Directory.GetFiles(strDirectoryToCompress, "*.*", SearchOption.TopDirectoryOnly); // refresh (now includes keyset.json)
-                compressor.CompressFilesEncrypted(strKeyFilePath, strKeyFilePW, files);
+                // 5) Wipe staging files and remove the folder (name shredding).
+                SecurelyScrubSqlStagingFolder();
 
-                // 5) Securely wipe the folder contents (removes plaintext keyset.json, SQL files, temp pw file etc.)
-                SensitiveDataCleaner.SecureDeleteAllFiles(strDirectoryToCompress, overwritePasses: 3);
-
-                return $"Encrypted archive created at: {strKeyFilePath}";
+                return $"Encrypted archive created at: {archivePath}";
             }
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error creating archive.");
+                // Even on failure, try to scrub staging so we don’t strand secrets.
+                try { SecurelyScrubSqlStagingFolder(); } catch { /* best-effort */ }
                 return "Error creating archive: " + ex.Message;
             }
             finally
             {
-                SensitiveDataCleaner.WipeString(ref strKeyFilePW);
-                strKeyFilePath = null;
+                SensitiveDataCleaner.WipeString(ref pw);
+                archivePath = null;
             }
         }
 
+        private static void SecurelyScrubSqlStagingFolder()
+        {
+            if (!Directory.Exists(SqlFolder)) return;
+
+            // Wipe file contents first…
+            SensitiveDataCleaner.SecureDeleteAllFiles(SqlFolder, overwritePasses: 3);
+
+            // …then remove the directory (shred names, remove dirs).
+            try
+            {
+                SensitiveDataCleaner.SecureDeleteDirectory(
+                    SqlFolder,
+                    overwritePasses: 1,
+                    shredNames: true,
+                    finalZeroPass: false,
+                    removeDirectories: true);
+            }
+            catch { /* best-effort */ }
+        }
+
+        #endregion
+
+        #region Archive read helpers
+
         /// <summary>
-        /// Compatibility wrapper. Prefer <see cref="KeyArchiveVerifier.VerifyPasswordAndSentinels(string, string)"/>.
+        /// Compatibility wrapper around <see cref="KeyArchiveVerifier.VerifyPasswordAndSentinels"/>.
         /// </summary>
         [Obsolete("Use KeyArchiveVerifier.VerifyPasswordAndSentinels(...) instead.")]
         public static bool VerifyKeyFilePW(string archivePath, string password)
             => KeyArchiveVerifier.VerifyPasswordAndSentinels(archivePath, password);
 
         /// <summary>
-        /// Loads a text file (e.g., SQL or the DB password file) from the encrypted key archive into the secure store.
+        /// Load a text file (SQL or DB password file) from the encrypted key archive into SEDS.
+        /// Special-case: if the file name equals <see cref="DatabaseHelper.DbPasswordKey"/>,
+        /// the password is loaded via <see cref="DatabaseHelper.StoreDatabasePassword(char[])"/>.
         /// </summary>
-        /// <param name="strFile">Filename inside the archive (case-insensitive; base name allowed).</param>
+        /// <param name="fileNameInArchive">Case-insensitive; base name allowed.</param>
         /// <returns>"worked", "not_found", or "error".</returns>
-        public static string LoadSqlFromEncryptedArchive(string strFile)
+        public static string LoadSqlFromEncryptedArchive(string fileNameInArchive)
         {
             try
             {
-                string strKeyFile = SecureEncryptedDataStore.GetString(Key_KeyFile);
+                var archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
 
-                char[] keyPwChars = null;
-                string strKeyPW = null;
+                char[] pwChars = null;
+                string pw = null;
                 try
                 {
-                    keyPwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                    strKeyPW = new string(keyPwChars);
+                    pwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
+                    pw = new string(pwChars ?? Array.Empty<char>());
                 }
                 finally
                 {
-                    if (keyPwChars != null) SensitiveDataCleaner.WipeCharArray(keyPwChars);
+                    if (pwChars != null) SensitiveDataCleaner.WipeCharArray(pwChars);
                 }
 
-                using var extractor = new SevenZipExtractor(strKeyFile, strKeyPW);
+                using var extractor = new SevenZipExtractor(archive, pw);
 
                 var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
-                    string.Equals(f.FileName, strFile, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(Path.GetFileName(f.FileName), strFile, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(f.FileName, fileNameInArchive, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Path.GetFileName(f.FileName), fileNameInArchive, StringComparison.OrdinalIgnoreCase));
 
                 if (entry.FileName == null || entry.IsDirectory)
                 {
-                    SecureEncryptedDataStore.Clear(strFile);
+                    SecureEncryptedDataStore.Clear(fileNameInArchive);
                     return "not_found";
                 }
 
-                using var memStream = new MemoryStream();
-                extractor.ExtractFile(entry.Index, memStream);
-                memStream.Position = 0;
+                using var ms = new MemoryStream();
+                extractor.ExtractFile(entry.Index, ms);
+                ms.Position = 0;
 
-                using var reader = new StreamReader(memStream, Encoding.UTF8);
-                string strContents = reader.ReadToEnd();
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                string contents = reader.ReadToEnd();
 
                 try
                 {
-                    // SPECIAL-CASE: password file — use the shared constant
-                    if (string.Equals(Path.GetFileName(entry.FileName), DatabaseHelper.DbPasswordKey, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(Path.GetFileName(entry.FileName),
+                                      DatabaseHelper.DbPasswordKey,
+                                      StringComparison.OrdinalIgnoreCase))
                     {
-                        DatabaseHelper.StoreDatabasePassword(strContents.ToCharArray());
+                        DatabaseHelper.StoreDatabasePassword(contents.ToCharArray());
                         return "worked";
                     }
 
-                    SecureEncryptedDataStore.SetString(strFile, strContents);
+                    SecureEncryptedDataStore.SetString(fileNameInArchive, contents);
                     return "worked";
                 }
                 finally
                 {
-                    SensitiveDataCleaner.WipeString(ref strContents);
-                    SensitiveDataCleaner.WipeString(ref strKeyPW);
+                    SensitiveDataCleaner.WipeString(ref contents);
+                    SensitiveDataCleaner.WipeString(ref pw);
                 }
             }
             catch (SevenZipException)
             {
-                // wrong password / invalid archive — let caller surface/log
-                return "error";
+                return "error"; // invalid archive / wrong password
             }
             catch (Exception ex)
             {
@@ -272,59 +308,41 @@ namespace Utilities.Security
             }
         }
 
-        // =====================================================================
-        // KeyProvisioner glue
-        // =====================================================================
-
         /// <summary>
-        /// First-run helper: ensures keyset.json exists in the plain SQL folder and loads keys into the session.
-        /// Called BEFORE zipping so the archive includes keyset.json.
-        /// </summary>
-        private static void EnsureKeySetForFirstRun_Folder(string sqlFolder)
-        {
-            KeyProvisioner.EnsureKeySetLoaded(
-                loadKeyset: () => ReadBytesFromFolder(sqlFolder, "keyset.json"),
-                saveKeyset: bytes => WriteBytesToFolder(sqlFolder, "keyset.json", bytes)
-            );
-        }
-
-        /// <summary>
-        /// Ensures keyset.json exists inside the encrypted archive and loads keys into the session.
-        /// Typically not needed after first run unless migrating legacy archives.
+        /// Ensure <c>keyset.json</c> exists inside the encrypted archive and load keys into SEDS.
+        /// Call after verifying the archive password.
         /// </summary>
         public static void EnsureKeySetFromArchive()
         {
             KeyProvisioner.EnsureKeySetLoaded(
                 loadKeyset: () => LoadKeyFromArchiveAsBytes("keyset.json"),
-                saveKeyset: bytes => SaveKeyToArchive("keyset.json", bytes) // rebuilds archive if needed
+                saveKeyset: bytes => SaveKeyToArchive("keyset.json", bytes)
             );
         }
 
-        /// <summary>Reads a file's bytes from the given plain folder; returns null if missing.</summary>
-        private static byte[] ReadBytesFromFolder(string folder, string name)
-        {
-            try
-            {
-                var path = Path.Combine(folder, name);
-                return File.Exists(path) ? File.ReadAllBytes(path) : null;
-            }
-            catch { return null; }
-        }
+        #endregion
 
-        /// <summary>Writes bytes to the given plain folder (overwrites).</summary>
-        private static void WriteBytesToFolder(string folder, string name, byte[] data)
-        {
-            Directory.CreateDirectory(folder);
-            var path = Path.Combine(folder, name);
-            File.WriteAllBytes(path, data);
-        }
+        #region KeyProvisioner glue for first-run (plain folder)
 
         /// <summary>
-        /// Extracts a file from the encrypted archive into memory (returns null if missing).
+        /// Ensure <c>keyset.json</c> exists in the plain SQL folder and load keys into SEDS.
+        /// Invoked before zipping so the archive includes the keyset.
         /// </summary>
-        public static byte[] LoadKeyFromArchiveAsBytes(string name)
+        private static void EnsureKeySetForFirstRun_Folder(string folder)
         {
-            string archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
+            KeyProvisioner.EnsureKeySetLoaded(
+                loadKeyset: () => ReadBytesFromFolder(folder, "keyset.json"),
+                saveKeyset: bytes => WriteBytesToFolder(folder, "keyset.json", bytes)
+            );
+        }
+
+        #endregion
+
+        #region Low-level helpers
+
+        private static byte[] LoadKeyFromArchiveAsBytes(string name)
+        {
+            var archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
             if (string.IsNullOrWhiteSpace(archive) || !File.Exists(archive)) return null;
 
             char[] pwChars = null;
@@ -332,7 +350,7 @@ namespace Utilities.Security
             try
             {
                 pwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                pw = new string(pwChars);
+                pw = new string(pwChars ?? Array.Empty<char>());
 
                 using var extractor = new SevenZipExtractor(archive, pw);
                 var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
@@ -345,7 +363,10 @@ namespace Utilities.Security
                 extractor.ExtractFile(entry.Index, ms);
                 return ms.ToArray();
             }
-            catch { return null; }
+            catch
+            {
+                return null;
+            }
             finally
             {
                 if (pwChars != null) SensitiveDataCleaner.WipeCharArray(pwChars);
@@ -353,18 +374,13 @@ namespace Utilities.Security
             }
         }
 
-        /// <summary>
-        /// Rebuilds the encrypted archive to include/update a single file (e.g., keyset.json).
-        /// Heavyweight but rare (first time on legacy archives).
-        /// </summary>
-        public static void SaveKeyToArchive(string name, byte[] bytes)
+        private static void SaveKeyToArchive(string name, byte[] bytes)
         {
-            string archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
+            var archive = SecureEncryptedDataStore.GetString(Key_KeyFile);
             if (string.IsNullOrWhiteSpace(archive))
                 throw new InvalidOperationException("Key file path is not set.");
 
-            // Extract current archive contents (if any) to temp
-            string tempDir = Path.Combine(Path.GetTempPath(), "MWPV_repack_" + Guid.NewGuid().ToString("N"));
+            var tempDir = Path.Combine(Path.GetTempPath(), "MWPV_repack_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
 
             char[] pwChars = null;
@@ -372,7 +388,7 @@ namespace Utilities.Security
             try
             {
                 pwChars = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                pw = new string(pwChars);
+                pw = new string(pwChars ?? Array.Empty<char>());
 
                 if (File.Exists(archive))
                 {
@@ -388,10 +404,8 @@ namespace Utilities.Security
                     }
                 }
 
-                // Write/overwrite the target file in temp
                 File.WriteAllBytes(Path.Combine(tempDir, name), bytes);
 
-                // Rebuild archive from temp
                 var compressor = new SevenZipCompressor
                 {
                     ArchiveFormat = OutArchiveFormat.SevenZip,
@@ -401,17 +415,43 @@ namespace Utilities.Security
                     ZipEncryptionMethod = ZipEncryptionMethod.Aes256,
                     PreserveDirectoryRoot = true
                 };
-
                 var files = Directory.GetFiles(tempDir, "*.*", SearchOption.TopDirectoryOnly);
                 compressor.CompressFilesEncrypted(archive, pw, files);
             }
             finally
             {
-                // Best-effort cleanup
-                try { SensitiveDataCleaner.SecureDeleteDirectory(tempDir, overwritePasses: 1, shredNames: true, finalZeroPass: false, removeDirectories: true); } catch { /* ignore */ }
+                try
+                {
+                    SensitiveDataCleaner.SecureDeleteDirectory(
+                        tempDir,
+                        overwritePasses: 1,
+                        shredNames: true,
+                        finalZeroPass: false,
+                        removeDirectories: true);
+                }
+                catch { /* best-effort */ }
+
                 if (pwChars != null) SensitiveDataCleaner.WipeCharArray(pwChars);
                 SensitiveDataCleaner.WipeString(ref pw);
             }
         }
+
+        private static byte[] ReadBytesFromFolder(string folder, string name)
+        {
+            try
+            {
+                var path = Path.Combine(folder, name);
+                return File.Exists(path) ? File.ReadAllBytes(path) : null;
+            }
+            catch { return null; }
+        }
+
+        private static void WriteBytesToFolder(string folder, string name, byte[] data)
+        {
+            Directory.CreateDirectory(folder);
+            File.WriteAllBytes(Path.Combine(folder, name), data);
+        }
+
+        #endregion
     }
 }

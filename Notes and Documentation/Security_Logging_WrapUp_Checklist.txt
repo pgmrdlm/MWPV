@@ -16,7 +16,7 @@ Security + Logging Wrap Up — Master Checklist
 [X] Confirm PayloadVer + KeySetVersion bump
 [ ] Add password strength meter to SetupPasswordAndKeyFile
 [ ] Finalize secure memory wipe routines for shutdown (normal + abnormal)
-[ ] Confirm all sensitive temp files are DPAPI-protected or securely wiped
+[X] Confirm all sensitive temp files are DPAPI-protected or securely wiped
 
 3) Coverage (Audit Reference)
 -----------------------------
