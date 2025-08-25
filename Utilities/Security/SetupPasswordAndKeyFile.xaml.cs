@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Reflection;              // (ok if not used after your edits)
+using System.Runtime.InteropServices; // SecureString marshal
+using System.Security;                // SecureString
 using System.Windows;
 using System.Windows.Input;
 
@@ -29,8 +31,8 @@ namespace Utilities.Security
     {
         // 🔑 SecureEncryptedDataStore key names (match files/keys inside the archive)
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
-        private const string Key_KeyFile = "KeyFile";          // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";            // sensitive password
+        private const string Key_KeyFile = "KeyFile";            // non-sensitive path
+        private const string Key_KeyPW = "KeyPW";                // sensitive password
 
         // Full path to local encrypted database
         private readonly string _localDbPath = Path.Combine(
@@ -99,209 +101,295 @@ namespace Utilities.Security
 
         private void btnSubmit_Click(object sender, RoutedEventArgs e)
         {
-            string password = pbPassword.Password;          // NOTE: string; future: SecureString/char[]
-            string verifyPassword = pbVerifyPassword.Password;
-            string fullPath = null;
+            // All secrets travel as SecureString/char[]; any string use is tightly scoped & dropped immediately.
+            char[]? pwChars = null;
+            char[]? verifyChars = null;
+            char[]? newDbPw = null;
 
-            if (!File.Exists(_localDbPath))
+            string? keyArchivePath = null; // non-sensitive
+
+            try
             {
-                // --- First run (DB doesn't exist) ---
-                if (!ValidateFirstRunInputs(password, verifyPassword, out string inputError))
+                keyArchivePath = tbKeyFile.Text;
+
+                if (!File.Exists(_localDbPath))
                 {
-                    tbErrorMessage.Text = inputError;
-                    tbErrorMessage.Visibility = Visibility.Visible;
+                    // --- First run (DB doesn't exist) ---
+                    pwChars = SecureStringToChars(pbPassword.SecurePassword);
+                    verifyChars = SecureStringToChars(pbVerifyPassword.SecurePassword);
+
+                    if (!ValidateFirstRunInputs(pwChars, verifyChars, keyArchivePath, out string inputError))
+                    {
+                        tbErrorMessage.Text = inputError;
+                        tbErrorMessage.Visibility = Visibility.Visible;
+                        return;
+                    }
+
+                    // Store key file path (non-sensitive) and password (sensitive)
+                    SecureEncryptedDataStore.SetString(Key_KeyFile, keyArchivePath);
+
+                    // Store the key-archive password into the store (datastore wipes our array)
+                    SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars);
+                    pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
+
+                    // Generate DB password (char[]), store, then wipe our copy
+                    SecurePassword.Generate(ref newDbPw, 32); // your existing helper
+                    SecureEncryptedDataStore.SetNoWipe(Key_DBPassword, newDbPw);
+                    SensitiveDataCleaner.Clear(ref newDbPw);
+
+                    // Setup DB and key file
+                    var service = new ServiceSetUp();
+
+                    string resultDb = service.SetUpDataBase();
+                    if (string.Equals(resultDb, "error", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ErrorHandler.InfoTitled("Setup",
+                            "Database creation failed.\n\n(This error has been logged.)",
+                            "SetupPasswordAndKeyFile/SetUpDataBase");
+                        return;
+                    }
+
+                    string resultKey = service.SetUpKeyFile();
+                    if (resultKey.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ErrorHandler.InfoTitled("Setup",
+                            "Key archive creation failed.\n\n(This error has been logged.)",
+                            "SetupPasswordAndKeyFile/SetUpKeyFile");
+                        return;
+                    }
+                }
+                else
+                {
+                    // --- Existing DB (user selects key file + enters password) ---
+                    if (string.IsNullOrWhiteSpace(keyArchivePath))
+                    {
+                        tbErrorMessage.Text = "Please select key file location.";
+                        tbErrorMessage.Visibility = Visibility.Visible;
+                        return;
+                    }
+
+                    // Convert to char[] for memory hygiene
+                    pwChars = SecureStringToChars(pbPassword.SecurePassword);
+                    if (pwChars.Length == 0)
+                    {
+                        tbErrorMessage.Text = "Please enter a password.";
+                        tbErrorMessage.Visibility = Visibility.Visible;
+                        return;
+                    }
+
+                    // Unfortunately KeyArchiveVerifier currently needs a string.
+                    // We scope a temporary string, call, then drop the reference.
+                    string? pwTemp = null;
+                    bool isCorrect = false;
+                    try
+                    {
+                        pwTemp = new string(pwChars);
+                        isCorrect = KeyArchiveVerifier.VerifyPasswordAndSentinels(keyArchivePath, pwTemp);
+                    }
+                    catch (Exception ex)
+                    {
+                        // EARLY LOG POINT #1 - verification threw (unexpected)
+                        EarlyLoginFailures.Record(
+                            EDT.KeyFileVerifyError,
+                            $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
+                        );
+
+                        ErrorHandler.InfoTitled("Key File Verification",
+                            "Error verifying key file.\n\n(This error has been logged.)",
+                            "KeyFileVerify");
+                        tbErrorMessage.Text = "Error verifying key file.";
+                        tbErrorMessage.Visibility = Visibility.Visible;
+                        return;
+                    }
+                    finally
+                    {
+                        // Drop the string ref ASAP (cannot zeroize strings)
+                        pwTemp = null;
+                    }
+
+                    if (!isCorrect)
+                    {
+                        EarlyLoginFailures.Record(
+                            EDT.InvalidPasswordOrKeyFile,
+                            $"Invalid key-file password or unsupported/unencrypted archive. Path='{keyArchivePath}'"
+                        );
+
+                        ErrorHandler.InfoTitled("Key File Verification",
+                            "Invalid Key File Password or invalid key file selected.\n\n(This error has been logged.)",
+                            "KeyFileVerify");
+
+                        tbErrorMessage.Text = "Invalid Key File Password or invalid key file selected.";
+                        tbErrorMessage.Visibility = Visibility.Visible;
+                        return;
+                    }
+
+                    // Store verified key file path (non-sensitive) and password (sensitive)
+                    SecureEncryptedDataStore.SetString(Key_KeyFile, keyArchivePath);
+                    SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars);
+                    pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
+                }
+
+                // 🔐 Secure Cleanup of UI controls
+                SensitiveDataCleaner.Clear(tbKeyFile);
+                SensitiveDataCleaner.Clear(pbPassword);
+                SensitiveDataCleaner.Clear(pbVerifyPassword);
+
+                // ✅ Load keys for this session (archive already verified/unlocked or freshly created)
+                ServiceSetUp.EnsureKeySetFromArchive();
+
+                // 📦 Load additional SQL logic from key archive (single source of truth)
+                SqlCatagory.EnsureKeysAndLoadAll();
+
+                // 🚨 Guard: if any must-have scripts are missing, stop gracefully (prevents later crashes)
+                var missing = SqlCatagory.GetMissingMustHaves();
+                if (missing.Length > 0)
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
+#endif
+                    ErrorHandler.InfoTitled(
+                        "SQL Catalog",
+                        "Required SQL scripts are missing from the key archive:\n" +
+                        string.Join(", ", missing) +
+                        "\n\nPlease verify you selected the correct encrypted archive. (This error has been logged.)",
+                        "SQLCatalog.Missing"
+                    );
+
+                    // Abort setup cleanly so startup can exit without throwing
+                    DialogResult = false;
+                    Close();
                     return;
                 }
 
-                fullPath = tbKeyFile.Text;
-
-                // Store key file path (non-sensitive) and password (sensitive)
-                SecureEncryptedDataStore.SetString(Key_KeyFile, fullPath);
-
-                char[] pwChars = password.ToCharArray();
-                SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars); // datastore wipes pwChars
-                SensitiveDataCleaner.WipeString(ref password);           // drop original string ref
-
-                // Generate and store DB password — char[] only until storage
-                char[] newPassword = null;
-                SecurePassword.Generate(ref newPassword, 32);
-                SecureEncryptedDataStore.SetNoWipe(Key_DBPassword, newPassword);
-                SensitiveDataCleaner.WipeCharArray(newPassword);
-
-                // Setup DB and key file
-                var service = new ServiceSetUp();
-
-                string resultDb = service.SetUpDataBase();
-                if (string.Equals(resultDb, "error", StringComparison.OrdinalIgnoreCase))
-                {
-                    ErrorHandler.InfoTitled("Setup",
-                        "Database creation failed.\n\n(This error has been logged.)",
-                        "SetupPasswordAndKeyFile/SetUpDataBase");
-                    return;
-                }
-
-                string resultKey = service.SetUpKeyFile();
-                if (resultKey.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
-                {
-                    ErrorHandler.InfoTitled("Setup",
-                        "Key archive creation failed.\n\n(This error has been logged.)",
-                        "SetupPasswordAndKeyFile/SetUpKeyFile");
-                    return;
-                }
-            }
-            else
-            {
-                // --- Existing DB (user selects key file + enters password) ---
-                if (string.IsNullOrWhiteSpace(password))
-                {
-                    tbErrorMessage.Text = "Please enter a password.";
-                    tbErrorMessage.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                if (string.IsNullOrWhiteSpace(tbKeyFile.Text))
-                {
-                    tbErrorMessage.Text = "Please select key file location.";
-                    tbErrorMessage.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                fullPath = tbKeyFile.Text;
-
-                bool isCorrect = false;
+                // 🧱 Ensure Logs schema exists (Init + Indexes), idempotent.
                 try
                 {
-                    // Strict verify: encrypted entries + sentinel files (DB_Password.txt & keyset.json)
-                    isCorrect = KeyArchiveVerifier.VerifyPasswordAndSentinels(fullPath, password);
+                    using var openConn = DatabaseHelper.OpenConnection();
+                    SchemaBootstrap.EnsureLogsSchema(openConn);
+
+#if DEBUG
+                    // 🔎 DEBUG-only smoke test
+                    SmokeTester.Run();
+#endif
                 }
                 catch (Exception ex)
                 {
-                    // EARLY LOG POINT #1 - verification threw (unexpected)
-                    // line ~180
-                    EarlyLoginFailures.Record(
-                        EDT.KeyFileVerifyError,
-                        $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
+                    // Non-fatal: surface a friendly message and continue
+                    ErrorHandler.InfoTitled(
+                        "Schema Bootstrap",
+                        $"Log schema bootstrap failed: {ex.Message}\n\n(This error has been logged.)",
+                        "SchemaBootstrap.EnsureLogsSchema"
                     );
-
-
-                    ErrorHandler.InfoTitled("Key File Verification",
-                        "Error verifying key file.\n\n(This error has been logged.)",
-                        "KeyFileVerify");
-                    tbErrorMessage.Text = "Error verifying key file.";
-                    tbErrorMessage.Visibility = Visibility.Visible;
-                    return;
                 }
 
-                // ✅ WRONG PASSWORD / WRONG FILE: no 'ex' here
-                if (!isCorrect)
-                {
-                    EarlyLoginFailures.Record(
-                        EDT.InvalidPasswordOrKeyFile,
-                        $"Invalid key-file password or unsupported/unencrypted archive. Path='{fullPath ?? tbKeyFile.Text}'"
-                    );
-
-                    ErrorHandler.InfoTitled("Key File Verification",
-                        "Invalid Key File Password or invalid key file selected.\n\n(This error has been logged.)",
-                        "KeyFileVerify");
-
-                    tbErrorMessage.Text = "Invalid Key File Password or invalid key file selected.";
-                    tbErrorMessage.Visibility = Visibility.Visible;
-                    return;
-                }
-
-
-                // Store verified key file path (non-sensitive) and password (sensitive)
-                SecureEncryptedDataStore.SetString(Key_KeyFile, fullPath);
-
-                char[] keyPwChars = password.ToCharArray();
-                SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, keyPwChars);
-                SensitiveDataCleaner.WipeString(ref password);
-            }
-
-            // 🔐 Secure Cleanup of UI and memory
-            SensitiveDataCleaner.Clear(tbKeyFile);
-            SensitiveDataCleaner.Clear(pbPassword);
-            SensitiveDataCleaner.Clear(pbVerifyPassword);
-
-            SensitiveDataCleaner.WipeString(ref password);
-            SensitiveDataCleaner.WipeString(ref verifyPassword);
-            SensitiveDataCleaner.WipeString(ref fullPath);
-
-            // ✅ Load keys for this session (archive already verified/unlocked or freshly created)
-            ServiceSetUp.EnsureKeySetFromArchive();
-
-            // 📦 Load additional SQL logic from key archive (single source of truth)
-            SqlCatagory.EnsureKeysAndLoadAll();
-
-            // 🚨 Guard: if any must-have scripts are missing, stop gracefully (prevents later crashes)
-            var missing = SqlCatagory.GetMissingMustHaves();
-            if (missing.Length > 0)
-            {
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
-#endif
-                ErrorHandler.InfoTitled(
-                    "SQL Catalog",
-                    "Required SQL scripts are missing from the key archive:\n" +
-                    string.Join(", ", missing) +
-                    "\n\nPlease verify you selected the correct encrypted archive. (This error has been logged.)",
-                    "SQLCatalog.Missing"
-                );
-
-                // Abort setup cleanly so startup can exit without throwing
-                DialogResult = false;
+                // ✅ Close the form
+                DialogResult = true;
                 Close();
-                return;
             }
-
-            // 🧱 Ensure Logs schema exists (Init + Indexes), idempotent.
-            try
+            finally
             {
-                using var openConn = DatabaseHelper.OpenConnection();
-                SchemaBootstrap.EnsureLogsSchema(openConn);
-
-#if DEBUG
-                // 🔎 DEBUG-only smoke test
-                SmokeTester.Run();
-#endif
+                // Memory hygiene: zero transient buffers
+                if (pwChars != null) Array.Clear(pwChars, 0, pwChars.Length);
+                if (verifyChars != null) Array.Clear(verifyChars, 0, verifyChars.Length);
+                if (newDbPw != null) Array.Clear(newDbPw, 0, newDbPw.Length);
+                keyArchivePath = null; // non-sensitive; drop ref anyway
             }
-            catch (Exception ex)
-            {
-                // Non-fatal: surface a friendly message and continue
-                ErrorHandler.InfoTitled(
-                    "Schema Bootstrap",
-                    $"Log schema bootstrap failed: {ex.Message}\n\n(This error has been logged.)",
-                    "SchemaBootstrap.EnsureLogsSchema"
-                );
-            }
-
-            // NOTE: Early .elog ingestion happens in App.OnStartup *after* SecureLogService.Initialize.
-
-            // ✅ Close the form
-            DialogResult = true;
-            Close();
         }
 
         private void btnCancel_Click(object sender, RoutedEventArgs e)
-            => Close();
+        {
+            // Scrub UI controls on cancel
+            SensitiveDataCleaner.Clear(pbPassword);
+            SensitiveDataCleaner.Clear(pbVerifyPassword);
+            SensitiveDataCleaner.Clear(tbKeyFile);
+            Close();
+        }
 
-        private bool ValidateFirstRunInputs(string password, string verifyPassword, out string error)
+        protected override void OnClosed(EventArgs e)
+        {
+            // Safety net: scrub even if user clicks the window X
+            try
+            {
+                SensitiveDataCleaner.Clear(pbPassword);
+                SensitiveDataCleaner.Clear(pbVerifyPassword);
+                SensitiveDataCleaner.Clear(tbKeyFile);
+            }
+            catch { /* swallow */ }
+            base.OnClosed(e);
+        }
+
+        // ========= Validation (char[]-based, no strings required) =========
+
+        private static bool ValidateFirstRunInputs(char[] pw, char[] verify, string? keyPath, out string error)
         {
             error = null;
 
-            if (!SecurePassword.IsPasswordValid(password, verifyPassword, out var pwError))
+            if (pw == null || pw.Length == 0)
             {
-                error = pwError;
+                error = "Please enter a password.";
                 return false;
             }
-
-            if (string.IsNullOrWhiteSpace(tbKeyFile.Text))
+            if (verify == null || verify.Length == 0)
+            {
+                error = "Please re-enter the password to verify.";
+                return false;
+            }
+            if (!FixedTimeEquals(pw, verify))
+            {
+                error = "Passwords do not match.";
+                return false;
+            }
+            if (pw.Length < 8) // baseline; you can tighten or add char[] rules
+            {
+                error = "Password must be at least 8 characters.";
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(keyPath))
             {
                 error = "Please select key file location.";
                 return false;
             }
-
             return true;
+        }
+
+        private static bool FixedTimeEquals(char[] a, char[] b)
+        {
+            if (a == null || b == null) return false;
+            int len = a.Length;
+            if (b.Length != len) return false;
+            int diff = 0;
+            for (int i = 0; i < len; i++) diff |= a[i] ^ b[i];
+            return diff == 0;
+        }
+
+        // ========= SecureString helpers =========
+
+        // SAFE version (no 'unsafe' keyword needed)
+        private static char[] SecureStringToChars(System.Security.SecureString? ss)
+        {
+            if (ss == null || ss.Length == 0) return Array.Empty<char>();
+
+            IntPtr bstr = IntPtr.Zero;
+            try
+            {
+                bstr = System.Runtime.InteropServices.Marshal.SecureStringToBSTR(ss);
+                int len = ss.Length;
+                var chars = new char[len];
+
+                // BSTR is UTF-16; read 2 bytes per char
+                for (int i = 0; i < len; i++)
+                {
+                    short val = System.Runtime.InteropServices.Marshal.ReadInt16(bstr, i * 2);
+                    chars[i] = (char)val;
+                }
+
+                return chars;
+            }
+            finally
+            {
+                if (bstr != IntPtr.Zero)
+                    System.Runtime.InteropServices.Marshal.ZeroFreeBSTR(bstr);
+            }
         }
 
         // ===== Custom title bar handlers (safe no-ops if not present in XAML) =====

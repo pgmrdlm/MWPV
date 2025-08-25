@@ -10,7 +10,10 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Principal;
 using System.Threading;
+using System.Threading.Tasks;               // TaskScheduler.UnobservedTaskException
 using System.Windows;
+using System.Windows.Threading;             // DispatcherUnhandledException
+using Microsoft.Win32;                      // SystemEvents.SessionEnding
 
 using Utilities.Diagnostics;                // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
@@ -42,6 +45,22 @@ namespace MWPV
         // Keep purge retention at 90 days
         private const int LogRetentionDays = 90;
 
+        // ---- secure wipe guard ----
+        private static int _wipeOnceFlag = 0;
+        private static void SafeWipeAll()
+        {
+            try
+            {
+                if (Interlocked.Exchange(ref _wipeOnceFlag, 1) == 1) return;
+                // never log here to avoid recursion during failure/teardown
+                SensitiveDataCleaner.WipeAll();
+            }
+            catch
+            {
+                // swallow — process is exiting or faulting
+            }
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // --- enforce single instance per user ---
@@ -69,6 +88,16 @@ namespace MWPV
                 Name = "MWPV.InstanceSignalListener"
             };
             _signalListenerThread.Start();
+
+            // --- abnormal exit & OS session handlers (register EARLY) ---
+            AppDomain.CurrentDomain.UnhandledException += (_, __) => SafeWipeAll();
+            TaskScheduler.UnobservedTaskException += (_, e2) => { try { SafeWipeAll(); } finally { e2.SetObserved(); } };
+            Current.DispatcherUnhandledException += (_, e3) =>
+            {
+                try { SafeWipeAll(); } finally { /* let ErrorHandler decide handling */ }
+            };
+            AppDomain.CurrentDomain.ProcessExit += (_, __) => SafeWipeAll();
+            SystemEvents.SessionEnding += (_, __) => SafeWipeAll();
 
             // --- platform init & global handlers ---
             Batteries_V2.Init();                   // SQLCipher
@@ -146,7 +175,6 @@ namespace MWPV
                 {
                     if (EarlyLoginFailures.HasPending())
                     {
-                        // ✅ Visible to the user (security posture + courtesy)
                         ErrorHandler.InfoTitled(
                             "Login Notice",
                             "Previous login failures were detected on this device.\n\n" +
@@ -304,7 +332,6 @@ namespace MWPV
         private static void LogWarn(string source, string message, int eventId, object? details = null)
             => Log(SecLogLevel.Warn, source, message, eventId, details);
 
-
         private static void LogError(string source, string message, int eventId, object? details = null)
             => Log(SecLogLevel.Error, source, message, eventId, details);
 
@@ -392,6 +419,9 @@ namespace MWPV
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // Wipe first on normal exit
+            SafeWipeAll();
+
             _shutdownListener = true;
 
             try { _instanceSignal?.Set(); } catch { }
