@@ -34,7 +34,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.7" />
-		<PackageReference Include="PasswordGenerator" Version="2.1.0" />
 		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
 	</ItemGroup>

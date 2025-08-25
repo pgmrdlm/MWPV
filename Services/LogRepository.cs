@@ -187,7 +187,7 @@ namespace MWPV.Services
                     }
                     else
                     {
-                        object chosen = null;
+                        object? chosen = null;
                         for (int i = 0; i < rd.FieldCount; i++)
                         {
                             var val = rd.GetValue(i);
@@ -270,13 +270,19 @@ namespace MWPV.Services
         {
             private static byte[] GetLogKey()
             {
-                // Must be provisioned by KeyProvisioner into SecureEncryptedDataStore
-                if (!SecureEncryptedDataStore.HasKey("LogPayloadKey"))
-                    throw new InvalidOperationException("LogPayloadKey not loaded into SecureEncryptedDataStore.");
-                var key = SecureEncryptedDataStore.GetBytes("LogPayloadKey");
-                if (key == null || key.Length != 32)
-                    throw new InvalidOperationException("LogPayloadKey is missing or not 32 bytes.");
-                return key;
+                // Accept both the legacy and new SEDS names.
+                if (SecureEncryptedDataStore.HasKey("LogPayloadKey"))
+                {
+                    var k = SecureEncryptedDataStore.GetBytes("LogPayloadKey");
+                    if (k != null && k.Length == 32) return k;
+                }
+                if (SecureEncryptedDataStore.HasKey("Key.LogPayloadKey"))
+                {
+                    var k = SecureEncryptedDataStore.GetBytes("Key.LogPayloadKey");
+                    if (k != null && k.Length == 32) return k;
+                }
+
+                throw new InvalidOperationException("LogPayloadKey not loaded into SecureEncryptedDataStore.");
             }
 
             public static byte[] Encrypt(byte[] plaintext)

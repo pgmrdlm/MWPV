@@ -1,16 +1,14 @@
-﻿using PasswordGenerator;
-using System;
+﻿using System;
+using System.Linq;
+using System.Security.Cryptography;
 
 namespace Utilities.Security
 {
     public static class SecurePassword
     {
         private const int MinimumLength = 8;
-        public static bool IsPasswordValid
-            (string password, 
-            string verifyPassword, 
-            out string errorMessage
-            )
+
+        public static bool IsPasswordValid(string password, string verifyPassword, out string errorMessage)
         {
             errorMessage = "";
 
@@ -46,45 +44,74 @@ namespace Utilities.Security
             return true;
         }
 
-        // 📦 Generate a secure password into a char[] (caller can wipe it)
+        // Generate a password into target[], meeting >=3/4 categories
         public static void Generate(ref char[] target, int length)
         {
-            if (length <= 0)
-                throw new ArgumentException($"Password length must be at least {MinimumLength} characters.");
+            if (length < MinimumLength)
+                throw new ArgumentException($"Password length must be at least {MinimumLength} characters.", nameof(length));
 
-            // Initialize Password generator with all character sets
-            var generator = new Password(includeLowercase: true, 
-                includeUppercase: true,
-                includeNumeric: true, 
-                includeSpecial: true,
-                passwordLength: length);
+            // Char sets
+            const string lowers = "abcdefghijklmnopqrstuvwxyz";
+            const string uppers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string digits = "0123456789";
+            // keep specials printable & filename/URL-safe-ish; adjust if you want broader
+            const string specials = "!@#$%^&*()-_=+[]{}:,.?";
 
-            string password = generator.Next();
+            // Convert to arrays once
+            var L = lowers.ToCharArray();
+            var U = uppers.ToCharArray();
+            var D = digits.ToCharArray();
+            var S = specials.ToCharArray();
 
-            // Resize or create target buffer
+            // We'll always include at least three categories; pick which three randomly
+            // Categories index map: 0=L,1=U,2=D,3=S
+            int[] cats = { 0, 1, 2, 3 };
+            Shuffle(cats); // RNG shuffle
+            var chosen = cats[..3]; // first three categories after shuffle
+
+            // Prepare result buffer
             if (target == null || target.Length != length)
                 target = new char[length];
 
-            // Copy to char[] for secure handling
-            password.CopyTo(0, target, 0, length);
+            int pos = 0;
 
-            // Overwrite the temporary string copy — not perfect, but prevents multiple references
-            password = null;
+            // Ensure at least one from each chosen category
+            foreach (int c in chosen)
+                target[pos++] = RandomFrom(c switch { 0 => L, 1 => U, 2 => D, _ => S });
+
+            // Fill the rest from the union of all four sets
+            char[] union = L.Concat(U).Concat(D).Concat(S).ToArray();
+            while (pos < length)
+                target[pos++] = RandomFrom(union);
+
+            // Final shuffle so required chars are not predictable positions
+            Shuffle(target);
         }
 
-        // Optional: generate and return a string version (for UI convenience ONLY — not secure!)
+        // Optional UI convenience. Avoid if you don’t need it.
         public static string GenerateAsString(int length)
         {
-            if (length <= 0)
-                throw new ArgumentException($"Password length must be at least {MinimumLength} characters.");
+            char[] buf = null!;
+            Generate(ref buf, length);
+            try { return new string(buf); }
+            finally { Array.Clear(buf, 0, buf.Length); }
+        }
 
-            var generator = new Password(includeLowercase: true, 
-                includeUppercase: true,
-                includeNumeric: true, 
-                includeSpecial: true,
-                passwordLength: length);
+        // --- helpers ---
 
-            return generator.Next(); // ❗ You CANNOT wipe this string
+        private static char RandomFrom(ReadOnlySpan<char> set)
+        {
+            int i = RandomNumberGenerator.GetInt32(set.Length);
+            return set[i];
+        }
+
+        private static void Shuffle<T>(T[] a)
+        {
+            for (int i = a.Length - 1; i > 0; i--)
+            {
+                int j = RandomNumberGenerator.GetInt32(i + 1);
+                (a[i], a[j]) = (a[j], a[i]);
+            }
         }
     }
 }
