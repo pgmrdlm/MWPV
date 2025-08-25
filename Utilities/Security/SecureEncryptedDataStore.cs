@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics; // Debug.WriteLine traces (always-on)
-using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -9,7 +8,8 @@ namespace Utilities.Security
 {
     /// <summary>
     /// In-memory encrypted key/value store for sensitive data.
-    /// - Stores ciphertext only (IV || CIPHERTEXT per entry).
+    /// - Stores ciphertext only (NONCE(12) || TAG(16) || CIPHERTEXT per entry, AES-GCM).
+    /// - Uses the logical key name as AAD to bind entries and prevent swap attacks.
     /// - Returns plaintext as byte[] or char[] (caller must wipe).
     /// - Session AES-256 key lives in-process and is wiped on global shutdown.
     /// </summary>
@@ -19,10 +19,13 @@ namespace Utilities.Security
         //     INTERNAL STATE
         // =========================
 
+        private const int NonceSize = 12; // recommended for AesGcm
+        private const int TagSize = 16; // 128-bit tag
+
         // Session-scoped AES-256 key (mutable for zeroization)
         private static readonly byte[] Key;
 
-        // In-memory ciphertext: value = IV||CIPHERTEXT
+        // In-memory ciphertext: value = NONCE||TAG||CIPHERTEXT
         private static readonly Dictionary<string, byte[]> _store = new(StringComparer.Ordinal);
 
         // Concurrency gate + wipe guard
@@ -115,8 +118,8 @@ namespace Utilities.Security
 
         private static void SetBytesInternal(string key, byte[] plainBytes)
         {
-            // Encrypt with a fresh random IV per entry
-            byte[] combined = EncryptWithRandomIv(plainBytes);
+            // Encrypt with a fresh random NONCE per entry + AAD=key name
+            byte[] combined = EncryptWithRandomNonce(key, plainBytes);
 
             // Defensive copy into store
             var copy = new byte[combined.Length];
@@ -190,12 +193,12 @@ namespace Utilities.Security
             {
                 ThrowIfWiped();
                 if (!_store.TryGetValue(key, out combined!))
-                    throw new KeyNotFoundException($"Key not found.");
+                    throw new KeyNotFoundException("Key not found.");
                 Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
             }
 
             // Decrypt (creates a new plaintext buffer)
-            return DecryptWithEmbeddedIv(combined);
+            return DecryptWithEmbeddedNonce(key, combined);
         }
 
         /// <summary>
@@ -313,49 +316,70 @@ namespace Utilities.Security
         // =========================
         //     CRYPTO PRIMITIVES
         // =========================
+        // Layout: NONCE(12) || TAG(16) || CIPHERTEXT
 
-        // Returns IV||CIPHERTEXT
-        private static byte[] EncryptWithRandomIv(byte[] plain)
+        private static byte[] EncryptWithRandomNonce(string keyName, byte[] plain)
         {
-            using var aes = Aes.Create();
-            aes.Key = Key;
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.PKCS7;
+            // AAD binds this ciphertext to the logical key 'keyName'
+            byte[] aad = Encoding.UTF8.GetBytes(keyName);
 
-            aes.GenerateIV();
-            var iv = aes.IV; // 16 bytes
+            var nonce = new byte[NonceSize];
+            RandomNumberGenerator.Fill(nonce);
 
-            using var ms = new MemoryStream(capacity: iv.Length + Math.Max(plain.Length, 16));
+            var ciphertext = new byte[plain.Length];
+            var tag = new byte[TagSize];
 
-            // prepend IV
-            ms.Write(iv, 0, iv.Length);
-
-            using (var cs = new CryptoStream(ms, aes.CreateEncryptor(aes.Key, iv), CryptoStreamMode.Write))
+            using (var gcm = new AesGcm(Key))
             {
-                cs.Write(plain, 0, plain.Length);
-            } // disposing CryptoStream flushes final block
+                gcm.Encrypt(nonce, plain, ciphertext, tag, aad);
+            }
 
-            return ms.ToArray(); // [IV(16)] + [CIPHERTEXT]
+            // layout: NONCE || TAG || CIPHERTEXT
+            var combined = new byte[NonceSize + TagSize + ciphertext.Length];
+            Buffer.BlockCopy(nonce, 0, combined, 0, NonceSize);
+            Buffer.BlockCopy(tag, 0, combined, NonceSize, TagSize);
+            Buffer.BlockCopy(ciphertext, 0, combined, NonceSize + TagSize, ciphertext.Length);
+
+            // wipe temps
+            Array.Clear(nonce, 0, nonce.Length);
+            Array.Clear(tag, 0, tag.Length);
+            Array.Clear(ciphertext, 0, ciphertext.Length);
+            Array.Clear(aad, 0, aad.Length);
+
+            return combined;
         }
 
-        private static byte[] DecryptWithEmbeddedIv(byte[] combined)
+        private static byte[] DecryptWithEmbeddedNonce(string keyName, byte[] combined)
         {
-            if (combined == null || combined.Length < 16)
+            if (combined == null || combined.Length < NonceSize + TagSize)
                 throw new CryptographicException("Ciphertext is too short.");
 
-            var iv = new byte[16];
-            Buffer.BlockCopy(combined, 0, iv, 0, 16);
+            byte[] aad = Encoding.UTF8.GetBytes(keyName);
 
-            using var aes = Aes.Create();
-            aes.Key = Key;
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.PKCS7;
+            var nonce = new byte[NonceSize];
+            var tag = new byte[TagSize];
 
-            using var ms = new MemoryStream(combined, 16, combined.Length - 16, writable: false);
-            using var cs = new CryptoStream(ms, aes.CreateDecryptor(aes.Key, iv), CryptoStreamMode.Read);
-            using var outMs = new MemoryStream();
-            cs.CopyTo(outMs);
-            return outMs.ToArray();
+            Buffer.BlockCopy(combined, 0, nonce, 0, NonceSize);
+            Buffer.BlockCopy(combined, NonceSize, tag, 0, TagSize);
+
+            int ctLen = combined.Length - NonceSize - TagSize;
+            var ciphertext = new byte[ctLen];
+            Buffer.BlockCopy(combined, NonceSize + TagSize, ciphertext, 0, ctLen);
+
+            var plain = new byte[ctLen];
+            using (var gcm = new AesGcm(Key))
+            {
+                // Throws CryptographicException if tampered/wrong key/AAD
+                gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
+            }
+
+            // wipe temps
+            Array.Clear(nonce, 0, nonce.Length);
+            Array.Clear(tag, 0, tag.Length);
+            Array.Clear(ciphertext, 0, ciphertext.Length);
+            Array.Clear(aad, 0, aad.Length);
+
+            return plain;
         }
 
         // =========================
