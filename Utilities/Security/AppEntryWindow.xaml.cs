@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;              // (ok if not used after your edits)
 using System.Runtime.InteropServices; // SecureString marshal
 using System.Security;                // SecureString
@@ -33,6 +34,10 @@ namespace Utilities.Security
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
         private const string Key_KeyFile = "KeyFile";            // non-sensitive path
         private const string Key_KeyPW = "KeyPW";                // sensitive password
+
+        // Policy knobs
+        private const int MinPasswordLength = 8; // keep baseline; adjust if desired
+        private static readonly string[] PolicyBuckets = { "uppercase", "lowercase", "digit", "special character" };
 
         // Full path to local encrypted database
         private readonly string _localDbPath = Path.Combine(
@@ -339,11 +344,29 @@ namespace Utilities.Security
                 error = "Passwords do not match.";
                 return false;
             }
-            if (pw.Length < 8) // baseline; you can tighten or add char[] rules
+            if (pw.Length < MinPasswordLength)
             {
-                error = "Password must be at least 8 characters.";
+                error = $"Password must be at least {MinPasswordLength} characters.";
                 return false;
             }
+
+            // 3-of-4 rule: uppercase, lowercase, digit, special
+            int classes = 0;
+            bool hasUpper = HasUpper(pw);
+            bool hasLower = HasLower(pw);
+            bool hasDigit = HasDigit(pw);
+            bool hasSpecial = HasSpecial(pw);
+            classes += hasUpper ? 1 : 0;
+            classes += hasLower ? 1 : 0;
+            classes += hasDigit ? 1 : 0;
+            classes += hasSpecial ? 1 : 0;
+
+            if (classes < 3)
+            {
+                error = "Password must include at least 3 of: uppercase, lowercase, digit, special character.";
+                return false;
+            }
+
             if (string.IsNullOrWhiteSpace(keyPath))
             {
                 error = "Please select key file location.";
@@ -360,6 +383,30 @@ namespace Utilities.Security
             int diff = 0;
             for (int i = 0; i < len; i++) diff |= a[i] ^ b[i];
             return diff == 0;
+        }
+
+        private static bool HasUpper(char[] a)
+        {
+            for (int i = 0; i < a.Length; i++) if (char.IsUpper(a[i])) return true;
+            return false;
+        }
+
+        private static bool HasLower(char[] a)
+        {
+            for (int i = 0; i < a.Length; i++) if (char.IsLower(a[i])) return true;
+            return false;
+        }
+
+        private static bool HasDigit(char[] a)
+        {
+            for (int i = 0; i < a.Length; i++) if (char.IsDigit(a[i])) return true;
+            return false;
+        }
+
+        private static bool HasSpecial(char[] a)
+        {
+            for (int i = 0; i < a.Length; i++) if (!char.IsLetterOrDigit(a[i])) return true;
+            return false;
         }
 
         // ========= SecureString helpers =========
