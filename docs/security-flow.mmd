@@ -1,0 +1,59 @@
+flowchart LR
+  subgraph Startup
+    A[App.xaml.cs: OnStartup()] --> B[SecureLogService.Initialize()]
+    A --> C[AppEntryWindow / PasswordEntryWindow]
+  end
+
+  subgraph PreLogin_Early
+    C -->|first run| SVC[ServiceSetUp: SetUpDataBase() & SetUpKeyFile()]
+    C -->|existing| KAV[KeyArchiveVerifier: VerifyPasswordAndSentinels()]
+    C -->|errors| ELF[EarlyLoginFailures (.elog)]
+    ELF -. ingest on success .-> LR[LogRepository]
+  end
+
+  subgraph Keys_Secrets
+    SEDS[SecureEncryptedDataStore]
+    SDC[SensitiveDataCleaner]
+    C --> SEDS
+    C --> SDC
+    SVC --> SEDS
+    KAV --> SEDS
+  end
+
+  subgraph SqlCatalog
+    SCAT[SqlCatagory: EnsureKeysAndLoadAll()]
+    SB[SchemaBootstrap: EnsureLogsSchema()]
+    DBH[DatabaseHelper: OpenConnection()]
+    C --> SCAT
+    C --> SB
+    SB --> DBH
+  end
+
+  subgraph Logging
+    SLS[SecureLogService: load INSERT SQL]
+    LR[LogRepository: Insert, SelectRecent, LastId]
+    C --> SLS
+    SLS --> LR
+    LR --> DBH
+  end
+
+  subgraph Diagnostics_DEBUG
+    ST[SmokeTester]
+    ST --> LR
+    ST --> DBH
+  end
+
+  KF[(Key.7z archive)]
+  LDB[(MWPV.db)]
+  EARLY[(%LOCALAPPDATA%/MWPV/early-logs)]
+  SEDS --- KF
+  DBH --- LDB
+  ELF --- EARLY
+
+  EH[ErrorHandler]
+  C --> EH
+  SVC --> EH
+  KAV --> EH
+  SB --> EH
+  SLS --> EH
+  LR --> EH

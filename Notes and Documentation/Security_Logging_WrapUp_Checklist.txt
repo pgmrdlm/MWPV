@@ -15,6 +15,7 @@ Security + Logging Wrap Up — Master Checklist
 [X] Switch LogRepository payload encryption to LogPayloadKey (drop dual-decrypt)
 [X] Confirm PayloadVer + KeySetVersion bump
 [ ] Add password strength meter to AppEntryWindow
+****** Don't care. not worth the time
 [X] Finalize secure memory wipe routines for shutdown (normal + abnormal)
 [X] Confirm all sensitive temp files are DPAPI-protected or securely wiped
 
