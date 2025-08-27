@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// Centralized input validation & normalization for names and free text.

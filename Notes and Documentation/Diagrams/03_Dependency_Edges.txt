@@ -6,5 +6,5 @@ Use fully-qualified names if you can; module-level edges are fine too.
 Examples:
 UI.MainWindow -> Services.CategoryService
 Services.CategoryService -> Data.DatabaseHelper
-Utilities.Security.KeyProvisioning -> Utilities.Security.SecureEncryptedDataStore
+Security.Utility.KeyProvisioning -> Security.Utility.SecureEncryptedDataStore
 Utilities.Logging.Logger -> Data.DatabaseHelper

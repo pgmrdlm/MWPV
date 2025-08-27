@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using SevenZip;
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// Pure verification of the encrypted key archive used at login.

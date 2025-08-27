@@ -12,7 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// Interaction logic for CreateKeyFileAndPassword.xaml

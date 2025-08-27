@@ -103,7 +103,7 @@ namespace Utilities.Helpers.Debug
   static class DebugCommands
     (no methods found)
 
-namespace Utilities.Security
+namespace Security.Utility
   partial class CreateKeyFileAndPassword : Window
     - public CreateKeyFileAndPassword()
     - public CreateKeyFileAndPassword()

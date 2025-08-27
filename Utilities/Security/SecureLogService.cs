@@ -4,9 +4,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Utilities.Logging;        // LogSeverity
-using Utilities.Security;       // SecureEncryptedDataStore
+using Security.Utility;       // SecureEncryptedDataStore
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// Centralized encrypted app logging to SQLite (v2 schema).

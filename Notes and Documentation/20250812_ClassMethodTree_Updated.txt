@@ -126,7 +126,7 @@ namespace Utilities.Helpers.Debug
   class DebugCommands
     (no methods found)
 
-namespace Utilities.Security
+namespace Security.Utility
   class CreateKeyFileAndPassword
     - CreateKeyFileAndPassword()
   class SecureEncryptedDataStore

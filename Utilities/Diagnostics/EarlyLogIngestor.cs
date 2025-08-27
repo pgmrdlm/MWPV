@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 
 using Utilities.Logging;    // LogSeverity
-using Utilities.Security;   // SecureLogService, SensitiveDataCleaner
+using Security.Utility;   // SecureLogService, SensitiveDataCleaner
 
 namespace Utilities.Diagnostics
 {
