@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
-namespace Security.Utility;
+namespace Security.Utility.Wiping;
 
 /// <summary>
 /// Secure file/dir deletion + sensitive-memory cleanup registry.

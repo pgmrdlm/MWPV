@@ -18,7 +18,7 @@ using Microsoft.Win32;                      // SystemEvents.SessionEnding
 using Utilities.Diagnostics;                // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
 using Security.Utility;                     // SecureLogService, SensitiveDataCleaner, SecureEncryptedDataStore
-using Utilities.Logging;                    // LogEventIds, LogSeverity
+//using Utilities.Logging;                    // LogEventIds, LogSeverity
 using Utilities.Security;              // <-- AppEntryWindow lives here now
 
 #if DEBUG
@@ -28,7 +28,6 @@ using System.Data.Common;                   // for DbCommand (debug helpers)
 
 // Disambiguation aliases
 using WpfApp = System.Windows.Application;
-using SecLogLevel = Utilities.Logging.LogSeverity;
 // avoid ambiguity with MWPV.Services.EarlyLogIngestor
 using EarlyLogIngestor = Utilities.Diagnostics.EarlyLogIngestor;
 // handy alias for the setup window

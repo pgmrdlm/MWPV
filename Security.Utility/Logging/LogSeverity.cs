@@ -1,5 +1,5 @@
 ﻿// Utilities/Logging/LogSeverity.cs
-namespace Utilities.Logging
+namespace Security.Utility.Logging
 {
     /// <summary>
     /// Normalized severity levels for application logging.

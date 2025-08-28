@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using SevenZip;
 using Utilities.Diagnostics;   // EarlyLoginFailures, EarlyFailType
+using EarlyFailType = Utilities.Diagnostics.EarlyFailType;
 
 namespace Utilities.Helpers
 {

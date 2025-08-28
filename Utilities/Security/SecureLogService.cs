@@ -3,7 +3,6 @@ using System.Data;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
-using Utilities.Logging;        // LogSeverity
 using Security.Utility;       // SecureEncryptedDataStore
 
 namespace Security.Utility

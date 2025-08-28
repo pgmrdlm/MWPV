@@ -4,7 +4,6 @@ using System;
 using System.Collections.ObjectModel;
 using Utilities.Helpers;    // DatabaseHelper, ErrorHandler
 using Security.Utility;   // SecureEncryptedDataStore, SensitiveDataCleaner, InputGuards, SecureLogService
-using Utilities.Logging;    // LogSeverity, LogEventIds
 
 namespace MWPV.Services
 {

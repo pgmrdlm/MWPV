@@ -1,7 +1,10 @@
-﻿// Makes the DLL types visible everywhere in the app:
+﻿// Make DLL namespaces available app-wide
 global using Security.Utility;
+global using Security.Utility.Storage;
+global using Security.Utility.Wiping;
+global using Security.Utility.Logging;
 
-// (optional shims so old code that types the bare names still compiles)
-global using SecureEncryptedDataStore = Security.Utility.SecureEncryptedDataStore;
-global using SensitiveDataCleaner = Security.Utility.SensitiveDataCleaner;
-global using EarlyFailType = Utilities.Diagnostics.EarlyFailType;
+// Aliases for convenience / backward-compat
+global using SecureEncryptedDataStore = Security.Utility.Storage.SecureEncryptedDataStore;
+global using SensitiveDataCleaner = Security.Utility.Wiping.SensitiveDataCleaner;
+global using SecLogLevel = Security.Utility.Logging.LogSeverity;  // <-- this defines SecLogLevel

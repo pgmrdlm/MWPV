@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics; // Debug.WriteLine traces (always-on)
 using System.Security.Cryptography;
 using System.Text;
+using Security.Utility.Wiping;
 
-namespace Security.Utility;
+namespace Security.Utility.Storage;
 
 /// <summary>
 /// In-memory encrypted key/value store for sensitive data.
