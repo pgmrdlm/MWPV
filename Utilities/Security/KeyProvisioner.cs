@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// Central source of truth for application keys.

@@ -110,6 +110,9 @@
                         <RowDefinition Height="10"/>
                         <RowDefinition Height="Auto"/>
                         <!-- Error -->
+                        <!-- NEW: Advisory banner row (collapsed by default) -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Filler -->
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -223,6 +226,24 @@
                              Background="#10FF0000"
                              Foreground="Red"
                              BorderThickness="0"/>
+
+                    <!-- Advisory banner (collapsed by default) -->
+                    <Border x:Name="InfoBanner"
+                            Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+                            Visibility="Visible"
+                            Margin="0,10,0,0"
+                            Padding="10"
+                            Background="#1E40AF"
+                            BorderBrush="#1D4ED8"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="White"
+                                   FontSize="13">
+                            Choose a safe location and file name for your encrypted key archive. The name and extension don’t affect encryption, but storing it in a secure, backed-up location does.
+                        </TextBlock>
+                    </Border>
+
                 </Grid>
             </Border>
         </Grid>

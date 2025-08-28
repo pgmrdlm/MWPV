@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using MWPV.Services;          // CategoryService
-using Utilities.Security;     // InputGuards
+using Security.Utility;     // InputGuards
 
 namespace MWPV.View.UserControls
 {

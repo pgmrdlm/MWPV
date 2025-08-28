@@ -10,7 +10,7 @@ If you want per-feature diagrams, list what belongs in each slice.
 - SecureEncryptedDataStore (read LogPayloadKey)
 
 [Security]
-- Utilities.Security.KeyProvisioning
-- Utilities.Security.SecureEncryptedDataStore
+- Security.Utility.KeyProvisioning
+- Security.Utility.SecureEncryptedDataStore
 - Early-log DPAPI writer
 - MemoryTracker (planned)

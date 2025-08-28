@@ -3,64 +3,45 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<UseWPF>true</UseWPF>
 
 		<!-- Runtime/bitness -->
 		<PlatformTarget>x64</PlatformTarget>
 		<Prefer32Bit>false</Prefer32Bit>
 
-		<!-- Versioning: stay on major v1 during development; bump only on release cycles -->
-		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.0.0.0</FileVersion>
-		<InformationalVersion Condition="'$(Configuration)'=='Debug'">1.0.0-dev</InformationalVersion>
-		<InformationalVersion Condition="'$(Configuration)'=='Release'">1.0.0</InformationalVersion>
+		<!-- Stop SDK from generating any assembly attributes -->
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<!-- We also don’t want the auto TargetFramework attribute -->
+		<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+
+		<!-- (Versions now come from AssemblyInfo.cs below) -->
 	</PropertyGroup>
 
-	<!-- Keep your embedded SQL (you’re embedding + copying; leaving behavior unchanged) -->
-	<ItemGroup>
-		<None Remove="Assets\Icons\MWPV_TitleBarIcon_16by16.ico" />
-		<None Remove="sql\SelectCatagories.sql" />
-	</ItemGroup>
-
-	<!-- Removed COMReference for System_Windows_Forms (caused MSB3290) -->
-
-	<ItemGroup>
-		<EmbeddedResource Include="sql\SelectCatagories.sql">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</EmbeddedResource>
-	</ItemGroup>
-
+	<!-- NuGet packages -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.7" />
 		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
 	</ItemGroup>
 
+	<!-- App resources / content -->
 	<ItemGroup>
-		<Folder Include="DataAccess\" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Resource Include="Assets\Icons\MWPV_TitleBarIcon_16by16.ico">
-			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</Resource>
-	</ItemGroup>
-
-	<!-- Make sure 7z.dll ships in both bin\ and publish\ -->
-	<ItemGroup>
+		<Resource Include="Assets\Icons\MWPV_TitleBarIcon_16by16.ico" />
 		<None Update="7z.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
+		<None Update="sql\SelectCatagories.sql">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 
-		<!-- Optional: ship 7-Zip license if you include the DLL
-    <None Include="License-7zip.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </None>
-    -->
+	<!-- Reference the Security.Utility project that sits alongside MWPV.csproj -->
+	<ItemGroup>
+		<ProjectReference Include="Security.Utility\Security.Utility.csproj" />
 	</ItemGroup>
 
 </Project>

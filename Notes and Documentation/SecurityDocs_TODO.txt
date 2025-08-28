@@ -1,0 +1,52 @@
+Security Documentation TODO List
+(Prepared for Monday documentation session)
+
+General Setup
+-   ☐ Create docs/ folder in repo if not already present.
+-   ☐ Add README pointer to docs/SECURITY.md.
+
+SECURITY.md (Overview)
+-   ☐ Document architecture (DLL vs App).
+-   ☐ Document data-at-rest (DB, key archive, early logs).
+-   ☐ Document data-in-process (SecureString, SEDS).
+-   ☐ Trust boundaries (UI ↔ DLL, etc.).
+
+SECURITY-FLOWS.md (Flows)
+-   ☐ First run flow diagram (key + DB creation).
+-   ☐ Returning user flow diagram (key verify + DB load).
+-   ☐ Early log ingestion flow diagram.
+-   ☐ SQL Catalog must-have check diagram.
+
+SECURITY-CODING-GUIDELINES.md (Coding)
+-   ☐ Secret handling rules (no long-lived strings, clear char[]).
+-   ☐ UI hygiene rules (wipe password boxes, advisory panel).
+-   ☐ Storage conventions (SEDS keys, early logs).
+-   ☐ Error + logging conventions (friendly UI, structured logs).
+-   ☐ File ops (atomic writes, secure delete, quarantine).
+-   ☐ Naming conventions + review checklist.
+
+SECURITY-OPERATIONS.md (Operations)
+-   ☐ Key archive care (naming, placement).
+-   ☐ Password rotation guidelines.
+-   ☐ Early failure logs (location, quarantine, viewing).
+-   ☐ Incident handling notes.
+
+SECURITY-TESTS.md (Test Matrix)
+-   ☐ First run happy path + validation tests.
+-   ☐ Returning user scenarios (correct, wrong, unencrypted).
+-   ☐ SQL catalog missing script test.
+-   ☐ Early log ingest (valid, corrupt).
+-   ☐ Hygiene tests (UI wiped).
+
+SECURITY-ADR-0001-dll-split.md (Decision Record)
+-   ☐ Document context (why split).
+-   ☐ Document decision (what moved to DLL).
+-   ☐ Consequences (pros, tradeoffs).
+
+------------------------------------------------------------------------
+
+Extras
+-   ☐ Insert screenshots (first run, error dialogs, quarantine folder).
+-   ☐ Insert must-have SQL list in single authoritative place.
+-   ☐ Cross-link all docs with nav headers.
+-   ☐ Help Documentation: Markdown base, TOC, PDF export, possible MkDocs site (future).

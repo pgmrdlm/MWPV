@@ -1,4 +1,4 @@
-﻿namespace Utilities.Security
+﻿namespace Security.Utility
 {
     /// <summary>
     /// Standardized reasons captured when recording early (pre-DB) login failures.

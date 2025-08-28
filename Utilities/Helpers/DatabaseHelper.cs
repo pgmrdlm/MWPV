@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Utilities.Security;     // SecureEncryptedDataStore, SensitiveDataCleaner
+using Security.Utility;     // SecureEncryptedDataStore, SensitiveDataCleaner
 
 namespace Utilities.Helpers
 {

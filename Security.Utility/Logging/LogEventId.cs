@@ -1,4 +1,4 @@
-﻿namespace Utilities.Logging
+﻿namespace Security.Utility.Logging
 {
     /// <summary>
     /// Same values as LogEventId enum, but as constants on a class.

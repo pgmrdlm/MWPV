@@ -1,7 +1,7 @@
 ﻿// Utilities/Sql/SecureSql.cs
 using System;
 using System.Text;
-using System.Reflection;
+using Security.Utility;   // <- from the external Security.Utility.dll
 
 namespace Utilities.Sql
 {
@@ -9,44 +9,50 @@ namespace Utilities.Sql
     {
         /// <summary>
         /// Fetch SQL text by filename key from SecureEncryptedDataStore.
-        /// Works with GetString(string), Get(string)->byte[], or GetChars(string)->char[].
-        /// Throws if the key is missing.
+        /// Prefers GetString; falls back to GetChars. Throws if the key is missing/empty.
         /// </summary>
         public static string Require(string filename)
         {
             if (string.IsNullOrWhiteSpace(filename))
                 throw new ArgumentException("Filename key must be provided.", nameof(filename));
 
-            var t = typeof(Utilities.Security.SecureEncryptedDataStore);
-
-            // 1) Prefer GetString(string)
-            var mGetString = t.GetMethod("GetString", BindingFlags.Public | BindingFlags.Static);
-            if (mGetString != null)
+            // 1) Prefer string
+            try
             {
-                var s = mGetString.Invoke(null, new object[] { filename }) as string;
-                if (!string.IsNullOrEmpty(s)) return s;
+                var s = SecureEncryptedDataStore.GetString(filename);
+                if (!string.IsNullOrEmpty(s))
+                    return s;
+            }
+            catch (KeyNotFoundException)
+            {
+                // fall through to char[] fallback
             }
 
-            // 2) Fallback: Get(string) -> byte[]
-            var mGetBytes = t.GetMethod("Get", BindingFlags.Public | BindingFlags.Static);
-            if (mGetBytes != null)
+            // 2) Fallback: char[]
+            try
             {
-                if (mGetBytes.Invoke(null, new object[] { filename }) is byte[] bytes && bytes.Length > 0)
-                    return Encoding.UTF8.GetString(bytes);
-            }
-
-            // 3) Fallback: GetChars(string) -> char[]
-            var mGetChars = t.GetMethod("GetChars", BindingFlags.Public | BindingFlags.Static);
-            if (mGetChars != null)
-            {
-                if (mGetChars.Invoke(null, new object[] { filename }) is char[] chars && chars.Length > 0)
+                var chars = SecureEncryptedDataStore.GetChars(filename);
+                if (chars is { Length: > 0 })
                     return new string(chars);
+            }
+            catch (KeyNotFoundException)
+            {
+                // will throw below
             }
 
 #if DEBUG
             System.Diagnostics.Debug.WriteLine($"[SecureSql] Missing script in store: {filename}");
 #endif
             throw new InvalidOperationException($"SQL script not found in secure store: {filename}");
+        }
+
+        /// <summary>
+        /// Non-throwing variant. Returns null if not present.
+        /// </summary>
+        public static string? TryGet(string filename)
+        {
+            try { return Require(filename); }
+            catch { return null; }
         }
     }
 }

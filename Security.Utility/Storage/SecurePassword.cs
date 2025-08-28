@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace Utilities.Security
+namespace Security.Utility.Storage
 {
     public static class SecurePassword
     {

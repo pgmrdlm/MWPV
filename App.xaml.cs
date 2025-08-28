@@ -17,8 +17,9 @@ using Microsoft.Win32;                      // SystemEvents.SessionEnding
 
 using Utilities.Diagnostics;                // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
-using Utilities.Security;                   // SecureLogService, SensitiveDataCleaner, SecureEncryptedDataStore
-using Utilities.Logging;                    // LogEventIds, LogSeverity
+using Security.Utility;                     // SecureLogService, SensitiveDataCleaner, SecureEncryptedDataStore
+//using Utilities.Logging;                    // LogEventIds, LogSeverity
+using Utilities.Security;              // <-- AppEntryWindow lives here now
 
 #if DEBUG
 using System.Diagnostics;
@@ -27,9 +28,10 @@ using System.Data.Common;                   // for DbCommand (debug helpers)
 
 // Disambiguation aliases
 using WpfApp = System.Windows.Application;
-using SecLogLevel = Utilities.Logging.LogSeverity;
 // avoid ambiguity with MWPV.Services.EarlyLogIngestor
 using EarlyLogIngestor = Utilities.Diagnostics.EarlyLogIngestor;
+// handy alias for the setup window
+using EntryWin = Utilities.Security.AppEntryWindow;
 
 namespace MWPV
 {
@@ -74,8 +76,15 @@ namespace MWPV
             if (!_ownsSingleInstanceMutex)
             {
                 // Signal existing instance to come to front and exit this one.
-                try { using var existing = EventWaitHandle.OpenExisting(eventName); existing.Set(); }
-                catch { ErrorHandler.InfoTitled("Already running", "MWPV is already running.", "single-instance"); }
+                try
+                {
+                    using var existing = EventWaitHandle.OpenExisting(eventName);
+                    existing.Set();
+                }
+                catch
+                {
+                    ErrorHandler.InfoTitled("Already running", "MWPV is already running.", "single-instance");
+                }
                 Current?.Shutdown();
                 return;
             }
@@ -92,9 +101,9 @@ namespace MWPV
             // --- abnormal exit & OS session handlers (register EARLY) ---
             AppDomain.CurrentDomain.UnhandledException += (_, __) => SafeWipeAll();
             TaskScheduler.UnobservedTaskException += (_, e2) => { try { SafeWipeAll(); } finally { e2.SetObserved(); } };
-            Current.DispatcherUnhandledException += (_, e3) =>
+            Current.DispatcherUnhandledException += (_, __) =>
             {
-                try { SafeWipeAll(); } finally { /* let ErrorHandler decide handling */ }
+                try { SafeWipeAll(); } finally { /* ErrorHandler handles UI/log */ }
             };
             AppDomain.CurrentDomain.ProcessExit += (_, __) => SafeWipeAll();
             SystemEvents.SessionEnding += (_, __) => SafeWipeAll();
@@ -112,7 +121,8 @@ namespace MWPV
             // --- run password/key setup before showing MainWindow ---
             Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            var setupWindow = new Utilities.Security.AppEntryWindow();
+            // **Moved to app namespace**
+            var setupWindow = new EntryWin();
             bool? ok = setupWindow.ShowDialog();
             if (ok != true)
             {
@@ -393,7 +403,7 @@ namespace MWPV
         {
             // Prefer setup window if visible; otherwise MainWindow; otherwise any visible window.
             Window? w =
-                Current.Windows.OfType<Utilities.Security.AppEntryWindow>()
+                Current.Windows.OfType<EntryWin>()
                     .FirstOrDefault(win => win.IsVisible)
                 ?? Current.MainWindow
                 ?? Current.Windows.Cast<Window>().FirstOrDefault(win => win.IsVisible);

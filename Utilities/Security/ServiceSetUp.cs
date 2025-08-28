@@ -5,10 +5,10 @@ using System.Linq;
 using System.Text;
 
 using Utilities.Helpers;   // ErrorHandler
-using Utilities.Security;  // SecureEncryptedDataStore, SensitiveDataCleaner
+using Security.Utility;  // SecureEncryptedDataStore, SensitiveDataCleaner
 using Utilities.Sql;       // DatabaseHelper
 
-namespace Utilities.Security
+namespace Security.Utility
 {
     /// <summary>
     /// First-run provisioning and secure loading utilities.

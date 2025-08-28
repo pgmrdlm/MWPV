@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Utilities.Helpers;      // DatabaseHelper.DbPasswordKey
-using Utilities.Security;     // SecureEncryptedDataStore
+using Security.Utility;     // SecureEncryptedDataStore
 using MWPV.Services;          // ServiceSetUp
 
 namespace Utilities.Sql

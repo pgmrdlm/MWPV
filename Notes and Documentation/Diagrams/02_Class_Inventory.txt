@@ -10,7 +10,7 @@ Namespace.ClassName
 - Notes: (optional)
 
 Example:
-Utilities.Security.KeyProvisioning
+Security.Utility.KeyProvisioning
 - Role: Create/load DbPassword, LogPayloadKey, UserSecretsKey; create-if-missing; load into SecureEncryptedDataStore
 - Key Methods: Initialize(), CreateIfMissing(), LoadIntoStore()
 - DependsOn: SecureEncryptedDataStore, SevenZipHelper, DPAPIHelper
