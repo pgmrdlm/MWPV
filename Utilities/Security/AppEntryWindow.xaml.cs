@@ -14,7 +14,7 @@ using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
 using EDT = Utilities.Diagnostics.EarlyFailType;
-
+using Security.Utility.Crypto;   // <- brings KeyArchiveVerifier into scope
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
 
 namespace Utilities.Security
