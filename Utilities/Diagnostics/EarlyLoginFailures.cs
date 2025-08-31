@@ -1,161 +1,141 @@
-﻿// File: MWPV/Utilities/Diagnostics/EarlyLoginFailures.cs
+﻿// Utilities/Diagnostics/EarlyLoginFailures.cs — full file
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace Utilities.Diagnostics
 {
-    // Public + same name so all existing call-sites keep working.
+    /// <summary>
+    /// DPAPI-protected early logs written before DB is available.
+    /// Format:
+    ///   Line1 (header):  ELOGJSON|1|dpapi
+    ///   Body (base64) :  Protect( UTF8(JSON) , entropy=header, CurrentUser )
+    /// </summary>
     public static partial class EarlyLoginFailures
     {
-        // ---------- Header constants & regex (matches your Notepad++ test) ----------
-        public const string HeaderPrefix = "ELOGJSON";
-        public const int HeaderVersion = 1;
-        public const string HeaderVariantPlain = "plain";
-        public const string HeaderRegexPattern =
-            @"^ELOGJSON\|(?<ver>\d+)(?:\|(?<variant>[A-Za-z0-9_-]+))?$";
-        public static readonly Regex HeaderRegex =
-            new Regex(HeaderRegexPattern, RegexOptions.Compiled);
+        public const string Header = "ELOGJSON|1|dpapi";
+        public const string FileExt = ".elogp";
 
-        // DEBUG trace that fires when the class is loaded.
-        static EarlyLoginFailures()
-        {
-#if DEBUG
-            Debug.WriteLine("[EARLY] EarlyLoginFailures loaded.");
-#endif
-        }
-
-        // ---------- Paths ----------
         public static string StoreDir =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
-        public static string QuarantineDir => Path.Combine(StoreDir, "quarantine");
 
-        [Conditional("DEBUG")]
-        private static void Trace(string msg) => Debug.WriteLine($"[EARLY] {msg}");
+        public static string QuarantineDir =>
+            Path.Combine(StoreDir, "quarantine");
 
-        // ---------- API preserved for existing code ----------
-        public static bool HasPending()
+        static EarlyLoginFailures()
         {
-            try
-            {
-                Directory.CreateDirectory(StoreDir);
-                return Directory.EnumerateFiles(StoreDir, "*.elogp").Any();
-            }
-            catch (Exception ex) { Trace("HasPending error: " + ex); return false; }
+            TryEnsureDir(StoreDir);
+            TryEnsureDir(QuarantineDir);
         }
 
-        public static string[] EnumeratePendingPaths()
+        /// <summary>Primary API to persist an early failure.</summary>
+        public static void Write(string category, string message, string? relatedFile = null, Exception? ex = null)
         {
             try
             {
-                Directory.CreateDirectory(StoreDir);
-                return Directory.EnumerateFiles(StoreDir, "*.elogp").OrderBy(p => p).ToArray();
-            }
-            catch (Exception ex) { Trace("EnumeratePendingPaths error: " + ex); return Array.Empty<string>(); }
-        }
-
-        public static void Quarantine(string fullPath, string reason)
-        {
-            try
-            {
-                Directory.CreateDirectory(QuarantineDir);
-                var baseName = Path.GetFileNameWithoutExtension(fullPath);
-                var dest = Path.Combine(QuarantineDir,
-                    $"{DateTime.UtcNow:yyyyMMddTHHmmssfff}_{baseName}_{Sanitize(reason)}.elogp");
-                File.Move(fullPath, dest, true);
-                Trace($"Quarantined '{fullPath}' :: {reason}");
-            }
-            catch (Exception ex) { Trace("Quarantine failed: " + ex); }
-        }
-
-        private static string Sanitize(string s) =>
-            new string(s.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_').ToArray());
-
-        // ---------- Record overloads to satisfy all call-sites ----------
-        public static void Record(string category, string message, Exception? ex = null, string? relatedFile = null)
-        {
-            try
-            {
-                Directory.CreateDirectory(StoreDir);
-                var path = Path.Combine(StoreDir, $"{DateTime.UtcNow:yyyyMMddTHHmmssfff}_{Guid.NewGuid():N}.elogp");
-
-                // Always write a PLAINTEXT header line so TryRead can regex it.
-                var header = $"{HeaderPrefix}|{HeaderVersion}|{HeaderVariantPlain}";
-#if DEBUG
-                Trace($"Record start path='{path}' header='{header}' cat='{category}' msg='{message}'");
-#endif
-                var body = new EarlyEntry(
+                var entry = new EarlyEntry(
                     whenUtc: DateTime.UtcNow,
                     category: category,
                     message: message,
-                    relatedFile: string.IsNullOrWhiteSpace(relatedFile) ? null : relatedFile,
+                    relatedFile: relatedFile,
                     exType: ex?.GetType().FullName,
                     exMessage: ex?.Message,
-                    exStack: ex?.ToString()
+                    exStack: ex?.StackTrace
                 );
 
-                // Header line (plaintext) + newline + JSON body (UTF-8 without BOM).
+                var json = JsonSerializer.Serialize(entry);
+                var bytes = Encoding.UTF8.GetBytes(json);
+
+                // DPAPI with deterministic entropy = header string
+                var entropy = Encoding.ASCII.GetBytes(Header);
+                var cipher = ProtectedData.Protect(bytes, entropy, DataProtectionScope.CurrentUser);
+                var b64 = Convert.ToBase64String(cipher);
+
+                var name = $"{DateTime.UtcNow:yyyyMMdd-HHmmssZ}_{Guid.NewGuid():N}{FileExt}";
+                var path = Path.Combine(StoreDir, name);
+
                 using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 using var sw = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                sw.WriteLine(header);
-                sw.Write(JsonSerializer.Serialize(body));
-                sw.Flush();
-#if DEBUG
-                Trace($"Record wrote '{path}' bytes={fs.Length}");
-#endif
+                sw.Write(Header);
+                sw.Write("\n");
+                sw.Write(b64);
             }
-            catch (Exception wex) { Trace("Record failed: " + wex); }
+            catch
+            {
+                // last-ditch path; no rethrow (cannot block app on logging)
+            }
         }
 
-        // Legacy convenience overloads some callers likely use:
-        public static void Record(string message) => Record("INFO", message, null, null);
-        public static void Record(Exception ex) => Record("EXCEPTION", ex.Message, ex, null);
-        public static void Record(string category, Exception ex) => Record(category, ex.Message, ex, null);
-        public static void Record(string category, string message, string relatedFile) => Record(category, message, null, relatedFile);
+        /// <summary>Legacy alias used in a few call sites.</summary>
+        public static void Record(string category, string message, string? relatedFile = null, Exception? ex = null)
+            => Write(category, message, relatedFile, ex);
 
-        // ---------- Reader used by the ingestor ----------
-        public static bool TryRead(string fullPath, out EarlyEntry? entry, out string failure)
+        // --- Compatibility overloads ---
+        public static void Record(string category, string message, Exception ex)
+            => Write(category, message, relatedFile: null, ex);
+
+        public static void Record(Enum stageEnum, string message, string? relatedFile = null, Exception? ex = null)
+            => Write(stageEnum.ToString(), message, relatedFile, ex);
+
+        public static void Record(Enum stageEnum, string message, Exception ex)
+            => Write(stageEnum.ToString(), message, relatedFile: null, ex);
+
+        /// <summary>Read, validate header, DPAPI-unprotect, and parse entry.</summary>
+        internal static bool TryReadAndDecrypt(
+            string path,
+            out EarlyEntry? entry,
+            out string? reason,
+            out byte[]? rawJson,
+            out byte[]? cipherBytes)
         {
-            entry = null; failure = "";
+            entry = null; reason = null; rawJson = null; cipherBytes = null;
+
             try
             {
-                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var sr = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                var all = File.ReadAllText(path, new UTF8Encoding(false));
+                var idx = all.IndexOf('\n');
+                if (idx < 0) { reason = "missing newline after header"; return false; }
 
-                var rawFirst = sr.ReadLine();
-                var firstLine = (rawFirst ?? string.Empty).Trim();
-                if (firstLine.Length > 0 && firstLine[0] == '\uFEFF') firstLine = firstLine.Substring(1);
-#if DEBUG
-                Trace($"TryRead '{fullPath}' header='{firstLine}'");
-#endif
-                var m = HeaderRegex.Match(firstLine);
-#if DEBUG
-                Trace($"TryRead header match success={m.Success}");
-#endif
-                if (!m.Success) { failure = "parse_failed:bad_header"; return false; }
-
-                var variant = m.Groups["variant"].Success ? m.Groups["variant"].Value : HeaderVariantPlain;
-                var rest = sr.ReadToEnd();
-
-                if (variant.Equals(HeaderVariantPlain, StringComparison.OrdinalIgnoreCase))
+                var hdr = all[..idx].TrimEnd('\r');
+                if (!string.Equals(hdr, Header, StringComparison.Ordinal))
                 {
-                    entry = JsonSerializer.Deserialize<EarlyEntry>(rest);
-                    if (entry == null) { failure = "parse_failed:json_null"; return false; }
-                    return true;
+                    reason = $"bad header: {hdr}";
+                    return false;
                 }
 
-                failure = $"parse_failed:unsupported_variant_{variant}";
-                return false;
+                var b64 = all[(idx + 1)..].Trim();
+                if (b64.Length == 0) { reason = "empty body"; return false; }
+
+                cipherBytes = Convert.FromBase64String(b64);
+
+                var entropy = Encoding.ASCII.GetBytes(Header);
+                var jsonBlob = ProtectedData.Unprotect(cipherBytes, entropy, DataProtectionScope.CurrentUser);
+                rawJson = jsonBlob;
+
+                entry = JsonSerializer.Deserialize<EarlyEntry>(jsonBlob);
+                if (entry is null) { reason = "json null"; return false; }
+
+                return true;
             }
-            catch (Exception ex) { failure = $"read_failed:{ex.GetType().Name}"; Trace("TryRead failed: " + ex); return false; }
+            catch (FormatException fe) { reason = "base64: " + fe.Message; return false; }
+            catch (CryptographicException ce) { reason = "dpapi: " + ce.Message; return false; }
+            catch (Exception ex) { reason = ex.Message; return false; }
         }
 
-        // Body shape
-        public sealed record EarlyEntry(DateTime whenUtc, string category, string message,
-                                        string? relatedFile, string? exType, string? exMessage, string? exStack);
+        private static void TryEnsureDir(string dir)
+        {
+            try { Directory.CreateDirectory(dir); } catch { }
+        }
+
+        public sealed record EarlyEntry(
+            DateTime whenUtc,
+            string category,
+            string message,
+            string? relatedFile,
+            string? exType,
+            string? exMessage,
+            string? exStack);
     }
 }

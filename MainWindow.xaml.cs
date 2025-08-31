@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using Utilities.Helpers;
-using Utilities.Helpers.Debug;
+using Utilities.Helpers.Debugging;
 
 #if DEBUG
 using Microsoft.Data.Sqlite;
