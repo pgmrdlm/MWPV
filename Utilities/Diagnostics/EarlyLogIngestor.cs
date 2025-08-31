@@ -1,500 +1,272 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Utilities/Diagnostics/EarlyLogIngestor.cs
+using System;
 using System.Data.Common;
-using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Security.Utility;   // SecureLogService, SensitiveDataCleaner
+using System.Text.RegularExpressions;
+using Security.Utility; // SecureEncryptedDataStore
 
 namespace Utilities.Diagnostics
 {
+    public sealed class EarlyIngestResult
+    {
+        public int Found { get; init; }
+        public int Inserted { get; set; }
+        public int Deduped { get; set; }
+        public int Quarantined { get; set; }
+        public int Deleted { get; set; }
+        public int Errors { get; set; }
+    }
+
     /// <summary>
-    /// Ingests plaintext “early” failure files from <see cref="EarlyLoginFailures.StoreDir"/>
-    /// into the encrypted log (<see cref="SecureLogService"/>).
-    /// Unreadable/malformed files are moved to <see cref="EarlyLoginFailures.QuarantineDir"/>.
-    /// Successfully consumed files are securely deleted and empty source folders are pruned.
+    /// Reads *.elogp files written before login, validates header + JSON,
+    /// and inserts rows into Logs inside a single DB transaction.
+    /// Good files can be deleted after commit; bad ones are quarantined.
     /// </summary>
     public static class EarlyLogIngestor
     {
-        public sealed class Result
-        {
-            public int Found { get; init; }
-            public int Inserted { get; init; }
-            public int Deduped { get; init; }        // reserved for future
-            public int Quarantined { get; init; }
-            public int Deleted { get; init; }        // files removed from the “early” store after ingest
-            public int Errors { get; init; }
-        }
+        private static readonly Regex HeaderRegex =
+            new(@"^\s*ELOGJSON\|(?<ver>\d+)\|plain\s*$",
+                RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        private const string QuarantineFolderName = "quarantine";
 
         /// <summary>
-        /// Ingest all pending “.elog” files. Writes via <see cref="SecureLogService"/> only (no schema SQL).
-        /// If <paramref name="openConnectionFactory"/> is provided, it’s touched first as a reachability probe.
+        /// Batch-ingest in ONE DB transaction.
         /// </summary>
-        public static Result IngestAllEarlyLogsTransactional(Func<DbConnection>? openConnectionFactory = null)
+        public static EarlyIngestResult IngestAllEarlyLogsTransactionalToLogs(
+            string earlyDir,
+            string sessionId,
+            string appVersion,
+            Func<DbConnection> openConnection,
+            string pattern = "*.elogp",
+            bool deleteOnSuccess = true,
+            string source = "EarlyIngest",
+            string level = "WARN")
         {
-            // Best-effort: prove DB reachability early so we fail fast rather than eating files.
-            try { using var _ = openConnectionFactory?.Invoke(); } catch { /* ignore */ }
+            Directory.CreateDirectory(earlyDir);
 
-            // Snapshot upfront for deterministic 'Found'.
-            var pending = new List<string>(EarlyLoginFailures.EnumeratePendingPaths());
-            int found = pending.Count;
-            if (found == 0)
-            {
-                TryLog(LogSeverity.Warn, "EARLY_INGEST_EMPTY", new
-                {
-                    dir = EarlyLoginFailures.StoreDir,
-                    whenUtc = DateTime.UtcNow
-                });
-                return new Result { Found = 0 };
-            }
+            var files = SafeGetFiles(earlyDir, pattern);
+            var result = new EarlyIngestResult { Found = files.Length };
 
-            int inserted = 0, deduped = 0, quarantined = 0, deleted = 0, errors = 0;
+            if (files.Length == 0)
+                return result;
 
-            foreach (var path in pending)
+            using var conn = openConnection();
+            using var tx = conn.BeginTransaction();
+
+            string insertSql = SecureEncryptedDataStore.GetString("Logs_Insert_V2.sql");
+            if (string.IsNullOrWhiteSpace(insertSql))
+                throw new InvalidOperationException("Logs_Insert_V2.sql not found in SecureEncryptedDataStore.");
+
+            // Optional best-effort dedupe support (skip silently if script is absent or incompatible)
+            string existsSql = SecureEncryptedDataStore.GetString("Logs_Exists_BySig.sql");
+            bool canDedupe = !string.IsNullOrWhiteSpace(existsSql);
+
+            foreach (var path in files)
             {
                 try
                 {
-                    if (!TryParseEarlyFile(path, out var payload, out var rawJson, out var reason))
+                    // 1) header + payload
+                    string jsonText;
+                    using (var sr = new StreamReader(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), detectEncodingFromByteOrderMarks: true))
                     {
-                        Quarantine(path, $"parse_failed:{reason}");
-                        quarantined++;
-                        TryPruneParentIfEmpty(path);
+                        var header = ReadFirstNonEmptyLine(sr);
+                        if (header is null)
+                        {
+                            Quarantine(path, "parse_failed_header_missing");
+                            result.Quarantined++;
+                            continue;
+                        }
+
+                        var m = HeaderRegex.Match(header);
+                        if (!m.Success)
+                        {
+                            Quarantine(path, "parse_failed_header_mismatch");
+                            result.Quarantined++;
+                            continue;
+                        }
+
+                        if (!int.TryParse(m.Groups["ver"].Value, out var ver) || ver != 1)
+                        {
+                            Quarantine(path, $"parse_failed_unsupported_version_{m.Groups["ver"].Value}");
+                            result.Quarantined++;
+                            continue;
+                        }
+
+                        jsonText = sr.ReadToEnd()?.Trim() ?? string.Empty;
+                    }
+
+                    if (jsonText.Length == 0)
+                    {
+                        Quarantine(path, "parse_failed_json_missing");
+                        result.Quarantined++;
                         continue;
                     }
 
-                    var evt = new
+                    using var doc = JsonDocument.Parse(jsonText);
+                    var root = doc.RootElement;
+
+                    // 2) optional dedupe (by payload hash)
+                    if (canDedupe)
                     {
-                        tsUtc = payload.tsUtc,
-                        type = payload.type,
-                        userSid = payload.userSid,
-                        machine = payload.machine,
-                        appVersion = payload.appVersion,
-                        message = payload.message,
-                        details = payload.details,   // boxed JSON if present
-                        file = Path.GetFileName(path),
-                        rawJson,                     // keep original JSON for audit trail
-                        source = "EARLY_LOGIN"
-                    };
+                        try
+                        {
+                            var sig = Sha256Hex(jsonText);
+                            using var existsCmd = conn.CreateCommand();
+                            existsCmd.Transaction = tx;
+                            existsCmd.CommandText = existsSql;
 
-                    // Write to encrypted log; on failure we keep the file to retry later.
-                    SecureLogService.WriteAsync(
-                        LogSeverity.Info,
-                        evt,
-                        eventCode: "EARLY_LOGIN_EVENT",
-                        source: "EarlyIngest").GetAwaiter().GetResult();
+                            var pSig = existsCmd.CreateParameter();
+                            pSig.ParameterName = "@Sig";
+                            pSig.Value = sig;
+                            existsCmd.Parameters.Add(pSig);
 
-                    // Consumed => securely delete the plaintext source.
-                    TrySecureDeleteFile(path);
-                    inserted++;
-                    deleted++;
-                    TryPruneParentIfEmpty(path);
+                            var scalar = existsCmd.ExecuteScalar();
+                            if (scalar != null && Convert.ToInt32(scalar) > 0)
+                            {
+                                result.Deduped++;
+                                if (deleteOnSuccess && TryDelete(path)) result.Deleted++;
+                                continue;
+                            }
+                        }
+                        catch
+                        {
+                            // if dedupe fails, proceed without dedupe
+                        }
+                    }
+
+                    // 3) map + insert
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.Transaction = tx;
+                        cmd.CommandText = insertSql;
+
+                        static string? S(JsonElement e, string name)
+                            => e.TryGetProperty(name, out var v) && v.ValueKind != JsonValueKind.Null ? v.GetString() : null;
+
+                        // WhenUtc from payload if present; else now UTC
+                        var whenUtc = DateTime.UtcNow;
+                        var whenUtcStr = S(root, "WhenUtc");
+                        if (!string.IsNullOrWhiteSpace(whenUtcStr) && DateTime.TryParse(whenUtcStr, out var parsed))
+                            whenUtc = parsed.ToUniversalTime();
+
+                        // optional stack hash (based on ExStack)
+                        string? stackHash = null;
+                        var exStack = S(root, "ExStack");
+                        if (!string.IsNullOrWhiteSpace(exStack))
+                            stackHash = Sha256Hex(exStack);
+
+                        void P(string name, object? val)
+                        {
+                            var p = cmd.CreateParameter();
+                            p.ParameterName = name;
+                            p.Value = val ?? DBNull.Value;
+                            cmd.Parameters.Add(p);
+                        }
+
+                        P("@WhenUtc", whenUtc);
+                        P("@CreatedUtc", DateTime.UtcNow);
+                        P("@Level", level);
+                        P("@Source", source);
+                        P("@EventCode", S(root, "Category") ?? "EARLY_FAILURE");
+                        P("@SessionId", sessionId);
+                        P("@MachineId", Environment.MachineName);
+                        P("@AppVersion", appVersion);
+                        P("@IsCrash", 0);
+                        P("@Payload", jsonText);
+                        P("@PayloadFmt", "json");
+                        P("@StackHash", (object?)stackHash ?? DBNull.Value);
+
+                        _ = cmd.ExecuteNonQuery();
+                        result.Inserted++;
+                    }
+
+                    // 4) delete on success (outside SQL transaction; best-effort)
+                    if (deleteOnSuccess && TryDelete(path)) result.Deleted++;
                 }
-                catch (Exception ex)
+                catch
                 {
-#if DEBUG
-                    Debug.WriteLine($"[EARLY_INGEST] ERROR for '{path}': {ex.GetType().Name} {ex.Message}");
-#endif
-                    errors++; // leave file for a later attempt
+                    result.Errors++;
+                    Quarantine(path, "unexpected_exception");
                 }
             }
 
-            TryLog(LogSeverity.Info, "EARLY_INGEST_SUMMARY", new
-            {
-                dir = EarlyLoginFailures.StoreDir,
-                found,
-                inserted,
-                deduped,
-                quarantined,
-                deleted,
-                errors,
-                whenUtc = DateTime.UtcNow
-            });
+            tx.Commit();
 
-            return new Result
-            {
-                Found = found,
-                Inserted = inserted,
-                Deduped = deduped,
-                Quarantined = quarantined,
-                Deleted = deleted,
-                Errors = errors
-            };
+            // Console summary (optional)
+            var when = DateTime.UtcNow.ToString("O");
+            Console.WriteLine($"[EarlyIngest EARLY_INGEST_SUMMARY :: {{\"dir\":\"{EscapeJson(earlyDir)}\",\"found\":{result.Found},\"inserted\":{result.Inserted},\"deduped\":{result.Deduped},\"quarantined\":{result.Quarantined},\"deleted\":{result.Deleted},\"errors\":{result.Errors},\"whenUtc\":\"{when}\"}}]");
+
+            return result;
         }
 
-        // ----------------- helpers -----------------
+        // ------------------ helpers ------------------
 
-        private static void TryLog(LogSeverity level, string eventCode, object payload)
+        private static string ReadFirstNonEmptyLine(StreamReader sr)
+        {
+            while (!sr.EndOfStream)
+            {
+                var line = sr.ReadLine();
+                if (!string.IsNullOrWhiteSpace(line))
+                    return line;
+            }
+            return null;
+        }
+
+        private static bool TryDelete(string path)
+        {
+            try { File.Delete(path); return true; }
+            catch { return false; }
+        }
+
+        private static bool Quarantine(string path, string reasonTag)
         {
             try
             {
-                SecureLogService.WriteAsync(level, payload, eventCode: eventCode, source: "EarlyIngest")
-                    .GetAwaiter().GetResult();
-            }
-            catch
-            {
-                // best-effort — never fail ingestion due to logging issues
-            }
-        }
+                var dir = Path.GetDirectoryName(path)!;
+                var qdir = Path.Combine(dir, QuarantineFolderName);
+                Directory.CreateDirectory(qdir);
 
-        private static void Quarantine(string path, string? why = null)
-        {
-            try
-            {
-#if DEBUG
-                Debug.WriteLine($"[EARLY_INGEST] Quarantine '{path}' :: {why}");
-#endif
-                EarlyLoginFailures.Quarantine(path, why);
+                var name = Path.GetFileNameWithoutExtension(path);
+                var ext = Path.GetExtension(path);
+                var dst = Path.Combine(qdir, $"{name}_{SanitizeForFile(reasonTag)}{ext}");
+
+                if (File.Exists(dst)) File.Delete(dst);
+                File.Move(path, dst);
             }
             catch
             {
                 // best-effort
             }
-        }
-
-        private static void TrySecureDeleteFile(string path)
-        {
-            try
-            {
-                SensitiveDataCleaner.SecureFileDelete(
-                    path,
-                    overwritePasses: 1,
-                    shredName: true,
-                    finalZeroPass: true);
-            }
-            catch
-            {
-                try { File.Delete(path); } catch { /* ignore */ }
-            }
-        }
-
-        private static void TryPruneParentIfEmpty(string path)
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(path);
-                if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return;
-
-                using var e = Directory.EnumerateFileSystemEntries(dir).GetEnumerator();
-                if (!e.MoveNext())
-                {
-                    SensitiveDataCleaner.SecureDeleteDirectory(
-                        dir,
-                        overwritePasses: 1,
-                        shredNames: true,
-                        finalZeroPass: false,
-                        removeDirectories: true);
-                }
-            }
-            catch
-            {
-                // best-effort
-            }
-        }
-
-        // ----------------- parsing -----------------
-
-        private sealed class EarlyPayload
-        {
-            public DateTime tsUtc { get; init; }
-            public string type { get; init; } = "unknown";
-            public string userSid { get; init; } = "UnknownUser";
-            public string machine { get; init; } = Environment.MachineName;
-            public string appVersion { get; init; } = "unknown";
-            public string message { get; init; } = "";
-            public object? details { get; init; }
-        }
-
-        /// <summary>
-        /// Supported formats:
-        ///  # V1 (preferred):
-        ///     MWPV-ELOG|v1
-        ///     content-type: application/json; charset=utf-8
-        ///
-        ///     {json}
-        ///
-        ///     JSON fields (optional): utc, type, userSid, machine, appVersion, message, details, exception, extra
-        ///
-        ///  # Legacy:
-        ///     MWPV_ELOG_V2
-        ///     key=value
-        ///     ...
-        ///     json={...}
-        /// </summary>
-        private static bool TryParseEarlyFile(
-            string path,
-            out EarlyPayload payload,
-            out string rawJson,
-            out string reason)
-        {
-            payload = default!;
-            rawJson = "";
-            reason = "";
-
-            string text;
-            try
-            {
-                text = File.ReadAllText(path, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                reason = "read_failed:" + ex.GetType().Name;
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                reason = "empty";
-                return false;
-            }
-
-            var lines = SplitLines(text);
-            if (lines.Count == 0)
-            {
-                reason = "no_lines";
-                return false;
-            }
-
-            var first = lines[0].Trim();
-            if (first.Equals("MWPV-ELOG|v1", StringComparison.OrdinalIgnoreCase))
-            {
-                return TryParseV1(lines, out payload, out rawJson, out reason);
-            }
-            else if (first.StartsWith("MWPV_ELOG_", StringComparison.OrdinalIgnoreCase))
-            {
-                return TryParseLegacy(lines, out payload, out rawJson, out reason);
-            }
-
-            reason = "bad_header";
             return false;
         }
 
-        // V1: header line, optional "content-type: ..." lines, blank line, then JSON (possibly multi-line).
-        // We rebuild the JSON from lines after the first blank line (no LINQ).
-        private static bool TryParseV1(
-            List<string> lines,
-            out EarlyPayload payload,
-            out string rawJson,
-            out string reason)
+        private static string Sha256Hex(string text)
         {
-            payload = default!;
-            rawJson = "";
-            reason = "";
-
-            int blankIndex = -1;
-            for (int i = 1; i < lines.Count; i++)
-            {
-                if (lines[i].Trim().Length == 0) { blankIndex = i; break; }
-            }
-            if (blankIndex < 0 || blankIndex == lines.Count - 1)
-            {
-                reason = "json_missing";
-                return false;
-            }
-
-            // Rebuild JSON from the remaining lines to avoid CR/LF position math.
-            var sb = new StringBuilder();
-            for (int i = blankIndex + 1; i < lines.Count; i++)
-            {
-                if (sb.Length > 0) sb.Append('\n');
-                sb.Append(lines[i]);
-            }
-            var jsonText = sb.ToString().Trim();
-            if (jsonText.Length == 0)
-            {
-                reason = "json_missing";
-                return false;
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(jsonText);
-                rawJson = jsonText;
-
-                var root = doc.RootElement;
-
-                DateTime tsUtc = DateTime.UtcNow;
-                if (root.TryGetProperty("utc", out var utcEl) &&
-                    utcEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(utcEl.GetString(), null,
-                        System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
-                {
-                    tsUtc = parsed.ToUniversalTime();
-                }
-
-                string type = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == JsonValueKind.String
-                    ? (tEl.GetString() ?? "unknown") : "unknown";
-
-                string userSid = root.TryGetProperty("userSid", out var sidEl) && sidEl.ValueKind == JsonValueKind.String
-                    ? (sidEl.GetString() ?? "UnknownUser") : "UnknownUser";
-
-                string machine = root.TryGetProperty("machine", out var mEl) && mEl.ValueKind == JsonValueKind.String
-                    ? (mEl.GetString() ?? Environment.MachineName) : Environment.MachineName;
-
-                string appVersion = root.TryGetProperty("appVersion", out var avEl) && avEl.ValueKind == JsonValueKind.String
-                    ? (avEl.GetString() ?? "unknown") : "unknown";
-
-                string message =
-                    (root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
-                        ? msgEl.GetString() ?? ""
-                        : (root.TryGetProperty("details", out var detMsgEl) && detMsgEl.ValueKind == JsonValueKind.String
-                            ? detMsgEl.GetString() ?? "" : ""));
-
-                object? detailsObj = null;
-                if (root.TryGetProperty("details", out var detEl))
-                    detailsObj = JsonToBoxed(detEl);
-
-                payload = new EarlyPayload
-                {
-                    tsUtc = tsUtc,
-                    type = type,
-                    userSid = userSid,
-                    machine = machine,
-                    appVersion = appVersion,
-                    message = message,
-                    details = detailsObj
-                };
-                return true;
-            }
-            catch (Exception ex)
-            {
-                reason = "json_parse_failed:" + ex.GetType().Name;
-                return false;
-            }
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(text);
+            var hash = sha.ComputeHash(bytes);
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var b in hash) sb.Append(b.ToString("x2"));
+            return sb.ToString();
         }
 
-        // Legacy “V2” best-effort parser:
-        //   MWPV_ELOG_V2
-        //   key=value
-        //   ...
-        //   json={...}
-        private static bool TryParseLegacy(
-            List<string> lines,
-            out EarlyPayload payload,
-            out string rawJson,
-            out string reason)
+        private static string[] SafeGetFiles(string dir, string pattern)
         {
-            payload = default!;
-            rawJson = "";
-            reason = "";
-
-            var kv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string? json = null;
-
-            for (int i = 1; i < lines.Count; i++)
-            {
-                var line = lines[i].Trim();
-                if (line.Length == 0) continue;
-
-                if (line.StartsWith("json=", StringComparison.OrdinalIgnoreCase))
-                {
-                    json = line.Substring(5).Trim();
-                    break; // json is last; ignore anything after
-                }
-
-                int eq = line.IndexOf('=');
-                if (eq <= 0) continue;
-
-                string key = line.Substring(0, eq).Trim();
-                string val = line.Substring(eq + 1).Trim();
-                kv[key] = val;
-            }
-
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                reason = "legacy_missing_json";
-                return false;
-            }
-
-            try
-            {
-                rawJson = json!;
-                using var doc = JsonDocument.Parse(json!);
-                var root = doc.RootElement;
-
-                DateTime tsUtc = DateTime.UtcNow;
-                if (root.TryGetProperty("tsUtc", out var tsEl) &&
-                    tsEl.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(tsEl.GetString(), null,
-                        System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsed))
-                {
-                    tsUtc = parsed.ToUniversalTime();
-                }
-
-                string type =
-                    (root.TryGetProperty("type", out var tEl) && tEl.ValueKind == JsonValueKind.String
-                        ? tEl.GetString() ?? "unknown"
-                        : (kv.TryGetValue("type", out var kvType) ? kvType : "unknown"));
-
-                string userSid =
-                    (root.TryGetProperty("userSid", out var sidEl) && sidEl.ValueKind == JsonValueKind.String
-                        ? sidEl.GetString() ?? "UnknownUser"
-                        : (kv.TryGetValue("userSid", out var kvSid) ? kvSid : "UnknownUser"));
-
-                string machine =
-                    (root.TryGetProperty("machine", out var mEl) && mEl.ValueKind == JsonValueKind.String
-                        ? mEl.GetString() ?? Environment.MachineName
-                        : (kv.TryGetValue("machine", out var kvM) ? kvM : Environment.MachineName));
-
-                string appVersion =
-                    (root.TryGetProperty("appVersion", out var avEl) && avEl.ValueKind == JsonValueKind.String
-                        ? avEl.GetString() ?? "unknown"
-                        : (kv.TryGetValue("appVersion", out var kvV) ? kvV : "unknown"));
-
-                string message =
-                    (root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
-                        ? msgEl.GetString() ?? ""
-                        : (kv.TryGetValue("message", out var kvMsg) ? kvMsg : ""));
-
-                object? detailsObj = null;
-                if (root.TryGetProperty("details", out var detEl))
-                    detailsObj = JsonToBoxed(detEl);
-
-                payload = new EarlyPayload
-                {
-                    tsUtc = tsUtc,
-                    type = type,
-                    userSid = userSid,
-                    machine = machine,
-                    appVersion = appVersion,
-                    message = message,
-                    details = detailsObj
-                };
-                return true;
-            }
-            catch (Exception ex)
-            {
-                reason = "legacy_json_parse_failed:" + ex.GetType().Name;
-                return false;
-            }
+            try { return Directory.GetFiles(dir, pattern); }
+            catch { return Array.Empty<string>(); }
         }
 
-        private static object? JsonToBoxed(JsonElement el)
+        private static string SanitizeForFile(string s)
         {
-            switch (el.ValueKind)
-            {
-                case JsonValueKind.Null: return null;
-                case JsonValueKind.String: return el.GetString();
-                case JsonValueKind.Number:
-                    if (el.TryGetInt64(out var i64)) return i64;
-                    if (el.TryGetDouble(out var d)) return d;
-                    return el.ToString();
-                case JsonValueKind.True:
-                case JsonValueKind.False: return el.GetBoolean();
-                case JsonValueKind.Object:
-                case JsonValueKind.Array: return el.GetRawText(); // preserve nested JSON
-                default: return el.ToString();
-            }
+            foreach (var ch in Path.GetInvalidFileNameChars())
+                s = s.Replace(ch, '_');
+            return s;
         }
 
-        private static List<string> SplitLines(string text)
-        {
-            var list = new List<string>();
-            using var sr = new StringReader(text);
-            string? line;
-            while ((line = sr.ReadLine()) is not null)
-                list.Add(line);
-            return list;
-        }
+        private static string EscapeJson(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }

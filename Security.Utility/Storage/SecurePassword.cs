@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Security.Cryptography;
+// File: Crypto/KeyArchiveVerifier.cs (example)
+using Security.Utility.Storage;   // SEDS lives here
+using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
 
 namespace Security.Utility.Storage
 {

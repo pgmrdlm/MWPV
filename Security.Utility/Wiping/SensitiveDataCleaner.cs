@@ -7,6 +7,10 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+// File: Crypto/KeyArchiveVerifier.cs (example)
+using Security.Utility.Storage;   // SEDS lives here
+using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
+// optional, file-local aliases:
 
 namespace Security.Utility.Wiping;
 

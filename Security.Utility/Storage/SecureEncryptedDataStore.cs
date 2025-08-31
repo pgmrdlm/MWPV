@@ -4,6 +4,10 @@ using System.Diagnostics; // Debug.WriteLine traces (always-on)
 using System.Security.Cryptography;
 using System.Text;
 using Security.Utility.Wiping;
+// File: Crypto/KeyArchiveVerifier.cs (example)
+using Security.Utility.Storage;   // SEDS lives here
+using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
+// optional, file-local aliases:
 
 namespace Security.Utility.Storage;
 
