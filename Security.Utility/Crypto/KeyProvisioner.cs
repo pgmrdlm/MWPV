@@ -2,8 +2,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Security.Cryptography;
+using Security.Utility.Storage; // SecureEncryptedDataStore
+using Security.Utility.Wiping;  // SensitiveDataCleaner
+// File: Crypto/KeyArchiveVerifier.cs (example)
 
-namespace Security.Utility
+namespace Security.Utility.Crypto
 {
     /// <summary>
     /// Central source of truth for application keys.

@@ -1,9 +1,14 @@
-﻿using System;
+﻿// Utilities/Helpers/SevenZipHelper.cs — full rewrite
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using SevenZip;
-using Utilities.Diagnostics;   // EarlyLoginFailures, EarlyFailType
-using EarlyFailType = Utilities.Diagnostics.EarlyFailType;
+using Utilities.Diagnostics;     // EarlyLoginFailures
+using Security.Utility;          // EarlyFailType
+using Utilities.Helpers.Debugging;
+using EarlyFail = Security.Utility.EarlyFailType;
 
 namespace Utilities.Helpers
 {
@@ -15,9 +20,9 @@ namespace Utilities.Helpers
 
         /// <summary>
         /// Configure SevenZipSharp's native library path.
-        /// - Tries explicitPath, env var SEVENZIP_LIBRARY_PATH, then common probe locations.
-        /// - Returns true on success, false otherwise (and records an early log instead of throwing).
-        /// - Idempotent and thread-safe.
+        /// Tries: explicitPath → SEVENZIP_LIBRARY_PATH → app baseDir locations.
+        /// Returns true on success; false on failure (and logs an early failure).
+        /// Thread-safe & idempotent.
         /// </summary>
         public static bool ConfigureLibraryPath(string? explicitPath = null)
         {
@@ -29,13 +34,15 @@ namespace Utilities.Helpers
 
                 try
                 {
-                    // 1) Candidate list (highest to lowest priority)
                     var is64 = Environment.Is64BitProcess;
                     var baseDir = AppContext.BaseDirectory;
-
+#if DEBUG
+                    Dbg($"ConfigureLibraryPath called. explicitPath={explicitPath ?? "<null>"} baseDir={baseDir} is64={is64}");
+#endif
                     var envPath = Environment.GetEnvironmentVariable("SEVENZIP_LIBRARY_PATH");
 
-                    var candidates = new[]
+                    // Build candidate list (highest → lowest priority)
+                    var candidates = new List<string?>()
                     {
                         explicitPath,
                         string.IsNullOrWhiteSpace(envPath) ? null : envPath,
@@ -52,32 +59,50 @@ namespace Utilities.Helpers
                     }
                     .Where(p => !string.IsNullOrWhiteSpace(p))
                     .Select(p => Path.GetFullPath(p!))
-                    .Distinct()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
+#if DEBUG
+                    Dbg("Probe candidates:\n" + string.Join("\n", candidates));
+#endif
                     var found = candidates.FirstOrDefault(File.Exists);
 
                     if (found == null)
                     {
-                        EarlyLoginFailures.Record(
-                            EarlyFailType.KeyfileMissingOrCorrupt,
-                            "SevenZip native DLL not found. Probed: " + string.Join(" | ", candidates)
-                        );
+                        var msg = "SevenZip native DLL not found.";
+                        EarlyLoginFailures.Record(EarlyFail.InvalidKeyFile, msg + " (See Debug output for probe list)");
+#if DEBUG
+                        Dbg(msg + "\n(no candidates existed on disk)");
+#endif
                         return false;
                     }
 
+                    // Set and remember
                     SevenZipBase.SetLibraryPath(found);
                     _pathUsed = found;
                     _configured = true;
+#if DEBUG
+                    Dbg("SevenZip library path set to: " + _pathUsed);
+#endif
                     return true;
+                }
+                catch (SevenZipLibraryException ex)
+                {
+                    // Library present but load failed (often bitness mismatch)
+                    var msg = "Failed to load SevenZip native library (bitness mismatch or invalid DLL).";
+                    EarlyLoginFailures.Record(EarlyFail.InvalidKeyFile, msg, ex);
+#if DEBUG
+                    Dbg(msg + " Exception=" + ex.Message);
+#endif
+                    return false;
                 }
                 catch (Exception ex)
                 {
-                    EarlyLoginFailures.Record(
-                        EarlyFailType.KeyfileMissingOrCorrupt,
-                        "Failed to configure SevenZip native library.",
-                        ex
-                    );
+                    var msg = "Unexpected error while configuring SevenZip native library.";
+                    EarlyLoginFailures.Record(EarlyFail.InvalidKeyFile, msg, ex);
+#if DEBUG
+                    Dbg(msg + " Exception=" + ex);
+#endif
                     return false;
                 }
             }
@@ -85,5 +110,11 @@ namespace Utilities.Helpers
 
         /// <summary>Returns the path that was configured (if any).</summary>
         public static string? GetConfiguredPath() => _pathUsed;
+
+#if DEBUG
+        [Conditional("DEBUG")]
+        private static void Dbg(string msg)
+            => Debug.WriteLine($"[SevenZipHelper] {msg}");
+#endif
     }
 }

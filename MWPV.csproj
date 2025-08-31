@@ -31,7 +31,7 @@
 	<ItemGroup>
 		<Resource Include="Assets\Icons\MWPV_TitleBarIcon_16by16.ico" />
 		<None Update="7z.dll">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
 		<None Update="sql\SelectCatagories.sql">

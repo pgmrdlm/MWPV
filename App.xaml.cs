@@ -1,460 +1,252 @@
-﻿// App.xaml.cs
-// Single-instance (per user SID) + bring-to-front,
-// early setup dialog, then main window; encrypted logging; safe cleanup.
-
-using MWPV.Services;                        // LogRepository
-using SQLitePCL;                            // Batteries_V2
+﻿// App.xaml.cs — full file (WPF, .NET 8)
 using System;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Security.Principal;
 using System.Threading;
-using System.Threading.Tasks;               // TaskScheduler.UnobservedTaskException
 using System.Windows;
-using System.Windows.Threading;             // DispatcherUnhandledException
-using Microsoft.Win32;                      // SystemEvents.SessionEnding
-
-using Utilities.Diagnostics;                // EarlyLoginFailures, EarlyLogIngestor
-using Utilities.Helpers;                    // DatabaseHelper, ErrorHandler, SevenZipHelper
-using Security.Utility;                     // SecureLogService, SensitiveDataCleaner, SecureEncryptedDataStore
-//using Utilities.Logging;                    // LogEventIds, LogSeverity
-using Utilities.Security;              // <-- AppEntryWindow lives here now
-
-#if DEBUG
-using System.Diagnostics;
-using System.Data.Common;                   // for DbCommand (debug helpers)
-#endif
-
-// Disambiguation aliases
-using WpfApp = System.Windows.Application;
-// avoid ambiguity with MWPV.Services.EarlyLogIngestor
-using EarlyLogIngestor = Utilities.Diagnostics.EarlyLogIngestor;
-// handy alias for the setup window
-using EntryWin = Utilities.Security.AppEntryWindow;
+using System.Runtime.InteropServices;
+using SevenZip;                       // path configured via SevenZipHelper
+using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyLogIngestor
+using Utilities.Helpers;              // SevenZipHelper, ErrorHandler
+using MWPV.Services;                  // LogRepository
+using Utilities.Security;
 
 namespace MWPV
 {
-    public partial class App : WpfApp
+    public partial class App : Application
     {
-        // ---- single-instance plumbing ----
-        private static Mutex? _singleInstanceMutex;
-        private static bool _ownsSingleInstanceMutex;
-        private static EventWaitHandle? _instanceSignal;
-        private static Thread? _signalListenerThread;
-        private static volatile bool _shutdownListener;
+        // Single-instance IDs (Global = cross-session)
+        private const string MutexName = @"Global\MWPV.App.SingleInstance";
+        private const string BringToFrontEventName = @"Global\MWPV.App.BringToFront";
 
-        // Keep purge retention at 90 days
-        private const int LogRetentionDays = 90;
-
-        // ---- secure wipe guard ----
-        private static int _wipeOnceFlag = 0;
-        private static void SafeWipeAll()
-        {
-            try
-            {
-                if (Interlocked.Exchange(ref _wipeOnceFlag, 1) == 1) return;
-                // never log here to avoid recursion during failure/teardown
-                SensitiveDataCleaner.WipeAll();
-            }
-            catch
-            {
-                // swallow — process is exiting or faulting
-            }
-        }
+        private Mutex? _singleInstanceMutex;
+        private EventWaitHandle? _bringToFrontEvent;
+        private Thread? _bringToFrontListener;
+        private bool _ownsMutex;
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            // --- enforce single instance per user ---
-            string userSid = WindowsIdentity.GetCurrent()?.User?.Value ?? "UnknownUser";
-            string mutexName = $@"Local\MWPV_{userSid}";
-            string eventName = $@"Local\MWPV_Signal_{userSid}";
-
-            _singleInstanceMutex = new Mutex(true, mutexName, out bool createdNew);
-            _ownsSingleInstanceMutex = createdNew;
-
-            if (!_ownsSingleInstanceMutex)
+            // ---- Single-instance gate ----
+            _singleInstanceMutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out _ownsMutex);
+            if (!_ownsMutex)
             {
-                // Signal existing instance to come to front and exit this one.
-                try
-                {
-                    using var existing = EventWaitHandle.OpenExisting(eventName);
-                    existing.Set();
-                }
-                catch
-                {
-                    ErrorHandler.InfoTitled("Already running", "MWPV is already running.", "single-instance");
-                }
-                Current?.Shutdown();
+                try { using var evt = EventWaitHandle.OpenExisting(BringToFrontEventName); evt.Set(); } catch { }
+                try { EarlyLoginFailures.Write("App", "Second instance detected; signaling first and exiting."); } catch { }
+                Shutdown();
                 return;
             }
-
-            // Listen for signals from secondary launches.
-            _instanceSignal = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
-            _signalListenerThread = new Thread(InstanceSignalListener)
-            {
-                IsBackground = true,
-                Name = "MWPV.InstanceSignalListener"
-            };
-            _signalListenerThread.Start();
-
-            // --- abnormal exit & OS session handlers (register EARLY) ---
-            AppDomain.CurrentDomain.UnhandledException += (_, __) => SafeWipeAll();
-            TaskScheduler.UnobservedTaskException += (_, e2) => { try { SafeWipeAll(); } finally { e2.SetObserved(); } };
-            Current.DispatcherUnhandledException += (_, __) =>
-            {
-                try { SafeWipeAll(); } finally { /* ErrorHandler handles UI/log */ }
-            };
-            AppDomain.CurrentDomain.ProcessExit += (_, __) => SafeWipeAll();
-            SystemEvents.SessionEnding += (_, __) => SafeWipeAll();
-
-            // --- platform init & global handlers ---
-            Batteries_V2.Init();                   // SQLCipher
-            SevenZipHelper.ConfigureLibraryPath(); // 7-Zip helper (best effort)
-            ErrorHandler.RegisterGlobalHandlers(this);
 
             base.OnStartup(e);
 
-            // Ensure early-failure directory exists (for pre-login .elog files)
-            Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
+            // Prevent auto-shutdown while showing the modal entry dialog
+            var originalShutdownMode = ShutdownMode;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // --- run password/key setup before showing MainWindow ---
-            Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-
-            // **Moved to app namespace**
-            var setupWindow = new EntryWin();
-            bool? ok = setupWindow.ShowDialog();
-            if (ok != true)
+            // ---- Bring-to-front listener ----
+            try
             {
-                Current.Shutdown();
+                _bringToFrontEvent = new EventWaitHandle(false, EventResetMode.AutoReset, BringToFrontEventName);
+                _bringToFrontListener = new Thread(BringToFrontListenLoop)
+                {
+                    IsBackground = true,
+                    Name = "MWPV.BringToFrontListener"
+                };
+                _bringToFrontListener.Start();
+            }
+            catch (Exception ex)
+            {
+                try { EarlyLoginFailures.Write("App", "Failed to start BringToFront listener", ex: ex); } catch { }
+            }
+
+            // ---- Initialize SevenZip native DLL early ----
+            try
+            {
+                var explicitPath = Path.Combine(AppContext.BaseDirectory, "7z.dll");
+                if (!SevenZipHelper.ConfigureLibraryPath(explicitPath))
+                    throw new InvalidOperationException($"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}");
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + SevenZipHelper.GetConfiguredPath());
+#endif
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(
+                    ex,
+                    "SevenZip could not be initialized.\n(Check that 7z.dll matches process bitness and is present.)",
+                    "SevenZip.Init");
+                Shutdown();
                 return;
             }
 
-            // --- configure encrypted logging (non-fatal if it fails) ---
-            string sessionId = Guid.NewGuid().ToString("N");
-            string appVersion =
-                (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
-                .GetName().Version?.ToString() ?? "unknown";
-
+            // ---- Startup ingest of any pre-existing early logs ----
             try
             {
-                var logs = new LogRepository(DatabaseHelper.OpenConnection, appVersion);
+                Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
+                Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
 
-                ErrorHandler.Configure(
-                    logs,
-                    sessionIdProvider: () => sessionId,
-                    appVersion: appVersion
-                );
+                var startupRepo = new LogRepository();
+                EarlyLogIngestor.IngestAll(startupRepo);
+            }
+            catch (Exception ex)
+            {
+                try { EarlyLoginFailures.Write("EarlyIngestor", "Failed during startup ingest", ex: ex); } catch { }
+            }
 
-                // Initialize secure logger before any WriteAsync calls
-                SecureLogService.Initialize(DatabaseHelper.OpenConnection, appVersion, "MWPV");
+            // ---- Entry flow (modal) -> then MainWindow ----
+            try
+            {
+                var entry = new AppEntryWindow();
+                var ok = entry.ShowDialog() == true;   // modal; DialogResult is valid inside
+                if (!ok)
+                {
+                    Shutdown();
+                    return;
+                }
 
-                // re-hook after logger live (so global handlers can write securely)
-                ErrorHandler.RegisterGlobalHandlers(this);
-
-#if DEBUG
-                Debug.WriteLine($"[LOG] Initialized encrypted logging v{appVersion}, session {sessionId}");
-#endif
-
-                // Sweep any unpacked SQL files (best effort)
+                // Heads-up if prior invalid attempts exist (same run or earlier)
+                int pending = 0;
                 try
                 {
-                    var sqlDir = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "MWPV", "sql");
-                    SensitiveDataCleaner.SecureDeleteAllFiles(sqlDir, overwritePasses: 1);
+                    var earlyDir = EarlyLoginFailures.StoreDir;
+                    if (Directory.Exists(earlyDir))
+                        pending = Directory.GetFiles(earlyDir, "*.elogp", SearchOption.TopDirectoryOnly).Length;
                 }
-                catch { /* ignore */ }
+                catch { /* best-effort */ }
 
-                // Standardized startup log
-                LogInfo("App", "Startup (post-setup)", LogEventIds.AppStart, new { version = appVersion, sessionId });
+                if (pending > 0)
+                {
+                    ErrorHandler.InfoTitled(
+                        "Previous Invalid Logins Detected",
+                        $"{pending} prior invalid login attempt(s) were found.\n\n" +
+                        "They will be ingested into the audit log now.",
+                        "EarlyLoginNotice");
+                }
 
-                // Prove DB connectivity explicitly and log result
-                TryProbeDb();
-
-                // Optional: purge old logs at startup if script is present
-                TryRunStartupLogPurge(LogRetentionDays);
-
-#if DEBUG
-                // Dump a few recent logs to Output window; safe & optional
-                DebugDumpRecentLogs(take: 20, crashesOnly: false);
-#endif
-
-                // --- user-facing notice + ingest any early .elog files now that encrypted logging is live ---
+                // Post-login ingest to catch files created during THIS run (e.g., bad pw then good)
                 try
                 {
-                    if (EarlyLoginFailures.HasPending())
-                    {
-                        ErrorHandler.InfoTitled(
-                            "Login Notice",
-                            "Previous login failures were detected on this device.\n\n" +
-                            "Details will now be ingested into the secure log.\n" +
-                            "This event has been logged.",
-                            "EarlyLogin.Ingest"
-                        );
-                    }
-
-                    var res = EarlyLogIngestor.IngestAllEarlyLogsTransactional(DatabaseHelper.OpenConnection);
-
-                    if (res.Inserted + res.Deduped + res.Quarantined + res.Deleted + res.Errors > 0)
-                    {
-                        SecureLogService.WriteAsync(
-                            SecLogLevel.Info,
-                            new { res.Inserted, res.Deduped, res.Quarantined, res.Deleted, res.Errors, sessionId },
-                            eventCode: "EARLY_INGEST_SUMMARY",
-                            source: "App.Startup"
-                        ).GetAwaiter().GetResult();
-                    }
+                    var postRepo = new LogRepository();
+                    EarlyLogIngestor.IngestAll(postRepo);
                 }
-                catch (Exception exIngest)
+                catch (Exception ex)
                 {
-                    SecureLogService.WriteAsync(
-                        SecLogLevel.Warn,
-                        new { ex = exIngest.Message },
-                        eventCode: "EARLY_INGEST_FAILED",
-                        source: "App.Startup"
-                    ).GetAwaiter().GetResult();
+                    try { EarlyLoginFailures.Write("EarlyIngestor", "Post-login ingest failed", ex: ex); } catch { }
                 }
+
+                var main = new MainWindow();
+                MainWindow = main;
+                main.Show();
             }
             catch (Exception ex)
             {
-                // Don’t block startup if logging init fails
-                ErrorHandler.Abend(
-                    ex,
-                    "Failed to initialize encrypted logging",
-                    stage: "startup-logging",
-                    severity: ErrorSeverity.Warning,
-                    icon: MessageBoxImage.Warning,
-                    log: false
-                );
+                try { EarlyLoginFailures.Write("App", "Failed to show initial window(s)", ex: ex); } catch { }
+                Shutdown(-1);
+                return;
             }
-
-            // --- show MainWindow (now single source of creation; App.xaml has no StartupUri) ---
-            var main = new MainWindow();
-            Current.MainWindow = main;
-            Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
-            main.Show();
-        }
-
-        // Try to purge old log rows using Logs_Purge_OlderThan.sql (if present in the key archive)
-        private static void TryRunStartupLogPurge(int retentionDays)
-        {
-            try
+            finally
             {
-                string sql = SecureEncryptedDataStore.GetString("Logs_Purge_OlderThan.sql");
-                if (string.IsNullOrWhiteSpace(sql))
-                    return; // script not present yet → skip silently
-
-                using var conn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = sql;
-
-                var cutoff = DateTime.UtcNow.AddDays(-Math.Abs(retentionDays));
-                var p = cmd.CreateParameter();
-                p.ParameterName = "@CutoffUtc";
-                p.DbType = System.Data.DbType.DateTime;
-                p.Value = cutoff;
-                cmd.Parameters.Add(p);
-
-                int n = cmd.ExecuteNonQuery();
-
-#if DEBUG
-                // Visible in VS Output window for quick verification
-                Debug.WriteLine($"[LOG Purge] purged={n} cutoffUtc={cutoff:O} retentionDays={retentionDays}");
-#endif
-                // Persisted in DB for audit
-                SecureLogService.WriteAsync(
-                    SecLogLevel.Info,
-                    new { purged = n, cutoffUtc = cutoff, retentionDays },
-                    eventCode: "LOGS_PURGE_STARTUP",
-                    source: "App.Startup"
-                ).GetAwaiter().GetResult();
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[LOG Purge] FAILED: {ex.Message}");
-#endif
-                SecureLogService.WriteAsync(
-                    SecLogLevel.Warn,
-                    new { ex = ex.Message },
-                    eventCode: "LOGS_PURGE_STARTUP_FAILED",
-                    source: "App.Startup"
-                ).GetAwaiter().GetResult();
-            }
-        }
-
-#if DEBUG
-        // ---- debug-only helpers ----
-
-        private static void DebugDumpRecentLogs(int take = 20, bool crashesOnly = false)
-        {
-            try
-            {
-                string sql = SecureEncryptedDataStore.GetString("Logs_Select_Recent.sql");
-                if (string.IsNullOrWhiteSpace(sql)) return;
-
-                using var conn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = sql;
-
-                // Add only if referenced by the script (future-proof).
-                AddOptionalParameter(cmd, "@Take", take);
-                AddOptionalParameter(cmd, "@Limit", take);
-                AddOptionalParameter(cmd, "@CrashesOnly", crashesOnly ? 1 : 0);
-
-                // Ensure @FromUtc exists (NULL is allowed; SQL checks IS NULL)
-                AddOptionalParameter(cmd, "@FromUtc", DBNull.Value);
-
-                using var r = cmd.ExecuteReader();
-                while (r.Read())
-                {
-                    var id = r["Id"];
-                    var created = r["CreatedUtc"];
-                    var level = r["Level"];
-                    var evt = r["EventCode"];
-                    var source = r["Source"];
-                    var payload = r["Payload"];
-                    Debug.WriteLine($"[LOG RECENT] #{id} {created} L={level} {source} {evt} :: {payload}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LOG RECENT] failed: {ex.Message}");
-            }
-        }
-
-        /// <summary>Adds a parameter only if the SQL text references it.</summary>
-        private static void AddOptionalParameter(DbCommand cmd, string name, object value)
-        {
-            if (!cmd.CommandText.Contains(name, StringComparison.OrdinalIgnoreCase)) return;
-            var p = cmd.CreateParameter();
-            p.ParameterName = name;
-            p.Value = value ?? DBNull.Value;
-            cmd.Parameters.Add(p);
-        }
-#endif
-
-        // --- small centralized wrappers to carry your numeric EventIds via SecureLogService ---
-        private static void LogInfo(string source, string message, int eventId, object? details = null)
-            => Log(SecLogLevel.Info, source, message, eventId, details);
-
-        private static void LogWarn(string source, string message, int eventId, object? details = null)
-            => Log(SecLogLevel.Warn, source, message, eventId, details);
-
-        private static void LogError(string source, string message, int eventId, object? details = null)
-            => Log(SecLogLevel.Error, source, message, eventId, details);
-
-        private static void Log(SecLogLevel level, string source, string message, int eventId, object? details)
-        {
-            try
-            {
-                SecureLogService.WriteAsync(
-                    level,
-                    new { eventId, message, details },
-                    eventCode: $"EVENT_{eventId}",
-                    source: source ?? "App"
-                ).GetAwaiter().GetResult();
-
-#if DEBUG
-                Debug.WriteLine($"[LOG {level}] {source} #{eventId} {message}");
-#endif
-            }
-            catch
-            {
-                // Intentionally swallow to avoid recursive logging/abends.
-            }
-        }
-
-        private static void TryProbeDb()
-        {
-            try
-            {
-                using var _ = DatabaseHelper.GetAppOpenConnection();
-                LogInfo("DB", "Connection opened", LogEventIds.DbOpenSucceeded);
-            }
-            catch (Exception ex)
-            {
-                LogError("DB", "Connection failed", LogEventIds.DbOpenFailed,
-                    new { exType = ex.GetType().Name, exMessage = ex.Message });
-            }
-        }
-
-        private void InstanceSignalListener()
-        {
-            try
-            {
-                while (!_shutdownListener && _instanceSignal is not null)
-                {
-                    _instanceSignal.WaitOne();
-                    if (_shutdownListener) break;
-
-                    try { Dispatcher?.BeginInvoke(new Action(BringExistingInstanceToFront)); }
-                    catch { /* never throw on listener thread */ }
-                }
-            }
-            catch
-            {
-                // Do not crash on listener errors
-            }
-        }
-
-        private void BringExistingInstanceToFront()
-        {
-            // Prefer setup window if visible; otherwise MainWindow; otherwise any visible window.
-            Window? w =
-                Current.Windows.OfType<EntryWin>()
-                    .FirstOrDefault(win => win.IsVisible)
-                ?? Current.MainWindow
-                ?? Current.Windows.Cast<Window>().FirstOrDefault(win => win.IsVisible);
-
-            if (w == null) return;
-
-            try
-            {
-                if (w.WindowState == WindowState.Minimized)
-                    w.WindowState = WindowState.Normal;
-
-                bool wasTop = w.Topmost;
-                w.Topmost = true;
-                w.Activate();
-                w.Topmost = wasTop;
-                w.Focus();
-            }
-            catch
-            {
-                // ignore activation issues
+                // Back to normal once MainWindow exists
+                ShutdownMode = originalShutdownMode == ShutdownMode.OnExplicitShutdown
+                    ? ShutdownMode.OnMainWindowClose
+                    : originalShutdownMode;
             }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            // Wipe first on normal exit
-            SafeWipeAll();
-
-            _shutdownListener = true;
-
-            try { _instanceSignal?.Set(); } catch { }
-            try { _instanceSignal?.Dispose(); } catch { }
-            _instanceSignal = null;
+            // Order matters: stop thread -> signal -> dispose, then mutex
+            try { _bringToFrontListener?.Interrupt(); } catch { }     // break WaitOne()
+            try { _bringToFrontEvent?.Set(); } catch { }              // nudge if not interrupted
 
             try
             {
-                if (_ownsSingleInstanceMutex && _singleInstanceMutex is not null)
-                    _singleInstanceMutex.ReleaseMutex();
+                if (_bringToFrontListener is { IsAlive: true })
+                {
+                    // Wait briefly to let the thread exit cleanly
+                    _bringToFrontListener.Join(millisecondsTimeout: 200);
+                }
             }
-            catch
+            catch { /* ignore */ }
+
+            try { _bringToFrontEvent?.Dispose(); } catch { }
+
+            try
             {
-                // ignore if we somehow don't own it
+                if (_ownsMutex) _singleInstanceMutex?.ReleaseMutex();
+                _singleInstanceMutex?.Dispose();
             }
-            finally
-            {
-                try { _singleInstanceMutex?.Dispose(); } catch { }
-                _singleInstanceMutex = null;
-                _ownsSingleInstanceMutex = false;
-            }
+            catch { }
 
             base.OnExit(e);
         }
+
+        // === Bring-to-front plumbing ===
+        private void BringToFrontListenLoop()
+        {
+            try
+            {
+                // snapshot to avoid races with field being nulled/disposed
+                var evt = _bringToFrontEvent;
+                if (evt is null) return;
+
+                while (true)
+                {
+                    try
+                    {
+                        if (!evt.WaitOne()) continue;   // blocks until signaled
+                    }
+                    catch (ThreadInterruptedException) { break; }   // normal shutdown
+                    catch (ObjectDisposedException) { break; }   // event disposed during shutdown
+
+                    // marshal to UI thread
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            if (Current?.MainWindow is Window w)
+                                BringWindowToFront(w);
+                        }
+                        catch (Exception ex)
+                        {
+                            try { EarlyLoginFailures.Write("App", "BringToFront handler exception", ex: ex); } catch { }
+                        }
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                try { EarlyLoginFailures.Write("App", "BringToFront listener loop exception", ex: ex); } catch { }
+            }
+        }
+
+        private static void BringWindowToFront(Window w)
+        {
+            if (w.WindowState == WindowState.Minimized)
+                w.WindowState = WindowState.Normal;
+
+            w.Activate();
+            w.Topmost = true;  // nudge
+            w.Topmost = false;
+            w.Focus();
+
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    ShowWindow(hwnd, SW_RESTORE);
+                    SetForegroundWindow(hwnd);
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        // Win32 helpers
+        private const int SW_RESTORE = 9;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     }
 }
