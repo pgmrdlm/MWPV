@@ -1,0 +1,32 @@
+    "UI Icons"
+      "Use Windows Unicode chars"
+        "[ ] Tried"
+        "[ ] Didn't work"
+        "[ ] Not worth it"
+        "[ ] Keep / Implement"
+
+    "Password Entry"
+      "Strength bar (guidance-only)"
+        "[ ] Tried"
+        "[ ] Didn't work"
+        "[ ] Not worth it"
+        "[ ] Keep / Implement"
+
+    "Password Policy"
+      "Dictionary word check (warn only)"
+        "[ ] Tried"
+        "[ ] Didn't work"
+        "[ ] Not worth it"
+        "[ ] Keep / Implement"
+
+    "Side Project"
+      "Contractor bid app"
+        "[ ] Charge?"
+        "[ ] Free (word of mouth)?"
+        "[ ] Trade for services?"
+
+    "Code Hygiene"
+      "Revisit code for stray debug paths"
+        "Include in existing methods/classes"
+        "Remove duplicate logic"
+```
