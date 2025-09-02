@@ -2,7 +2,7 @@
 using System.Data;
 using System.Diagnostics;
 using Utilities.Helpers;   // DatabaseHelper
-using Utilities.Sql;       // SqlCatagory
+using Utilities.Sql;       // SqlCagegory
 
 namespace Utilities.Diagnostics
 {
@@ -18,7 +18,7 @@ namespace Utilities.Diagnostics
                 // 1) READ TEST: Categories via cached SQL
                 using (var readCmd = conn.CreateCommand())
                 {
-                    readCmd.CommandText = SqlCatagory.GetSql("SelectCatagories.sql");
+                    readCmd.CommandText = SqlCagegory.GetSql("SelectCategories.sql");
                     using var rdr = readCmd.ExecuteReader();
                     int rows = 0;
                     while (rdr.Read()) rows++;
@@ -31,7 +31,7 @@ namespace Utilities.Diagnostics
 
                 using (var insCmd = conn.CreateCommand())
                 {
-                    insCmd.CommandText = SqlCatagory.GetSql("Logs_Insert_V2.sql");
+                    insCmd.CommandText = SqlCagegory.GetSql("Logs_Insert_V2.sql");
 
                     insCmd.Parameters.AddWithValue("@WhenUtc", nowUtc);
                     insCmd.Parameters.AddWithValue("@CreatedUtc", nowUtc);
@@ -64,7 +64,7 @@ namespace Utilities.Diagnostics
                 // 3) VERIFY INSERT: fetch last insert id
                 using (var lastIdCmd = conn.CreateCommand())
                 {
-                    lastIdCmd.CommandText = SqlCatagory.GetSql("Logs_LastInsertId.sql");
+                    lastIdCmd.CommandText = SqlCagegory.GetSql("Logs_LastInsertId.sql");
                     lastId = Convert.ToInt64(lastIdCmd.ExecuteScalar());
                     Debug.WriteLine($"[SMOKE][VERIFY] Logs last inserted id={lastId}");
                 }

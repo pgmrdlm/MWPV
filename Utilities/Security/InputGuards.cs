@@ -1,24 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Security.Utility
 {
     /// <summary>
     /// Centralized input validation & normalization for names and free text.
-    ///
-    /// Policy:
-    /// - We do NOT silently “fix” dangerous symbols. We normalize whitespace and control chars,
-    ///   then VALIDATE & REJECT with a clear error if input still violates the rules.
-    ///
-    /// Names (categories/items):
-    ///   - Strict: min/max length, no quotes/angle-brackets/pipe/backslash/backtick/semicolon, etc.
-    ///
-    /// Descriptions (tooltips / multi-line text):
-    ///   - Normalize (trim, keep newlines, strip control chars except \n/\t).
-    ///   - Forbid a small explicit set of risky symbols: <, >, |, `, \, ', ", ;
-    ///   - Return (IsValid, CleanText, Error) so UIs can show the message and avoid silent stripping.
+    /// - Names: strict (length, allowed char set), single-line.
+    /// - Descriptions: human-friendly; allow punctuation, strip control chars, cap length.
     /// </summary>
     public static class InputGuards
     {
@@ -27,17 +18,9 @@ namespace Security.Utility
         private static readonly Regex CollapseSpacesButKeepNewlines =
             new(@"[^\S\n]+", RegexOptions.Compiled);
 
-        // Remove ALL control chars EXCEPT CR/LF/TAB (we’ll normalize CR to LF later).
+        // Remove ALL control chars EXCEPT CR/LF/TAB (we normalize CR to LF later).
         private static readonly Regex StripControlExceptNewlineTab =
             new(@"[\p{C}&&[^\r\n\t]]", RegexOptions.Compiled);
-
-        // Base forbidden characters for "names"
-        private static readonly char[] ForbiddenNameChars =
-            { '\'', '\"', ';', '\\', '`', '<', '>', '|' };
-
-        // Forbidden characters for descriptions (explicit, narrow set)
-        private static readonly char[] ForbiddenDescriptionChars =
-            { '<', '>', '|', '`', '\\', '\'', '\"', ';' };
 
         public readonly struct NameCheck
         {
@@ -58,26 +41,26 @@ namespace Security.Utility
 
         /// <summary>
         /// Validate a category/item name.
-        /// - Trims, collapses internal spaces, strips control chars (except \n/\t which are then removed by collapse).
-        /// - Enforces min/max.
-        /// - Forbids explicit dangerous symbols.
+        /// - Trims, strips control chars, collapses whitespace, forces single-line.
+        /// - Enforces min/max length.
+        /// - Allows letters/digits/space/'-','_','&' (+ any in extraAllowed).
         /// - Optional banned-name list (case-insensitive).
         /// </summary>
         public static NameCheck ValidateCategoryName(
             string? raw,
             int minLen,
             int maxLen,
-            string? extraAllowed = null,                 // chars to *unblock* from the forbidden set
-            IEnumerable<string>? bannedNames = null)     // optional disallow list
+            string? extraAllowed = null,
+            IEnumerable<string>? bannedNames = null)
         {
             if (raw is null)
-                return NameCheck.Fail("Name is required.");
+                return NameCheck.Fail("Category name is required.");
 
-            // Normalize: trim, collapse spaces (keep newlines out of names by design)
+            // Normalize → single line, no control chars, compact spacing.
             string s = raw.Trim();
             s = StripControlExceptNewlineTab.Replace(s, string.Empty);
             s = s.Replace("\r\n", "\n").Replace('\r', '\n'); // normalize line endings
-            s = s.Replace('\n', ' ');                        // names should be single-line
+            s = s.Replace('\n', ' ');                        // names must be single-line
             s = CollapseSpacesButKeepNewlines.Replace(s, " ").Trim();
 
             if (s.Length < minLen)
@@ -85,9 +68,13 @@ namespace Security.Utility
             if (s.Length > maxLen)
                 return NameCheck.Fail($"Category name must be {maxLen} characters or fewer.");
 
-            var forbidden = BuildForbidden(ForbiddenNameChars, extraAllowed);
-            if (s.IndexOfAny(forbidden) >= 0)
-                return NameCheck.Fail("Category name contains characters that aren’t allowed (e.g., quotes, angle brackets, pipe).");
+            // Allowed set: letters, digits, space, -, _, &, plus extras
+            var allowExtra = (extraAllowed ?? string.Empty).ToHashSet();
+            bool Allowed(char c) =>
+                char.IsLetterOrDigit(c) || c == ' ' || c == '-' || c == '_' || c == '&' || allowExtra.Contains(c);
+
+            if (s.Any(ch => !Allowed(ch)))
+                return NameCheck.Fail("Name can only contain letters, numbers, spaces, -, _, &.");
 
             if (bannedNames != null && bannedNames.Contains(s, StringComparer.OrdinalIgnoreCase))
                 return NameCheck.Fail("That category name isn’t allowed. Please choose a different name.");
@@ -97,14 +84,12 @@ namespace Security.Utility
 
         /// <summary>
         /// Normalize free-form text:
-        /// - Trim leading/trailing whitespace
-        /// - Normalize CR/LF to LF
+        /// - Trim edges; normalize CR/LF to LF
         /// - Strip control chars (except LF/TAB)
-        /// - Collapse runs of spaces/tabs (but PRESERVE newlines)
+        /// - Collapse runs of spaces/tabs (preserve newlines)
+        /// - Remove trailing spaces per line
         /// - Cap to maxLen
-        ///
-        /// NOTE: This does NOT remove “forbidden” symbols. Use ValidateDescription(...) to enforce policy.
-        /// Returns null if the resulting text is empty.
+        /// Returns null if empty after normalization.
         /// </summary>
         public static string? NormalizeFreeText(string? raw, int maxLen)
         {
@@ -117,11 +102,10 @@ namespace Security.Utility
             s = s.Replace("\r\n", "\n").Replace('\r', '\n');
             s = StripControlExceptNewlineTab.Replace(s, string.Empty);
 
-            // Collapse spaces/tabs but KEEP \n intact
-            // (This preserves user paragraphing while preventing weird spacing.)
+            // Collapse spaces/tabs, keep newlines
             s = CollapseSpacesButKeepNewlines.Replace(s, " ");
 
-            // Remove trailing spaces on each line, and trim overall
+            // Trim trailing spaces per line and overall
             var lines = s.Split('\n').Select(l => l.TrimEnd());
             s = string.Join("\n", lines).Trim();
 
@@ -134,32 +118,20 @@ namespace Security.Utility
         /// <summary>
         /// Validates free-text for descriptions/tooltips:
         /// - First normalizes via NormalizeFreeText (preserves newlines)
-        /// - Then REJECTS if any forbidden symbol is present
-        /// - Returns (IsValid, CleanText, Error)
+        /// - Allows normal punctuation (apostrophes, quotes, semicolons, etc.)
+        /// - Rejects only if empty (optional) or over maxLen (handled in normalization)
         /// </summary>
         public static (bool IsValid, string? CleanText, string? Error) ValidateDescription(
             string? text,
             int maxLen = 512,
-            string? extraAllowed = null) // allow callers to relax a specific char if needed
+            string? extraAllowed = null) // kept for signature compatibility; not used
         {
             string normalized = NormalizeFreeText(text, maxLen) ?? string.Empty;
 
-            // Build forbidden set (optionally unblocking one or more chars)
-            var forbidden = BuildForbidden(ForbiddenDescriptionChars, extraAllowed);
-
-            if (normalized.IndexOfAny(forbidden) >= 0)
-                return (false, null, "Description contains characters that aren’t allowed (<, >, |, `, \\, ', \", ;).");
-
+            // If you want to allow empty descriptions, treat empty as valid:
+            // return (true, normalized, null);
+            // Current policy: empty is allowed; caller may replace with the name.
             return (true, normalized, null);
-        }
-
-        // --- helpers ---
-
-        private static char[] BuildForbidden(char[] baseSet, string? extraAllowed)
-        {
-            if (string.IsNullOrEmpty(extraAllowed)) return baseSet;
-            var allow = extraAllowed.ToHashSet();
-            return baseSet.Where(c => !allow.Contains(c)).ToArray();
         }
     }
 }

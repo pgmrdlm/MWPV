@@ -9,7 +9,7 @@ using System.Windows.Media;           // Brush for meter coloring
 using Microsoft.Data.Sqlite;          // ok if not used directly here
 
 using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
-using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
+using Utilities.Sql;                  // SqlCagegory, SchemaBootstrap
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
 using EDT = Utilities.Diagnostics.EarlyFailType;
@@ -295,10 +295,10 @@ namespace Utilities.Security
                 ServiceSetUp.EnsureKeySetFromArchive();
 
                 // 📦 Load additional SQL logic from key archive
-                SqlCatagory.EnsureKeysAndLoadAll();
+                SqlCagegory.EnsureKeysAndLoadAll();
 
                 // 🚨 Guard: must-have scripts check
-                var missing = SqlCatagory.GetMissingMustHaves();
+                var missing = SqlCagegory.GetMissingMustHaves();
                 if (missing.Length > 0)
                 {
 #if DEBUG

@@ -6,18 +6,18 @@ namespace MWPV.View.UserControls
 {
     public partial class Panel : UserControl
     {
-        private AddCatagoryInline? _addCatagoryInline;
+        private AddCategoryInline? _addCategoryInline;
         private bool _isHandlingInlineEvent;
 
         public Panel()
         {
             InitializeComponent();
-            this.Loaded += Panel_Loaded;
+            Loaded += Panel_Loaded;
 
             // Default view
             ShowCategoryGrid();
 
-            InitializeAddCatagoryInline();
+            InitializeAddCategoryInline();
         }
 
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
@@ -35,7 +35,7 @@ namespace MWPV.View.UserControls
 
             // Ensure data and internal wiring are fresh inside the grid
             CategoryGrid.RefreshCategoryGrid();      // repopulate
-            CategoryGrid.EnsureInternalWiring();     // NEW: asks grid to wire SelectionChanged safely
+            CategoryGrid.EnsureInternalWiring();     // keep selection wiring fresh
 
             // Add Item hidden until a category is clicked
             if (btnAddCategoryItem != null)
@@ -56,13 +56,13 @@ namespace MWPV.View.UserControls
 
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
-            ShowAddCatagory();
+            ShowAddCategory();
         }
 
-        private void ShowAddCatagory()
+        private void ShowAddCategory()
         {
-            if (AddCatagoryHost != null)
-                AddCatagoryHost.Visibility = Visibility.Visible;
+            if (AddCategoryHost != null)
+                AddCategoryHost.Visibility = Visibility.Visible;
 
             if (btnAddCategory != null)
                 btnAddCategory.Visibility = Visibility.Collapsed;
@@ -76,8 +76,8 @@ namespace MWPV.View.UserControls
 
         private void ShowCategoryGrid()
         {
-            if (AddCatagoryHost != null)
-                AddCatagoryHost.Visibility = Visibility.Collapsed;
+            if (AddCategoryHost != null)
+                AddCategoryHost.Visibility = Visibility.Collapsed;
 
             if (CategoryGrid != null)
                 CategoryGrid.Visibility = Visibility.Visible;
@@ -89,24 +89,24 @@ namespace MWPV.View.UserControls
                 btnAddCategoryItem.Visibility = Visibility.Collapsed;
         }
 
-        private void InitializeAddCatagoryInline()
+        private void InitializeAddCategoryInline()
         {
-            if (AddCatagoryContent == null) return;
+            if (AddCategoryContent == null) return;
 
-            if (_addCatagoryInline != null)
+            if (_addCategoryInline != null)
             {
-                _addCatagoryInline.Submitted -= AddCatagoryInline_Submitted;
-                _addCatagoryInline.Canceled -= AddCatagoryInline_Canceled;
+                _addCategoryInline.Submitted -= AddCategoryInline_Submitted;
+                _addCategoryInline.Canceled -= AddCategoryInline_Canceled;
             }
 
-            _addCatagoryInline = new AddCatagoryInline();
-            _addCatagoryInline.Submitted += AddCatagoryInline_Submitted;
-            _addCatagoryInline.Canceled += AddCatagoryInline_Canceled;
+            _addCategoryInline = new AddCategoryInline();
+            _addCategoryInline.Submitted += AddCategoryInline_Submitted;
+            _addCategoryInline.Canceled += AddCategoryInline_Canceled;
 
-            AddCatagoryContent.Content = _addCatagoryInline;
+            AddCategoryContent.Content = _addCategoryInline;
         }
 
-        private void AddCatagoryInline_Submitted(object? sender, CatagorySubmittedEventArgs e)
+        private void AddCategoryInline_Submitted(object? sender, CategorySubmittedEventArgs e)
         {
             if (_isHandlingInlineEvent) return;
             _isHandlingInlineEvent = true;
@@ -114,8 +114,7 @@ namespace MWPV.View.UserControls
             {
                 ShowCategoryGrid();
                 RefreshCategoryGrid();      // repopulates
-                // NOTE: Add Item remains hidden until a category is clicked
-                _addCatagoryInline?.ResetForm();
+                _addCategoryInline?.ResetForm();
             }
             finally
             {
@@ -123,7 +122,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private void AddCatagoryInline_Canceled(object? sender, EventArgs e)
+        private void AddCategoryInline_Canceled(object? sender, EventArgs e)
         {
             if (_isHandlingInlineEvent) return;
             _isHandlingInlineEvent = true;
@@ -131,7 +130,7 @@ namespace MWPV.View.UserControls
             {
                 ShowCategoryGrid();
                 RefreshCategoryGrid();      // keep wiring fresh even after cancel
-                _addCatagoryInline?.ResetForm();
+                _addCategoryInline?.ResetForm();
             }
             finally
             {

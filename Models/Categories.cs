@@ -1,6 +1,6 @@
 ﻿namespace MWPV.Models
 {
-    public class Catagories
+    public class Categories
     {
         public string strCategory1 { get; set; }
         public string strCategory2 { get; set; }
