@@ -1,4 +1,4 @@
-// MainWindow.xaml.cs — popup removed; routes menu to inline Add Catagory
+// MainWindow.xaml.cs — popup removed; routes menu to inline Add Cagegory
 using System;
 using System.Reflection;
 using System.Windows;
@@ -45,7 +45,7 @@ namespace MWPV
 
         /// <summary>
         /// Menu: Tools -> Add Category (previously opened popup).
-        /// Now routes to the inline Add Catagory hosted inside the left Panel.
+        /// Now routes to the inline Add Cagegory hosted inside the left Panel.
         /// </summary>
         private void OpenCategoryEntry_Click(object sender, RoutedEventArgs e)
         {
@@ -54,8 +54,8 @@ namespace MWPV
                 if (Panel == null) return;
 
                 // Preferred: call a public method if you add one later
-                //   public void ShowAddCatagoryInline() => (internally calls ShowAddCatagory)
-                var pub = Panel.GetType().GetMethod("ShowAddCatagoryInline",
+                //   public void ShowAddCagegoryInline() => (internally calls ShowAddCagegory)
+                var pub = Panel.GetType().GetMethod("ShowAddCagegoryInline",
                     BindingFlags.Instance | BindingFlags.Public);
                 if (pub != null)
                 {
@@ -64,7 +64,7 @@ namespace MWPV
                 }
 
                 // Fallback: call the existing private method via reflection
-                var priv = Panel.GetType().GetMethod("ShowAddCatagory",
+                var priv = Panel.GetType().GetMethod("ShowAddCagegory",
                     BindingFlags.Instance | BindingFlags.NonPublic);
                 if (priv != null)
                 {

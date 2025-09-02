@@ -15,7 +15,7 @@ namespace MWPV.View.UserControls
         public event EventHandler? CategoryItemClicked;
 
         // ObservableCollection to hold the categories
-        public ObservableCollection<Catagories> BoundCatagories { get; set; } = new ObservableCollection<Catagories>();
+        public ObservableCollection<Categories> BoundCatagories { get; set; } = new ObservableCollection<Categories>();
 
         public CategoryGrid()
         {
@@ -76,7 +76,7 @@ namespace MWPV.View.UserControls
         private void CategoryDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Only fire if a real category is selected
-            if ((sender as DataGrid)?.SelectedItem is Catagories)
+            if ((sender as DataGrid)?.SelectedItem is Categories)
             {
                 RaiseCategorySelected();
             }

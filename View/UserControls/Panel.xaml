@@ -31,11 +31,11 @@
                         Style="{StaticResource DialogPrimary}"/>
             </StackPanel>
 
-            <!-- Default view: Catagory grid (visible by default) -->
+            <!-- Default view: Category grid (visible by default) -->
             <uc:CategoryGrid x:Name="CategoryGrid"/>
 
-            <!-- Inline Add Catagory host (flush; no padding/border/background) -->
-            <Border x:Name="AddCatagoryHost"
+            <!-- Inline Add Category host (flush; no padding/border/background) -->
+            <Border x:Name="AddCategoryHost"
                     Visibility="Collapsed"
                     Background="Transparent"
                     BorderBrush="{x:Null}"
@@ -43,7 +43,7 @@
                     CornerRadius="0"
                     Padding="0"
                     Margin="0">
-                <ContentControl x:Name="AddCatagoryContent" />
+                <ContentControl x:Name="AddCategoryContent" />
             </Border>
         </DockPanel>
 

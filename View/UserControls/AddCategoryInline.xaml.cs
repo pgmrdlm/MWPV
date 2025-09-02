@@ -2,34 +2,23 @@
 using System.Windows;
 using System.Windows.Controls;
 using MWPV.Services;          // CategoryService
-using Security.Utility;     // InputGuards
+using Security.Utility;       // InputGuards
 
 namespace MWPV.View.UserControls
 {
-    public partial class AddCatagoryInline : UserControl
+    public partial class AddCategoryInline : UserControl
     {
-        // Events the host (Panel) can subscribe to
-        public event EventHandler<CatagorySubmittedEventArgs>? Submitted;
+        public event EventHandler<CategorySubmittedEventArgs>? Submitted;
         public event EventHandler? Canceled;
 
-        public AddCatagoryInline()
+        public AddCategoryInline()
         {
             InitializeComponent();
-            Loaded += (s, e) => tbCategoryName?.Focus();
+            Loaded += (_, __) => tbCategoryName?.Focus();
         }
 
-        /* ---------------- UI EVENTS ---------------- */
-
-        private void tbCategoryName_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            // keep UX snappy: clear previous errors as the user types
-            ClearError();
-        }
-
-        private void tbCategoryDescription_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            ClearError();
-        }
+        private void tbCategoryName_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
+        private void tbCategoryDescription_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
 
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
@@ -38,16 +27,16 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // NAME: strict rules (min 4, max 17) using your central guard
+                // Validate name (centralized rules)
                 var nameRes = InputGuards.ValidateCategoryName(tbCategoryName?.Text, minLen: 4, maxLen: 17);
                 if (!nameRes.IsValid)
                 {
                     FailAndFocus(nameRes.Error ?? "Invalid category name.");
                     return;
                 }
-                string name = nameRes.CleanName!;
+                var name = nameRes.CleanName!;
 
-                // DESCRIPTION: centralized validation + normalization (max 512)
+                // Validate description
                 var descRes = InputGuards.ValidateDescription(tbCategoryDescription?.Text, maxLen: 512);
                 if (!descRes.IsValid)
                 {
@@ -55,20 +44,23 @@ namespace MWPV.View.UserControls
                     tbCategoryDescription?.Focus();
                     return;
                 }
-                string? description = string.IsNullOrWhiteSpace(descRes.CleanText) ? name : descRes.CleanText;
+                var description = string.IsNullOrWhiteSpace(descRes.CleanText) ? name : descRes.CleanText;
 
-                // Duplicate check (NOCASE at DB)
+                // Duplicate check (uses corrected API name)
+                bool exists;
                 try
                 {
-                    if (CategoryService.DoesCatagoryExist(name))
-                    {
-                        FailAndFocus("Category already exists. Please enter a different name.");
-                        return;
-                    }
+                    exists = CategoryService.DoesCategoryExist(name);
                 }
                 catch (Exception ex)
                 {
                     FailAndFocus($"Error checking duplicates: {ex.Message}");
+                    return;
+                }
+
+                if (exists)
+                {
+                    FailAndFocus("Category already exists. Please enter a different name.");
                     return;
                 }
 
@@ -83,9 +75,8 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                // Success → tell host to flip back & refresh
-                ClearError();
-                Submitted?.Invoke(this, new CatagorySubmittedEventArgs(name, description));
+                // Success
+                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description));
             }
             finally
             {
@@ -98,8 +89,6 @@ namespace MWPV.View.UserControls
             ClearError();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
-
-        /* ---------------- HELPERS ---------------- */
 
         private void SetBusy(bool isBusy)
         {
@@ -130,9 +119,7 @@ namespace MWPV.View.UserControls
             tbCategoryName?.SelectAll();
         }
 
-        /// <summary>
-        /// Public helper so host can reset the form after a successful add, if desired.
-        /// </summary>
+        // Host can call this after a successful add or cancel
         public void ResetForm()
         {
             tbCategoryName.Text = string.Empty;
@@ -142,12 +129,12 @@ namespace MWPV.View.UserControls
         }
     }
 
-    public sealed class CatagorySubmittedEventArgs : EventArgs
+    public sealed class CategorySubmittedEventArgs : EventArgs
     {
         public string Name { get; }
         public string? Description { get; }
 
-        public CatagorySubmittedEventArgs(string name, string? description)
+        public CategorySubmittedEventArgs(string name, string? description)
         {
             Name = name;
             Description = string.IsNullOrWhiteSpace(description) ? null : description;

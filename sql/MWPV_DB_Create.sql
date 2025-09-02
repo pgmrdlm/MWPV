@@ -2,7 +2,10 @@
    MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
    ----------------------------------------------------------------------------
    ⚠️ DANGER: This drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   Purpose: rebuild the database from scratch (no migrations tonight).
+   Purpose: rebuild the database from scratch with corrected 'Category' spelling.
+   Notes:
+     - DROP phase is tolerant: removes BOTH legacy 'Catagory*' and new 'Category*'.
+     - CREATE phase uses ONLY the new 'Category*' names (tables/columns/FKs/views).
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -11,105 +14,116 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- DROP VIEWS FIRST
+-- DROP VIEWS FIRST (names unchanged)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 DROP VIEW IF EXISTS vw_CurrentPin;
 
 -- ---------------------------------------------------------------------------
--- DROP TABLES
+-- DROP TABLES (tolerate both old/new spellings)
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS AppSettings;
 DROP TABLE IF EXISTS Logs;
 DROP TABLE IF EXISTS DbVersion;
+
+-- Per-item history / lookups (both spellings)
 DROP TABLE IF EXISTS CatagoryItemSecurityQuestions;
+DROP TABLE IF EXISTS CategoryItemSecurityQuestions;
+
 DROP TABLE IF EXISTS CatagoryItemPinHistory;
+DROP TABLE IF EXISTS CategoryItemPinHistory;
+
 DROP TABLE IF EXISTS CatagoryItemPasswordHistory;
+DROP TABLE IF EXISTS CategoryItemPasswordHistory;
+
 DROP TABLE IF EXISTS CatagoryItem;
+DROP TABLE IF EXISTS CategoryItem;
+
 DROP TABLE IF EXISTS Catagory;
+DROP TABLE IF EXISTS Category;
 
 COMMIT;
 PRAGMA foreign_keys = ON;
 
 -- =============================================================================
--- CREATE OBJECTS
+-- CREATE OBJECTS (ONLY the corrected 'Category*' names)
 -- =============================================================================
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- Table: Catagory   (intentional spelling kept to match existing code)
+-- Table: Category
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS Catagory (
-    Catagory_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
-    Catagory_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
-    Catagory_Description TEXT,
+CREATE TABLE IF NOT EXISTS Category (
+    Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
+    Category_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
+    Category_Description TEXT,
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
 -- Seed default categories (idempotent)
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Encryption', 'Encrypted local Files and or folders', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Encryption');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Encryption');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Financial', 'Financial web sites or applications (Banking/Credit Card)', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Financial');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Financial');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Applications', 'Computer/Phone application logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Applications');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Applications');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Application Forums', 'Login to forums that support applications', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Application Forums');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Application Forums');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Goverment', 'Any government web site login', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Goverment');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Goverment');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Astro Forums', 'Logins for Astro forum web sites', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Astro Forums');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Astro Forums');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Google Accounts', 'Logins for Gmail, Google Drive, or other Google services', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Google Accounts');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Google Accounts');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Non Google Email', 'Non Google Email logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Non Google Email');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Non Google Email');
 
-INSERT INTO Catagory (Catagory_Name, Catagory_Description, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, IsActive)
 SELECT 'Political Forums', 'Political forum logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Catagory WHERE Catagory_Name='Political Forums');
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Political Forums');
 
 -- ---------------------------------------------------------------------------
--- Table: CatagoryItem
+-- Table: CategoryItem
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CatagoryItem (
-    ItemId                            INTEGER PRIMARY KEY AUTOINCREMENT,
-    Catagory_Key                      INTEGER NOT NULL
-                                              REFERENCES Catagory (Catagory_Key) ON DELETE CASCADE,
-    CatagoryItem_Name                 TEXT    NOT NULL,
-    CatagoryItem_Password             BLOB,
-    CatagoryItem_Pin                  BLOB,
-    CatagoryItem_AcctNbr              BLOB,
-    CatagoryId_LicenceKey             BLOB,
-    CatagoryItem_LoginId              BLOB,
-    CatagoryItem_Email                BLOB,
-    CatagoryItem_UpdateDate           TEXT    NOT NULL,
-    CatagoryItem_Notes                TEXT,
-    IsActive                          INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
-    CatagoryItem_NbrSecurityQuestions INTEGER DEFAULT 0,
-    UNIQUE (Catagory_Key, CatagoryItem_Name COLLATE NOCASE)
+CREATE TABLE IF NOT EXISTS CategoryItem (
+    ItemId                               INTEGER PRIMARY KEY AUTOINCREMENT,
+    Category_Key                         INTEGER NOT NULL
+                                               REFERENCES Category (Category_Key) ON DELETE CASCADE,
+    CategoryItem_Name                    TEXT    NOT NULL,
+    CategoryItem_Password                BLOB,
+    CategoryItem_Pin                     BLOB,
+    CategoryItem_AcctNbr                 BLOB,
+    CategoryId_LicenceKey                BLOB,   -- kept original field intent; only prefix corrected
+    CategoryItem_LoginId                 BLOB,
+    CategoryItem_Email                   BLOB,
+    CategoryItem_UpdateDate              TEXT    NOT NULL,
+    CategoryItem_Notes                   TEXT,
+    IsActive                             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
+    CategoryItem_NbrSecurityQuestions    INTEGER DEFAULT 0,
+    UNIQUE (Category_Key, CategoryItem_Name COLLATE NOCASE)
 );
 
 -- ---------------------------------------------------------------------------
--- Table: CatagoryItemPasswordHistory
+-- Table: CategoryItemPasswordHistory
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CatagoryItemPasswordHistory (
+CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
     PwHistId  INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemId    INTEGER NOT NULL REFERENCES CatagoryItem (ItemId) ON DELETE CASCADE,
+    ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CreatedAt INTEGER NOT NULL,               -- Unix epoch
     Version   INTEGER NOT NULL DEFAULT 1,     -- Crypto/key version
     Password  BLOB    NOT NULL,               -- Envelope (e.g., version|nonce|tag|padLen|ciphertext)
@@ -117,11 +131,11 @@ CREATE TABLE IF NOT EXISTS CatagoryItemPasswordHistory (
 );
 
 -- ---------------------------------------------------------------------------
--- Table: CatagoryItemPinHistory
+-- Table: CategoryItemPinHistory
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CatagoryItemPinHistory (
+CREATE TABLE IF NOT EXISTS CategoryItemPinHistory (
     PinHistId INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemId    INTEGER NOT NULL REFERENCES CatagoryItem (ItemId) ON DELETE CASCADE,
+    ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CreatedAt INTEGER NOT NULL,               -- Unix epoch
     Version   INTEGER NOT NULL DEFAULT 1,     -- Crypto/key version
     Pin       BLOB    NOT NULL,               -- Envelope (e.g., version|nonce|tag|padLen|ciphertext)
@@ -129,11 +143,11 @@ CREATE TABLE IF NOT EXISTS CatagoryItemPinHistory (
 );
 
 -- ---------------------------------------------------------------------------
--- Table: CatagoryItemSecurityQuestions
+-- Table: CategoryItemSecurityQuestions
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CatagoryItemSecurityQuestions (
+CREATE TABLE IF NOT EXISTS CategoryItemSecurityQuestions (
     SecQId   INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemId   INTEGER NOT NULL REFERENCES CatagoryItem (ItemId) ON DELETE CASCADE,
+    ItemId   INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     Question TEXT    NOT NULL,
     Answer   BLOB    NOT NULL,
     UNIQUE (ItemId, Question COLLATE NOCASE)
@@ -151,7 +165,7 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.0.0', strftime('%Y-%m-%d %H:%M:%S','now'), 'Initial schema creation', 1
+SELECT '1.0.0', strftime('%Y-%m-%d %H:%M:%S','now'), 'Initial schema creation (Category spelling fixed)', 1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 -- ---------------------------------------------------------------------------
@@ -216,24 +230,24 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- ---------------------------------------------------------------------------
--- Views
+-- Views (point to new 'Category*' tables)
 -- ---------------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
     SELECT h.*
-    FROM CatagoryItemPasswordHistory h
+    FROM CategoryItemPasswordHistory h
     JOIN (
         SELECT ItemId, MAX(CreatedAt) AS MaxCreated
-        FROM CatagoryItemPasswordHistory
+        FROM CategoryItemPasswordHistory
         GROUP BY ItemId
     ) latest
       ON h.ItemId = latest.ItemId AND h.CreatedAt = latest.MaxCreated;
 
 CREATE VIEW IF NOT EXISTS vw_CurrentPin AS
     SELECT h.*
-    FROM CatagoryItemPinHistory h
+    FROM CategoryItemPinHistory h
     JOIN (
         SELECT ItemId, MAX(CreatedAt) AS MaxCreated
-        FROM CatagoryItemPinHistory
+        FROM CategoryItemPinHistory
         GROUP BY ItemId
     ) latest
       ON h.ItemId = latest.ItemId AND h.CreatedAt = latest.MaxCreated;

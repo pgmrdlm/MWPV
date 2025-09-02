@@ -1,4 +1,4 @@
-﻿// Utilities/Sql/SqlCatagory.cs
+﻿// Utilities/Sql/SqlCagegory.cs
 using System;
 using System.Collections.Generic;
 using Utilities.Helpers;      // DatabaseHelper.DbPasswordKey
@@ -12,22 +12,22 @@ namespace Utilities.Sql
     /// Single source of truth for SQL/secret artifacts stored in keys.7z,
     /// with helpers to load them into the secure store and cache SQL text.
     /// </summary>
-    public static class SqlCatagory
+    public static class SqlCagegory
     {
         // 📦 Master catalog — update here and nowhere else.
         // Includes SQL scripts + the DB password entry (secret).
         private static readonly string[] RequiredArtifacts =
         {
-            "CatagoryExists.sql",
+            "CategoryExists.sql",
             DatabaseHelper.DbPasswordKey,   // maps to DB_Password.txt in archive (secret, not SQL)
-            "InsertCatagory.sql",
+            "InsertCategory.sql",
             "Logs_Indexes.sql",
             "Logs_Init.sql",
             "Logs_Insert_V2.sql",
             "Logs_Select_Recent.sql",       // NEW
             "Logs_LastInsertId.sql",        // NEW
             "MWPV_DB_Create.sql",
-            "SelectCatagories.sql",
+            "SelectCategories.sql",
             "Logs_Purge_OlderThan.sql",
             "Logs_Exists_BySig.sql"
         };
@@ -39,9 +39,9 @@ namespace Utilities.Sql
             "Logs_Select_Recent.sql",
             "Logs_Init.sql",
             "Logs_Indexes.sql",
-            "SelectCatagories.sql",
-            "CatagoryExists.sql",
-            "InsertCatagory.sql"
+            "SelectCategories.sql",
+            "CategoryExists.sql",
+            "InsertCategory.sql"
             // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
         };
 

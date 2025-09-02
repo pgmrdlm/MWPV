@@ -17,7 +17,7 @@ namespace Utilities.Sql
         private const bool VerboseBootstrap = true;
 
         /// <summary>
-        /// Call this after the DB is open and after SqlCatagory.LoadAll() has loaded scripts into the secure store.
+        /// Call this after the DB is open and after SqlCagegory.LoadAll() has loaded scripts into the secure store.
         /// </summary>
         public static void EnsureLogsSchema(SqliteConnection openConn)
         {
