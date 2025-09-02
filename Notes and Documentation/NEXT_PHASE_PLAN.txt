@@ -1,0 +1,132 @@
+MWPV – NEXT PHASE PLAN (Security)
+
+============================================================
+A) PASSWORD STRENGTH METER (small, self-contained)
+------------------------------------------------------------
+Goal:
+  - Ship a warning-only meter so it stops getting postponed.
+
+Scope:
+  - Live meter in PasswordEntryWindow showing: Weak / Fair / Good / Strong
+  - Policy hint: 8+ chars AND at least 2 of 3 (upper, lower, special)
+  - No dictionary checks. No submit blocking.
+  - Wipe temp char[] after scoring; still call UICleaner.Clear(...) on submit/cancel
+
+Definition of Done:
+  - Meter updates as user types
+  - Submit flow unchanged (policy enforced at submit as today)
+  - Security_Documentation.md updated from “planned” -> “implemented”
+
+
+============================================================
+B) LOGGING FOUNDATION (data model + API)
+------------------------------------------------------------
+Goal:
+  - Capture events now; add details later.
+
+Schema (encrypted via SQLCipher):
+  - LogEvents(EventId, Utc, EventType, Entity, EntityId, UserTag, SessionId, Source, Note)
+  - LogEventDetails(DetailId, EventId FK, ColumnName, ChangeType, BeforeHash?, AfterHash?, BeforeEnc?, AfterEnc?, MaskHint?)
+  - Indexes: Utc; Entity+EntityId; Details.EventId
+
+Service:
+  - ISecureLogger.LogAsync(AuditEvent evt, IEnumerable<ColumnChange> details)
+  - ISecureLogger.LogSimpleAsync(AuditEvent evt, params string[] changedColumns)  (MVP)
+  - Uses LogPayloadKey from SEDS; AES-GCM helpers exist for future encrypted values
+
+Ingestion Hook:
+  - After successful login: ingest DPAPI .elogp files -> write summary event (IngestedEarlyFailure)
+  - Show non-blocking banner; securely delete .elogp after ingest
+
+Definition of Done:
+  - Tables created/migrated
+  - One real code path logs Create/Update with column NAMES only (no values)
+  - Ingestion path writes a summary event
+
+
+============================================================
+C) LOG VIEWER MVP (usable, not fancy)
+------------------------------------------------------------
+Placement:
+  - Viewer takes over the main panel (replacing Category/Detail + Add buttons)
+  - Toggle via Tools -> “View Logs…” (clean up menu labels/order)
+
+UI:
+  - Top filters: Date range | Event Type | Entity | Search
+  - Grid: Time | Type | Entity | EntityId | ColumnsChanged | Note
+  - Right panel: list of changed column names (no values for MVP)
+  - Session banner: “Early failures ingested: N” (if any)
+
+Definition of Done:
+  - Filters work; grid shows LogEvents
+  - Selecting a row shows its column list (from LogEventDetails)
+  - Handles empty states and stays responsive on real data
+
+
+============================================================
+D) COLUMN-LEVEL ENCRYPTION (design first, implement selectively)
+------------------------------------------------------------
+Policy:
+  - Sensitive user-entered columns: AES‑256‑GCM per column (confidentiality + integrity)
+  - Key: separate, randomly generated UserSecretsKey (distinct from DbPassword / LogPayloadKey)
+  - Key already stored in encrypted keyfile JSON
+
+Plan:
+  - Start logging only column NAMES (and optional hashes)
+  - When needed, add per-column encrypted before/after payloads (nonce|ct|tag)
+  - UI shows “(encrypted)” or redacted for those fields
+
+Definition of Done (later):
+  - At least one sensitive field wired end-to-end as reference
+
+
+============================================================
+E) ENHANCEMENTS AFTER MVP
+------------------------------------------------------------
+  - CSV export, pagination/virtualization, persistent filters
+  - Purge policy (default 90 days) + manual purge
+  - Value previews for non-sensitive types (ints/bools/dates)
+  - Role/permission checks for viewing logs (future)
+
+
+============================================================
+CROSS-CUTTING DECISIONS
+------------------------------------------------------------
+  - Feature flag: put Log Viewer behind a toggle so we can ship partial
+  - Branching: small PRs
+      * feat/password-strength-meter
+      * feat/logging-schema
+      * feat/secure-logger
+      * feat/log-viewer-mvp
+  - Telemetry (optional): count log events per session, no PII
+
+
+============================================================
+BACKLOG – ACTIONABLE TASKS
+------------------------------------------------------------
+[ ] A1: Add PasswordStrengthEvaluator (length + categories only)
+[ ] A2: Hook PasswordChanged -> update meter (wipe temp buffer)
+[ ] A3: Update Security_Documentation.md wording to “implemented”
+
+[ ] B1: Create/migrate LogEvents + LogEventDetails
+[ ] B2: Implement ISecureLogger + SecureLogService
+[ ] B3: Wire one update path -> LogSimpleAsync(...)
+[ ] B4: After login success, ingest .elogp -> summary event -> delete .elogp
+
+[ ] C1: Tools menu: add “View Logs…” + cleanup labels/order
+[ ] C2: Swap main panel into Log Viewer host; toggle back to Categories
+[ ] C3: Filters + grid bound to LogEvents
+[ ] C4: Right panel shows column names for selected event
+[ ] C5: Session banner for ingested early failures
+
+[ ] D1: Identify sensitive columns
+[ ] D2: Define AES-GCM payload DTO (nonce|ct|tag)
+[ ] D3: Update Security_Documentation.md roadmap (already noted)
+
+============================================================
+IMPLEMENTATION ORDER (suggested)
+------------------------------------------------------------
+  1) A (Strength meter) – small win, isolated
+  2) B (Schema + logger) – capture events today
+  3) C (Viewer MVP) – make it visible
+  4) D (Column-level encryption) – design now, implement selectively later
