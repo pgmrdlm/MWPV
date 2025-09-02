@@ -1,38 +1,33 @@
 ﻿using System;
 using System.IO;
-using System.Reflection;              // (ok if not used after your edits)
 using System.Runtime.InteropServices; // SecureString marshal
 using System.Security;                // SecureString
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;           // Brush for meter coloring
 
 using Microsoft.Data.Sqlite;          // ok if not used directly here
 
 using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                  // SqlCatagory, SchemaBootstrap
-// using Utilities.Security;          // (moved to Security.Utility per security split)
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
 using EDT = Utilities.Diagnostics.EarlyFailType;
-using Security.Utility.Crypto;   // <- brings KeyArchiveVerifier into scope
+using Security.Utility.Crypto;        // KeyArchiveVerifier
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
+using MWPV.Utilities.Security;        // PasswordStrengthEvaluator, PasswordStrength
 
 namespace Utilities.Security
 {
     /// <summary>
-    /// Setup dialog that handles both first-run provisioning and subsequent logins.
-    /// Responsibilities:
-    ///  - First run: create DB, build encrypted archive, stash DB password + keyset in the archive.
-    ///  - Subsequent runs: verify an existing encrypted archive + password using sentinel files.
-    ///  - Load SQL catalog from the archive and ensure Logs schema exists.
-    ///  - (DEBUG) run a small smoke test.
-    ///
-    /// IMPORTANT: No secure DB logging or early-log ingestion is done here.
-    ///            App.OnStartup performs SecureLogService.Initialize and then ingests early logs.
+    /// Setup/Login dialog:
+    ///   • First run: create DB, create encrypted key archive, stash DB password + keyset in archive.
+    ///   • Normal login: verify existing encrypted archive + password using sentinels.
+    ///   • Load SQL catalog and ensure Logs schema exists. (DEBUG) optional smoke test.
     /// </summary>
     public partial class AppEntryWindow : Window
     {
-        // 🔑 SecureEncryptedDataStore key names (match files/keys inside the archive)
+        // SecureEncryptedDataStore keys (file/key names in the archive)
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
         private const string Key_KeyFile = "KeyFile";            // non-sensitive path
         private const string Key_KeyPW = "KeyPW";                // sensitive password
@@ -48,30 +43,92 @@ namespace Utilities.Security
         {
             InitializeComponent();
 
-            // Keep max/restore glyph in sync if custom titlebar is present
-            try
-            {
-                UpdateMaxGlyph();
-                StateChanged += (_, __) => UpdateMaxGlyph();
-            }
-            catch { /* fine if glyph not present */ }
+            // Keep max/restore glyph in sync (safe if glyph not present)
+            try { UpdateMaxGlyph(); StateChanged += (_, __) => UpdateMaxGlyph(); } catch { }
 
-            // Existing install: hide verify field, switch button wording
-            if (File.Exists(_localDbPath))
+            // Determine mode
+            bool firstRun = !File.Exists(_localDbPath);
+
+            if (!firstRun)
             {
+                // ==== Normal login ====
+                // Hide verify + banner
                 VerifyPasswordRow.Height = new GridLength(0);
                 lblVerifyPassword.Visibility = Visibility.Collapsed;
                 pbVerifyPassword.Visibility = Visibility.Collapsed;
                 InfoBanner.Visibility = Visibility.Collapsed;
-                btnCreateKeyFile.Content = "Select Key File";
-            } else { }
+
+                // Change button label only (keep the key glyph)
+                try { tbKeyButtonText.Text = "Select Key File"; } catch { /* if not found, ignore */ }
+
+                // Hide strength panel completely & detach handlers
+                var strengthPanel = PwStrengthBar?.Parent as FrameworkElement;
+                if (strengthPanel != null) strengthPanel.Visibility = Visibility.Collapsed;
+                if (pbPassword != null) pbPassword.PasswordChanged -= Password_Changed;
+                if (pbVerifyPassword != null) pbVerifyPassword.PasswordChanged -= VerifyPassword_Changed;
+            }
+            else
+            {
+                // ==== First run ====
+                // Ensure label is "Create Key File" (also set in XAML)
+                try { tbKeyButtonText.Text = "Create Key File"; } catch { /* ignore */ }
+
+                // Wire advisory meter (no policy gating)
+                if (pbPassword != null) pbPassword.PasswordChanged += Password_Changed;
+                if (pbVerifyPassword != null) pbVerifyPassword.PasswordChanged += VerifyPassword_Changed;
+            }
         }
 
+        // =========================
+        // Title bar & window chrome
+        // =========================
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                if (e.ClickCount == 2) ToggleMaxRestore();
+                else if (e.ButtonState == MouseButtonState.Pressed) DragMove();
+            }
+            catch { /* ignore drag exceptions */ }
+        }
+
+        private void MinButton_Click(object sender, RoutedEventArgs e)
+            => SystemCommands.MinimizeWindow(this);
+
+        private void MaxRestoreButton_Click(object sender, RoutedEventArgs e)
+            => ToggleMaxRestore();
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+            => SystemCommands.CloseWindow(this);
+
+        private void ToggleMaxRestore()
+        {
+            if (WindowState == WindowState.Maximized)
+                SystemCommands.RestoreWindow(this);
+            else
+                SystemCommands.MaximizeWindow(this);
+            UpdateMaxGlyph();
+        }
+
+        private void UpdateMaxGlyph()
+        {
+            try
+            {
+                var tb = FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
+                if (tb != null)
+                    tb.Text = (WindowState == WindowState.Maximized) ? "\uE923" : "\uE922"; // Restore / Maximize
+            }
+            catch { /* fine if glyph not present */ }
+        }
+
+        // =========================
+        // Key file selection (open/save)
+        // =========================
         private void btnCreateKeyFile_Click(object sender, RoutedEventArgs e)
         {
             if (File.Exists(_localDbPath))
             {
-                // Existing DB: choose an existing encrypted key archive (any extension acceptable)
+                // Existing DB: choose an existing encrypted key archive
                 var openFileDialog = new Microsoft.Win32.OpenFileDialog
                 {
                     Title = "Select your encrypted key archive",
@@ -103,13 +160,15 @@ namespace Utilities.Security
             }
         }
 
+        // =========================
+        // Submit / Cancel
+        // =========================
         private void btnSubmit_Click(object sender, RoutedEventArgs e)
         {
             // All secrets travel as SecureString/char[]; any string use is tightly scoped & dropped immediately.
             char[]? pwChars = null;
             char[]? verifyChars = null;
             char[]? newDbPw = null;
-
             string? keyArchivePath = null; // non-sensitive
 
             try
@@ -131,13 +190,11 @@ namespace Utilities.Security
 
                     // Store key file path (non-sensitive) and password (sensitive)
                     SecureEncryptedDataStore.SetString(Key_KeyFile, keyArchivePath);
-
-                    // Store the key-archive password into the store (datastore wipes our array)
                     SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars);
                     pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
 
                     // Generate DB password (char[]), store, then wipe our copy
-                    SecurePassword.Generate(ref newDbPw, 32); // your existing helper
+                    SecurePassword.Generate(ref newDbPw, 32);
                     SecureEncryptedDataStore.SetNoWipe(Key_DBPassword, newDbPw);
                     SensitiveDataCleaner.Clear(ref newDbPw);
 
@@ -172,7 +229,6 @@ namespace Utilities.Security
                         return;
                     }
 
-                    // Convert to char[] for memory hygiene
                     pwChars = SecureStringToChars(pbPassword.SecurePassword);
                     if (pwChars.Length == 0)
                     {
@@ -181,8 +237,7 @@ namespace Utilities.Security
                         return;
                     }
 
-                    // Unfortunately KeyArchiveVerifier currently needs a string.
-                    // We scope a temporary string, call, then drop the reference.
+                    // KeyArchiveVerifier needs a string (short-lived)
                     string? pwTemp = null;
                     bool isCorrect = false;
                     try
@@ -192,7 +247,6 @@ namespace Utilities.Security
                     }
                     catch (Exception ex)
                     {
-                        // EARLY LOG POINT #1 - verification threw (unexpected)
                         EarlyLoginFailures.Record(
                             EDT.KeyFileVerifyError,
                             $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
@@ -207,8 +261,7 @@ namespace Utilities.Security
                     }
                     finally
                     {
-                        // Drop the string ref ASAP (cannot zeroize strings)
-                        pwTemp = null;
+                        pwTemp = null; // drop string ref ASAP
                     }
 
                     if (!isCorrect)
@@ -233,18 +286,18 @@ namespace Utilities.Security
                     pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
                 }
 
-                // 🔐 UI-only cleanup (switched to UICleaner for controls)
+                // 🔐 UI-only cleanup
                 UICleaner.Clear(tbKeyFile);
                 UICleaner.Clear(pbPassword);
                 UICleaner.Clear(pbVerifyPassword);
 
-                // ✅ Load keys for this session (archive already verified/unlocked or freshly created)
+                // ✅ Load keys for this session
                 ServiceSetUp.EnsureKeySetFromArchive();
 
-                // 📦 Load additional SQL logic from key archive (single source of truth)
+                // 📦 Load additional SQL logic from key archive
                 SqlCatagory.EnsureKeysAndLoadAll();
 
-                // 🚨 Guard: if any must-have scripts are missing, stop gracefully (prevents later crashes)
+                // 🚨 Guard: must-have scripts check
                 var missing = SqlCatagory.GetMissingMustHaves();
                 if (missing.Length > 0)
                 {
@@ -259,13 +312,12 @@ namespace Utilities.Security
                         "SQLCatalog.Missing"
                     );
 
-                    // Abort setup cleanly so startup can exit without throwing
                     DialogResult = false;
                     Close();
                     return;
                 }
 
-                // 🧱 Ensure Logs schema exists (Init + Indexes), idempotent.
+                // 🧱 Ensure Logs schema exists (idempotent)
                 try
                 {
                     using var openConn = DatabaseHelper.OpenConnection();
@@ -296,7 +348,7 @@ namespace Utilities.Security
                 if (pwChars != null) Array.Clear(pwChars, 0, pwChars.Length);
                 if (verifyChars != null) Array.Clear(verifyChars, 0, verifyChars.Length);
                 if (newDbPw != null) Array.Clear(newDbPw, 0, newDbPw.Length);
-                keyArchivePath = null; // non-sensitive; drop ref anyway
+                keyArchivePath = null;
             }
         }
 
@@ -343,7 +395,7 @@ namespace Utilities.Security
                 error = "Passwords do not match.";
                 return false;
             }
-            if (pw.Length < 8) // baseline; you can tighten or add char[] rules
+            if (pw.Length < 8) // baseline; adjust as desired
             {
                 error = "Password must be at least 8 characters.";
                 return false;
@@ -368,22 +420,21 @@ namespace Utilities.Security
 
         // ========= SecureString helpers =========
 
-        // SAFE version (no 'unsafe' keyword needed)
-        private static char[] SecureStringToChars(System.Security.SecureString? ss)
+        private static char[] SecureStringToChars(SecureString? ss)
         {
             if (ss == null || ss.Length == 0) return Array.Empty<char>();
 
             IntPtr bstr = IntPtr.Zero;
             try
             {
-                bstr = System.Runtime.InteropServices.Marshal.SecureStringToBSTR(ss);
+                bstr = Marshal.SecureStringToBSTR(ss);
                 int len = ss.Length;
                 var chars = new char[len];
 
                 // BSTR is UTF-16; read 2 bytes per char
                 for (int i = 0; i < len; i++)
                 {
-                    short val = System.Runtime.InteropServices.Marshal.ReadInt16(bstr, i * 2);
+                    short val = Marshal.ReadInt16(bstr, i * 2);
                     chars[i] = (char)val;
                 }
 
@@ -392,52 +443,102 @@ namespace Utilities.Security
             finally
             {
                 if (bstr != IntPtr.Zero)
-                    System.Runtime.InteropServices.Marshal.ZeroFreeBSTR(bstr);
+                    Marshal.ZeroFreeBSTR(bstr);
             }
         }
 
-        // ===== Custom title bar handlers (safe no-ops if not present in XAML) =====
-
-        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        // =========================
+        // Advisory strength meter wiring (first-run only)
+        // =========================
+        private void Password_Changed(object? sender, RoutedEventArgs e)
         {
+            char[] buf = Array.Empty<char>();
             try
             {
-                if (e.ClickCount == 2)
-                    ToggleMaxRestore();
-                else
-                    DragMove();
+                buf = SecureStringToChars(pbPassword?.SecurePassword);
+                var result = PasswordStrengthEvaluator.Evaluate(buf);
+
+                if (PwStrengthBar != null)
+                    PwStrengthBar.Value = result.Score01;
+
+                if (PwStrengthText != null)
+                    PwStrengthText.Text = $"Password strength: {result.Strength} ({result.Length} chars)";
+
+                if (PwTipsList != null)
+                    PwTipsList.ItemsSource = result.Suggestions;
+
+                if (PwStrengthBar != null)
+                {
+                    var brushKey = result.Strength switch
+                    {
+                        PasswordStrength.VeryWeak => "PwWeak",
+                        PasswordStrength.Weak => "PwWeak",
+                        PasswordStrength.Fair => "PwFair",
+                        PasswordStrength.Strong => "PwStrong",
+                        PasswordStrength.VeryStrong => "PwVeryStrong",
+                        _ => "PwStrong"
+                    };
+                    if (TryFindResource(brushKey) is Brush b)
+                        PwStrengthBar.Foreground = b;
+                }
+
+                // Clear visible mismatch message as the user types if now matching
+                if (tbErrorMessage != null && tbErrorMessage.Visibility == Visibility.Visible)
+                {
+                    if (PasswordsMatchSecure())
+                    {
+                        tbErrorMessage.Text = string.Empty;
+                        tbErrorMessage.Visibility = Visibility.Collapsed;
+                    }
+                }
             }
-            catch { /* ignore drag exceptions */ }
+            finally
+            {
+                if (buf.Length > 0) Array.Clear(buf, 0, buf.Length);
+            }
         }
 
-        private void MinButton_Click(object sender, RoutedEventArgs e)
-            => SystemCommands.MinimizeWindow(this);
-
-        private void MaxRestoreButton_Click(object sender, RoutedEventArgs e)
-            => ToggleMaxRestore();
-
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
-            => SystemCommands.CloseWindow(this);
-
-        private void ToggleMaxRestore()
+        private void VerifyPassword_Changed(object? sender, RoutedEventArgs e)
         {
-            if (WindowState == WindowState.Maximized)
-                SystemCommands.RestoreWindow(this);
+            // Advisory-only: surface mismatch message; does not block submit
+            if (!PasswordsMatchSecure())
+            {
+                tbErrorMessage.Text = "Passwords do not match.";
+                tbErrorMessage.Visibility = Visibility.Visible;
+            }
             else
-                SystemCommands.MaximizeWindow(this);
-            UpdateMaxGlyph();
+            {
+                tbErrorMessage.Text = string.Empty;
+                tbErrorMessage.Visibility = Visibility.Collapsed;
+            }
         }
 
-        // Swap □ (E922) / ⇱ (E923) if you named the TextBlock "TbMaxGlyph" in XAML
-        private void UpdateMaxGlyph()
+        private bool PasswordsMatchSecure()
         {
+            if (pbPassword == null || pbVerifyPassword == null) return true;
+            var a = pbPassword.SecurePassword;
+            var b = pbVerifyPassword.SecurePassword;
+            if (a == null || b == null) return false;
+            if (a.Length != b.Length) return false;
+
+            IntPtr pa = IntPtr.Zero, pb = IntPtr.Zero;
             try
             {
-                var tb = FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
-                if (tb != null)
-                    tb.Text = (WindowState == WindowState.Maximized) ? "\uE923" : "\uE922";
+                pa = Marshal.SecureStringToGlobalAllocUnicode(a);
+                pb = Marshal.SecureStringToGlobalAllocUnicode(b);
+                int bytes = a.Length * 2;
+                int diff = 0;
+                for (int i = 0; i < bytes; i += 2)
+                {
+                    diff |= Marshal.ReadInt16(pa, i) ^ Marshal.ReadInt16(pb, i);
+                }
+                return diff == 0;
             }
-            catch { /* fine if glyph not present */ }
+            finally
+            {
+                if (pa != IntPtr.Zero) Marshal.ZeroFreeGlobalAllocUnicode(pa);
+                if (pb != IntPtr.Zero) Marshal.ZeroFreeGlobalAllocUnicode(pb);
+            }
         }
     }
 }

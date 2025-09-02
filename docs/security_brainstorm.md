@@ -5,12 +5,18 @@
         "[ ] Not worth it"
         "[ ] Keep / Implement"
 
+    "key file locatio restriction"
+        "[ ] Tried"
+        "[ ] Didn't work"
+        "[ ] Not worth it"
+        "[ ] Keep / Implement"
+
     "Password Entry"
       "Strength bar (guidance-only)"
         "[ ] Tried"
         "[ ] Didn't work"
         "[ ] Not worth it"
-        "[ ] Keep / Implement"
+        "[x] Keep / Implement"
 
     "Password Policy"
       "Dictionary word check (warn only)"
