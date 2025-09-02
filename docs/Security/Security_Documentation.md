@@ -7,6 +7,9 @@ MWPV (My Windows Password Vault) enforces a layered security model:
 
 This document describes the design, flows, and class responsibilities that form the security backbone of MWPV.
 
+**Defense-in-Depth.** An attacker generally needs **both** the key file *and* its password to read the vault. Once column-level encryption is enabled, certain fields are separately protected even if the DB layer is bypassed. **If the device is compromised while unlocked, or both the key file and password are exposed, the vault should be considered compromised.**
+
+
 ---
 
 ## Encryption Overview
@@ -28,7 +31,7 @@ This document describes the design, flows, and class responsibilities that form 
 - Before DB is unlocked, failed login attempts are captured in `.elogp` files.
 - These files are protected using **DPAPI**, making them machine-specific.
 - On the next successful login:
-  - `.elogp` files are ingested into the encrypted log database.
+  - `.elogp` files are ingested into the encrypted log tables.
   - The application displays a non-blocking notification that invalid login attempts occurred.
   - After ingestion, the original `.elogp` files are securely deleted.
 
@@ -49,6 +52,11 @@ This will be an early addition, but enforcement of the above rules occurs only a
 
 ## Sensitive Data Handling
 
+### In-Memory Protection
+- Outside of active cryptographic operations, **sensitive values are encrypted in memory** under a per-session key; plaintext exists only transiently and is **zeroized immediately** after use.
+- UI secrets (e.g., WPF `PasswordBox`/`TextBox`) are cleared via `UICleaner` immediately after use.
+
+
 ### Wiping Rules
 - **All sensitive data** (passwords, keys, derived arrays, buffers) must be wiped immediately after use.
 - Wiping is done via:
@@ -61,7 +69,7 @@ This will be an early addition, but enforcement of the above rules occurs only a
 ## Sequence Flows
 
 ### Normal Login
-![Login Sequence](LoginSequenceFlow-1.png)
+![Normal Login Sequence](NormalLoginSequenceFlow-1.png)
 
 ### First-Time Setup
 ![First Login Sequence](FirstLoginSequenceFlow-1.png)
