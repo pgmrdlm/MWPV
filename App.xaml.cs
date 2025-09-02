@@ -37,8 +37,7 @@ namespace MWPV
 
             base.OnStartup(e);
 
-            // Prevent auto-shutdown while showing the modal entry dialog
-            var originalShutdownMode = ShutdownMode;
+            // IMPORTANT: never allow auto-shutdown while we negotiate the entry dialog
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             // ---- Bring-to-front listener ----
@@ -95,10 +94,10 @@ namespace MWPV
             try
             {
                 var entry = new AppEntryWindow();
-                var ok = entry.ShowDialog() == true;   // modal; DialogResult is valid inside
+                var ok = entry.ShowDialog() == true;   // modal; null/false if closed/cancelled
                 if (!ok)
                 {
-                    Shutdown();
+                    Shutdown();        // EXIT CLEANLY ON CANCEL/CLOSE
                     return;
                 }
 
@@ -132,9 +131,14 @@ namespace MWPV
                     try { EarlyLoginFailures.Write("EarlyIngestor", "Post-login ingest failed", ex: ex); } catch { }
                 }
 
-                var main = new MainWindow();
-                MainWindow = main;
-                main.Show();
+                // Create and show main window, THEN restore normal shutdown behavior
+                if (!Dispatcher.HasShutdownStarted)
+                {
+                    var main = new MainWindow();
+                    MainWindow = main;
+                    ShutdownMode = ShutdownMode.OnMainWindowClose;  // <-- set ONLY after MainWindow exists
+                    main.Show();
+                }
             }
             catch (Exception ex)
             {
@@ -142,13 +146,7 @@ namespace MWPV
                 Shutdown(-1);
                 return;
             }
-            finally
-            {
-                // Back to normal once MainWindow exists
-                ShutdownMode = originalShutdownMode == ShutdownMode.OnExplicitShutdown
-                    ? ShutdownMode.OnMainWindowClose
-                    : originalShutdownMode;
-            }
+            // NOTE: No 'finally' that touches ShutdownMode — avoids the crash when app is already shutting down.
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -195,7 +193,7 @@ namespace MWPV
                         if (!evt.WaitOne()) continue;   // blocks until signaled
                     }
                     catch (ThreadInterruptedException) { break; }   // normal shutdown
-                    catch (ObjectDisposedException) { break; }   // event disposed during shutdown
+                    catch (ObjectDisposedException) { break; }      // event disposed during shutdown
 
                     // marshal to UI thread
                     Dispatcher.BeginInvoke(new Action(() =>

@@ -1,17 +1,27 @@
 ﻿<Window x:Class="Utilities.Security.AppEntryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Icon="/Assets/Icons/MWPV_TitleBarIcon_16by16.ico"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Icon="/Assets/Icons/MWPV_TitleBarIcon_16by16.ico"
         WindowStyle="None"
         ResizeMode="CanResize"
         AllowsTransparency="True"
         Background="Transparent"
         WindowStartupLocation="CenterScreen"
-        Height="320"
         Width="640"
+        SizeToContent="Height"
+        MinHeight="340"
+        MaxHeight="560"
         SnapsToDevicePixels="True"
         UseLayoutRounding="True">
+
+    <!-- Brushes for password-strength meter -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="PwWeak" Color="#D32F2F"/>
+        <SolidColorBrush x:Key="PwFair" Color="#FBC02D"/>
+        <SolidColorBrush x:Key="PwStrong" Color="#388E3C"/>
+        <SolidColorBrush x:Key="PwVeryStrong" Color="#2E7D32"/>
+    </Window.Resources>
 
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
@@ -98,7 +108,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <!-- Password -->
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- Strength meter -->
                         <RowDefinition x:Name="VerifyPasswordRow" Height="Auto"/>
                         <!-- Verify -->
                         <RowDefinition Height="16"/>
@@ -110,10 +121,10 @@
                         <RowDefinition Height="10"/>
                         <RowDefinition Height="Auto"/>
                         <!-- Error -->
-                        <!-- NEW: Advisory banner row (collapsed by default) -->
                         <RowDefinition Height="Auto"/>
-                        <!-- Filler -->
+                        <!-- Advisory banner -->
                         <RowDefinition Height="*"/>
+                        <!-- Filler -->
                     </Grid.RowDefinitions>
 
                     <Grid.ColumnDefinitions>
@@ -122,7 +133,7 @@
                         <ColumnDefinition Width="12"/>
                         <!-- gutter -->
                         <ColumnDefinition Width="*"/>
-                        <!-- text boxes -->
+                        <!-- inputs -->
                     </Grid.ColumnDefinitions>
 
                     <!-- Enter Password -->
@@ -141,6 +152,30 @@
                                  Foreground="Black"
                                  PasswordChar="*"
                                  Padding="6,2"/>
+
+                    <!-- Password strength (advisory only) -->
+                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,6,0,0">
+                        <ProgressBar x:Name="PwStrengthBar"
+                                     Height="8"
+                                     Minimum="0" Maximum="1"
+                                     Value="0"
+                                     Background="#22000000"/>
+                        <TextBlock x:Name="PwStrengthText"
+                                   Margin="0,4,0,0"
+                                   FontSize="12"
+                                   Foreground="Black"
+                                   Text="Password strength: n/a"/>
+                        <ItemsControl x:Name="PwTipsList" Margin="0,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="• " />
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
 
                     <!-- Verify Password -->
                     <Label x:Name="lblVerifyPassword"
@@ -170,8 +205,10 @@
                             ToolTip="Create/Choose the encrypted key archive"
                             Margin="0,0,10,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE838;" Margin="0,0,8,0"/>
-                            <TextBlock Text="Select Key File"/>
+                            <!-- Key glyph (MDL2 E72E) -->
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72E;" Margin="0,0,8,0"/>
+                            <!-- Named so code-behind can change text depending on first-run vs login -->
+                            <TextBlock x:Name="tbKeyButtonText" Text="Create Key File"/>
                         </StackPanel>
                     </Button>
 
@@ -227,7 +264,7 @@
                              Foreground="Red"
                              BorderThickness="0"/>
 
-                    <!-- Advisory banner (collapsed by default) -->
+                    <!-- Advisory banner -->
                     <Border x:Name="InfoBanner"
                             Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
                             Visibility="Visible"
