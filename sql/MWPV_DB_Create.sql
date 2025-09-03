@@ -2,7 +2,8 @@
    MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
    ----------------------------------------------------------------------------
    ⚠️ DANGER: This drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   Purpose: rebuild the database from scratch with corrected 'Category' spelling.
+   Purpose: rebuild the database from scratch with corrected 'Category' spelling
+            and enhanced Logs schema (dedupe/quarantine/provenance/archiving).
    Notes:
      - DROP phase is tolerant: removes BOTH legacy 'Catagory*' and new 'Category*'.
      - CREATE phase uses ONLY the new 'Category*' names (tables/columns/FKs/views).
@@ -14,10 +15,18 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- DROP VIEWS FIRST (names unchanged)
+-- DROP VIEWS FIRST (names unchanged + new log views)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 DROP VIEW IF EXISTS vw_CurrentPin;
+
+-- New log views (drop if exist)
+DROP VIEW IF EXISTS vw_Logs_RecentActive;
+DROP VIEW IF EXISTS vw_Logs_ErrorsRecent;
+DROP VIEW IF EXISTS vw_Logs_Quarantine;
+DROP VIEW IF EXISTS vw_Logs_EarlyIngest;
+DROP VIEW IF EXISTS vw_Logs_Archive;
+DROP VIEW IF EXISTS vw_Logs_StackHotspots;
 
 -- ---------------------------------------------------------------------------
 -- DROP TABLES (tolerate both old/new spellings)
@@ -165,38 +174,58 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.0.0', strftime('%Y-%m-%d %H:%M:%S','now'), 'Initial schema creation (Category spelling fixed)', 1
+SELECT '1.0.0', strftime('%Y-%m-%d %H:%M:%S','now'), 'Initial schema creation (Category spelling fixed + enhanced Logs)', 1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 -- ---------------------------------------------------------------------------
--- Table: Logs (canonical dev schema v1)
+-- Table: Logs (canonical dev schema v1 + enhancements)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Logs (
-    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    CreatedUtc    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    Level         TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','ERROR','FATAL','WARNING')),
-    Source        TEXT,
-    EventCode     TEXT,
-    SessionId     TEXT    NOT NULL DEFAULT '',
-    MachineId     TEXT,
-    AppVersion    TEXT    NOT NULL DEFAULT '',
-    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
-    Payload       BLOB,        -- AES-256-GCM: nonce(12)|ciphertext|tag(16)
-    PayloadFmt    TEXT,        -- e.g. 'gcm-json-v1'
-    PayloadVer    INTEGER NOT NULL DEFAULT 1,
-    KeySetVersion INTEGER NOT NULL DEFAULT 1,
-    StackHash     TEXT
+    Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    WhenUtc        TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    CreatedUtc     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    Level          TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','ERROR','FATAL','WARNING')),
+    Source         TEXT,
+    EventCode      TEXT,
+    SessionId      TEXT    NOT NULL DEFAULT '',
+    MachineId      TEXT,
+    AppVersion     TEXT    NOT NULL DEFAULT '',
+    IsCrash        INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
+    -- Encrypted payload (AES-256-GCM: nonce(12)|ciphertext|tag(16))
+    Payload        BLOB,
+    PayloadFmt     TEXT,        -- e.g. 'gcm-json-v1'
+    PayloadVer     INTEGER NOT NULL DEFAULT 1,
+    KeySetVersion  INTEGER NOT NULL DEFAULT 1,
+    StackHash      TEXT,
+
+    -- ✅ New: bulletproof dedupe + provenance + quarantine + archive
+    PayloadHash    TEXT,        -- hex SHA-256 of encrypted payload (or canonical JSON) — must be consistent end-to-end
+    IngestOrigin   TEXT    NOT NULL DEFAULT 'Runtime' CHECK (IngestOrigin IN ('Early','Runtime','Import')),
+    IsQuarantined  INTEGER NOT NULL DEFAULT 0 CHECK (IsQuarantined IN (0,1)),
+    QuarantineReason TEXT,      -- e.g. 'DPAPI_Fail','Malformed','KeyMismatch','Unknown'
+    ArchivedAt     TEXT,        -- when set, row is considered archived/out of hot path
+
+    UNIQUE (PayloadHash)
 );
 
--- Helpful indexes
-CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc        ON Logs(CreatedUtc);
-CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc_Desc   ON Logs(CreatedUtc DESC);
-CREATE INDEX IF NOT EXISTS IX_Logs_Level             ON Logs(Level);
-CREATE INDEX IF NOT EXISTS IX_Logs_Level_CreatedUtc  ON Logs(Level, CreatedUtc DESC);
-CREATE INDEX IF NOT EXISTS IX_Logs_EventCode         ON Logs(EventCode);
-CREATE INDEX IF NOT EXISTS IX_Logs_IsCrash           ON Logs(IsCrash);
-CREATE INDEX IF NOT EXISTS IX_Logs_StackHash         ON Logs(StackHash);
+-- Helpful indexes (focused + partial)
+-- Primary recency path
+CREATE INDEX IF NOT EXISTS IX_Logs_WhenUtc_Desc           ON Logs(WhenUtc DESC);
+-- Severity filters
+CREATE INDEX IF NOT EXISTS IX_Logs_Level_WhenUtc_Desc     ON Logs(Level, WhenUtc DESC);
+-- Source / Event drilldowns
+CREATE INDEX IF NOT EXISTS IX_Logs_Source_WhenUtc_Desc    ON Logs(Source, WhenUtc DESC);
+CREATE INDEX IF NOT EXISTS IX_Logs_EventCode_WhenUtc_Desc ON Logs(EventCode, WhenUtc DESC);
+-- Sessions
+CREATE INDEX IF NOT EXISTS IX_Logs_Session_WhenUtc_Desc   ON Logs(SessionId, WhenUtc DESC);
+-- Crashes (partial)
+CREATE INDEX IF NOT EXISTS IX_Logs_Crash_Recent           ON Logs(WhenUtc DESC) WHERE IsCrash = 1;
+-- Quarantine (partial)
+CREATE INDEX IF NOT EXISTS IX_Logs_Quarantine_Recent      ON Logs(WhenUtc DESC) WHERE IsQuarantined = 1;
+-- Archive (partial)
+CREATE INDEX IF NOT EXISTS IX_Logs_Archive_Recent         ON Logs(ArchivedAt DESC) WHERE ArchivedAt IS NOT NULL;
+-- Stack hotspots
+CREATE INDEX IF NOT EXISTS IX_Logs_StackHash_WhenUtc_Desc ON Logs(StackHash, WhenUtc DESC);
 
 -- ---------------------------------------------------------------------------
 -- Table: AppSettings (key/value store)
@@ -230,7 +259,7 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- ---------------------------------------------------------------------------
--- Views (point to new 'Category*' tables)
+-- Views (point to new 'Category*' tables + helpful log views)
 -- ---------------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
     SELECT h.*
@@ -251,6 +280,76 @@ CREATE VIEW IF NOT EXISTS vw_CurrentPin AS
         GROUP BY ItemId
     ) latest
       ON h.ItemId = latest.ItemId AND h.CreatedAt = latest.MaxCreated;
+
+-- Helper severity mapping (inline via CASE in views below)
+-- TRACE(0), DEBUG(10), INFO(20), WARN/WARNING(30), ERROR(40), FATAL(50)
+
+CREATE VIEW IF NOT EXISTS vw_Logs_RecentActive AS
+    SELECT *,
+           CASE UPPER(Level)
+               WHEN 'TRACE' THEN 0
+               WHEN 'DEBUG' THEN 10
+               WHEN 'INFO' THEN 20
+               WHEN 'WARN' THEN 30
+               WHEN 'WARNING' THEN 30
+               WHEN 'ERROR' THEN 40
+               WHEN 'FATAL' THEN 50
+               ELSE 20
+           END AS SeverityRank
+    FROM Logs
+    WHERE IsQuarantined = 0
+      AND ArchivedAt IS NULL
+    ORDER BY WhenUtc DESC;
+
+CREATE VIEW IF NOT EXISTS vw_Logs_ErrorsRecent AS
+    SELECT *
+    FROM (
+        SELECT *,
+               CASE UPPER(Level)
+                   WHEN 'TRACE' THEN 0
+                   WHEN 'DEBUG' THEN 10
+                   WHEN 'INFO' THEN 20
+                   WHEN 'WARN' THEN 30
+                   WHEN 'WARNING' THEN 30
+                   WHEN 'ERROR' THEN 40
+                   WHEN 'FATAL' THEN 50
+                   ELSE 20
+               END AS SeverityRank
+        FROM Logs
+        WHERE IsQuarantined = 0 AND ArchivedAt IS NULL
+    )
+    WHERE SeverityRank >= 40
+    ORDER BY WhenUtc DESC;
+
+CREATE VIEW IF NOT EXISTS vw_Logs_Quarantine AS
+    SELECT *
+    FROM Logs
+    WHERE IsQuarantined = 1
+    ORDER BY WhenUtc DESC;
+
+CREATE VIEW IF NOT EXISTS vw_Logs_EarlyIngest AS
+    SELECT *
+    FROM Logs
+    WHERE IngestOrigin = 'Early'
+      AND IsQuarantined = 0
+    ORDER BY WhenUtc DESC;
+
+CREATE VIEW IF NOT EXISTS vw_Logs_Archive AS
+    SELECT *
+    FROM Logs
+    WHERE ArchivedAt IS NOT NULL
+    ORDER BY ArchivedAt DESC;
+
+CREATE VIEW IF NOT EXISTS vw_Logs_StackHotspots AS
+    SELECT StackHash,
+           COUNT(*)      AS N,
+           MAX(WhenUtc)  AS LastSeen,
+           SUM(CASE WHEN IsQuarantined=1 THEN 1 ELSE 0 END) AS QuarantinedCount
+    FROM Logs
+    WHERE StackHash IS NOT NULL
+      AND ArchivedAt IS NULL
+    GROUP BY StackHash
+    ORDER BY N DESC, LastSeen DESC;
 
 COMMIT;
 
