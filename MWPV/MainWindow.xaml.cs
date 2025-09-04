@@ -4,7 +4,6 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using Utilities.Helpers;
-//using Utilities.Helpers.Debugging;
 
 #if DEBUG
 using Microsoft.Data.Sqlite;
@@ -24,8 +23,6 @@ namespace MWPV
             // Title bar glyph sync (no override of OnStateChanged to keep Hot Reload happy)
             UpdateMaxRestoreGlyph();
             this.StateChanged += (_, __) => UpdateMaxRestoreGlyph();
-
-
         }
 
         /// <summary>

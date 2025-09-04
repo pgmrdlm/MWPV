@@ -7,7 +7,6 @@ using System.Linq;
 using SevenZip;
 using Utilities.Diagnostics;     // EarlyLoginFailures
 using Security.Utility;          // EarlyFailType
-//using Utilities.Helpers.Debugging;
 using EarlyFail = Security.Utility.EarlyFailType;
 
 namespace Utilities.Helpers
