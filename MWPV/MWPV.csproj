@@ -26,6 +26,9 @@
 		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
 	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
+	</ItemGroup>
 
 	<!-- App resources / content -->
 	<ItemGroup>
@@ -40,8 +43,5 @@
 	</ItemGroup>
 
 	<!-- Reference the Security.Utility project that sits alongside MWPV.csproj -->
-	<ItemGroup>
-		<ProjectReference Include="Security.Utility\Security.Utility.csproj" />
-	</ItemGroup>
 
 </Project>

@@ -1,0 +1,33 @@
+# pack-refs with: peeled fully-peeled sorted 
+3994d0b3651734eaa8b1c52343c6309b3b160c32 refs/remotes/origin/NewDataDll
+070af65525493c4325d38967dc7be2f40e7d56bf refs/remotes/origin/main
+3994d0b3651734eaa8b1c52343c6309b3b160c32 refs/remotes/origin/recover/security-utility-fix
+eb55fd8d2a83c63da5d001e34a8c3abfa0ca7f82 refs/tags/milestone-1
+^1533218690fbbfe8df364d5ef15a7e0d7011e882
+3a0469bc60de8d6b6929dbb8da2dfa686b54e256 refs/tags/safe-20250818
+4eb0054c581d075bcedcea69deed3e6e45ba7d7c refs/tags/safe/build-ok-2025-08-25-0935
+^eaaec74eccec6f4521579fec02a59b60a09953bc
+29015c8ed2086ced48bc0e80130674f88ccb4c10 refs/tags/savepoint-20250830-221753
+^f26ab270c2f03a8633d076e924deca60cb61cfbc
+fb20a0efe67aacac7c9599530242a2d63ef559ff refs/tags/v0.0.0-dedupe-merge
+^9c2854536ba1c179efea8a2e50a90546309a0a16
+581639f0a24ecec809c9bcc008b7f6f050cabf2a refs/tags/v0.0.0-payload-merge
+^e39db971b6516b6ea84071d1bb9e528115dae20c
+bdcb12956ad8491d23fc980742f69033f6d35494 refs/tags/v0.1.1-quarantine
+^07052cc7c3b574789efc28a2bd5e033107c927a1
+b5e45584e70f2a22bb639090e61461ca5f701660 refs/tags/v0.2.0
+^baefd322c15cc29ecad56d0f305755da4715efbb
+4b1706548939aead14280a063ac022dba52a4027 refs/tags/v0.6.0-dbpasswordjson
+^e20f1c95596736913e43de5c6852dbb8cdc22315
+a02fd1434f5865cda196e4175dfc80f9682a4bf5 refs/tags/v0.9.0-sec-log-wrap
+^717bb37f738d1c7c3965f6a593553d6f631d4a96
+a5eb57684b8d7480adf3ac4c542b9a985fba2cbf refs/tags/v0.9.1-cat-clean
+^070af65525493c4325d38967dc7be2f40e7d56bf
+cb8afddfae2637b499c18101ef18666e8b18b216 refs/tags/v0.9.1-secure-wipe
+^6862fb012345d6523135d46c02fa581cbcdeac0d
+27c66e658fdc6e32258ecb3c76c4ceeddff44d8c refs/tags/v0.9.2-secure-datastore
+^943d0fc97cff6c3357151c980c042b2474b1c67b
+1e7136e91393330e924ad0657468f59c2ed5eb65 refs/tags/v1.0.0-password-entry
+^b553d317cc96add9fab339712c49851dc717a515
+118576124d237a35cf2481e2c28e76b170549d59 refs/tags/v1.2.0
+^b4cb5a4d74dcedf7574af4bb1ec4aac8cd3740b1
