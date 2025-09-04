@@ -1,55 +1,140 @@
-﻿using System.Data.Common;
-using MWPV.Data.Abstractions;
+﻿using MWPV.Data.Abstractions;
 using MWPV.Data.Models;
-using MWPV.Data.Internal; // for SqlCatalog / Require()
 
 namespace MWPV.Data.Repositories;
 
-public sealed class CategoryRepository
+/// <summary>
+/// SQLite implementation of <see cref="ICategoryRepository"/>.
+/// Uses parameterized commands and maps to schema columns:
+/// Category_Key, Category_Name, Category_Description, IsActive.
+/// </summary>
+public sealed class CategoryRepository : ICategoryRepository
 {
-    private readonly ISqlExecutor _db;
+    private readonly IConnectionFactory _factory;
+    private readonly IDataLogSink _log;
 
-    public CategoryRepository(ISqlExecutor db) => _db = db;
+    public CategoryRepository(IConnectionFactory factory, IDataLogSink log)
+    {
+        _factory = factory ?? throw new ArgumentNullException(nameof(factory));
+        _log = log ?? throw new ArgumentNullException(nameof(log));
+    }
 
-    // ---- Reads -------------------------------------------------------------
+    public async Task<long> AddAsync(Category category)
+    {
+        const string Sql = @"
+INSERT INTO Categories (Category_Name, Category_Description, IsActive)
+VALUES ($name, $desc, $active);
+SELECT last_insert_rowid();";
 
-    public Category? GetById(long id) =>
-        _db.QuerySingle<Category>(
-            SqlCatalog.Require("Category_SelectById.sql"),
-            new { id });
+        try
+        {
+            await using var conn = _factory.CreateConnection();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = Sql;
+            cmd.Parameters.AddWithValue("$name", category.Category_Name);
+            cmd.Parameters.AddWithValue("$desc", (object?)category.Category_Description ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$active", category.IsActive);
 
-    public IEnumerable<Category> ListAll() =>
-        _db.Query<Category>(
-            SqlCatalog.Require("Category_SelectAll.sql"));
+            var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+            var id = Convert.ToInt64(result);
+            _log.Info("CategoryRepository.Add.Success", new { id, category.Category_Name });
+            return id;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("CategoryRepository.Add.Failed", new { category.Category_Name }, ex);
+            throw;
+        }
+    }
 
-    public IEnumerable<Category> ListActive() =>
-        _db.Query<Category>(
-            SqlCatalog.Require("Category_SelectActive.sql"));
+    public async Task<Category?> GetByIdAsync(long id)
+    {
+        const string Sql = @"
+SELECT Category_Key, Category_Name, Category_Description, IsActive
+FROM Categories
+WHERE Category_Key = $id;";
 
-    public bool ExistsByName(string name) =>
-        _db.QuerySingle<long>(
-            SqlCatalog.Require("Category_ExistsByName.sql"),
-            new { name }) > 0;
+        await using var conn = _factory.CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = Sql;
+        cmd.Parameters.AddWithValue("$id", id);
 
-    // ---- Writes ------------------------------------------------------------
+        await using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+        if (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            return new Category
+            {
+                Category_Key = reader.GetInt64(0),
+                Category_Name = reader.GetString(1),
+                Category_Description = reader.IsDBNull(2) ? null : reader.GetString(2),
+                IsActive = reader.GetBoolean(3)
+            };
+        }
 
-    public long Add(Category c, DbTransaction? tx = null) =>
-        _db.QuerySingle<long>(
-            SqlCatalog.Require("Category_Insert.sql"),
-            c, tx);
+        return null;
+    }
 
-    public int Update(Category c, DbTransaction? tx = null) =>
-        _db.Execute(
-            SqlCatalog.Require("Category_Update.sql"),
-            c, tx);
+    public async Task<IReadOnlyList<Category>> GetAllAsync()
+    {
+        const string Sql = @"
+SELECT Category_Key, Category_Name, Category_Description, IsActive
+FROM Categories
+ORDER BY Category_Name;";
 
-    public int Deactivate(long id, DbTransaction? tx = null) =>
-        _db.Execute(
-            SqlCatalog.Require("Category_Deactivate.sql"),
-            new { id }, tx);
+        var list = new List<Category>();
 
-    public int Delete(long id, DbTransaction? tx = null) =>
-        _db.Execute(
-            SqlCatalog.Require("Category_Delete.sql"),
-            new { id }, tx);
+        await using var conn = _factory.CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = Sql;
+
+        await using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            list.Add(new Category
+            {
+                Category_Key = reader.GetInt64(0),
+                Category_Name = reader.GetString(1),
+                Category_Description = reader.IsDBNull(2) ? null : reader.GetString(2),
+                IsActive = reader.GetBoolean(3)
+            });
+        }
+
+        return list;
+    }
+
+    public async Task<int> UpdateAsync(Category category)
+    {
+        const string Sql = @"
+UPDATE Categories
+SET Category_Name = $name,
+    Category_Description = $desc,
+    IsActive = $active
+WHERE Category_Key = $id;";
+
+        await using var conn = _factory.CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = Sql;
+        cmd.Parameters.AddWithValue("$id", category.Category_Key);
+        cmd.Parameters.AddWithValue("$name", category.Category_Name);
+        cmd.Parameters.AddWithValue("$desc", (object?)category.Category_Description ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$active", category.IsActive);
+
+        var affected = await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+        _log.Info("CategoryRepository.Update", new { category.Category_Key, affected });
+        return affected;
+    }
+
+    public async Task<int> DeleteAsync(long id)
+    {
+        const string Sql = @"DELETE FROM Categories WHERE Category_Key = $id;";
+
+        await using var conn = _factory.CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = Sql;
+        cmd.Parameters.AddWithValue("$id", id);
+
+        var affected = await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+        _log.Info("CategoryRepository.Delete", new { id, affected });
+        return affected;
+    }
 }

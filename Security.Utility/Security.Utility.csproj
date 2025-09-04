@@ -1,13 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
 
-  <ItemGroup>
-    <PackageReference Include="Squid-Box.SevenZipSharp" Version="1.6.2.24" />
-  </ItemGroup>
+		<!-- Turn off SDK-generated AssemblyInfo to avoid duplicates -->
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+		<!-- Optional but nice for libs -->
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+		<Deterministic>true</Deterministic>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Squid-Box.SevenZipSharp" Version="1.6.2.24" />
+	</ItemGroup>
 
 </Project>

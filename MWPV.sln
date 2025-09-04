@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MWPV", "MWPV.csproj", "{09C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security.Utility", "Security.Utility\Security.Utility.csproj", "{807EC17A-2E20-41DE-A7D5-194F5967CB82}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MWPV.Data", "MWPV.Data\MWPV.Data.csproj", "{CBF90D16-2955-D0CD-BE98-EF6A724F6501}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,6 +26,10 @@ Global
 		{807EC17A-2E20-41DE-A7D5-194F5967CB82}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{807EC17A-2E20-41DE-A7D5-194F5967CB82}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{807EC17A-2E20-41DE-A7D5-194F5967CB82}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBF90D16-2955-D0CD-BE98-EF6A724F6501}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBF90D16-2955-D0CD-BE98-EF6A724F6501}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBF90D16-2955-D0CD-BE98-EF6A724F6501}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBF90D16-2955-D0CD-BE98-EF6A724F6501}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
