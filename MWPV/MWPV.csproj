@@ -40,8 +40,5 @@
 	</ItemGroup>
 
 	<!-- Reference the Security.Utility project that sits alongside MWPV.csproj -->
-	<ItemGroup>
-		<ProjectReference Include="Security.Utility\Security.Utility.csproj" />
-	</ItemGroup>
 
 </Project>
