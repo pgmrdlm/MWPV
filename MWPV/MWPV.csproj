@@ -22,9 +22,13 @@
 
 	<!-- NuGet packages -->
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.7" />
+		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.8" />
 		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\MWPV.Data\MWPV.Data.csproj" />
+	  <ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
 	</ItemGroup>
 
 	<!-- App resources / content -->

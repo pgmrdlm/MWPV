@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using Utilities.Helpers;
-using Utilities.Helpers.Debugging;
+//using Utilities.Helpers.Debugging;
 
 #if DEBUG
 using Microsoft.Data.Sqlite;
@@ -25,22 +25,7 @@ namespace MWPV
             UpdateMaxRestoreGlyph();
             this.StateChanged += (_, __) => UpdateMaxRestoreGlyph();
 
-#if DEBUG
-            try
-            {
-                // Ctrl+Alt+L -> Export FULL DB to .sql (unencrypted; Logs.Payload decrypted to JSON)
-                InputBindings.Add(new KeyBinding(
-                    DebugCommands.ExportFullSql,
-                    new KeyGesture(Key.L, ModifierKeys.Control | ModifierKeys.Alt)));
 
-                CommandBindings.Add(new CommandBinding(DebugCommands.ExportFullSql, async (_, __) =>
-                {
-                    Func<SqliteConnection> openAppConn = DatabaseHelper.GetAppOpenConnection;
-                    await FullSqlExportService.ExportFullDbAsSqlAsync(openAppConn, decryptLogsPayload: true);
-                }));
-            }
-            catch { /* keep constructor bulletproof */ }
-#endif
         }
 
         /// <summary>

@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MWPV.Data")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fd8ae71668529fe5127074ff19169036a3cdc03e")]
 [assembly: System.Reflection.AssemblyProductAttribute("MWPV.Data")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MWPV.Data")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
