@@ -82,8 +82,8 @@ namespace MWPV
                 Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
                 Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
 
-                var startupRepo = new LogRepository();
-                EarlyLogIngestor.IngestAll(startupRepo);
+                // CHANGED: parameterless ingest (matches new EarlyLogIngestor signature)
+                EarlyLogIngestor.IngestAll();
             }
             catch (Exception ex)
             {
@@ -123,8 +123,8 @@ namespace MWPV
                 // Post-login ingest to catch files created during THIS run (e.g., bad pw then good)
                 try
                 {
-                    var postRepo = new LogRepository();
-                    EarlyLogIngestor.IngestAll(postRepo);
+                    // CHANGED: parameterless ingest (matches new EarlyLogIngestor signature)
+                    EarlyLogIngestor.IngestAll();
                 }
                 catch (Exception ex)
                 {
