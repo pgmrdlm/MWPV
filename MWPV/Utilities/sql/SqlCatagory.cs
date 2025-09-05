@@ -29,7 +29,9 @@ namespace Utilities.Sql
             "MWPV_DB_Create.sql",
             "SelectCategories.sql",
             "Logs_Purge_OlderThan.sql",
-            "Logs_Exists_BySig.sql"
+            "Logs_Exists_BySig.sql",
+            "Logs_Select_All.sql",
+            "Logs_Select_Page.sql"
         };
 
         // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.
@@ -41,7 +43,9 @@ namespace Utilities.Sql
             "Logs_Indexes.sql",
             "SelectCategories.sql",
             "CategoryExists.sql",
-            "InsertCategory.sql"
+            "InsertCategory.sql",
+            "Logs_Select_All.sql",
+            "Logs_Select_Page.sql"
             // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
         };
 
