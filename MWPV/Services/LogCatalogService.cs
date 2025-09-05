@@ -5,63 +5,105 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using Utilities.Sql;        // SqlCagegory.GetSql(...)
+using Utilities.Helpers;    // DatabaseHelper (for default connection factory)
 
 namespace MWPV.Services
 {
     /// <summary>
-    /// Minimal loader for the log catalog (for binding in ViewLogs.xaml).
-    /// Pass a factory that returns an OPEN SqliteConnection to the app DB.
+    /// Loader + simple writer for the log catalog.
+    /// All SQL is externalized via SqlCagegory.GetSql(...).
     /// </summary>
     public static class LogCatalogService
     {
         /// <summary>
-        /// Load ALL logs (ordered newest first) into a fresh collection.
+        /// Insert a lightweight "login heartbeat" row (INFO/Login/LOGIN). No payload.
+        /// Returns inserted Id, or -1 on failure.
+        /// </summary>
+        public static long InsertLoginEvent(Func<SqliteConnection>? openAppConnection = null)
+        {
+            openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
+
+            try
+            {
+                using var cn = openAppConnection();
+
+                var nowIso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+                using (var cmd = cn.CreateCommand())
+                {
+                    cmd.CommandText = SqlCagegory.GetSql("Logs_Insert_V2.sql");
+
+                    cmd.Parameters.AddWithValue("@WhenUtc", nowIso);
+                    cmd.Parameters.AddWithValue("@CreatedUtc", nowIso);
+                    cmd.Parameters.AddWithValue("@Level", "INFO");
+                    cmd.Parameters.AddWithValue("@Source", "Login");
+                    cmd.Parameters.AddWithValue("@EventCode", "LOGIN");
+                    cmd.Parameters.AddWithValue("@SessionId", "");
+                    cmd.Parameters.AddWithValue("@MachineId", Environment.MachineName ?? "");
+                    cmd.Parameters.AddWithValue("@AppVersion", AppVersion());
+                    cmd.Parameters.AddWithValue("@IsCrash", 0);
+
+                    var pPl = cmd.CreateParameter();
+                    pPl.ParameterName = "@Payload";
+                    pPl.Value = DBNull.Value; // no payload for heartbeat
+                    cmd.Parameters.Add(pPl);
+
+                    var pFmt = cmd.CreateParameter();
+                    pFmt.ParameterName = "@PayloadFmt";
+                    pFmt.Value = DBNull.Value;
+                    cmd.Parameters.Add(pFmt);
+
+                    cmd.Parameters.AddWithValue("@StackHash", "");
+
+                    var affected = cmd.ExecuteNonQuery();
+                    if (affected != 1)
+                    {
+                        Debug.WriteLine("[LOGS][InsertLoginEvent] affected != 1");
+                        return -1;
+                    }
+                }
+
+                using var last = cn.CreateCommand();
+                last.CommandText = SqlCagegory.GetSql("Logs_LastInsertId.sql");
+                var obj = last.ExecuteScalar();
+                var id = Convert.ToInt64(obj);
+                Debug.WriteLine($"[LOGS][InsertLoginEvent] lastId={id}");
+                return id;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LOGS][InsertLoginEvent][FAIL] {ex.GetType().Name}: {ex.Message}");
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// Load ALL logs (newest first) into a new collection.
         /// </summary>
         public static async Task<ObservableCollection<Logs>> LoadAllAsync(
             Func<SqliteConnection> openAppConnection,
             CancellationToken ct = default)
         {
             var items = new ObservableCollection<Logs>();
-
             using var cn = openAppConnection();
 
-            // --- DEBUG: total row count ---------------------------------------
             long total = await CountAsync(cn, ct);
             Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-            // -------------------------------------------------------------------
 
             using var cmd = cn.CreateCommand();
-            cmd.CommandText = @"
-SELECT
-  Id,
-  WhenUtc,
-  CreatedUtc,
-  Level,
-  Source,
-  EventCode,
-  SessionId,
-  MachineId,
-  AppVersion,
-  IsCrash,
-  PayloadFmt,
-  PayloadVer,
-  KeySetVersion,
-  StackHash,
-  length(Payload) as PayloadSize
-FROM Logs
-ORDER BY Id DESC;";
+            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_All.sql");
 
             using var rdr = await cmd.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
                 items.Add(Map(rdr));
 
             Debug.WriteLine($"[LOGS] LoadAllAsync loaded {items.Count} rows.");
-
             return items;
         }
 
         /// <summary>
-        /// Load a page of logs (newest first). Useful if the table gets big.
+        /// Load a page of logs (newest first).
         /// </summary>
         public static async Task<ObservableCollection<Logs>> LoadPageAsync(
             Func<SqliteConnection> openAppConnection,
@@ -69,35 +111,13 @@ ORDER BY Id DESC;";
             CancellationToken ct = default)
         {
             var items = new ObservableCollection<Logs>();
-
             using var cn = openAppConnection();
 
-            // --- DEBUG: total row count ---------------------------------------
             long total = await CountAsync(cn, ct);
             Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-            // -------------------------------------------------------------------
 
             using var cmd = cn.CreateCommand();
-            cmd.CommandText = @"
-SELECT
-  Id,
-  WhenUtc,
-  CreatedUtc,
-  Level,
-  Source,
-  EventCode,
-  SessionId,
-  MachineId,
-  AppVersion,
-  IsCrash,
-  PayloadFmt,
-  PayloadVer,
-  KeySetVersion,
-  StackHash,
-  length(Payload) as PayloadSize
-FROM Logs
-ORDER BY Id DESC
-LIMIT $take OFFSET $skip;";
+            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_Page.sql");
             cmd.Parameters.AddWithValue("$take", take);
             cmd.Parameters.AddWithValue("$skip", skip);
 
@@ -106,12 +126,11 @@ LIMIT $take OFFSET $skip;";
                 items.Add(Map(rdr));
 
             Debug.WriteLine($"[LOGS] LoadPageAsync loaded {items.Count} rows (take={take}, skip={skip}).");
-
             return items;
         }
 
         /// <summary>
-        /// Clear and refill an existing bound collection in-place.
+        /// Clear and refill an existing bound collection in-place (newest first).
         /// </summary>
         public static async Task ReloadIntoAsync(
             ObservableCollection<Logs> target,
@@ -119,34 +138,13 @@ LIMIT $take OFFSET $skip;";
             CancellationToken ct = default)
         {
             target.Clear();
-
             using var cn = openAppConnection();
 
-            // --- DEBUG: total row count ---------------------------------------
             long total = await CountAsync(cn, ct);
             Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-            // -------------------------------------------------------------------
 
             using var cmd = cn.CreateCommand();
-            cmd.CommandText = @"
-SELECT
-  Id,
-  WhenUtc,
-  CreatedUtc,
-  Level,
-  Source,
-  EventCode,
-  SessionId,
-  MachineId,
-  AppVersion,
-  IsCrash,
-  PayloadFmt,
-  PayloadVer,
-  KeySetVersion,
-  StackHash,
-  length(Payload) as PayloadSize
-FROM Logs
-ORDER BY Id DESC;";
+            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_All.sql");
 
             int loaded = 0;
             using var rdr = await cmd.ExecuteReaderAsync(ct);
@@ -156,7 +154,7 @@ ORDER BY Id DESC;";
                 loaded++;
             }
 
-            Debug.WriteLine($"[LOGS] ReloadIntoAsync loaded {loaded} rows into bound collection.");
+            Debug.WriteLine($"[LOGS] ReloadIntoAsync loaded {loaded} rows.");
         }
 
         // ---- helpers ----
@@ -175,7 +173,6 @@ ORDER BY Id DESC;";
 
         private static Logs Map(SqliteDataReader r)
         {
-            // SQLite returns integers as long; cast carefully.
             return new Logs
             {
                 Id = r.GetInt64(0),
@@ -198,5 +195,11 @@ ORDER BY Id DESC;";
 
         private static string GetString(SqliteDataReader r, int i)
             => r.IsDBNull(i) ? string.Empty : r.GetString(i);
+
+        private static string AppVersion()
+        {
+            var v = System.Reflection.Assembly.GetEntryAssembly()?.GetName()?.Version;
+            return v?.ToString() ?? "dev";
+        }
     }
 }
