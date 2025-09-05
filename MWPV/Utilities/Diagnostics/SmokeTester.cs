@@ -70,14 +70,14 @@ namespace Utilities.Diagnostics
                 }
 
 #if DEBUG
-                // 4) DEBUG cleanup: remove the inserted smoke row
-                using (var delCmd = conn.CreateCommand())
-                {
-                    delCmd.CommandText = "DELETE FROM Logs WHERE Id = @id";
-                    delCmd.Parameters.AddWithValue("@id", lastId);
-                    var deleted = delCmd.ExecuteNonQuery();
-                    Debug.WriteLine($"[SMOKE][CLEAN] Deleted={deleted} id={lastId}");
-                }
+                //// 4) DEBUG cleanup: remove the inserted smoke row (DISABLED per request)
+                ////using (var delCmd = conn.CreateCommand())
+                ////{
+                ////    delCmd.CommandText = "DELETE FROM Logs WHERE Id = @id";
+                ////    delCmd.Parameters.AddWithValue("@id", lastId);
+                ////    var deleted = delCmd.ExecuteNonQuery();
+                ////    Debug.WriteLine($"[SMOKE][CLEAN] Deleted={deleted} id={lastId}");
+                ////}
 #endif
             }
             catch (Exception ex)
