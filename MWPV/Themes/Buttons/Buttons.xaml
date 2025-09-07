@@ -1,20 +1,15 @@
 ﻿<!-- Themes/Buttons/Buttons.xaml -->
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
-    <!-- =========================
-         Global button size knobs
-         ========================= -->
-    <sys:Double x:Key="StdButtonWidth"
-                xmlns:sys="clr-namespace:System;assembly=mscorlib">130</sys:Double>
-    <sys:Double x:Key="StdButtonHeight"
-                xmlns:sys="clr-namespace:System;assembly=mscorlib">20</sys:Double>
+    <!-- Global button size knobs -->
+    <sys:Double x:Key="StdButtonWidth">130</sys:Double>
+    <sys:Double x:Key="StdButtonHeight">20</sys:Double>
 
-    <!-- =========================
-         Shared Brushes & Colors
-         ========================= -->
-
-    <!-- Primary (green – for action buttons like Add/Submit) -->
+    <!-- Shared Brushes & Colors -->
+    <!-- Primary (green) -->
     <LinearGradientBrush x:Key="PrimaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#008A00" Offset="0"/>
         <GradientStop Color="#BFFFCF" Offset="0.5"/>
@@ -65,7 +60,7 @@
         <GradientStop Color="#A80000" Offset="1"/>
     </LinearGradientBrush>
 
-    <!-- Nav / Category (blue – used by CategoryPill) -->
+    <!-- Nav / Category (blue) -->
     <LinearGradientBrush x:Key="NavNormalBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#2B6CFF" Offset="0"/>
         <GradientStop Color="#BBD1FF" Offset="0.5"/>
@@ -82,6 +77,23 @@
         <GradientStop Color="#1949B3" Offset="1"/>
     </LinearGradientBrush>
 
+    <!-- Item (purple) -->
+    <LinearGradientBrush x:Key="ItemNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6A0DAD" Offset="0"/>
+        <GradientStop Color="#D1B3FF" Offset="0.5"/>
+        <GradientStop Color="#6A0DAD" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ItemHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#7F26C9" Offset="0"/>
+        <GradientStop Color="#E0CCFF" Offset="0.5"/>
+        <GradientStop Color="#7F26C9" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ItemPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#4B007F" Offset="0"/>
+        <GradientStop Color="#C2A3FF" Offset="0.5"/>
+        <GradientStop Color="#4B007F" Offset="1"/>
+    </LinearGradientBrush>
+
     <!-- Disabled + focus -->
     <LinearGradientBrush x:Key="DisabledBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#C9C9C9" Offset="0"/>
@@ -91,9 +103,7 @@
     <SolidColorBrush x:Key="DisabledForeground" Color="#7A7A7A"/>
     <SolidColorBrush x:Key="FocusBorder" Color="#3B82F6"/>
 
-    <!-- =========================
-         Base Rounded Template
-         ========================= -->
+    <!-- Base Rounded Template with unified fade/press overlays -->
     <Style x:Key="RoundedButtonBase" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource StdButtonWidth}"/>
         <Setter Property="Height" Value="{StaticResource StdButtonHeight}"/>
@@ -102,8 +112,10 @@
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -113,16 +125,76 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="14"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter RecognizesAccessKey="True"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        <Grid>
+                            <!-- unified overlay tints -->
+                            <Border x:Name="HoverOverlay"
+                                    CornerRadius="14"
+                                    Background="#40FFFFFF"
+                                    Opacity="0"/>
+                            <Border x:Name="PressedOverlay"
+                                    CornerRadius="14"
+                                    Background="#20000000"
+                                    Opacity="0"/>
+                            <ContentPresenter RecognizesAccessKey="True"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="MouseOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.18" Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.22" Duration="0:0:0.06"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.06"/>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused"/>
+                                <VisualState x:Name="Focused">
+                                    <Storyboard>
+                                        <!-- handled via Trigger below for border visuals -->
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
                     </Border>
+
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bd" Property="BorderBrush" Value="#1F000000"/>
-                        </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bd" Property="BorderBrush" Value="#2F000000"/>
                             <Setter Property="Padding" Value="10,7"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
@@ -130,7 +202,7 @@
                             <Setter Property="BorderThickness" Value="2"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource DisabledBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
                             <Setter TargetName="bd" Property="BorderBrush" Value="#33000000"/>
                         </Trigger>
@@ -140,9 +212,7 @@
         </Setter>
     </Style>
 
-    <!-- =========================
-         Dialog Buttons
-         ========================= -->
+    <!-- Dialog Buttons -->
     <Style x:Key="DialogPrimary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource PrimaryNormalBrush}"/>
         <Setter Property="BorderBrush" Value="#20000000"/>
@@ -194,13 +264,10 @@
         </Style.Triggers>
     </Style>
 
-    <!-- =========================
-         Category Pill (for DataGrid category buttons)
-         ========================= -->
+    <!-- Category / Item pill buttons -->
     <Style x:Key="CategoryPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource NavNormalBrush}"/>
         <Setter Property="BorderBrush" Value="#20000000"/>
-        <Setter Property="Foreground" Value="Black"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -216,9 +283,25 @@
         </Style.Triggers>
     </Style>
 
-    <!-- =========================
-         Title Bar Glyph Button (doesn't inherit base size)
-         ========================= -->
+    <Style x:Key="ItemPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
+        <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
+        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Title bar glyph button (no base size) -->
     <Style x:Key="TitleButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
@@ -250,46 +333,6 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-    </Style>
-
-    <!-- =========================
-         Item (purple – for category items)
-         ========================= -->
-    <LinearGradientBrush x:Key="ItemNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#6A0DAD" Offset="0"/>
-        <GradientStop Color="#D1B3FF" Offset="0.5"/>
-        <GradientStop Color="#6A0DAD" Offset="1"/>
-    </LinearGradientBrush>
-
-    <LinearGradientBrush x:Key="ItemHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#7F26C9" Offset="0"/>
-        <GradientStop Color="#E0CCFF" Offset="0.5"/>
-        <GradientStop Color="#7F26C9" Offset="1"/>
-    </LinearGradientBrush>
-
-    <LinearGradientBrush x:Key="ItemPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#4B007F" Offset="0"/>
-        <GradientStop Color="#C2A3FF" Offset="0.5"/>
-        <GradientStop Color="#4B007F" Offset="1"/>
-    </LinearGradientBrush>
-
-    <Style x:Key="ItemPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="#20000000"/>
-        <Setter Property="Foreground" Value="Black"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
-            </Trigger>
-        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>

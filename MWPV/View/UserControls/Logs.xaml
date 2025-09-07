@@ -1,0 +1,174 @@
+﻿<UserControl x:Class="MWPV.View.UserControls.Logs"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <!-- Whole surface -->
+    <Grid Background="Bisque">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36"/>
+            <!-- title -->
+            <RowDefinition Height="*"/>
+            <!-- body -->
+        </Grid.RowDefinitions>
+
+        <!-- Title bar -->
+        <Border Grid.Row="0" Background="#810000" Padding="12,0,6,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Title text + count placeholder -->
+                <TextBlock Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontWeight="SemiBold"
+                           FontSize="16">
+                    <Run Text="Application Logs"/>
+                    <Run Text=" " />
+                    <Run Text="(" />
+                    <Run x:Name="runCount" Text="0"/>
+                    <Run Text=" item(s))"/>
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <!-- Body -->
+        <Grid Grid.Row="1" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <!-- filter/search/apply -->
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="Auto"/>
+                <!-- page + buttons -->
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="*"/>
+                <!-- grid -->
+            </Grid.RowDefinitions>
+
+            <!-- Filter/search/apply row -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- "Filter:" -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="180"/>
+                    <!-- filter combo -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                    <!-- search box -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Apply -->
+                </Grid.ColumnDefinitions>
+
+                <Label Grid.Column="0"
+                       VerticalAlignment="Center"
+                       FontWeight="Bold"
+                       Content="Filter:"/>
+
+                <ComboBox x:Name="cmbFilter"
+                          Grid.Column="2"
+                          Height="28"
+                          VerticalAlignment="Center">
+                    <ComboBoxItem Content="All" IsSelected="True"/>
+                    <ComboBoxItem Content="Warnings only"/>
+                    <ComboBoxItem Content="Errors only"/>
+                    <ComboBoxItem Content="Security only"/>
+                    <ComboBoxItem Content="Crashes only"/>
+                    <ComboBoxItem Content="Misc"/>
+                </ComboBox>
+
+                <TextBox x:Name="tbSearch"
+                         Grid.Column="4"
+                         Height="28"
+                         VerticalAlignment="Center"
+                         ToolTip="Search (source, code, message)"/>
+
+                <Button x:Name="btnApply"
+                        Grid.Column="6"
+                        Style="{StaticResource DialogPrimary}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8B0;" Margin="0,0,8,0"/>
+                        <TextBlock Text="Apply"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Page controls and actions -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Page text -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Next 10 -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Next 25 -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- All -->
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Close -->
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Page:" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="txtPageInfo" Text="1 / 1" FontWeight="SemiBold"/>
+                </StackPanel>
+
+                <Button x:Name="btnNext10"
+                        Grid.Column="3"
+                        Style="{StaticResource DialogPrimary}">
+                    <TextBlock Text="Next 10"/>
+                </Button>
+
+                <Button x:Name="btnNext25"
+                        Grid.Column="5"
+                        Style="{StaticResource DialogPrimary}">
+                    <TextBlock Text="Next 25"/>
+                </Button>
+
+                <Button x:Name="btnAll"
+                        Grid.Column="7"
+                        Style="{StaticResource DialogPrimary}">
+                    <TextBlock Text="All"/>
+                </Button>
+
+                <Button x:Name="btnClose"
+                        Grid.Column="9"
+                        Style="{StaticResource DialogSecondary}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" Margin="0,0,8,0"/>
+                        <TextBlock Text="Close"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Data grid -->
+            <DataGrid x:Name="dgLogs"
+                      Grid.Row="4"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      RowHeaderWidth="0">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="When (UTC)" Binding="{Binding WhenUtc}" Width="180"/>
+                    <DataGridTextColumn Header="Level"      Binding="{Binding Level}"  Width="80"/>
+                    <DataGridTextColumn Header="Source"     Binding="{Binding Source}" Width="140"/>
+                    <DataGridTextColumn Header="Code"       Binding="{Binding Code}"   Width="80"/>
+                    <DataGridTextColumn Header="Message"    Binding="{Binding Message}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </Grid>
+</UserControl>
