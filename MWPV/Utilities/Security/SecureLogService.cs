@@ -1,94 +1,100 @@
 ﻿using System;
-using System.Data;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
-using Security.Utility;       // SecureEncryptedDataStore
+
+// Use the canonical enum from your logging namespace to avoid ambiguity
+using LogSeverity = Security.Utility.Logging.LogSeverity;
 
 namespace Security.Utility
 {
     /// <summary>
-    /// Centralized encrypted app logging to SQLite (v2 schema).
+    /// Standalone secure-log PREPARATION (no SQL, no app references).
+    /// Prepares payload and forwards a V3 envelope to a host-provided insert delegate.
     /// </summary>
     public static class SecureLogService
     {
-        // ---- configuration ----
+        // Host-provided insert callback (envelope -> inserted id)
+        private static Func<LogWriteEnvelopeV3, long>? _insertV3;
+
         private static Func<SqliteConnection>? _connectionFactory;
         private static string _appVersion = "unknown";
         private static string _machineId = Environment.MachineName;
         private static readonly JsonSerializerOptions _json = new() { WriteIndented = false };
 
-        // Session id (fallback if the host doesn’t pass one in payload)
-        private static readonly string _sessionId = Guid.NewGuid().ToString("N");
-
-        /// <summary>Call once at startup.</summary>
+        /// <summary>Call once at startup from the host app.</summary>
         public static void Initialize(
             Func<SqliteConnection> connectionFactory,
             string appVersion,
-            string machineId)
+            string machineId,
+            Func<LogWriteEnvelopeV3, long> insertV3Callback)
         {
             _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
             _appVersion = string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion;
             _machineId = string.IsNullOrWhiteSpace(machineId) ? Environment.MachineName : machineId;
+            _insertV3 = insertV3Callback ?? throw new ArgumentNullException(nameof(insertV3Callback));
         }
 
         /// <summary>
-        /// Write a log row (v2).
-        /// Named args supported: eventCode, source, whenUtc, createdUtc, isCrash, stackHash, payloadFmt.
+        /// Prepare-and-write via host insert delegate (V3). No SQL here.
         /// </summary>
-        public static async Task WriteAsync(
+        public static async Task<long> WriteAsync(
             LogSeverity level,
             object? payload,
-            string? eventCode = null,
-            string? source = null,
-            DateTime? whenUtc = null,
-            DateTime? createdUtc = null,
-            bool isCrash = false,
-            string? stackHash = null,
-            string? payloadFmt = "json")
+            string eventCode,
+            string source,
+            string message,
+            string? payloadFmt = null)
         {
+            if (_insertV3 is null)
+                throw new InvalidOperationException("SecureLogService.Initialize must be called with an insert callback.");
             if (_connectionFactory is null)
                 throw new InvalidOperationException("SecureLogService.Initialize must be called before WriteAsync.");
 
-            // Default times
-            var when = whenUtc ?? DateTime.UtcNow;
-            var created = createdUtc ?? DateTime.UtcNow;
+            // Prepare payload bytes + format
+            byte[]? bytes;
+            string fmt;
 
-            // Serialize payload
-            string payloadText = payload switch
+            switch (payload)
             {
-                null => "",
-                string s => s,
-                _ => JsonSerializer.Serialize(payload, _json)
+                case null:
+                    bytes = null; fmt = "none";
+                    break;
+                case byte[] b:
+                    bytes = b; fmt = string.IsNullOrWhiteSpace(payloadFmt) ? "binary" : payloadFmt!;
+                    break;
+                case string s:
+                    bytes = Encoding.UTF8.GetBytes(s);
+                    fmt = string.IsNullOrWhiteSpace(payloadFmt) ? "json" : payloadFmt!;
+                    break;
+                default:
+                    var json = JsonSerializer.Serialize(payload, _json);
+                    bytes = Encoding.UTF8.GetBytes(json);
+                    fmt = string.IsNullOrWhiteSpace(payloadFmt) ? "json" : payloadFmt!;
+                    break;
+            }
+
+            // If/when you add encryption:
+            // - Encrypt 'bytes' with LogPayloadKey
+            // - Set fmt = "aes-gcm"
+            // - Size = ciphertext length
+
+            var env = new LogWriteEnvelopeV3
+            {
+                Level = MapLevel(level),
+                Source = string.IsNullOrWhiteSpace(source) ? "App" : source,
+                EventCode = string.IsNullOrWhiteSpace(eventCode) ? "EVENT_0" : eventCode,
+                Message = message ?? "",
+                Payload = bytes,
+                PayloadFmt = fmt,
+                PayloadSize = bytes?.Length ?? 0,
+                CreatedUtc = DateTime.UtcNow.ToString("o"),
+                AppVersion = _appVersion
             };
 
-            // Load the v2 INSERT from secure store
-            string sql = SecureEncryptedDataStore.GetString("Logs_Insert_V2.sql");
-            if (string.IsNullOrWhiteSpace(sql))
-                throw new InvalidOperationException("Logs_Insert_V2.sql not found in SecureEncryptedDataStore.");
-
-            await using var conn = _connectionFactory();
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = sql;
-
-            // REQUIRED parameters (match your script exactly)
-            Add(cmd, "@WhenUtc", DbType.DateTime, when);
-            Add(cmd, "@CreatedUtc", DbType.DateTime, created);
-
-            // IMPORTANT: DB expects TEXT level with a CHECK constraint
-            Add(cmd, "@Level", DbType.String, MapLevel(level));
-
-            Add(cmd, "@Source", DbType.String, source ?? "App");
-            Add(cmd, "@EventCode", DbType.String, string.IsNullOrWhiteSpace(eventCode) ? "EVENT_0" : eventCode);
-            Add(cmd, "@SessionId", DbType.String, _sessionId);
-            Add(cmd, "@MachineId", DbType.String, _machineId);
-            Add(cmd, "@AppVersion", DbType.String, _appVersion);
-            Add(cmd, "@IsCrash", DbType.Int32, isCrash ? 1 : 0);
-            Add(cmd, "@Payload", DbType.String, payloadText);
-            Add(cmd, "@PayloadFmt", DbType.String, string.IsNullOrWhiteSpace(payloadFmt) ? "json" : payloadFmt);
-            Add(cmd, "@StackHash", DbType.String, stackHash ?? "");
-
-            await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            // Delegate to host’s single writer
+            return await Task.Run(() => _insertV3!(env)).ConfigureAwait(false);
         }
 
         private static string MapLevel(LogSeverity level) => level switch
@@ -97,17 +103,25 @@ namespace Security.Utility
             LogSeverity.Info => "INFO",
             LogSeverity.Warn => "WARN",
             LogSeverity.Error => "ERROR",
-            LogSeverity.Critical => "FATAL",   // schema expects FATAL, not CRITICAL
+            LogSeverity.Critical => "FATAL",
             _ => "INFO"
         };
+    }
 
-        private static void Add(SqliteCommand cmd, string name, DbType type, object? value)
-        {
-            var p = cmd.CreateParameter();
-            p.ParameterName = name;
-            p.DbType = type;
-            p.Value = value ?? DBNull.Value;
-            cmd.Parameters.Add(p);
-        }
+    /// <summary>
+    /// Standalone V3 envelope (no SQL knowledge, no app references).
+    /// Host maps this to actual SQL params.
+    /// </summary>
+    public sealed class LogWriteEnvelopeV3
+    {
+        public string Level { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string EventCode { get; set; } = "";
+        public string Message { get; set; } = "";
+        public byte[]? Payload { get; set; }
+        public string PayloadFmt { get; set; } = "none";
+        public int PayloadSize { get; set; } = 0;
+        public string CreatedUtc { get; set; } = "";
+        public string AppVersion { get; set; } = "";
     }
 }

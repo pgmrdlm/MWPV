@@ -2,6 +2,8 @@
 using System;
 using System.Threading.Tasks;
 using Security.Utility.Logging; // LogSeverity
+using LogSeverity = Security.Utility.Logging.LogSeverity;
+
 
 namespace MWPV.Services
 {

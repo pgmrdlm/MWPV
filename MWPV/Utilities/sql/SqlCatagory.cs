@@ -23,7 +23,7 @@ namespace Utilities.Sql
             "InsertCategory.sql",
             "Logs_Indexes.sql",
             "Logs_Init.sql",
-            "Logs_Insert_V2.sql",
+            "Logs_Insert_V3.sql",
             "Logs_Select_Recent.sql",       // NEW
             "Logs_LastInsertId.sql",        // NEW
             "MWPV_DB_Create.sql",
@@ -37,7 +37,7 @@ namespace Utilities.Sql
         // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.
         public static readonly string[] MustHaveScripts =
         {
-            "Logs_Insert_V2.sql",
+            "Logs_Insert_V3.sql",
             "Logs_Select_Recent.sql",
             "Logs_Init.sql",
             "Logs_Indexes.sql",

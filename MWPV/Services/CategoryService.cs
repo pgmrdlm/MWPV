@@ -4,6 +4,7 @@ using System;
 using System.Collections.ObjectModel;
 using Utilities.Helpers;     // DatabaseHelper, ErrorHandler
 using Security.Utility;      // SecureEncryptedDataStore, InputGuards, SecureLogService
+using LogSeverity = Security.Utility.Logging.LogSeverity;  // disambiguate enum
 
 namespace MWPV.Services
 {
@@ -122,7 +123,8 @@ namespace MWPV.Services
                     level: LogSeverity.Warn,
                     payload: new { name = cleanName, reason = "duplicate" },
                     eventCode: "CATEGORY_DUPLICATE",
-                    source: "CategoryService.InsertCategory");
+                    source: "CategoryService.InsertCategory",
+                    message: "Duplicate category detected; insert skipped");
                 return;
             }
 

@@ -5,6 +5,8 @@ using System.Text;
 using System.Windows;                     // MessageBox
 using MWPV.Services;                      // LogRepository
 using Security.Utility.Logging;           // LogSeverity + extensions
+using LogSeverity = Security.Utility.Logging.LogSeverity;
+
 
 namespace Utilities.Helpers
 {

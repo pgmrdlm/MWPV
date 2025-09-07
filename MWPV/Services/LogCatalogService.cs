@@ -1,200 +1,154 @@
-﻿using System;
-using System.Collections.ObjectModel;
+﻿// MWPV/Services/LogCatalogService.cs
+using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
-using MWPV.Models;
-using Utilities.Sql;        // SqlCagegory.GetSql(...)
-using Utilities.Helpers;    // DatabaseHelper (for default connection factory)
+using Utilities.Sql;       // SqlCagegory.GetSql(...)
+using Utilities.Helpers;   // DatabaseHelper (for default connection factory)
 
 namespace MWPV.Services
 {
     /// <summary>
-    /// Loader + simple writer for the log catalog.
-    /// All SQL is externalized via SqlCagegory.GetSql(...).
+    /// Single, centralized writer for Logs (matches Logs_Insert_V3.sql).
+    /// Keep ALL param names here — nowhere else.
     /// </summary>
     public static class LogCatalogService
     {
+        // Simple request bag so callers never touch SQL params.
+        public sealed class RequestV3
+        {
+            public string Level { get; set; } = "";
+            public string Source { get; set; } = "";
+            public string EventCode { get; set; } = "";
+            public byte[]? Payload { get; set; } = null;
+            public string PayloadFmt { get; set; } = "none";
+            public string CreatedUtc { get; set; } = "";    // ISO-8601; if empty we fill
+            public string AppVersion { get; set; } = "";
+
+            // Optional extras (safe defaults applied in Insert)
+            public string? WhenUtc { get; set; } = null;     // if null -> mirror CreatedUtc
+            public string? SessionId { get; set; } = null;
+            public long? LoginId { get; set; } = null;
+            public long? ItemId { get; set; } = null;
+            public string? DeviceMake { get; set; } = null;
+            public string? DeviceModel { get; set; } = null;
+            public string? OSVersion { get; set; } = null;
+            public string? DeviceIdHash { get; set; } = null;
+            public string? InstallType { get; set; } = null;
+            public int? PayloadVer { get; set; } = null;
+            public int? KeySetVersion { get; set; } = null;
+            public string? StackHash { get; set; } = null;
+            public int? IsCrash { get; set; } = null;     // 0/1; default 0
+        }
+
         /// <summary>
-        /// Insert a lightweight "login heartbeat" row (INFO/Login/LOGIN). No payload.
-        /// Returns inserted Id, or -1 on failure.
+        /// The ONE writer. Returns inserted Id or -1.
+        /// Matches exactly the columns/params in Logs_Insert_V3.sql.
         /// </summary>
-        public static long InsertLoginEvent(Func<SqliteConnection>? openAppConnection = null)
+        public static long Insert(RequestV3 req, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
 
             try
             {
                 using var cn = openAppConnection();
+                using var cmd = cn.CreateCommand();
 
-                var nowIso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                var sql = SqlCagegory.GetSql("Logs_Insert_V3.sql");
+                if (string.IsNullOrWhiteSpace(sql))
+                    throw new InvalidOperationException("SQL not loaded: Logs_Insert_V3.sql");
+                cmd.CommandText = sql;
 
-                using (var cmd = cn.CreateCommand())
+                // --- Times ---
+                var createdIso = string.IsNullOrWhiteSpace(req.CreatedUtc) ? DateTime.UtcNow.ToString("o") : req.CreatedUtc!;
+                var whenIso = string.IsNullOrWhiteSpace(req.WhenUtc) ? createdIso : req.WhenUtc!;
+
+                cmd.Parameters.AddWithValue("@WhenUtc", whenIso);
+                cmd.Parameters.AddWithValue("@CreatedUtc", createdIso);
+
+                // --- Core ---
+                cmd.Parameters.AddWithValue("@Level", req.Level ?? "");
+                cmd.Parameters.AddWithValue("@Source", req.Source ?? "");
+                cmd.Parameters.AddWithValue("@EventCode", req.EventCode ?? "");
+
+                // --- Session / User / Device (safe defaults) ---
+                cmd.Parameters.AddWithValue("@SessionId", req.SessionId ?? "");
+                cmd.Parameters.AddWithValue("@LoginId", (object?)req.LoginId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@ItemId", (object?)req.ItemId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@MachineId", Environment.MachineName ?? "");
+                cmd.Parameters.AddWithValue("@DeviceMake", (object?)req.DeviceMake ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@DeviceModel", (object?)req.DeviceModel ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@OSVersion", (object?)req.OSVersion ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@DeviceIdHash", (object?)req.DeviceIdHash ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@InstallType", (object?)req.InstallType ?? DBNull.Value);
+
+                // --- App / Crash flag ---
+                cmd.Parameters.AddWithValue("@AppVersion",
+                    string.IsNullOrWhiteSpace(req.AppVersion) ? AppVersion() : req.AppVersion);
+                cmd.Parameters.AddWithValue("@IsCrash", req.IsCrash ?? 0);
+
+                // --- Payload ---
+                var pPayload = cmd.CreateParameter();
+                pPayload.ParameterName = "@Payload";
+                pPayload.Value = (object?)req.Payload ?? DBNull.Value;
+                cmd.Parameters.Add(pPayload);
+
+                cmd.Parameters.AddWithValue("@PayloadFmt",
+                    string.IsNullOrWhiteSpace(req.PayloadFmt) ? "none" : req.PayloadFmt);
+                cmd.Parameters.AddWithValue("@PayloadVer", (object?)req.PayloadVer ?? 0);
+                cmd.Parameters.AddWithValue("@KeySetVersion", (object?)req.KeySetVersion ?? 0);
+                cmd.Parameters.AddWithValue("@StackHash", req.StackHash ?? "");
+
+                // --- INSERT ---
+                var affected = cmd.ExecuteNonQuery();
+                if (affected != 1)
                 {
-                    cmd.CommandText = SqlCagegory.GetSql("Logs_Insert_V2.sql");
-
-                    cmd.Parameters.AddWithValue("@WhenUtc", nowIso);
-                    cmd.Parameters.AddWithValue("@CreatedUtc", nowIso);
-                    cmd.Parameters.AddWithValue("@Level", "INFO");
-                    cmd.Parameters.AddWithValue("@Source", "Login");
-                    cmd.Parameters.AddWithValue("@EventCode", "LOGIN");
-                    cmd.Parameters.AddWithValue("@SessionId", "");
-                    cmd.Parameters.AddWithValue("@MachineId", Environment.MachineName ?? "");
-                    cmd.Parameters.AddWithValue("@AppVersion", AppVersion());
-                    cmd.Parameters.AddWithValue("@IsCrash", 0);
-
-                    var pPl = cmd.CreateParameter();
-                    pPl.ParameterName = "@Payload";
-                    pPl.Value = DBNull.Value; // no payload for heartbeat
-                    cmd.Parameters.Add(pPl);
-
-                    var pFmt = cmd.CreateParameter();
-                    pFmt.ParameterName = "@PayloadFmt";
-                    pFmt.Value = DBNull.Value;
-                    cmd.Parameters.Add(pFmt);
-
-                    cmd.Parameters.AddWithValue("@StackHash", "");
-
-                    var affected = cmd.ExecuteNonQuery();
-                    if (affected != 1)
-                    {
-                        Debug.WriteLine("[LOGS][InsertLoginEvent] affected != 1");
-                        return -1;
-                    }
+                    Debug.WriteLine("[LOGS][Insert] affected != 1");
+                    return -1;
                 }
 
+#if DEBUG
+                // --- DEBUG: print total count after insert ---
+                try
+                {
+                    using var countCmd = cn.CreateCommand();
+                    countCmd.CommandText = "SELECT COUNT(*) FROM Logs;";
+                    var total = Convert.ToInt64(countCmd.ExecuteScalar());
+                    Debug.WriteLine($"[LOGS][DEBUG] total rows now = {total}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[LOGS][DEBUG][COUNT][FAIL] {ex.GetType().Name}: {ex.Message}");
+                }
+#endif
+
+                // --- last insert id ---
                 using var last = cn.CreateCommand();
                 last.CommandText = SqlCagegory.GetSql("Logs_LastInsertId.sql");
-                var obj = last.ExecuteScalar();
-                var id = Convert.ToInt64(obj);
-                Debug.WriteLine($"[LOGS][InsertLoginEvent] lastId={id}");
-                return id;
+                return Convert.ToInt64(last.ExecuteScalar());
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][InsertLoginEvent][FAIL] {ex.GetType().Name}: {ex.Message}");
+                Debug.WriteLine($"[LOGS][Insert][FAIL] {ex.GetType().Name}: {ex.Message}");
                 return -1;
             }
         }
 
         /// <summary>
-        /// Load ALL logs (newest first) into a new collection.
+        /// Convenience: login heartbeat using this same writer (no payload).
         /// </summary>
-        public static async Task<ObservableCollection<Logs>> LoadAllAsync(
-            Func<SqliteConnection> openAppConnection,
-            CancellationToken ct = default)
+        public static long InsertLoginEvent(Func<SqliteConnection>? openAppConnection = null)
         {
-            var items = new ObservableCollection<Logs>();
-            using var cn = openAppConnection();
-
-            long total = await CountAsync(cn, ct);
-            Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-
-            using var cmd = cn.CreateCommand();
-            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_All.sql");
-
-            using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
-                items.Add(Map(rdr));
-
-            Debug.WriteLine($"[LOGS] LoadAllAsync loaded {items.Count} rows.");
-            return items;
-        }
-
-        /// <summary>
-        /// Load a page of logs (newest first).
-        /// </summary>
-        public static async Task<ObservableCollection<Logs>> LoadPageAsync(
-            Func<SqliteConnection> openAppConnection,
-            int skip, int take,
-            CancellationToken ct = default)
-        {
-            var items = new ObservableCollection<Logs>();
-            using var cn = openAppConnection();
-
-            long total = await CountAsync(cn, ct);
-            Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-
-            using var cmd = cn.CreateCommand();
-            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_Page.sql");
-            cmd.Parameters.AddWithValue("$take", take);
-            cmd.Parameters.AddWithValue("$skip", skip);
-
-            using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
-                items.Add(Map(rdr));
-
-            Debug.WriteLine($"[LOGS] LoadPageAsync loaded {items.Count} rows (take={take}, skip={skip}).");
-            return items;
-        }
-
-        /// <summary>
-        /// Clear and refill an existing bound collection in-place (newest first).
-        /// </summary>
-        public static async Task ReloadIntoAsync(
-            ObservableCollection<Logs> target,
-            Func<SqliteConnection> openAppConnection,
-            CancellationToken ct = default)
-        {
-            target.Clear();
-            using var cn = openAppConnection();
-
-            long total = await CountAsync(cn, ct);
-            Debug.WriteLine($"[LOGS] Total rows in Logs = {total}");
-
-            using var cmd = cn.CreateCommand();
-            cmd.CommandText = SqlCagegory.GetSql("Logs_Select_All.sql");
-
-            int loaded = 0;
-            using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
+            var req = new RequestV3
             {
-                target.Add(Map(rdr));
-                loaded++;
-            }
-
-            Debug.WriteLine($"[LOGS] ReloadIntoAsync loaded {loaded} rows.");
-        }
-
-        // ---- helpers ----
-
-        private static async Task<long> CountAsync(SqliteConnection cn, CancellationToken ct)
-        {
-            using var count = cn.CreateCommand();
-            count.CommandText = "SELECT COUNT(*) FROM Logs;";
-            var obj = await count.ExecuteScalarAsync(ct);
-
-            if (obj is long l) return l;
-            if (obj is int i) return i;
-            if (obj is string s && long.TryParse(s, out var p)) return p;
-            return 0;
-        }
-
-        private static Logs Map(SqliteDataReader r)
-        {
-            return new Logs
-            {
-                Id = r.GetInt64(0),
-                WhenUtc = GetString(r, 1),
-                CreatedUtc = GetString(r, 2),
-                Level = GetString(r, 3),
-                Source = GetString(r, 4),
-                EventCode = GetString(r, 5),
-                SessionId = GetString(r, 6),
-                MachineId = GetString(r, 7),
-                AppVersion = GetString(r, 8),
-                IsCrash = !r.IsDBNull(9) && (r.GetInt64(9) != 0),
-                PayloadFmt = GetString(r, 10),
-                PayloadVer = (int)(r.IsDBNull(11) ? 0 : r.GetInt64(11)),
-                KeySetVersion = (int)(r.IsDBNull(12) ? 0 : r.GetInt64(12)),
-                StackHash = GetString(r, 13),
-                PayloadSize = r.IsDBNull(14) ? (int?)null : checked((int)r.GetInt64(14)),
+                Level = "INFO",
+                Source = "Login",
+                EventCode = "LOGIN",
+                Payload = null,
+                PayloadFmt = "none",
+                AppVersion = AppVersion()
             };
+            return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
         }
-
-        private static string GetString(SqliteDataReader r, int i)
-            => r.IsDBNull(i) ? string.Empty : r.GetString(i);
 
         private static string AppVersion()
         {

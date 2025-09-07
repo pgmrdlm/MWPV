@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Utilities/Diagnostics/SmokeTester.cs
+using System;
 using System.Diagnostics;
 using Utilities.Helpers;        // DatabaseHelper
 using MWPV.Services;           // LogCatalogService
@@ -12,7 +13,7 @@ namespace Utilities.Diagnostics
         {
             try
             {
-                // (A) Optional read test (keep or drop as you wish)
+                // Optional: quick read check (safe to keep for sanity)
                 try
                 {
                     using var cn = DatabaseHelper.OpenConnection();
@@ -26,14 +27,14 @@ namespace Utilities.Diagnostics
                     Debug.WriteLine($"[SMOKE][READ][FAIL] {ex.GetType().Name}: {ex.Message}");
                 }
 
-                // (B) Write a login heartbeat row via the SERVICE (single source of truth)
-                var id = LogCatalogService.InsertLoginEvent(DatabaseHelper.GetAppOpenConnection);
+                // Write a login heartbeat THROUGH THE SERVICE (centralized insert)
+                // Service handles mapping to Logs_Insert_V3.sql
+                long id = LogCatalogService.InsertLoginEvent(DatabaseHelper.GetAppOpenConnection);
+
                 if (id > 0)
                     Debug.WriteLine($"[SMOKE][WRITE] InsertLoginEvent id={id}");
                 else
                     Debug.WriteLine("[SMOKE][WRITE][FAIL] InsertLoginEvent returned -1");
-
-                // No delete. Row is kept as a login heartbeat.
             }
             catch (Exception ex)
             {
