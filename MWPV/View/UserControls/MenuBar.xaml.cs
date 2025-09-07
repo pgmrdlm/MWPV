@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 // REMOVE: using MWPV.View.Windows;
-using MWPV.View.Logs; // optional, makes the ctor shorter
+//using MWPV.View.Logs; // optional, makes the ctor shorter
 
 namespace MWPV.View.UserControls
 {
@@ -18,7 +18,7 @@ namespace MWPV.View.UserControls
 
         private void mnuToolsViewLogs_Click(object sender, RoutedEventArgs e)
         {
-            try
+          /* try
             {
                 var dlg = new ViewLogs();   // this is now a Window
                 dlg.Owner = Application.Current?.MainWindow;
@@ -31,7 +31,7 @@ namespace MWPV.View.UserControls
                     "View Logs",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
-            }
+            }*/
         }
     }
 }
