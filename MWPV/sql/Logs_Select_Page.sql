@@ -1,20 +1,18 @@
--- Logs_Select_Page.sql
 SELECT
   Id,
-  WhenUtc,
   CreatedUtc,
   Level,
   Source,
   EventCode,
-  SessionId,
   MachineId,
   AppVersion,
   IsCrash,
-  PayloadFmt,
-  PayloadVer,
-  KeySetVersion,
-  StackHash,
-  length(Payload) as PayloadSize
+  LoginId,
+  ItemId,
+  DeviceMake,
+  DeviceModel,
+  OSVersion,
+  InstallType
 FROM Logs
-ORDER BY Id DESC
-LIMIT $take OFFSET $skip;
+ORDER BY CreatedUtc DESC
+LIMIT @limit OFFSET @offset;

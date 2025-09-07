@@ -1,19 +1,17 @@
--- Logs_Select_All.sql
 SELECT
   Id,
-  WhenUtc,
   CreatedUtc,
   Level,
   Source,
   EventCode,
-  SessionId,
   MachineId,
   AppVersion,
   IsCrash,
-  PayloadFmt,
-  PayloadVer,
-  KeySetVersion,
-  StackHash,
-  length(Payload) as PayloadSize
+  LoginId,
+  ItemId,
+  DeviceMake,
+  DeviceModel,
+  OSVersion,
+  InstallType
 FROM Logs
-ORDER BY Id DESC;
+ORDER BY CreatedUtc DESC;
