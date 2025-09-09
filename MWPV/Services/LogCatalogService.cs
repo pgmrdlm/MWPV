@@ -1,21 +1,18 @@
-﻿// MWPV/Services/LogCatalogService.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Utilities.Sql;       // SqlCagegory.GetSql(...)
 using Utilities.Helpers;   // DatabaseHelper
+using MWPV.Utilities.Json; // AppJson.LogPayloadDto (back-compat)
 
 namespace MWPV.Services
 {
-    /// <summary>
-    /// Centralized reader/writer for Logs.
-    /// - Write: Insert(RequestV3) matches Logs_Insert_V3.sql (loaded via SqlCagegory)
-    /// - Read : SelectRecent(...) uses Logs_Select_Recent.sql (loaded via SqlCagegory)
-    /// </summary>
     public static class LogCatalogService
     {
-        // ---------------- WRITE ----------------
+        // ---------------- WRITE (core) ----------------
 
         public sealed class RequestV3
         {
@@ -24,11 +21,11 @@ namespace MWPV.Services
             public string EventCode { get; set; } = "";
             public byte[]? Payload { get; set; } = null;
             public string PayloadFmt { get; set; } = "none";
-            public string CreatedUtc { get; set; } = "";    // ISO-8601; if empty we fill
+            public string CreatedUtc { get; set; } = "";
             public string AppVersion { get; set; } = "";
 
             // Optional extras
-            public string? WhenUtc { get; set; } = null;     // if null -> mirror CreatedUtc
+            public string? WhenUtc { get; set; } = null;
             public string? SessionId { get; set; } = null;
             public long? LoginId { get; set; } = null;
             public long? ItemId { get; set; } = null;
@@ -43,10 +40,6 @@ namespace MWPV.Services
             public int? IsCrash { get; set; } = null; // 0/1
         }
 
-        /// <summary>
-        /// Single writer for logs. SQL text comes from SqlCagegory.GetSql("Logs_Insert_V3.sql").
-        /// Returns inserted Id or -1 on failure.
-        /// </summary>
         public static long Insert(RequestV3 req, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
@@ -130,16 +123,72 @@ namespace MWPV.Services
             return v?.ToString() ?? "dev";
         }
 
+        // ---------------- WRITE (helpers) ----------------
+
+        // New flexible overload — accepts any object; parameter name is `dto`
+        public static long AppendJson(
+            string level,
+            string source,
+            string eventCode,
+            object dto,
+            DateTime? whenUtc = null,
+            string? sessionId = null,
+            long? loginId = null,
+            long? itemId = null,
+            int? payloadVer = 1,
+            int? keySetVersion = null,
+            bool isCrash = false,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            var json = JsonSerializer.SerializeToUtf8Bytes(dto, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+            var req = new RequestV3
+            {
+                Level = level ?? "INFO",
+                Source = source ?? "",
+                EventCode = eventCode ?? "",
+                Payload = json,
+                PayloadFmt = "json",
+                PayloadVer = payloadVer,
+                KeySetVersion = keySetVersion,
+                AppVersion = AppVersion(),
+                CreatedUtc = DateTime.UtcNow.ToString("o"),
+                WhenUtc = (whenUtc ?? DateTime.UtcNow).ToUniversalTime().ToString("o"),
+                SessionId = sessionId,
+                LoginId = loginId,
+                ItemId = itemId,
+                IsCrash = isCrash ? 1 : 0
+            };
+
+            return Insert(req, openAppConnection);
+        }
+
+        // Back-compat for AppJson.LogPayloadDto callers
+        public static long AppendJson(
+            string level,
+            string source,
+            string eventCode,
+            AppJson.LogPayloadDto dto,
+            DateTime? whenUtc = null,
+            string? sessionId = null,
+            long? loginId = null,
+            long? itemId = null,
+            int? payloadVer = 1,
+            int? keySetVersion = null,
+            bool isCrash = false,
+            Func<SqliteConnection>? openAppConnection = null)
+            => AppendJson(level, source, eventCode, (object)dto, whenUtc, sessionId, loginId, itemId, payloadVer, keySetVersion, isCrash, openAppConnection);
+
         // ---------------- READ ----------------
 
-        /// <summary>
-        /// Returns recent logs for the viewer. SQL loaded via SqlCagegory from Logs_Select_Recent.sql.
-        /// We set both @Limit and @limit to be safe. Only populate properties guaranteed on your model.
-        /// </summary>
-        public static IReadOnlyList<MWPV.Models.Logs> SelectRecent(int limit = 200, Func<SqliteConnection>? openAppConnection = null)
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(int limit = 200, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
-            var result = new List<MWPV.Models.Logs>();
+            var result = new List<global::MWPV.Models.Logs>();
 
             try
             {
@@ -157,13 +206,13 @@ namespace MWPV.Services
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
                 {
-                    var m = new MWPV.Models.Logs
+                    var m = new global::MWPV.Models.Logs
                     {
                         Id = Convert.ToInt64(r["Id"]),
                         CreatedUtc = r["CreatedUtc"] as string ?? "",
                         Level = r["Level"] as string ?? "",
                         Source = r["Source"] as string ?? "",
-                        EventCode = r["EventCode"] as string ?? ""   // NOTE: your model exposes EventCode (not Code)
+                        EventCode = r["EventCode"] as string ?? ""
                     };
                     result.Add(m);
                 }

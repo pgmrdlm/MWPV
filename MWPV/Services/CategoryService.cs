@@ -2,31 +2,24 @@
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;        // <-- added
-using Utilities.Helpers;         // DatabaseHelper, ErrorHandler
-using Security.Utility;          // SecureEncryptedDataStore, InputGuards, SecureLogService
-using LogSeverity = Security.Utility.Logging.LogSeverity;  // disambiguate enum
+using System.Diagnostics;
+using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
+using Utilities.Sql;      // SqlCagegory
+using Security.Utility;   // InputGuards
+using MWPV.Services;      // LogCatalogService
 
 namespace MWPV.Services
 {
     public static class CategoryService
     {
-        // --------------------------------------------------------------------
-        // Helpers
-        // --------------------------------------------------------------------
-        private static string? LoadSqlOrNull(params string[] names)
+        // --- helpers ---
+
+        private static string LoadSqlRequired(string assetName)
         {
-            foreach (var name in names)
-            {
-                try
-                {
-                    var s = SecureEncryptedDataStore.GetString(name);
-                    if (!string.IsNullOrWhiteSpace(s))
-                        return s;
-                }
-                catch { /* asset not found in this catalog name; try next */ }
-            }
-            return null;
+            var sql = SqlCagegory.GetSql(assetName);
+            if (string.IsNullOrWhiteSpace(sql))
+                throw new InvalidOperationException($"SQL not loaded: {assetName}");
+            return sql;
         }
 
         private static void AddParamAliases(SqliteCommand cmd, string[] names, object? value)
@@ -38,33 +31,20 @@ namespace MWPV.Services
             }
         }
 
-        // --------------------------------------------------------------------
-        // LOAD
-        // --------------------------------------------------------------------
-        /// <summary>
-        /// Loads categories from the encrypted SQL asset (new name first, legacy fallback).
-        /// </summary>
+        // --- read ---
+
         public static ObservableCollection<Categories> LoadCategories()
         {
             var rows = new ObservableCollection<Categories>();
-            var stage = "init";
 
             try
             {
-                stage = "load-sql";
-                var selectSql = LoadSqlOrNull(
-                    "SelectCategories.sql",       // canonical
-                    "SelectCatagories.sql"        // legacy misspelling
-                ) ?? throw new InvalidOperationException("SelectCategories.sql not found in the key archive.");
+                var selectSql = LoadSqlRequired("SelectCategories.sql");
 
-                stage = "open-conn";
                 using var conn = DatabaseHelper.GetAppOpenConnection();
-
-                stage = "prep";
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = selectSql;
 
-                stage = "exec";
                 using var r = cmd.ExecuteReader();
 
                 int iCol1 = r.GetOrdinal("Col1");
@@ -93,31 +73,49 @@ namespace MWPV.Services
                     Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
                     int idx = 0;
                     foreach (var c in rows)
-                    {
                         Debug.WriteLine($"[CATEGORIES][{idx++}] '{c.strCategory1}' | '{c.strCategory2}' | '{c.strCategory3}'");
-                    }
                 }
-                catch { /* debug only */ }
+                catch { }
 #endif
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Error loading categories", stage: stage);
+                ErrorHandler.Abend(ex, "Error loading categories");
             }
 
             return rows;
         }
 
-        // Legacy shim (kept for callers during transition)
         [Obsolete("Use LoadCategories()")]
         public static ObservableCollection<Categories> LoadCatagories() => LoadCategories();
 
-        // --------------------------------------------------------------------
-        // INSERT
-        // --------------------------------------------------------------------
+        // --- exists ---
+
+        public static bool DoesCategoryExist(string categoryName)
+        {
+            if (string.IsNullOrWhiteSpace(categoryName))
+                return false;
+
+            var existsSql = LoadSqlRequired("CategoryExists.sql");
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = existsSql;
+
+            AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, categoryName.Trim());
+
+            object? scalar = cmd.ExecuteScalar();
+            return scalar != null && Convert.ToInt64(scalar) != 0;
+        }
+
+        [Obsolete("Use DoesCategoryExist(name)")]
+        public static bool DoesCatagoryExist(string categoryName) => DoesCategoryExist(categoryName);
+
+        // --- insert ---
+
         /// <summary>
-        /// Inserts a new category if it doesn't already exist.
-        /// Validates and normalizes inputs; description defaults to name.
+        /// Insert if not present; on success log INFO with { categoryId, categoryName }.
+        /// On duplicate, log WARN with { categoryName }.
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription)
         {
@@ -128,73 +126,80 @@ namespace MWPV.Services
                 throw new ArgumentException(check.Error ?? "Invalid category name.", nameof(newCategory));
 
             string cleanName = check.CleanName;
-            string? desc = InputGuards.NormalizeFreeText(newDescription, maxLen: 512);
+            string? desc = Security.Utility.InputGuards.NormalizeFreeText(newDescription, maxLen: 512);
             if (string.IsNullOrWhiteSpace(desc)) desc = cleanName;
 
             if (DoesCategoryExist(cleanName))
             {
-                _ = SecureLogService.WriteAsync(
-                    level: LogSeverity.Warn,
-                    payload: new { name = cleanName, reason = "duplicate" },
-                    eventCode: "CATEGORY_DUPLICATE",
-                    source: "CategoryService.InsertCategory",
-                    message: "Duplicate category detected; insert skipped");
+                // WARN duplicate
+                try
+                {
+                    LogCatalogService.AppendJson(
+                        level: "WARN",
+                        source: "CategoryService",
+                        eventCode: "CATEGORY_DUPLICATE",
+                        dto: new
+                        {
+                            message = $"Duplicate category '{cleanName}' detected; insert skipped",
+                            source = "CategoryService",
+                            eventCode = "CATEGORY_DUPLICATE",
+                            occurredUtc = DateTime.UtcNow,
+                            user = Environment.UserName,
+                            categoryName = cleanName
+                        }
+                    );
+                }
+                catch { }
                 return;
             }
 
-            var insertSql = LoadSqlOrNull(
-                "InsertCategory.sql",   // canonical
-                "InsertCagegory.sql"    // legacy misspelling
-            ) ?? "INSERT INTO Category (Category_Name, Category_Description, IsActive) " +
-                 "VALUES (@CategoryName, @Description, 1);"; // safe inline fallback
+            var insertSql = LoadSqlRequired("InsertCategory.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var tx = conn.BeginTransaction();
 
-            using var cmd = conn.CreateCommand();
-            cmd.Transaction = tx;
-            cmd.CommandText = insertSql;
+            long newId;
 
-            // Bind both modern and legacy parameter names
-            AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, cleanName);
-            AddParamAliases(cmd, new[] { "@Description", "@description" }, desc!);
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = insertSql;
 
-            cmd.ExecuteNonQuery();
+                AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, cleanName);
+                AddParamAliases(cmd, new[] { "@Description", "@description" }, desc);
+
+                cmd.ExecuteNonQuery();
+            }
+
+            using (var last = conn.CreateCommand())
+            {
+                last.Transaction = tx;
+                last.CommandText = "SELECT last_insert_rowid();";
+                newId = Convert.ToInt64(last.ExecuteScalar());
+            }
+
             tx.Commit();
+
+            // INFO inserted
+            try
+            {
+                LogCatalogService.AppendJson(
+                    level: "INFO",
+                    source: "CategoryService",
+                    eventCode: "CATEGORY_INSERTED",
+                    dto: new
+                    {
+                        message = $"Category '{cleanName}' inserted",
+                        source = "CategoryService",
+                        eventCode = "CATEGORY_INSERTED",
+                        occurredUtc = DateTime.UtcNow,
+                        user = Environment.UserName,
+                        categoryId = newId,
+                        categoryName = cleanName
+                    }
+                );
+            }
+            catch { }
         }
-
-        // --------------------------------------------------------------------
-        // EXISTS
-        // --------------------------------------------------------------------
-        /// <summary>
-        /// Returns true if a category with the given name exists (case-insensitive).
-        /// </summary>
-        public static bool DoesCategoryExist(string categoryName)
-        {
-            if (string.IsNullOrWhiteSpace(categoryName))
-                return false;
-
-            var existsSql = LoadSqlOrNull(
-                "CategoryExists.sql",   // canonical
-                "CagegoryExists.sql"    // legacy misspelling
-            ) ?? "SELECT EXISTS ( " +
-                 "  SELECT 1 FROM Category " +
-                 "  WHERE Category_Name = @CategoryName COLLATE NOCASE LIMIT 1 " +
-                 ");";
-
-            using var conn = DatabaseHelper.GetAppOpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = existsSql;
-
-            // Bind both modern and legacy parameter names
-            AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, categoryName.Trim());
-
-            object? scalar = cmd.ExecuteScalar();
-            return scalar != null && Convert.ToInt64(scalar) != 0;
-        }
-
-        // Legacy shim
-        [Obsolete("Use DoesCategoryExist(name)")]
-        public static bool DoesCatagoryExist(string categoryName) => DoesCategoryExist(categoryName);
     }
 }

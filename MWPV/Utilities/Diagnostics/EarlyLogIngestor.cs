@@ -1,15 +1,19 @@
 ﻿// Utilities/Diagnostics/EarlyLogIngestor.cs
-using MWPV.Services;   // LogCatalogService
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using MWPV.Services;          // LogCatalogService
+using MWPV.Utilities.Json;    // AppJson
 
 namespace Utilities.Diagnostics
 {
     /// <summary>
     /// Ingests *.elogp from EarlyLoginFailures.StoreDir into DB with dedupe & quarantine.
     /// NO SQL here — builds a V3 request and calls LogCatalogService.Insert per file.
+    /// Payload JSON is built centrally via AppJson and stored as UTF-8 with PayloadFmt="json".
     /// </summary>
     public static class EarlyLogIngestor
     {
@@ -40,7 +44,15 @@ namespace Utilities.Diagnostics
                         continue;
                     }
 
-                    var hashHex = Sha256Hex(rawJson!);
+                    if (rawJson == null || rawJson.Length == 0)
+                    {
+                        Quarantine(path, "empty payload");
+                        quarantined++;
+                        continue;
+                    }
+
+                    // Hash of the original raw JSON for dedupe/quarantine signatures
+                    var hashHex = Sha256Hex(rawJson);
                     if (!seenHashes.Add(hashHex))
                     {
                         Quarantine(path, "duplicate in same run (hash)");
@@ -48,13 +60,27 @@ namespace Utilities.Diagnostics
                         continue;
                     }
 
-                    // Prefer the file's event time; fall back to now if missing
-                    // Prefer the file's event time; fall back to now if missing
+                    // Timestamps
                     var createdIso = DateTime.UtcNow.ToString("o");
                     DateTime whenDt = entry?.whenUtc ?? DateTime.UtcNow;
                     if (whenDt.Kind != DateTimeKind.Utc) whenDt = whenDt.ToUniversalTime();
                     var whenIso = whenDt.ToString("o");
 
+                    // Build standardized payload via AppJson; keep original decrypted JSON as Context
+                    string originalJson = SafeUtf8(rawJson);
+                    var dto = new AppJson.LogPayloadDto
+                    {
+                        Message = reason ?? "Early login failure",
+                        Source = "EarlyIngest",
+                        EventCode = "EARLY_FAIL",
+                        OccurredUtc = whenDt,
+                        // User: leave null unless your entry exposes a safe-to-store username.
+                        Context = originalJson
+                    };
+
+                    // Central JSON builder -> UTF-8 bytes
+                    var payloadJson = AppJson.SerializeLogPayload(dto);
+                    var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
 
                     // Build only the fields your V3 SQL actually uses
                     var req = new LogCatalogService.RequestV3
@@ -62,8 +88,8 @@ namespace Utilities.Diagnostics
                         Level = "ERROR",
                         Source = "EarlyIngest",
                         EventCode = "EARLY_FAIL",
-                        Payload = null,
-                        PayloadFmt = "none",
+                        Payload = payloadBytes,
+                        PayloadFmt = "json",
                         CreatedUtc = createdIso,
                         WhenUtc = whenIso,
                         StackHash = hashHex,
@@ -91,6 +117,12 @@ namespace Utilities.Diagnostics
             }
 
             Debug.WriteLine($"[EarlyIngest] total={total} inserted={inserted} dupes={dupes} quarantined={quarantined} failed={failed}");
+        }
+
+        private static string SafeUtf8(byte[] data)
+        {
+            try { return Encoding.UTF8.GetString(data); }
+            catch { return "<decode-error>"; }
         }
 
         private static string Sha256Hex(byte[] data)
