@@ -1,4 +1,5 @@
-﻿<UserControl x:Class="MWPV.View.UserControls.Panel"
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl x:Class="MWPV.View.UserControls.Panel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -7,65 +8,80 @@
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="1000">
 
-    <Grid>
-        <!-- 50/50 columns, no splitter -->
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" MinWidth="220"/>
-            <ColumnDefinition Width="*" MinWidth="300"/>
-        </Grid.ColumnDefinitions>
+    <!-- Base split first; overlay last to sit on top -->
+    <Grid x:Name="Root">
 
-        <!-- Left: Categories (FLUSH LEFT) -->
-        <DockPanel Grid.Column="0" Margin="0,8,8,8" LastChildFill="True">
-            <TextBlock DockPanel.Dock="Top"
-                       Text="Categories"
-                       FontSize="14"
-                       FontWeight="SemiBold"
-                       Margin="0,0,0,8"/>
+        <!-- ===== Base split (DEFAULT VIEW) ===== -->
+        <Grid x:Name="SplitRoot">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="260"/>
+                <ColumnDefinition Width="*" MinWidth="420"/>
+            </Grid.ColumnDefinitions>
 
-            <StackPanel DockPanel.Dock="Top"
-                        Orientation="Horizontal"
-                        Margin="0,0,0,8">
-                <Button x:Name="btnAddCategory"
-                        Content="Add Category"
-                        Click="btnAddCategory_Click"
-                        Style="{StaticResource DialogPrimary}"/>
-            </StackPanel>
+            <!-- LEFT: Categories (Add Category + CategoryGrid + inline host) -->
+            <DockPanel Grid.Column="0" LastChildFill="True" Margin="8,8,8,8">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Categories"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
 
-            <!-- Default view: Category grid (visible by default) -->
-            <uc:CategoryGrid x:Name="CategoryGrid"/>
+                <StackPanel DockPanel.Dock="Top"
+                            Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <Button x:Name="btnAddCategory"
+                            Content="Add Category"
+                            Click="btnAddCategory_Click"
+                            Style="{StaticResource DialogPrimary}"/>
+                </StackPanel>
 
-            <!-- Inline Add Category host (flush; no padding/border/background) -->
-            <Border x:Name="AddCategoryHost"
-                    Visibility="Collapsed"
-                    Background="Transparent"
-                    BorderBrush="{x:Null}"
-                    BorderThickness="0"
-                    CornerRadius="0"
-                    Padding="0"
-                    Margin="0">
-                <ContentControl x:Name="AddCategoryContent" />
-            </Border>
-        </DockPanel>
+                <!-- Default: visible category grid -->
+                <uc:CategoryGrid x:Name="CategoryGrid"/>
 
-        <!-- Right: Items -->
-        <DockPanel Grid.Column="1" Margin="8,8,8,8" LastChildFill="True">
-            <TextBlock DockPanel.Dock="Top"
-                       Text="Items"
-                       FontSize="14"
-                       FontWeight="SemiBold"
-                       Margin="0,0,0,8"/>
+                <!-- Inline Add Category host -->
+                <Border x:Name="AddCategoryHost"
+                        Visibility="Collapsed"
+                        Background="Transparent"
+                        BorderBrush="{x:Null}"
+                        BorderThickness="0"
+                        CornerRadius="0"
+                        Padding="0"
+                        Margin="0">
+                    <ContentControl x:Name="AddCategoryContent"/>
+                </Border>
+            </DockPanel>
 
-            <StackPanel DockPanel.Dock="Top"
-                        Orientation="Horizontal"
-                        Margin="0,0,0,8">
-                <!-- Starts collapsed; you’ll show it when a category is clicked -->
-                <Button x:Name="btnAddCategoryItem"
-                        Content="Add Item"
-                        Style="{StaticResource DialogPrimary}"
-                        Visibility="Collapsed"/>
-            </StackPanel>
+            <!-- RIGHT: Items (Add Item button + Items host) -->
+            <DockPanel Grid.Column="1" LastChildFill="True" Margin="8,8,8,8">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Items"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
 
-            <ContentControl x:Name="CategoryItemsHost"/>
-        </DockPanel>
+                <StackPanel DockPanel.Dock="Top"
+                            Orientation="Horizontal"
+                            Margin="0,0,0,8">
+                    <!-- Shown after a category is clicked -->
+                    <Button x:Name="btnAddCategoryItem"
+                            Content="Add Item"
+                            Visibility="Collapsed"
+                            Style="{StaticResource DialogPrimary}"/>
+                </StackPanel>
+
+                <ContentControl x:Name="CategoryItemsHost"/>
+            </DockPanel>
+        </Grid>
+
+        <!-- ===== FULL LOGS OVERLAY ===== -->
+        <Border x:Name="OverlayHost"
+                Visibility="Collapsed"
+                Panel.ZIndex="1000"
+                Background="#00000000">
+            <uc:Logs x:Name="LogsOverlay"
+                     HorizontalAlignment="Stretch"
+                     VerticalAlignment="Stretch"/>
+        </Border>
+
     </Grid>
 </UserControl>

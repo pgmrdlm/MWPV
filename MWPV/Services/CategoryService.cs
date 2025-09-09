@@ -2,8 +2,9 @@
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
-using Utilities.Helpers;     // DatabaseHelper, ErrorHandler
-using Security.Utility;      // SecureEncryptedDataStore, InputGuards, SecureLogService
+using System.Diagnostics;        // <-- added
+using Utilities.Helpers;         // DatabaseHelper, ErrorHandler
+using Security.Utility;          // SecureEncryptedDataStore, InputGuards, SecureLogService
 using LogSeverity = Security.Utility.Logging.LogSeverity;  // disambiguate enum
 
 namespace MWPV.Services
@@ -85,6 +86,19 @@ namespace MWPV.Services
                         strCategoryToolTip3 = r.IsDBNull(iDes3) ? "" : r.GetString(iDes3),
                     });
                 }
+
+#if DEBUG
+                try
+                {
+                    Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
+                    int idx = 0;
+                    foreach (var c in rows)
+                    {
+                        Debug.WriteLine($"[CATEGORIES][{idx++}] '{c.strCategory1}' | '{c.strCategory2}' | '{c.strCategory3}'");
+                    }
+                }
+                catch { /* debug only */ }
+#endif
             }
             catch (Exception ex)
             {

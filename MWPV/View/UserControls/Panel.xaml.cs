@@ -12,20 +12,24 @@ namespace MWPV.View.UserControls
         public Panel()
         {
             InitializeComponent();
+
+            // Ensure both overlay and grid wiring happen after tree ready
             Loaded += Panel_Loaded;
 
-            // Default view
+            // Default left-pane view
             ShowCategoryGrid();
 
+            // Prepare inline Add Category content
             InitializeAddCategoryInline();
         }
 
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
         {
             WireCategoryGridEvents();
+            WireOverlayEvents();
         }
 
-        // Idempotent: safe to call repeatedly
+        // ---- Category grid wiring / refresh ----
         private void WireCategoryGridEvents()
         {
             if (CategoryGrid == null) return;
@@ -33,19 +37,17 @@ namespace MWPV.View.UserControls
             CategoryGrid.CategoryItemClicked -= CategoryGrid_CategoryItemClicked;
             CategoryGrid.CategoryItemClicked += CategoryGrid_CategoryItemClicked;
 
-            // Ensure data and internal wiring are fresh inside the grid
-            CategoryGrid.RefreshCategoryGrid();      // repopulate
-            CategoryGrid.EnsureInternalWiring();     // keep selection wiring fresh
+            try { CategoryGrid.RefreshCategoryGrid(); } catch { /* no-op */ }
+            try { CategoryGrid.EnsureInternalWiring(); } catch { /* no-op */ }
 
-            // Add Item hidden until a category is clicked
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Collapsed;
         }
 
         public void RefreshCategoryGrid()
         {
-            CategoryGrid?.RefreshCategoryGrid();
-            CategoryGrid?.EnsureInternalWiring();
+            try { CategoryGrid?.RefreshCategoryGrid(); } catch { /* no-op */ }
+            try { CategoryGrid?.EnsureInternalWiring(); } catch { /* no-op */ }
         }
 
         private void CategoryGrid_CategoryItemClicked(object? sender, EventArgs e)
@@ -54,41 +56,7 @@ namespace MWPV.View.UserControls
                 btnAddCategoryItem.Visibility = Visibility.Visible;
         }
 
-        private void btnAddCategory_Click(object sender, RoutedEventArgs e)
-        {
-            ShowAddCategory();
-        }
-
-        private void ShowAddCategory()
-        {
-            if (AddCategoryHost != null)
-                AddCategoryHost.Visibility = Visibility.Visible;
-
-            if (btnAddCategory != null)
-                btnAddCategory.Visibility = Visibility.Collapsed;
-
-            if (btnAddCategoryItem != null)
-                btnAddCategoryItem.Visibility = Visibility.Collapsed;
-
-            if (CategoryGrid != null)
-                CategoryGrid.Visibility = Visibility.Collapsed;
-        }
-
-        private void ShowCategoryGrid()
-        {
-            if (AddCategoryHost != null)
-                AddCategoryHost.Visibility = Visibility.Collapsed;
-
-            if (CategoryGrid != null)
-                CategoryGrid.Visibility = Visibility.Visible;
-
-            if (btnAddCategory != null)
-                btnAddCategory.Visibility = Visibility.Visible;
-
-            if (btnAddCategoryItem != null)
-                btnAddCategoryItem.Visibility = Visibility.Collapsed;
-        }
-
+        // ---- Inline Add Category flow ----
         private void InitializeAddCategoryInline()
         {
             if (AddCategoryContent == null) return;
@@ -106,6 +74,41 @@ namespace MWPV.View.UserControls
             AddCategoryContent.Content = _addCategoryInline;
         }
 
+        private void btnAddCategory_Click(object sender, RoutedEventArgs e)
+        {
+            ShowAddCategory();
+        }
+
+        private void ShowAddCategory()
+        {
+            if (AddCategoryHost != null)
+                AddCategoryHost.Visibility = Visibility.Visible;
+
+            if (CategoryGrid != null)
+                CategoryGrid.Visibility = Visibility.Collapsed;
+
+            if (btnAddCategory != null)
+                btnAddCategory.Visibility = Visibility.Collapsed;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowCategoryGrid()
+        {
+            if (AddCategoryHost != null)
+                AddCategoryHost.Visibility = Visibility.Collapsed;
+
+            if (CategoryGrid != null)
+                CategoryGrid.Visibility = Visibility.Visible;
+
+            if (btnAddCategory != null)
+                btnAddCategory.Visibility = Visibility.Visible;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Visibility = Visibility.Collapsed;
+        }
+
         private void AddCategoryInline_Submitted(object? sender, CategorySubmittedEventArgs e)
         {
             if (_isHandlingInlineEvent) return;
@@ -113,7 +116,7 @@ namespace MWPV.View.UserControls
             try
             {
                 ShowCategoryGrid();
-                RefreshCategoryGrid();      // repopulates
+                RefreshCategoryGrid();      // repopulates and rewires
                 _addCategoryInline?.ResetForm();
             }
             finally
@@ -136,6 +139,27 @@ namespace MWPV.View.UserControls
             {
                 _isHandlingInlineEvent = false;
             }
+        }
+
+        // ---- Logs overlay ----
+        private void WireOverlayEvents()
+        {
+            if (LogsOverlay == null) return;
+
+            LogsOverlay.CloseRequested -= LogsOverlay_CloseRequested;
+            LogsOverlay.CloseRequested += LogsOverlay_CloseRequested;
+        }
+
+        public void ShowLogs()
+        {
+            if (OverlayHost != null)
+                OverlayHost.Visibility = Visibility.Visible;
+        }
+
+        private void LogsOverlay_CloseRequested(object? sender, EventArgs e)
+        {
+            if (OverlayHost != null)
+                OverlayHost.Visibility = Visibility.Collapsed;
         }
     }
 }

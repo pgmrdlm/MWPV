@@ -1,14 +1,5 @@
-// MainWindow.xaml.cs — popup removed; routes menu to inline Add Cagegory
-using System;
-using System.Reflection;
-using System.Windows;
+ï»¿using System.Windows;
 using System.Windows.Input;
-using Utilities.Helpers;
-
-#if DEBUG
-using Microsoft.Data.Sqlite;
-using Utilities.Services; // FullSqlExportService
-#endif
 
 namespace MWPV
 {
@@ -17,110 +8,50 @@ namespace MWPV
         public MainWindow()
         {
             InitializeComponent();
-            this.Visibility = Visibility.Visible;
-            this.WindowState = WindowState.Normal;
-
-            // Title bar glyph sync (no override of OnStateChanged to keep Hot Reload happy)
-            UpdateMaxRestoreGlyph();
-            this.StateChanged += (_, __) => UpdateMaxRestoreGlyph();
         }
 
-        /// <summary>
-        /// Menu: Tools -> Add Category (previously opened popup).
-        /// Now routes to the inline Add Cagegory hosted inside the left Panel.
-        /// </summary>
-        private void OpenCategoryEntry_Click(object sender, RoutedEventArgs e)
+        // ---------------- Logs overlay bridge ----------------
+        // Called by MenuBar (Tools -> View Logs)
+        public void ShowLogsPanel()
         {
-            try
-            {
-                if (Panel == null) return;
-
-                // Preferred: call a public method if you add one later
-                //   public void ShowAddCagegoryInline() => (internally calls ShowAddCagegory)
-                var pub = Panel.GetType().GetMethod("ShowAddCagegoryInline",
-                    BindingFlags.Instance | BindingFlags.Public);
-                if (pub != null)
-                {
-                    pub.Invoke(Panel, null);
-                    return;
-                }
-
-                // Fallback: call the existing private method via reflection
-                var priv = Panel.GetType().GetMethod("ShowAddCagegory",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                if (priv != null)
-                {
-                    priv.Invoke(Panel, null);
-                    return;
-                }
-
-                // Last resort: do nothing (user can press the "Add Category" button on the left)
-            }
-            catch
-            {
-                // Keep silent: menu action should never crash the app
-            }
+            try { Panel?.ShowLogs(); } catch { /* no-op */ }
         }
 
-        // ===== Title Bar Handlers =====
+        // ---------------- Title bar handlers (no visual changes) ----------------
         private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 2 && e.LeftButton == MouseButtonState.Pressed)
+            // Allow dragging the window; double-click toggles maximize/restore
+            if (e.ClickCount == 2)
             {
-                ToggleMaxRestore();
-                return;
+                MaxRestore_Click(sender, e);
             }
-
-            if (e.ButtonState == MouseButtonState.Pressed)
+            else
             {
-                // Smart drag from maximized: restore near cursor then drag
-                if (WindowState == WindowState.Maximized)
-                {
-                    var mouse = PointToScreen(e.GetPosition(this));
-                    WindowState = WindowState.Normal;
-                    Left = mouse.X - (ActualWidth * 0.5);
-                    Top = Math.Max(mouse.Y - 20, 0);
-                }
-                try { DragMove(); } catch { /* ignore if mouse released */ }
+                try { DragMove(); } catch { /* ignore if drag starts during resize */ }
             }
         }
 
         private void TitleBar_OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
-            var screen = PointToScreen(e.GetPosition(this));
-            SystemCommands.ShowSystemMenu(this, screen);
+            // Intentionally no-op to avoid changing your menu/title bar behavior.
+            // (If you later want a system menu here, we can add it without visual changes.)
         }
 
         private void Minimize_Click(object sender, RoutedEventArgs e)
-            => SystemCommands.MinimizeWindow(this);
-
-        private void MaxRestore_Click(object sender, RoutedEventArgs e)
-            => ToggleMaxRestore();
-
-        private void Close_Click(object sender, RoutedEventArgs e)
-            => SystemCommands.CloseWindow(this);
-
-        private void ToggleMaxRestore()
         {
-            if (WindowState == WindowState.Maximized)
-                SystemCommands.RestoreWindow(this);
-            else
-                SystemCommands.MaximizeWindow(this);
-
-            UpdateMaxRestoreGlyph();
+            WindowState = WindowState.Minimized;
         }
 
-        private void UpdateMaxRestoreGlyph()
+        private void MaxRestore_Click(object sender, RoutedEventArgs e)
         {
-            // Flip the MDL2 glyph shown inside the Max/Restore button
-            if (TbMaxGlyph != null)
-            {
-                TbMaxGlyph.Text = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
-            }
-            if (MaxRestoreButton != null)
-            {
-                MaxRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "Restore" : "Maximize";
-            }
+            WindowState = (WindowState == WindowState.Maximized)
+                ? WindowState.Normal
+                : WindowState.Maximized;
+        }
+
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
     }
 }

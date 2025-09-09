@@ -325,7 +325,8 @@ namespace Utilities.Security
 
 #if DEBUG
                     // 🔎 DEBUG-only smoke test
-                    SmokeTester.Run();
+                    MWPV.Utilities.Diagnostics.SmokeTester.Run();
+
 #endif
                 }
                 catch (Exception ex)
