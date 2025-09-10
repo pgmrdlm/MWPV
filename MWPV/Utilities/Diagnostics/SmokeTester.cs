@@ -1,75 +1,90 @@
-﻿// File: MWPV/Utilities/Diagnostics/SmokeTester.cs
+﻿// Utilities/Diagnostics/SmokeTester.cs
 using System;
 using System.Diagnostics;
-using Microsoft.Data.Sqlite;
-using Utilities.Helpers;          // DatabaseHelper
-using MWPV.Services;              // LogCatalogService
-using MWPV.Utilities.Json;        // AppJson
+using System.Text.Json;
+using MWPV.Services;        // LogCatalogService
+using MWPV.Utilities.Json;  // AppJson
 
-namespace MWPV.Utilities.Diagnostics
+namespace Utilities.Diagnostics
 {
+    /// <summary>
+    /// Lightweight smoke checks run at startup:
+    /// - Basic category read (elsewhere, if you keep it)
+    /// - JSON round-trip using AppJson
+    /// - Append a simple SMOKE log row to the DB
+    /// </summary>
     public static class SmokeTester
     {
         public static void Run()
         {
-            // ---- READ: count categories (correct table name) ----
             try
             {
-                using var cn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = cn.CreateCommand();
-                cmd.CommandText = "SELECT COUNT(*) FROM Category;"; // singular table
-                var cnt = Convert.ToInt32(cmd.ExecuteScalar());
-                Debug.WriteLine($"[SMOKE][READ] Category rows={cnt}");
-            }
-            catch (SqliteException ex)
-            {
-                Debug.WriteLine($"[SMOKE][READ][FAIL] {ex.GetType().Name}: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[SMOKE][READ][FAIL] {ex.GetType().Name}: {ex.Message}");
-            }
-
-            // ---- WRITE: log a login event ----
-            try
-            {
-                var id = LogCatalogService.InsertLoginEvent();
-                Debug.WriteLine($"[SMOKE][WRITE] InsertLoginEvent id={id}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[SMOKE][WRITE][FAIL] {ex.GetType().Name}: {ex.Message}");
-            }
-
-            // ---- JSON: central helper sanity (logs payload DTO) ----
-            try
-            {
-                var dto = new AppJson.LogPayloadDto
-                {
-                    Message = "Smoke test JSON round-trip",
-                    Source = "SmokeTester",
-                    EventCode = "SMOKE",
-                    OccurredUtc = DateTime.UtcNow,
-                    User = Environment.UserName
-                };
-
-                // serialize (pretty for readability in Debug)
-                var json = AppJson.SerializeLogPayload(dto, pretty: true);
-                Debug.WriteLine($"[SMOKE][JSON] payload={json}");
-
-                // deserialize
-                var ok = AppJson.TryDeserializeLogPayload(json, out var roundTrip);
-                Debug.WriteLine($"[SMOKE][JSON] roundtrip-ok={ok} msg={roundTrip?.Message}");
-
-                // (placeholder) encrypted path – currently no-op until we wire AES
-                var enc = AppJson.SerializeEncryptedLogPayload(dto);
-                var dec = AppJson.DeserializeEncryptedLogPayload(enc);
-                Debug.WriteLine($"[SMOKE][JSON] enc-rt-ok={(dec?.Message == dto.Message)}");
+                JsonRoundTrip();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SMOKE][JSON][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
+
+            try
+            {
+                WriteSmokeLog();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SMOKE][WRITE][FAIL] {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static void JsonRoundTrip()
+        {
+            var dto = new AppJson.LogPayloadDto
+            {
+                Message = "Smoke test JSON round-trip",
+                Source = "SmokeTester",
+                EventCode = "SMOKE",
+                OccurredUtc = DateTime.UtcNow,
+                // No User field in your current LogPayloadDto
+                // Context left null
+            };
+
+            // Serialize with the canonical options
+            string json = AppJson.SerializeLogPayload(dto);
+            Debug.WriteLine("[SMOKE][JSON] payload=\n" + json);
+
+            // Parse with System.Text.Json (validates structure)
+            using var doc = JsonDocument.Parse(json);
+            bool hasMsg = doc.RootElement.TryGetProperty("message", out var msgProp);
+            string? msg = hasMsg ? msgProp.GetString() : null;
+
+            // And deserialize back into the DTO using your helper
+            var roundTrip = AppJson.DeserializeLogPayload(json);
+
+            bool ok = roundTrip != null && roundTrip.Message == dto.Message;
+            Debug.WriteLine($"[SMOKE][JSON] roundtrip-ok={ok} msg={msg ?? "<null>"}");
+
+            // If you still want an “encrypted” path later, wire it up in AppJson and
+            // add a separate check here. For now we avoid calling non-existent helpers.
+        }
+
+        private static void WriteSmokeLog()
+        {
+            var dto = new AppJson.LogPayloadDto
+            {
+                Message = "Smoke test JSON round-trip",
+                Source = "SmokeTester",
+                EventCode = "SMOKE",
+                OccurredUtc = DateTime.UtcNow
+            };
+
+            long id = LogCatalogService.AppendJson(
+                level: "INFO",
+                source: "SmokeTester",
+                eventCode: "SMOKE",
+                dto: dto
+            );
+
+            Debug.WriteLine($"[SMOKE][WRITE] InsertLoginEvent id={id}");
         }
     }
 }

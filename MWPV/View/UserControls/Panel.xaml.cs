@@ -13,8 +13,9 @@ namespace MWPV.View.UserControls
         {
             InitializeComponent();
 
-            // Ensure both overlay and grid wiring happen after tree ready
+            // Ensure we hook/unhook after the visual tree is ready
             Loaded += Panel_Loaded;
+            Unloaded += Panel_Unloaded;
 
             // Default left-pane view
             ShowCategoryGrid();
@@ -23,25 +24,43 @@ namespace MWPV.View.UserControls
             InitializeAddCategoryInline();
         }
 
+        /* ======================= Lifecycle ======================= */
+
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
         {
             WireCategoryGridEvents();
             WireOverlayEvents();
         }
 
-        // ---- Category grid wiring / refresh ----
+        private void Panel_Unloaded(object? sender, RoutedEventArgs e)
+        {
+            UnwireCategoryGridEvents();
+            UnwireOverlayEvents();
+        }
+
+        /* =================== Category Grid Area =================== */
+
         private void WireCategoryGridEvents()
         {
             if (CategoryGrid == null) return;
 
+            // Rewire click handler
             CategoryGrid.CategoryItemClicked -= CategoryGrid_CategoryItemClicked;
             CategoryGrid.CategoryItemClicked += CategoryGrid_CategoryItemClicked;
 
+            // Refresh data + internal wiring (if those methods exist)
             try { CategoryGrid.RefreshCategoryGrid(); } catch { /* no-op */ }
             try { CategoryGrid.EnsureInternalWiring(); } catch { /* no-op */ }
 
+            // Default state: hide "Add Category Item" until a category is clicked
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Collapsed;
+        }
+
+        private void UnwireCategoryGridEvents()
+        {
+            if (CategoryGrid == null) return;
+            CategoryGrid.CategoryItemClicked -= CategoryGrid_CategoryItemClicked;
         }
 
         public void RefreshCategoryGrid()
@@ -56,7 +75,8 @@ namespace MWPV.View.UserControls
                 btnAddCategoryItem.Visibility = Visibility.Visible;
         }
 
-        // ---- Inline Add Category flow ----
+        /* =================== Add Category Inline =================== */
+
         private void InitializeAddCategoryInline()
         {
             if (AddCategoryContent == null) return;
@@ -141,23 +161,43 @@ namespace MWPV.View.UserControls
             }
         }
 
-        // ---- Logs overlay ----
+        /* ======================= Logs Overlay ======================= */
+
         private void WireOverlayEvents()
         {
             if (LogsOverlay == null) return;
 
+            // Rewire the CloseRequested event exposed by Logs.xaml.cs
             LogsOverlay.CloseRequested -= LogsOverlay_CloseRequested;
             LogsOverlay.CloseRequested += LogsOverlay_CloseRequested;
         }
 
+        private void UnwireOverlayEvents()
+        {
+            if (LogsOverlay == null) return;
+            LogsOverlay.CloseRequested -= LogsOverlay_CloseRequested;
+        }
+
+        /// <summary>
+        /// Shows the logs overlay. The Logs control itself loads/paginates on Loaded.
+        /// </summary>
         public void ShowLogs()
         {
             if (OverlayHost != null)
                 OverlayHost.Visibility = Visibility.Visible;
+
+            // If you want to ensure Logs refreshes to the first page whenever shown:
+            try
+            {
+                // Expose a public method on Logs (optional) like ResetToFirstPage();
+                // LogsOverlay?.ResetToFirstPage();
+            }
+            catch { /* optional; ignore */ }
         }
 
         private void LogsOverlay_CloseRequested(object? sender, EventArgs e)
         {
+            // Simply hide the overlay host; no need to mutate visual tree
             if (OverlayHost != null)
                 OverlayHost.Visibility = Visibility.Collapsed;
         }

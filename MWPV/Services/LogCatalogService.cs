@@ -183,10 +183,16 @@ namespace MWPV.Services
             Func<SqliteConnection>? openAppConnection = null)
             => AppendJson(level, source, eventCode, (object)dto, whenUtc, sessionId, loginId, itemId, payloadVer, keySetVersion, isCrash, openAppConnection);
 
-        // ---------------- READ ----------------
+        // ---------------- READ (paging-first) ----------------
 
-        // lightweight list for the grid (no payload fields)
-        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(int limit = 200, Func<SqliteConnection>? openAppConnection = null)
+        /// <summary>
+        /// Unified paging reader for the grid (no payload fields).
+        /// Backs both initial load and "Next N" using Logs_Select_Page.sql (@limit, @offset).
+        /// </summary>
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectPage(
+            int offset,
+            int limit,
+            Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
             var result = new List<global::MWPV.Models.Logs>();
@@ -196,35 +202,48 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("Logs_Select_Recent.sql");
+                var sql = SqlCagegory.GetSql("Logs_Select_Page.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: Logs_Select_Recent.sql");
+                    throw new InvalidOperationException("SQL not loaded: Logs_Select_Page.sql");
                 cmd.CommandText = sql;
 
-                // support @Limit or @limit, depending on the SQL text
-                var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@Limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
-                var pLower = cmd.CreateParameter(); pLower.ParameterName = "@limit"; pLower.Value = limit; cmd.Parameters.Add(pLower);
+                // Support both casings to be robust against SQL text variants
+                var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
+                var pLimit2 = cmd.CreateParameter(); pLimit2.ParameterName = "@Limit"; pLimit2.Value = limit; cmd.Parameters.Add(pLimit2);
+
+                var pOffset = cmd.CreateParameter(); pOffset.ParameterName = "@offset"; pOffset.Value = offset; cmd.Parameters.Add(pOffset);
+                var pOffset2 = cmd.CreateParameter(); pOffset2.ParameterName = "@Offset"; pOffset2.Value = offset; cmd.Parameters.Add(pOffset2);
 
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
                 {
-                    var m = new global::MWPV.Models.Logs
+                    result.Add(new global::MWPV.Models.Logs
                     {
                         Id = Convert.ToInt64(r["Id"], CultureInfo.InvariantCulture),
                         CreatedUtc = r["CreatedUtc"] as string ?? "",
                         Level = r["Level"] as string ?? "",
                         Source = r["Source"] as string ?? "",
                         EventCode = r["EventCode"] as string ?? ""
-                    };
-                    result.Add(m);
+                    });
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][SelectRecent][FAIL] {ex.GetType().Name}: {ex.Message}");
+                Debug.WriteLine($"[LOGS][SelectPage][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Backward-compatible helper: returns the newest N logs.
+        /// Now implemented via paging (offset=0) so only one SQL is needed.
+        /// </summary>
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(
+            int limit = 200,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            return SelectPage(offset: 0, limit: limit, openAppConnection);
         }
 
         // ==== details DTO (schema has no Message column) ====

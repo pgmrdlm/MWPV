@@ -1,4 +1,6 @@
-﻿using System;
+﻿// File: MWPV/View/Windows/LogDetailsWindow.cs
+using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 
@@ -24,40 +26,40 @@ namespace MWPV.View.Windows
         {
             _entry = entry;
 
-            txtId.Text = entry.Id;
-            txtCreated.Text = entry.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss");
-            txtLevel.Text = entry.Level;
-            txtSource.Text = entry.Source;
-            txtEvent.Text = entry.EventCode;
+            txtId.Text = entry.Id ?? string.Empty;
+            txtCreated.Text = entry.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            txtLevel.Text = entry.Level ?? string.Empty;
+            txtSource.Text = entry.Source ?? string.Empty;
+            txtEvent.Text = entry.EventCode ?? string.Empty;
 
-            txtFmt.Text = entry.PayloadFmt ?? "none";
-            txtSize.Text = entry.PayloadSize.ToString();
+            txtFmt.Text = string.IsNullOrWhiteSpace(entry.PayloadFmt) ? "none" : entry.PayloadFmt!;
+            txtSize.Text = entry.PayloadSize.ToString(CultureInfo.InvariantCulture);
 
-            // Pretty print JSON if applicable
-            if (!string.IsNullOrWhiteSpace(entry.Payload) &&
-                string.Equals(entry.PayloadFmt, "json", StringComparison.OrdinalIgnoreCase))
+            txtPayload.Text = PrettyOrRaw(entry.Payload ?? string.Empty, entry.PayloadFmt);
+        }
+
+        private static string PrettyOrRaw(string payload, string? fmt)
+        {
+            if (string.IsNullOrWhiteSpace(payload))
+                return "(none)";
+
+            if (!string.Equals(fmt, "json", StringComparison.OrdinalIgnoreCase))
+                return payload;
+
+            try
             {
-                try
-                {
-                    var doc = JsonDocument.Parse(entry.Payload);
-                    txtPayload.Text = JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
-                }
-                catch
-                {
-                    // if it isn't valid json, just show the raw text
-                    txtPayload.Text = entry.Payload;
-                }
+                using var doc = JsonDocument.Parse(payload);
+                return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
             }
-            else
+            catch
             {
-                txtPayload.Text = entry.Payload ?? "";
+                return payload; // not JSON — show raw
             }
         }
 
         private void btnCopy_Click(object sender, RoutedEventArgs e)
         {
-            try { Clipboard.SetText(txtPayload.Text ?? ""); }
-            catch { /* ignore */ }
+            try { Clipboard.SetText(txtPayload.Text ?? string.Empty); } catch { }
         }
 
         private void btnClose_Click(object? sender, RoutedEventArgs e) => Close();

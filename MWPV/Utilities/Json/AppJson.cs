@@ -6,8 +6,7 @@ using System.Text.Json.Serialization;
 namespace MWPV.Utilities.Json
 {
     /// <summary>
-    /// Central JSON facade. One place to tune serializer options and expose
-    /// typed helpers for domain payloads (starting with Logs).
+    /// Central JSON facade with tuned options and domain DTOs.
     /// </summary>
     public static class AppJson
     {
@@ -31,11 +30,8 @@ namespace MWPV.Utilities.Json
             WriteIndented = true
         };
 
-        // If you need DB/persist-specific tweaks later, change here
-        private static readonly JsonSerializerOptions PersistOptions = new(DefaultOptions)
-        {
-            // e.g., custom date converters if required in future
-        };
+        // If you later need persist-specific tweaks, fork from DefaultOptions here.
+        private static readonly JsonSerializerOptions PersistOptions = new(DefaultOptions);
 
         // ---- Generic helpers ----
         public static string Serialize<T>(T value, bool pretty = false) =>
@@ -53,17 +49,18 @@ namespace MWPV.Utilities.Json
         // ===================== Domain: Logs =====================
 
         /// <summary>
-        /// Canonical payload shape for log entries written to Logs_* tables.
-        /// Extend cautiously to keep backward compatibility.
+        /// Canonical payload shape for log entries in Logs_* tables.
+        /// Forward-only model: Context is structured JSON (JsonElement).
         /// </summary>
         public sealed class LogPayloadDto
         {
             public string? Message { get; set; }
-            public string? Source { get; set; }     // e.g., "Login", "Auth", "EarlyIngest"
-            public string? EventCode { get; set; }  // e.g., "LOGIN", "INVALID_PASSWORD"
-            public string? Context { get; set; }    // optional JSON/text blob
+            public string? Source { get; set; }     // e.g., "EarlyIngest"
+            public string? EventCode { get; set; }  // e.g., "EARLY_FAIL"
             public DateTime? OccurredUtc { get; set; }
-            public string? User { get; set; }       // optional actor/subject
+
+            // Forward-only: store original decrypted elog JSON as structured JSON.
+            public JsonElement? Context { get; set; }
         }
 
         public static string SerializeLogPayload(LogPayloadDto dto, bool pretty = false) =>
@@ -71,25 +68,5 @@ namespace MWPV.Utilities.Json
 
         public static LogPayloadDto? DeserializeLogPayload(string json) =>
             JsonSerializer.Deserialize<LogPayloadDto>(json, DefaultOptions);
-
-        public static bool TryDeserializeLogPayload(string json, out LogPayloadDto? dto)
-        {
-            try { dto = JsonSerializer.Deserialize<LogPayloadDto>(json, DefaultOptions); return true; }
-            catch { dto = null; return false; }
-        }
-
-        // ---- Encryption stubs (wire to Security.Utility when ready) ----
-        public static string SerializeEncryptedLogPayload(LogPayloadDto dto)
-        {
-            var plaintext = SerializeLogPayload(dto);
-            // TODO: encrypt via Security.Utility (LogPayloadKey)
-            return plaintext; // placeholder
-        }
-
-        public static LogPayloadDto? DeserializeEncryptedLogPayload(string ciphertext)
-        {
-            // TODO: decrypt via Security.Utility
-            return DeserializeLogPayload(ciphertext);
-        }
     }
 }
