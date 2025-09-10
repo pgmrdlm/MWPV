@@ -4,39 +4,40 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d">
-
-    <Grid Background="Bisque">
+    <Grid Margin="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="36"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Top bar -->
-        <DockPanel Grid.Row="0" Margin="6">
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button x:Name="btnClose" Style="{StaticResource DialogSecondary}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" Margin="0,0,8,0"/>
-                        <TextBlock Text="Close"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </DockPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="btnRefresh" Content="Refresh" Width="90" Margin="0,0,8,0"/>
+            <Button x:Name="btnClose" Content="Close" Width="90"/>
+            <TextBlock Text="  " />
+            <TextBlock Text="Logs (recent)" VerticalAlignment="Center" FontWeight="Bold" />
+        </StackPanel>
 
-        <!-- Data grid -->
         <DataGrid x:Name="dgLogs"
                   Grid.Row="1"
-                  Margin="6"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
+                  CanUserAddRows="False"
+                  SelectionMode="Single"
                   HeadersVisibility="Column"
-                  RowHeaderWidth="0">
+                  MouseDoubleClick="dgLogs_MouseDoubleClick">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Id"          Binding="{Binding Id}"          Width="80"/>
-                <DataGridTextColumn Header="CreatedUtc"  Binding="{Binding CreatedUtc}"  Width="160"/>
-                <DataGridTextColumn Header="Level"       Binding="{Binding Level}"       Width="80"/>
-                <DataGridTextColumn Header="Source"      Binding="{Binding Source}"      Width="140"/>
-                <DataGridTextColumn Header="EventCode"   Binding="{Binding EventCode}"   Width="120"/>
+                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="70"/>
+                <DataGridTextColumn Header="CreatedUtc" Binding="{Binding CreatedUtc}" Width="250"/>
+                <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="90"/>
+                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="180"/>
+                <DataGridTextColumn Header="EventCode" Binding="{Binding EventCode}" Width="200"/>
+                <DataGridTemplateColumn Header="Details" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="View" Width="80" Click="ViewLog_Click"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
     </Grid>

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
@@ -94,7 +96,7 @@ namespace MWPV.Services
 
                 using var last = cn.CreateCommand();
                 last.CommandText = SqlCagegory.GetSql("Logs_LastInsertId.sql");
-                return Convert.ToInt64(last.ExecuteScalar());
+                return Convert.ToInt64(last.ExecuteScalar(), CultureInfo.InvariantCulture);
             }
             catch (Exception ex)
             {
@@ -125,7 +127,6 @@ namespace MWPV.Services
 
         // ---------------- WRITE (helpers) ----------------
 
-        // New flexible overload — accepts any object; parameter name is `dto`
         public static long AppendJson(
             string level,
             string source,
@@ -167,7 +168,6 @@ namespace MWPV.Services
             return Insert(req, openAppConnection);
         }
 
-        // Back-compat for AppJson.LogPayloadDto callers
         public static long AppendJson(
             string level,
             string source,
@@ -185,6 +185,7 @@ namespace MWPV.Services
 
         // ---------------- READ ----------------
 
+        // lightweight list for the grid (no payload fields)
         public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(int limit = 200, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
@@ -200,6 +201,7 @@ namespace MWPV.Services
                     throw new InvalidOperationException("SQL not loaded: Logs_Select_Recent.sql");
                 cmd.CommandText = sql;
 
+                // support @Limit or @limit, depending on the SQL text
                 var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@Limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
                 var pLower = cmd.CreateParameter(); pLower.ParameterName = "@limit"; pLower.Value = limit; cmd.Parameters.Add(pLower);
 
@@ -208,7 +210,7 @@ namespace MWPV.Services
                 {
                     var m = new global::MWPV.Models.Logs
                     {
-                        Id = Convert.ToInt64(r["Id"]),
+                        Id = Convert.ToInt64(r["Id"], CultureInfo.InvariantCulture),
                         CreatedUtc = r["CreatedUtc"] as string ?? "",
                         Level = r["Level"] as string ?? "",
                         Source = r["Source"] as string ?? "",
@@ -223,6 +225,118 @@ namespace MWPV.Services
             }
 
             return result;
+        }
+
+        // ==== details DTO (schema has no Message column) ====
+        public sealed class LogDetailsRecord
+        {
+            public long Id { get; init; }
+            public string CreatedUtc { get; init; } = "";
+            public string Level { get; init; } = "";
+            public string Source { get; init; } = "";
+            public string EventCode { get; init; } = "";
+            public string? PayloadFmt { get; init; }
+            public int PayloadSize { get; init; }
+            public string? Payload { get; init; }  // decoded text for json/text
+        }
+
+        // full record for details (includes payload)
+        public static LogDetailsRecord? SelectById(long id, Func<SqliteConnection>? openAppConnection = null)
+        {
+            openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
+
+            try
+            {
+                using var cn = openAppConnection();
+                using var cmd = cn.CreateCommand();
+
+                var sql = SqlCagegory.GetSql("Logs_Select_ById.sql");
+                if (string.IsNullOrWhiteSpace(sql))
+                    throw new InvalidOperationException("SQL not loaded: Logs_Select_ById.sql");
+                cmd.CommandText = sql;
+
+                cmd.Parameters.AddWithValue("@id", id);
+
+                using var r = cmd.ExecuteReader();
+                if (!r.Read()) return null;
+
+                string createdUtc = ReadString(r, "CreatedUtc") ?? "";
+                string level = ReadString(r, "Level") ?? "";
+                string source = ReadString(r, "Source") ?? "";
+                string eventCode = ReadString(r, "EventCode") ?? "";
+                string payloadFmt = ReadString(r, "PayloadFmt") ?? "none";
+                int payloadSizeCol = ReadInt32Nullable(r, "PayloadSize") ?? 0;
+                byte[]? blob = ReadBytesNullable(r, "Payload");
+                string? payloadTxt = DecodePayloadText(payloadFmt, blob);
+
+                int payloadSize = blob?.Length ?? payloadSizeCol;
+
+                return new LogDetailsRecord
+                {
+                    Id = Convert.ToInt64(r["Id"], CultureInfo.InvariantCulture),
+                    CreatedUtc = createdUtc,
+                    Level = level,
+                    Source = source,
+                    EventCode = eventCode,
+                    PayloadFmt = payloadFmt,
+                    PayloadSize = payloadSize,
+                    Payload = payloadTxt
+                };
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LOGS][SelectById][FAIL] {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        // ---------------- helpers ----------------
+
+        private static string? DecodePayloadText(string? fmt, byte[]? bytes)
+        {
+            if (bytes == null || bytes.Length == 0) return null;
+
+            switch ((fmt ?? "none").ToLowerInvariant())
+            {
+                case "json":
+                case "text":
+                    return Encoding.UTF8.GetString(bytes);
+                case "none":
+                default:
+                    try { return Encoding.UTF8.GetString(bytes); }
+                    catch { return null; }
+            }
+        }
+
+        private static string? ReadString(SqliteDataReader r, string name)
+        {
+            var ord = SafeOrdinal(r, name);
+            if (ord < 0 || r.IsDBNull(ord)) return null;
+            return r.GetString(ord);
+        }
+
+        private static int? ReadInt32Nullable(SqliteDataReader r, string name)
+        {
+            var ord = SafeOrdinal(r, name);
+            if (ord < 0 || r.IsDBNull(ord)) return null;
+            return r.GetInt32(ord);
+        }
+
+        private static byte[]? ReadBytesNullable(SqliteDataReader r, string name)
+        {
+            var ord = SafeOrdinal(r, name);
+            if (ord < 0 || r.IsDBNull(ord)) return null;
+
+            var len = (int)r.GetBytes(ord, 0, null, 0, 0);
+            var buf = new byte[len];
+            r.GetBytes(ord, 0, buf, 0, len);
+            return buf;
+        }
+
+        private static int SafeOrdinal(SqliteDataReader r, string name)
+        {
+            try { return r.GetOrdinal(name); }
+            catch { return -1; }
         }
     }
 }
