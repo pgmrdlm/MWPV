@@ -4,17 +4,18 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Utilities.Sql;       // SqlCagegory.GetSql(...)
 using Utilities.Helpers;   // DatabaseHelper
-using MWPV.Utilities.Json; // AppJson.LogPayloadDto (back-compat)
+using MWPV.Utilities.Json; // AppJson
 
 namespace MWPV.Services
 {
     public static class LogCatalogService
     {
-        // ---------------- WRITE (core) ----------------
+        // =====================================================================
+        // WRITE
+        // =====================================================================
 
         public sealed class RequestV3
         {
@@ -87,8 +88,8 @@ namespace MWPV.Services
 
                 cmd.Parameters.AddWithValue("@PayloadFmt",
                     string.IsNullOrWhiteSpace(req.PayloadFmt) ? "none" : req.PayloadFmt);
-                cmd.Parameters.AddWithValue("@PayloadVer", (object?)req.PayloadVer ?? 0);
-                cmd.Parameters.AddWithValue("@KeySetVersion", (object?)req.KeySetVersion ?? 0);
+                cmd.Parameters.AddWithValue("@PayloadVer", (object?)req.PayloadVer ?? 1);
+                cmd.Parameters.AddWithValue("@KeySetVersion", (object?)req.KeySetVersion ?? 1);
                 cmd.Parameters.AddWithValue("@StackHash", req.StackHash ?? "");
 
                 var affected = cmd.ExecuteNonQuery();
@@ -125,8 +126,10 @@ namespace MWPV.Services
             return v?.ToString() ?? "dev";
         }
 
-        // ---------------- WRITE (helpers) ----------------
-
+        /// <summary>
+        /// Forward-only JSON appender. Serializes the supplied DTO with AppJson options,
+        /// stores as UTF-8 bytes, and marks PayloadFmt = "json".
+        /// </summary>
         public static long AppendJson(
             string level,
             string source,
@@ -136,16 +139,13 @@ namespace MWPV.Services
             string? sessionId = null,
             long? loginId = null,
             long? itemId = null,
-            int? payloadVer = 1,
+            int payloadVer = 1,
             int? keySetVersion = null,
             bool isCrash = false,
             Func<SqliteConnection>? openAppConnection = null)
         {
-            var json = JsonSerializer.SerializeToUtf8Bytes(dto, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            });
+            // Use the central AppJson options for stability across writers
+            var json = Encoding.UTF8.GetBytes(AppJson.Serialize(dto, pretty: false));
 
             var req = new RequestV3
             {
@@ -168,6 +168,7 @@ namespace MWPV.Services
             return Insert(req, openAppConnection);
         }
 
+        // Convenience overload for your AppJson.LogPayloadDto
         public static long AppendJson(
             string level,
             string source,
@@ -177,17 +178,19 @@ namespace MWPV.Services
             string? sessionId = null,
             long? loginId = null,
             long? itemId = null,
-            int? payloadVer = 1,
+            int payloadVer = 1,
             int? keySetVersion = null,
             bool isCrash = false,
             Func<SqliteConnection>? openAppConnection = null)
             => AppendJson(level, source, eventCode, (object)dto, whenUtc, sessionId, loginId, itemId, payloadVer, keySetVersion, isCrash, openAppConnection);
 
-        // ---------------- READ (paging-first) ----------------
+        // =====================================================================
+        // READ
+        // =====================================================================
 
         /// <summary>
-        /// Unified paging reader for the grid (no payload fields).
-        /// Backs both initial load and "Next N" using Logs_Select_Page.sql (@limit, @offset).
+        /// Rows for the grid (no payload).
+        /// Backed by Logs_Select_Page.sql (@limit, @offset).
         /// </summary>
         public static IReadOnlyList<global::MWPV.Models.Logs> SelectPage(
             int offset,
@@ -207,12 +210,8 @@ namespace MWPV.Services
                     throw new InvalidOperationException("SQL not loaded: Logs_Select_Page.sql");
                 cmd.CommandText = sql;
 
-                // Support both casings to be robust against SQL text variants
                 var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
-                var pLimit2 = cmd.CreateParameter(); pLimit2.ParameterName = "@Limit"; pLimit2.Value = limit; cmd.Parameters.Add(pLimit2);
-
                 var pOffset = cmd.CreateParameter(); pOffset.ParameterName = "@offset"; pOffset.Value = offset; cmd.Parameters.Add(pOffset);
-                var pOffset2 = cmd.CreateParameter(); pOffset2.ParameterName = "@Offset"; pOffset2.Value = offset; cmd.Parameters.Add(pOffset2);
 
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
@@ -235,18 +234,12 @@ namespace MWPV.Services
             return result;
         }
 
-        /// <summary>
-        /// Backward-compatible helper: returns the newest N logs.
-        /// Now implemented via paging (offset=0) so only one SQL is needed.
-        /// </summary>
         public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(
             int limit = 200,
             Func<SqliteConnection>? openAppConnection = null)
-        {
-            return SelectPage(offset: 0, limit: limit, openAppConnection);
-        }
+            => SelectPage(offset: 0, limit: limit, openAppConnection);
 
-        // ==== details DTO (schema has no Message column) ====
+        // ---- Details DTO returned to the window ----
         public sealed class LogDetailsRecord
         {
             public long Id { get; init; }
@@ -256,10 +249,16 @@ namespace MWPV.Services
             public string EventCode { get; init; } = "";
             public string? PayloadFmt { get; init; }
             public int PayloadSize { get; init; }
-            public string? Payload { get; init; }  // decoded text for json/text
+
+            /// <summary>
+            /// Decoded text for json/text payloads; null for encrypted/unknown formats.
+            /// </summary>
+            public string? Payload { get; init; }
         }
 
-        // full record for details (includes payload)
+        /// <summary>
+        /// Full record for details (includes payload blob, decoded to text when json/text).
+        /// </summary>
         public static LogDetailsRecord? SelectById(long id, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
@@ -279,16 +278,16 @@ namespace MWPV.Services
                 using var r = cmd.ExecuteReader();
                 if (!r.Read()) return null;
 
-                string createdUtc = ReadString(r, "CreatedUtc") ?? "";
-                string level = ReadString(r, "Level") ?? "";
-                string source = ReadString(r, "Source") ?? "";
-                string eventCode = ReadString(r, "EventCode") ?? "";
-                string payloadFmt = ReadString(r, "PayloadFmt") ?? "none";
-                int payloadSizeCol = ReadInt32Nullable(r, "PayloadSize") ?? 0;
-                byte[]? blob = ReadBytesNullable(r, "Payload");
-                string? payloadTxt = DecodePayloadText(payloadFmt, blob);
+                var createdUtc = ReadString(r, "CreatedUtc") ?? "";
+                var level = ReadString(r, "Level") ?? "";
+                var source = ReadString(r, "Source") ?? "";
+                var eventCode = ReadString(r, "EventCode") ?? "";
+                var payloadFmt = ReadString(r, "PayloadFmt") ?? "none";
+                var payloadSizeC = ReadInt32Nullable(r, "PayloadSize") ?? 0;
+                var blob = ReadBytesNullable(r, "Payload");
 
-                int payloadSize = blob?.Length ?? payloadSizeCol;
+                var payloadSize = blob?.Length ?? payloadSizeC;
+                string? payloadText = DecodePayloadText(payloadFmt, blob);
 
                 return new LogDetailsRecord
                 {
@@ -299,7 +298,7 @@ namespace MWPV.Services
                     EventCode = eventCode,
                     PayloadFmt = payloadFmt,
                     PayloadSize = payloadSize,
-                    Payload = payloadTxt
+                    Payload = payloadText
                 };
             }
             catch (Exception ex)
@@ -309,7 +308,9 @@ namespace MWPV.Services
             }
         }
 
-        // ---------------- helpers ----------------
+        // =====================================================================
+        // Helpers
+        // =====================================================================
 
         private static string? DecodePayloadText(string? fmt, byte[]? bytes)
         {
@@ -320,10 +321,11 @@ namespace MWPV.Services
                 case "json":
                 case "text":
                     return Encoding.UTF8.GetString(bytes);
-                case "none":
+
+                // For encrypted/unknown formats, do not attempt to decode as text.
+                // Example: "gcm-json-v1" remains null here; the viewer can show a hint.
                 default:
-                    try { return Encoding.UTF8.GetString(bytes); }
-                    catch { return null; }
+                    return null;
             }
         }
 

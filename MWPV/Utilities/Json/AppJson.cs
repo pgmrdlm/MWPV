@@ -49,17 +49,17 @@ namespace MWPV.Utilities.Json
         // ===================== Domain: Logs =====================
 
         /// <summary>
-        /// Canonical payload shape for log entries in Logs_* tables.
-        /// Forward-only model: Context is structured JSON (JsonElement).
+        /// Canonical payload shape for log entries stored in Logs.
+        /// Forward-only: keep original structured data in Context.
         /// </summary>
         public sealed class LogPayloadDto
         {
             public string? Message { get; set; }
-            public string? Source { get; set; }     // e.g., "EarlyIngest"
-            public string? EventCode { get; set; }  // e.g., "EARLY_FAIL"
+            public string? Source { get; set; }     // e.g., "EarlyIngest", "CategoryService"
+            public string? EventCode { get; set; }  // e.g., "EARLY_FAIL", "CATEGORY_INSERTED"
             public DateTime? OccurredUtc { get; set; }
 
-            // Forward-only: store original decrypted elog JSON as structured JSON.
+            // Keep original details as structured JSON (if any)
             public JsonElement? Context { get; set; }
         }
 

@@ -12,7 +12,9 @@ namespace MWPV.Services
 {
     public static class CategoryService
     {
-        // --- helpers ---
+        // --------------------------------------------------------------------
+        // Helpers
+        // --------------------------------------------------------------------
 
         private static string LoadSqlRequired(string assetName)
         {
@@ -22,16 +24,9 @@ namespace MWPV.Services
             return sql;
         }
 
-        private static void AddParamAliases(SqliteCommand cmd, string[] names, object? value)
-        {
-            foreach (var n in names)
-            {
-                if (!cmd.Parameters.Contains(n))
-                    cmd.Parameters.AddWithValue(n, value ?? DBNull.Value);
-            }
-        }
-
-        // --- read ---
+        // --------------------------------------------------------------------
+        // Reads
+        // --------------------------------------------------------------------
 
         public static ObservableCollection<Categories> LoadCategories()
         {
@@ -75,7 +70,7 @@ namespace MWPV.Services
                     foreach (var c in rows)
                         Debug.WriteLine($"[CATEGORIES][{idx++}] '{c.strCategory1}' | '{c.strCategory2}' | '{c.strCategory3}'");
                 }
-                catch { }
+                catch { /* ignore debug write issues */ }
 #endif
             }
             catch (Exception ex)
@@ -86,10 +81,9 @@ namespace MWPV.Services
             return rows;
         }
 
-        [Obsolete("Use LoadCategories()")]
-        public static ObservableCollection<Categories> LoadCatagories() => LoadCategories();
-
-        // --- exists ---
+        // --------------------------------------------------------------------
+        // Exists
+        // --------------------------------------------------------------------
 
         public static bool DoesCategoryExist(string categoryName)
         {
@@ -102,20 +96,20 @@ namespace MWPV.Services
             using var cmd = conn.CreateCommand();
             cmd.CommandText = existsSql;
 
-            AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, categoryName.Trim());
+            // Forward-only: one canonical param name
+            cmd.Parameters.AddWithValue("@CategoryName", categoryName.Trim());
 
             object? scalar = cmd.ExecuteScalar();
             return scalar != null && Convert.ToInt64(scalar) != 0;
         }
 
-        [Obsolete("Use DoesCategoryExist(name)")]
-        public static bool DoesCatagoryExist(string categoryName) => DoesCategoryExist(categoryName);
-
-        // --- insert ---
+        // --------------------------------------------------------------------
+        // Insert (idempotent-at-call-site; warns on dup)
+        // --------------------------------------------------------------------
 
         /// <summary>
-        /// Insert if not present; on success log INFO with { categoryId, categoryName }.
-        /// On duplicate, log WARN with { categoryName }.
+        /// Insert if not present; on success logs INFO with { categoryId, categoryName }.
+        /// On duplicate, logs WARN with { categoryName }.
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription)
         {
@@ -144,12 +138,11 @@ namespace MWPV.Services
                             source = "CategoryService",
                             eventCode = "CATEGORY_DUPLICATE",
                             occurredUtc = DateTime.UtcNow,
-                            user = Environment.UserName,
                             categoryName = cleanName
                         }
                     );
                 }
-                catch { }
+                catch { /* logging must never throw */ }
                 return;
             }
 
@@ -165,8 +158,9 @@ namespace MWPV.Services
                 cmd.Transaction = tx;
                 cmd.CommandText = insertSql;
 
-                AddParamAliases(cmd, new[] { "@CategoryName", "@Categoryname", "@Cagegoryname" }, cleanName);
-                AddParamAliases(cmd, new[] { "@Description", "@description" }, desc);
+                // Forward-only: canonical param names expected by InsertCategory.sql
+                cmd.Parameters.AddWithValue("@CategoryName", cleanName);
+                cmd.Parameters.AddWithValue("@Description", desc);
 
                 cmd.ExecuteNonQuery();
             }
@@ -193,13 +187,12 @@ namespace MWPV.Services
                         source = "CategoryService",
                         eventCode = "CATEGORY_INSERTED",
                         occurredUtc = DateTime.UtcNow,
-                        user = Environment.UserName,
                         categoryId = newId,
                         categoryName = cleanName
                     }
                 );
             }
-            catch { }
+            catch { /* logging must never throw */ }
         }
     }
 }

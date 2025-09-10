@@ -3,4 +3,4 @@
 -- Assumes CategoryExists.sql has already checked for duplicates (case-insensitive).
 
 INSERT INTO Category (Category_Name, Category_Description, IsActive)
-VALUES (@Categoryname, @description, 1);
+VALUES (@CategoryName, @Description, 1);

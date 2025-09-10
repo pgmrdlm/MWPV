@@ -49,7 +49,7 @@ namespace MWPV.View.UserControls
         public void RefreshCategoryGrid()
         {
             BoundCatagories.Clear();
-            var catagories = CategoryService.LoadCatagories();
+            var catagories = CategoryService.LoadCategories();
             foreach (var cat in catagories)
                 BoundCatagories.Add(cat);
         }
