@@ -1,0 +1,130 @@
+﻿<UserControl x:Class="MWPV.View.UserControls.LogDetailsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="320"
+             Background="Bisque">
+    <Grid Background="Bisque">
+        <Border Background="Bisque"
+                BorderBrush="#FFD8B8"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12">
+            <Grid>
+                <!-- Layout -->
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <!-- Header -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Id -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Created -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Meta -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Message -->
+                    <RowDefinition Height="*"/>
+                    <!-- Payload -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Actions -->
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Header -->
+                <TextBlock Text="Log Details"
+                           Grid.Row="0" Grid.ColumnSpan="2"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#553300"
+                           Margin="0,0,0,10"/>
+
+                <!-- Id -->
+                <TextBlock Text="Id:" Grid.Row="1" Grid.Column="0"
+                           FontWeight="SemiBold" Margin="0,0,8,6" Foreground="#664000"/>
+                <TextBlock Text="{Binding EntryId, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           Grid.Row="1" Grid.Column="1" Margin="0,0,0,6" Foreground="#222"/>
+
+                <!-- Created -->
+                <TextBlock Text="Created (UTC):" Grid.Row="2" Grid.Column="0"
+                           FontWeight="SemiBold" Margin="0,0,8,6" Foreground="#664000"/>
+                <TextBlock Text="{Binding CreatedText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           Grid.Row="2" Grid.Column="1" Margin="0,0,0,6" Foreground="#222"/>
+
+                <!-- Level / Source / Event -->
+                <TextBlock Text="Level / Source / Event:" Grid.Row="3" Grid.Column="0"
+                           FontWeight="SemiBold" Margin="0,4,8,6" Foreground="#664000"/>
+                <TextBlock Text="{Binding MetaText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           Grid.Row="3" Grid.Column="1" Margin="0,4,0,6" Foreground="#222" TextWrapping="Wrap"/>
+
+                <!-- Message -->
+                <TextBlock Text="Message:" Grid.Row="4" Grid.Column="0"
+                           FontWeight="SemiBold" Margin="0,4,8,6" Foreground="#664000"/>
+                <TextBlock Text="{Binding Message, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           Grid.Row="4" Grid.Column="1" Margin="0,4,0,6" Foreground="#222" TextWrapping="Wrap"/>
+
+                <!-- Payload -->
+                <GroupBox Header="Payload"
+                          Grid.Row="5" Grid.ColumnSpan="2"
+                          Margin="0,8,0,8"
+                          Background="Bisque"
+                          BorderBrush="#FFD8B8">
+                    <Grid Background="Bisque">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <!-- meta line -->
+                            <RowDefinition Height="*"/>
+                            <!-- text area -->
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="6,4,6,6">
+                            <TextBlock Text="Fmt:" FontWeight="SemiBold" Margin="0,0,6,0" Foreground="#664000"/>
+                            <TextBlock Text="{Binding PayloadFmt, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                       Margin="0,0,12,0" Foreground="#222"/>
+                            <TextBlock Text="Bytes:" FontWeight="SemiBold" Margin="0,0,6,0" Foreground="#664000"/>
+                            <TextBlock Text="{Binding PayloadSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                       Foreground="#222"/>
+                        </StackPanel>
+
+                        <!-- No scrollbars; text wraps and panel can be resized -->
+                        <TextBox Grid.Row="1"
+                                 Text="{Binding PayloadText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 TextWrapping="Wrap"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 IsReadOnly="True"
+                                 Background="Bisque"
+                                 BorderBrush="#FFD8B8"
+                                 BorderThickness="1"
+                                 Padding="6"
+                                 VerticalAlignment="Stretch"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalScrollBarVisibility="Disabled"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 MinHeight="140"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Actions: centered and wrapping to avoid clipping -->
+                <WrapPanel Grid.Row="6" Grid.ColumnSpan="2"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,0"
+                           ItemHeight="28" ItemWidth="Auto">
+                    <Button x:Name="btnCopy"
+                            Content="Copy details"
+                            Style="{StaticResource DialogPrimary}"
+                            Padding="16,4"
+                            Margin="0,0,8,0"/>
+                    <Button x:Name="btnClear"
+                            Content="Clear"
+                            Style="{StaticResource DialogSecondary}"
+                            Padding="16,4"
+                            Margin="0,0,0,0"/>
+                </WrapPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

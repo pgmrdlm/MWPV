@@ -4,11 +4,22 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
-    <!-- Global button size knobs -->
-    <sys:Double x:Key="StdButtonWidth">130</sys:Double>
-    <sys:Double x:Key="StdButtonHeight">20</sys:Double>
+    <!-- =======================
+         GLOBAL SIZES & PADDING
+         ======================= -->
+    <!-- Original standard button size (used by pills, defaults, etc.) -->
+    <sys:Double   x:Key="StdButtonWidth">130</sys:Double>
+    <sys:Double   x:Key="StdButtonHeight">20</sys:Double>
+    <Thickness    x:Key="StdButtonPadding">10,6,10,6</Thickness>
 
-    <!-- Shared Brushes & Colors -->
+    <!-- Taller “action” variant (fat buttons) -->
+    <sys:Double   x:Key="FatButtonHeight">28</sys:Double>
+    <Thickness    x:Key="FatButtonPadding">16,6,16,6</Thickness>
+
+    <!-- =======================
+         SHARED BRUSHES
+         (same hues you provided)
+         ======================= -->
     <!-- Primary (green) -->
     <LinearGradientBrush x:Key="PrimaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#008A00" Offset="0"/>
@@ -102,15 +113,19 @@
     </LinearGradientBrush>
     <SolidColorBrush x:Key="DisabledForeground" Color="#7A7A7A"/>
     <SolidColorBrush x:Key="FocusBorder" Color="#3B82F6"/>
+    <SolidColorBrush x:Key="ShadowStroke" Color="#33000000"/>
 
-    <!-- Base Rounded Template with unified fade/press overlays -->
+    <!-- =======================
+         BASE TEMPLATE (130×20)
+         ======================= -->
     <Style x:Key="RoundedButtonBase" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource StdButtonWidth}"/>
         <Setter Property="Height" Value="{StaticResource StdButtonHeight}"/>
         <Setter Property="Margin" Value="2"/>
-        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Padding" Value="{StaticResource StdButtonPadding}"/>
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -126,68 +141,45 @@
                             CornerRadius="14"
                             SnapsToDevicePixels="True">
                         <Grid>
-                            <!-- unified overlay tints -->
-                            <Border x:Name="HoverOverlay"
-                                    CornerRadius="14"
-                                    Background="#40FFFFFF"
-                                    Opacity="0"/>
-                            <Border x:Name="PressedOverlay"
-                                    CornerRadius="14"
-                                    Background="#20000000"
-                                    Opacity="0"/>
+                            <Border x:Name="HoverOverlay"  CornerRadius="14" Background="#40FFFFFF" Opacity="0"/>
+                            <Border x:Name="PressedOverlay" CornerRadius="14" Background="#20000000" Opacity="0"/>
                             <ContentPresenter RecognizesAccessKey="True"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Grid>
+
+                        <!-- VSM -->
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.12"/>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.08"/>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="MouseOver">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0.18" Duration="0:0:0.12"/>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.08"/>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0.18" Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.06"/>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0.22" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0.22" Duration="0:0:0.06"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled">
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.06"/>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="FocusStates">
                                 <VisualState x:Name="Unfocused"/>
                                 <VisualState x:Name="Focused">
-                                    <Storyboard>
-                                        <!-- handled via Trigger below for border visuals -->
-                                    </Storyboard>
+                                    <Storyboard/>
                                 </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
@@ -195,11 +187,17 @@
 
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter Property="Padding" Value="10,7"/>
+                            <Setter Property="Padding" Value="10,7,10,7"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource FocusBorder}"/>
                             <Setter Property="BorderThickness" Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsDefault" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="#5B9DFF"/>
+                        </Trigger>
+                        <Trigger Property="IsCancel" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="#FF7B7B"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource DisabledBrush}"/>
@@ -212,10 +210,37 @@
         </Setter>
     </Style>
 
-    <!-- Dialog Buttons -->
+    <!-- =======================
+         SIZE / PURPOSE VARIANTS
+         ======================= -->
+    <!-- Fat action buttons (use on Refresh/Close/Add Category/Prev/Next) -->
+    <Style x:Key="ActionFat" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
+        <Setter Property="Height" Value="{StaticResource FatButtonHeight}"/>
+        <Setter Property="Padding" Value="{StaticResource FatButtonPadding}"/>
+    </Style>
+
+    <!-- Neutral action (gray) — keeps standard size unless combined with ActionFat -->
+    <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
+        <Setter Property="Background" Value="{StaticResource SecondaryNormalBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource SecondaryHoverBrush}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource SecondaryPressedBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Dialog buttons (green/gray/red). Combine with ActionFat where you want the tall look -->
     <Style x:Key="DialogPrimary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource PrimaryNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
@@ -232,7 +257,7 @@
 
     <Style x:Key="DialogSecondary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource SecondaryNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource SecondaryHoverBrush}"/>
@@ -264,10 +289,10 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Category / Item pill buttons -->
+    <!-- Category / Item pills — identical size for consistency -->
     <Style x:Key="CategoryPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource NavNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -285,7 +310,7 @@
 
     <Style x:Key="ItemPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="#20000000"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
@@ -301,7 +326,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Title bar glyph button (no base size) -->
+    <!-- Title bar glyph button -->
     <Style x:Key="TitleButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
@@ -312,11 +337,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -335,4 +357,104 @@
         </Setter>
     </Style>
 
+    <!-- =======================
+         ROUND 24×24 DETAILS BTN
+         ======================= -->
+    <Style x:Key="DialogPrimaryCheckSmall"
+           TargetType="Button"
+           BasedOn="{StaticResource RoundedButtonBase}">
+        <!-- remove the 130×20 from the base -->
+        <Setter Property="Width" Value="24"/>
+        <Setter Property="Height" Value="24"/>
+        <Setter Property="Padding" Value="0"/>
+
+        <Setter Property="Background" Value="{StaticResource PrimaryNormalBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="Black"/>
+        <Setter Property="Content" Value="&#xE73E;"/>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="999"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <Border x:Name="HoverOverlay"  CornerRadius="999" Background="#40FFFFFF" Opacity="0"/>
+                            <Border x:Name="PressedOverlay" CornerRadius="999" Background="#20000000" Opacity="0"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="MouseOver">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0.18" Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0.22" Duration="0:0:0.06"/>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualState x:Name="Unfocused"/>
+                                <VisualState x:Name="Focused">
+                                    <Storyboard/>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource FocusBorder}"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource DisabledBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
+                            <Setter TargetName="bd" Property="BorderBrush" Value="#33000000"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+        <!-- glyph color on hover/press -->
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
+                <Setter Property="Foreground" Value="#1246A6"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource PrimaryPressedBrush}"/>
+                <Setter Property="Foreground" Value="#0B2E73"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DisabledBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
 </ResourceDictionary>

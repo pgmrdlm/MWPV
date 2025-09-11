@@ -1,4 +1,5 @@
-﻿using System;
+﻿// File: MWPV/View/UserControls/Logs.xaml.cs
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -7,7 +8,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using MWPV.Services;
-using MWPV.View.Windows;
 
 namespace MWPV.View.UserControls
 {
@@ -32,6 +32,9 @@ namespace MWPV.View.UserControls
             IsVisibleChanged += Logs_IsVisibleChanged;
         }
 
+        // ===========================
+        // Lifecycle
+        // ===========================
         private async void Logs_Loaded(object? sender, RoutedEventArgs e)
         {
             if (!_loadedOnce)
@@ -47,9 +50,15 @@ namespace MWPV.View.UserControls
                 await LoadFirstPageAsync(silent: true);
         }
 
+        // ===========================
+        // Toolbar
+        // ===========================
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadFirstPageAsync();
         private void Close_Click(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
 
+        // ===========================
+        // Paging
+        // ===========================
         public async Task LoadFirstPageAsync(bool silent = false)
         {
             _offset = 0;
@@ -82,6 +91,10 @@ namespace MWPV.View.UserControls
 
                 if (dgLogs.Items.Count > 0)
                     dgLogs.ScrollIntoView(dgLogs.Items[0]);
+
+                // Auto-clear details if no row
+                if (_rows.Count == 0)
+                    DetailsPanel.Clear();
             }
             catch (Exception ex)
             {
@@ -101,64 +114,45 @@ namespace MWPV.View.UserControls
             txtStatus.Text = $"Page {page} • Showing {PageSize} rows";
         }
 
-        private void dgLogs_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        // ===========================
+        // Row Interaction
+        // ===========================
+        private async void dgLogs_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (dgLogs.SelectedItem is MWPV.Models.Logs row)
-                _ = OpenDetailsAsync(row.Id);
+                await ShowDetailsAsync(row);
         }
 
         private async void ViewLog_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.DataContext is MWPV.Models.Logs row)
-                await OpenDetailsAsync(row.Id);
+                await ShowDetailsAsync(row);
         }
 
-        private async Task OpenDetailsAsync(long id)
+        private async void dgLogs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (dgLogs.SelectedItem is MWPV.Models.Logs row)
+                await ShowDetailsAsync(row, silent: true);
+        }
+
+        // ===========================
+        // Details
+        // ===========================
+        private async Task ShowDetailsAsync(MWPV.Models.Logs row, bool silent = false)
         {
             try
             {
-                var rec = await Task.Run(() => LogCatalogService.SelectById(id));
-                if (rec is null)
-                    throw new InvalidOperationException($"No log found for id={id}");
-
-                var entry = new LogEntry
-                {
-                    Id = rec.Id.ToString(CultureInfo.InvariantCulture),
-                    CreatedUtc = ParseIsoUtc(rec.CreatedUtc),
-                    Level = rec.Level ?? string.Empty,
-                    Source = rec.Source ?? string.Empty,
-                    EventCode = rec.EventCode ?? string.Empty,
-                    Payload = rec.Payload ?? string.Empty,
-                    PayloadSize = rec.PayloadSize,
-                    PayloadFmt = string.IsNullOrWhiteSpace(rec.PayloadFmt) ? "none" : rec.PayloadFmt!.Trim()
-                };
-
-                var owner = Window.GetWindow(this);
-                LogDetailsWindow.ShowSingle(owner!, entry);
+                await DetailsPanel.LoadFromAsync(row);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Unable to open log details.\n\n{ex}", "Logs",
-                                MessageBoxButton.OK, MessageBoxImage.Error);
+                if (!silent)
+                {
+                    MessageBox.Show($"Unable to load log details.\n\n{ex}", "Logs",
+                                    MessageBoxButton.OK, MessageBoxImage.Error);
+                }
                 Debug.WriteLine($"[LOGS][Details][FAIL] {ex}");
             }
-        }
-
-        private static DateTime ParseIsoUtc(string? iso)
-        {
-            if (!string.IsNullOrWhiteSpace(iso))
-            {
-                if (DateTimeOffset.TryParse(
-                        iso, CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                        out var dto)) return dto.UtcDateTime;
-
-                if (DateTime.TryParse(
-                        iso, CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                        out var dt)) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-            }
-            return DateTime.UtcNow;
         }
     }
 }

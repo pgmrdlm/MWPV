@@ -5,10 +5,11 @@ namespace MWPV.Models
 {
     /// <summary>
     /// POCO representing a row from the Logs table (payload not included).
-    /// Suitable for binding to a DataGrid.
+    /// Suitable for binding to a DataGrid and a right-side details pane.
     /// </summary>
     public class Logs
     {
+        // Primary key
         public long Id { get; set; }
 
         // Raw UTC timestamps as stored in SQLite (TEXT)
@@ -24,8 +25,11 @@ namespace MWPV.Models
         public string AppVersion { get; set; } = "";
         public bool IsCrash { get; set; }
 
+        // Optional message column (binds to the DataGrid "Message" column and details pane)
+        public string? Message { get; set; }
+
         // Payload metadata only (blob not surfaced here)
-        public string? PayloadFmt { get; set; }         // e.g., "gcm-json-v1"
+        public string? PayloadFmt { get; set; }         // e.g., "gcm-json-v1", "json", "none"
         public int PayloadVer { get; set; } = 1;
         public int KeySetVersion { get; set; } = 1;
 
@@ -41,6 +45,10 @@ namespace MWPV.Models
         // Bind-friendly local strings (empty when not parseable)
         public string WhenLocal => WhenParsed?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "";
         public string CreatedLocal => CreatedParsed?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "";
+
+        // Handy combined label for the details pane if desired
+        public string MetaLabel =>
+            $"{(Level ?? "").Trim()} / {(Source ?? "").Trim()} / {(EventCode ?? "").Trim()}".Trim().Trim('/').Trim();
 
         private static DateTimeOffset? ParseUtc(string? s)
         {
