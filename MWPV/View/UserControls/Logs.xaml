@@ -4,89 +4,162 @@
     <Grid Background="Bisque">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- toolbar -->
             <RowDefinition Height="*"/>
-            <!-- table -->
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Toolbar -->
-        <Grid Grid.Row="0" Margin="8,6">
+        <Grid Grid.Row="0" Margin="12,6,12,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left: actions -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button x:Name="btnRefresh" Content="Refresh" Padding="16,4" Margin="0,0,8,0"
-                        Click="Refresh_Click"/>
-                <Button x:Name="btnClose" Content="Close" Padding="16,4"
-                        Click="Close_Click"/>
+                <Button x:Name="btnRefresh"
+                Content="Refresh"
+                Style="{StaticResource DialogPrimary}"
+                Padding="16,4"
+                Margin="0,0,8,0"
+                Click="Refresh_Click"/>
+                <Button x:Name="btnClose"
+                Content="Close"
+                Style="{StaticResource DialogSecondary}"
+                Padding="16,4"
+                Click="Close_Click"/>
             </StackPanel>
 
-            <!-- Center: title -->
             <TextBlock Grid.Column="1"
-                       Text="Logs (recent)"
-                       FontWeight="SemiBold"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
-
-            <!-- Right: auto-refresh (no direct handlers; code-behind wires these) -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                <CheckBox x:Name="chkAuto" Content="Auto-refresh" Margin="0,0,6,0"/>
-                <TextBlock Text="every" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox x:Name="cmbSeconds" Width="60" SelectedIndex="1" Margin="0,0,6,0">
-                    <ComboBoxItem>5</ComboBoxItem>
-                    <ComboBoxItem>10</ComboBoxItem>
-                    <ComboBoxItem>30</ComboBoxItem>
-                </ComboBox>
-                <TextBlock Text="sec" VerticalAlignment="Center"/>
-            </StackPanel>
+                 Text="Logs (recent)"
+                 FontWeight="SemiBold"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"/>
         </Grid>
 
-        <!-- Data table -->
+        <!-- DataGrid -->
         <DataGrid x:Name="dgLogs"
-                  Grid.Row="1"
-                  Margin="8,0,8,8"
-                  ItemsSource="{Binding}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  CanUserReorderColumns="False"
-                  CanUserResizeRows="False"
-                  HeadersVisibility="Column"
-                  GridLinesVisibility="None"
-                  Background="Bisque"
-                  BorderThickness="0"
-                  RowHeaderWidth="0"
-                  SelectionMode="Single"
-                  SelectionUnit="FullRow"
-                  RowHeight="28"
-                  EnableRowVirtualization="True"
-                  VirtualizingPanel.IsVirtualizing="True"
-                  VirtualizingPanel.VirtualizationMode="Recycling"
-                  ScrollViewer.CanContentScroll="True"
-                  ScrollViewer.VerticalScrollBarVisibility="Visible"
-                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
+              Grid.Row="1"
+              Margin="12,0,12,6"
+              VerticalAlignment="Top"
+              HorizontalAlignment="Stretch"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              CanUserAddRows="False"
+              CanUserDeleteRows="False"
+              CanUserReorderColumns="False"
+              CanUserResizeRows="False"
+              HeadersVisibility="Column"
+              GridLinesVisibility="None"
+              Background="Bisque"
+              BorderThickness="0"
+              RowHeaderWidth="0"
+              SelectionMode="Single"
+              SelectionUnit="FullRow"
+              RowHeight="28"
+              EnableRowVirtualization="True"
+              VirtualizingPanel.IsVirtualizing="True"
+              VirtualizingPanel.VirtualizationMode="Recycling"
+              ScrollViewer.CanContentScroll="True"
+              ScrollViewer.VerticalScrollBarVisibility="Disabled"
+              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+
+            <!-- Column headers: hover cue -->
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#FFEED5"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                    <Setter Property="BorderBrush" Value="#FFD8B8"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                    <Setter Property="Padding" Value="6,4"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="DarkBlue"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="Bisque"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="SnapsToDevicePixels" Value="True"/>
+                </Style>
+            </DataGrid.RowStyle>
+
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Id"         Binding="{Binding Id}"         Width="80"/>
-                <DataGridTextColumn Header="CreatedUtc" Binding="{Binding CreatedUtc}" Width="220"/>
-                <DataGridTextColumn Header="Level"      Binding="{Binding Level}"      Width="110"/>
-                <DataGridTextColumn Header="Source"     Binding="{Binding Source}"     Width="170"/>
-                <DataGridTextColumn Header="EventCode"  Binding="{Binding EventCode}"  Width="170"/>
-                <DataGridTemplateColumn Header="Details" Width="120">
+                <!-- Centered small field -->
+                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="*">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <!-- Left-aligned longer fields -->
+                <DataGridTextColumn Header="CreatedUtc" Binding="{Binding CreatedUtc}" Width="*"/>
+
+                <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="*">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*"/>
+
+                <DataGridTextColumn Header="EventCode" Binding="{Binding EventCode}" Width="*">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <!-- Button column -->
+                <DataGridTemplateColumn Header="Details" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Button Content="View"
-                                    Padding="12,2"
-                                    Focusable="False"
-                                    Click="ViewLog_Click"/>
+                      Style="{StaticResource DialogPrimary}"
+                      Padding="12,2"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Focusable="False"
+                      Click="ViewLog_Click"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
+
+        <!-- Paging -->
+        <Grid Grid.Row="2" Margin="12,0,12,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="btnPrev"
+                Content="◀ Prev 15"
+                Style="{StaticResource DialogPrimary}"
+                Padding="12,4"
+                Margin="0,0,6,0"
+                Click="_btnPrev_Click"/>
+                <TextBlock x:Name="txtStatus"
+                   Text="Page 1 • Showing 15 rows"
+                   VerticalAlignment="Center"
+                   Margin="6,0"/>
+                <Button x:Name="btnNext"
+                Content="Next 15 ▶"
+                Style="{StaticResource DialogPrimary}"
+                Padding="12,4"
+                Margin="6,0,0,0"
+                Click="_btnNext_Click"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

@@ -10,7 +10,7 @@
         mc:Ignorable="d"
         Title="MWPV - My Windows Password Vault"
         WindowStyle="None"
-        Height="864" Width="1536" WindowState="Maximized"
+        Height="864" Width="1536"
         ResizeMode="CanResize">
 
     <!-- Borderless drag/resize -->
