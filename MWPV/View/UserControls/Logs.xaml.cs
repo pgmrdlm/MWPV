@@ -2,11 +2,9 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using MWPV.Services;
 
 namespace MWPV.View.UserControls
@@ -24,17 +22,11 @@ namespace MWPV.View.UserControls
         public Logs()
         {
             InitializeComponent();
-
-            dgLogs.ItemsSource = _rows;
-            dgLogs.MouseDoubleClick += dgLogs_MouseDoubleClick;
-
+            ListPanel.ItemsSource = _rows;
             Loaded += Logs_Loaded;
             IsVisibleChanged += Logs_IsVisibleChanged;
         }
 
-        // ===========================
-        // Lifecycle
-        // ===========================
         private async void Logs_Loaded(object? sender, RoutedEventArgs e)
         {
             if (!_loadedOnce)
@@ -50,15 +42,9 @@ namespace MWPV.View.UserControls
                 await LoadFirstPageAsync(silent: true);
         }
 
-        // ===========================
-        // Toolbar
-        // ===========================
-        private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadFirstPageAsync();
-        private void Close_Click(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this, EventArgs.Empty);
+        private void Close_Click(object sender, RoutedEventArgs e) =>
+            CloseRequested?.Invoke(this, EventArgs.Empty);
 
-        // ===========================
-        // Paging
-        // ===========================
         public async Task LoadFirstPageAsync(bool silent = false)
         {
             _offset = 0;
@@ -85,14 +71,9 @@ namespace MWPV.View.UserControls
             try
             {
                 var list = await Task.Run(() => LogCatalogService.SelectPage(offset, limit));
-
                 _rows.Clear();
                 foreach (var r in list) _rows.Add(r);
 
-                if (dgLogs.Items.Count > 0)
-                    dgLogs.ScrollIntoView(dgLogs.Items[0]);
-
-                // Auto-clear details if no row
                 if (_rows.Count == 0)
                     DetailsPanel.Clear();
             }
@@ -105,39 +86,30 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private async void _btnNext_Click(object sender, RoutedEventArgs e) => await LoadNextPageAsync();
-        private async void _btnPrev_Click(object sender, RoutedEventArgs e) => await LoadPrevPageAsync();
-
         private void UpdateStatus()
         {
             int page = (_offset / PageSize) + 1;
-            txtStatus.Text = $"Page {page} • Showing {PageSize} rows";
+            ListPanel.StatusText = $"Page {page} • Showing {PageSize} rows";
         }
 
-        // ===========================
-        // Row Interaction
-        // ===========================
-        private async void dgLogs_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private async void ListPanel_PrevRequested(object sender, RoutedEventArgs e) =>
+            await LoadPrevPageAsync();
+
+        private async void ListPanel_NextRequested(object sender, RoutedEventArgs e) =>
+            await LoadNextPageAsync();
+
+        private async void ListPanel_ViewRequested(object sender, RoutedEventArgs e)
         {
-            if (dgLogs.SelectedItem is MWPV.Models.Logs row)
+            if (ListPanel.SelectedItem is MWPV.Models.Logs row)
                 await ShowDetailsAsync(row);
         }
 
-        private async void ViewLog_Click(object sender, RoutedEventArgs e)
+        private async void ListPanel_SelectionChanged(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is MWPV.Models.Logs row)
-                await ShowDetailsAsync(row);
-        }
-
-        private async void dgLogs_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (dgLogs.SelectedItem is MWPV.Models.Logs row)
+            if (ListPanel.SelectedItem is MWPV.Models.Logs row)
                 await ShowDetailsAsync(row, silent: true);
         }
 
-        // ===========================
-        // Details
-        // ===========================
         private async Task ShowDetailsAsync(MWPV.Models.Logs row, bool silent = false)
         {
             try
@@ -147,10 +119,8 @@ namespace MWPV.View.UserControls
             catch (Exception ex)
             {
                 if (!silent)
-                {
                     MessageBox.Show($"Unable to load log details.\n\n{ex}", "Logs",
                                     MessageBoxButton.OK, MessageBoxImage.Error);
-                }
                 Debug.WriteLine($"[LOGS][Details][FAIL] {ex}");
             }
         }

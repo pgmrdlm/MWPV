@@ -2,59 +2,15 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:uc="clr-namespace:MWPV.View.UserControls">
-
-    <!-- Local resources: round 24x24 button.
-         Fixed: name the Border "PART_Border" so triggers can target it. -->
-    <UserControl.Resources>
-        <Style x:Key="Round24Button" TargetType="Button" BasedOn="{StaticResource DialogPrimary}">
-            <Setter Property="Width" Value="24"/>
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="2,0"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="PART_Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="12">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="PART_Border" Property="Opacity" Value="0.95"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="PART_Border" Property="Opacity" Value="0.9"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="PART_Border" Property="Opacity" Value="0.6"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </UserControl.Resources>
+    <!-- resources omitted for brevity; keep your Round24Button style here -->
 
     <Grid Background="Bisque">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Toolbar -->
             <RowDefinition Height="*"/>
-            <!-- Main content -->
-            <RowDefinition Height="Auto"/>
-            <!-- Paging -->
         </Grid.RowDefinitions>
 
-        <!-- ===========================
-             Toolbar
-             =========================== -->
+        <!-- Toolbar -->
         <Grid Grid.Row="0" Margin="12,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -63,12 +19,6 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button x:Name="btnRefresh"
-                        Content="Refresh"
-                        Style="{StaticResource DialogPrimary}"
-                        Padding="16,4"
-                        Margin="0,0,8,0"
-                        Click="Refresh_Click"/>
                 <Button x:Name="btnClose"
                         Content="Close"
                         Style="{StaticResource DialogSecondary}"
@@ -83,9 +33,7 @@
                        VerticalAlignment="Center"/>
         </Grid>
 
-        <!-- ===========================
-             Main content: Grid | Splitter | Details (UserControl)
-             =========================== -->
+        <!-- Main content -->
         <Grid Grid.Row="1" Margin="12,0,12,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="7*"/>
@@ -93,121 +41,14 @@
                 <ColumnDefinition Width="3*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- DataGrid -->
-            <DataGrid x:Name="dgLogs"
-                      Grid.Column="0"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False"
-                      CanUserDeleteRows="False"
-                      CanUserReorderColumns="False"
-                      CanUserResizeRows="False"
-                      HeadersVisibility="Column"
-                      GridLinesVisibility="None"
-                      Background="Bisque"
-                      BorderThickness="0"
-                      RowHeaderWidth="0"
-                      SelectionMode="Single"
-                      SelectionUnit="FullRow"
-                      RowHeight="28"
-                      EnableRowVirtualization="True"
-                      VirtualizingPanel.IsVirtualizing="True"
-                      VirtualizingPanel.VirtualizationMode="Recycling"
-                      ScrollViewer.CanContentScroll="True"
-                      SelectionChanged="dgLogs_SelectionChanged">
+            <!-- Left: LogListPanel -->
+            <uc:LogListPanel x:Name="ListPanel"
+                             Grid.Column="0"
+                             PrevRequested="ListPanel_PrevRequested"
+                             NextRequested="ListPanel_NextRequested"
+                             ViewRequested="ListPanel_ViewRequested"
+                             SelectionChangedRouted="ListPanel_SelectionChanged" />
 
-                <!-- Column headers -->
-                <DataGrid.ColumnHeaderStyle>
-                    <Style TargetType="DataGridColumnHeader">
-                        <Setter Property="Background" Value="#FFEED5"/>
-                        <Setter Property="Foreground" Value="Black"/>
-                        <Setter Property="FontWeight" Value="SemiBold"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                        <Setter Property="BorderBrush" Value="#FFD8B8"/>
-                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                        <Setter Property="Padding" Value="6,4"/>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="DarkBlue"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </DataGrid.ColumnHeaderStyle>
-
-                <!-- Row style: Bisque normal, blue selected -->
-                <DataGrid.RowStyle>
-                    <Style TargetType="DataGridRow">
-                        <Setter Property="Background" Value="Bisque"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="Foreground" Value="Black"/>
-                        <Setter Property="SnapsToDevicePixels" Value="True"/>
-                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                        <Style.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="#CDE3FF"/>
-                                <Setter Property="Foreground" Value="Black"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </DataGrid.RowStyle>
-
-                <!-- Columns -->
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="80">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextAlignment" Value="Center"/>
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn Header="Created (Local)" Binding="{Binding CreatedLocal}" Width="170"/>
-
-                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="80">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextAlignment" Value="Center"/>
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="140"/>
-
-                    <DataGridTextColumn Header="EventCode" Binding="{Binding EventCode}" Width="140">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextAlignment" Value="Center"/>
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-
-                    <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
-
-                    <!-- 24x24 round Details button -->
-                    <DataGridTemplateColumn Header="Detail" Width="48" IsReadOnly="True">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource Round24Button}"
-                                        ToolTip="View log details"
-                                        Click="ViewLog_Click"
-                                        AutomationProperties.Name="View log details">
-                                    <!-- Visible glyph; can be replaced from code-behind if desired -->
-                                    <TextBlock Text="✓"
-                                               FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Button>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <!-- Splitter -->
             <GridSplitter Grid.Column="1"
                           Width="6"
                           HorizontalAlignment="Center"
@@ -216,33 +57,9 @@
                           ShowsPreview="True"
                           ResizeBehavior="PreviousAndNext"/>
 
-            <!-- Right-side Details pane (UserControl) -->
+            <!-- Right: Details -->
             <uc:LogDetailsPanel x:Name="DetailsPanel"
                                 Grid.Column="2"/>
-        </Grid>
-
-        <!-- ===========================
-             Paging
-             =========================== -->
-        <Grid Grid.Row="2" Margin="12,0,12,10" Grid.Column="0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button x:Name="btnPrev"
-                        Content="◀ Prev 15"
-                        Style="{StaticResource DialogPrimary}"
-                        Padding="12,4"
-                        Margin="0,0,6,0"
-                        Click="_btnPrev_Click"/>
-                <TextBlock x:Name="txtStatus"
-                           Text="Page 1 • Showing 15 rows"
-                           VerticalAlignment="Center"
-                           Margin="6,0"/>
-                <Button x:Name="btnNext"
-                        Content="Next 15 ▶"
-                        Style="{StaticResource DialogPrimary}"
-                        Padding="12,4"
-                        Margin="6,0,0,0"
-                        Click="_btnNext_Click"/>
-            </StackPanel>
         </Grid>
     </Grid>
 </UserControl>
