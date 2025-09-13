@@ -2,10 +2,8 @@
    MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
    ----------------------------------------------------------------------------
    ⚠️ DANGER: This drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   Purpose: rebuild the database from scratch with corrected 'Category' spelling.
-   Notes:
-     - DROP phase is tolerant: removes BOTH legacy 'Catagory*' and new 'Category*'.
-     - CREATE phase uses ONLY the new 'Category*' names (tables/columns/FKs/views).
+   Purpose: rebuild DB with corrected Category*, and universal ComboType/ComboDetail
+            for all dropdowns (AUTOINCREMENT keys; no hardcoded IDs).
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -14,19 +12,25 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- DROP VIEWS FIRST (names unchanged)
+-- DROP VIEWS (drop all known)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 DROP VIEW IF EXISTS vw_CurrentPin;
+DROP VIEW IF EXISTS vComboTypeActive;
+DROP VIEW IF EXISTS vComboDetailActive;
 
 -- ---------------------------------------------------------------------------
--- DROP TABLES (tolerate both old/new spellings)
+-- DROP TABLES (be exhaustive/consistent)
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS AppSettings;
 DROP TABLE IF EXISTS Logs;
 DROP TABLE IF EXISTS DbVersion;
 
--- Per-item history / lookups (both spellings)
+-- Universal dropdowns
+DROP TABLE IF EXISTS ComboDetail;
+DROP TABLE IF EXISTS ComboType;
+
+-- Per-item history / lookups (support both legacy/new spellings)
 DROP TABLE IF EXISTS CatagoryItemSecurityQuestions;
 DROP TABLE IF EXISTS CategoryItemSecurityQuestions;
 
@@ -46,9 +50,56 @@ COMMIT;
 PRAGMA foreign_keys = ON;
 
 -- =============================================================================
--- CREATE OBJECTS (ONLY the corrected 'Category*' names)
+-- CREATE OBJECTS
 -- =============================================================================
 BEGIN TRANSACTION;
+
+-- ---------------------------------------------------------------------------
+-- Universal dropdowns: ComboType, ComboDetail (AUTOINCREMENT PKs)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ComboType (
+    ComboTypeId   INTEGER  PRIMARY KEY AUTOINCREMENT,  -- auto-assigned
+    Code          TEXT     NOT NULL UNIQUE,            -- e.g., 'log_filters'
+    Description   TEXT     NOT NULL,
+    Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
+    CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
+    UpdatedUtc    TEXT     NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_ComboType_UpdateUtc
+AFTER UPDATE ON ComboType
+BEGIN
+  UPDATE ComboType SET UpdatedUtc = datetime('now') WHERE ComboTypeId = NEW.ComboTypeId;
+END;
+
+CREATE TABLE IF NOT EXISTS ComboDetail (
+    ComboDetailId INTEGER  PRIMARY KEY AUTOINCREMENT,  -- auto-assigned
+    ComboTypeId   INTEGER  NOT NULL,                   -- FK to ComboType
+    Seq           INTEGER  NOT NULL,                   -- display order
+    Code          TEXT     NOT NULL,                   -- stable item code (e.g., 'SMOKE')
+    Description   TEXT     NOT NULL,                   -- display text
+    Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
+    CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
+    UpdatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (ComboTypeId) REFERENCES ComboType (ComboTypeId) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ComboDetail_Type_Seq
+    ON ComboDetail (ComboTypeId, Seq);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ComboDetail_Type_Code
+    ON ComboDetail (ComboTypeId, Code);
+
+CREATE INDEX IF NOT EXISTS ix_ComboDetail_TypeActiveSeq
+    ON ComboDetail (ComboTypeId, Active, Seq);
+
+CREATE TRIGGER IF NOT EXISTS trg_ComboDetail_UpdateUtc
+AFTER UPDATE ON ComboDetail
+BEGIN
+  UPDATE ComboDetail
+     SET UpdatedUtc = datetime('now')
+   WHERE ComboDetailId = NEW.ComboDetailId;
+END;
 
 -- ---------------------------------------------------------------------------
 -- Table: Category
@@ -98,70 +149,60 @@ SELECT 'Political Forums', 'Political forum logins', 1
 WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Political Forums');
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItem  (CategoryItem_* -> CI_*, secrets moved to CI_SecretMeta)
+-- Table: CategoryItem
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItem (
     ItemId               INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Key         INTEGER NOT NULL
                               REFERENCES Category (Category_Key) ON DELETE CASCADE,
 
-    CI_Name              TEXT    NOT NULL,         -- button label in the grid
-    CI_Notes             TEXT,                     -- non-secret notes (plain text)
-
-    -- Encrypted, viewable-but-not-searchable extras (AEAD-encrypted JSON):
-    -- Example (before encryption):
-    -- {"username":"...","email":"...","acctNbr":"...","licenseKey":"...","filePath":"...","secqa":[{"q":"...","a":"..."}]}
+    CI_Name              TEXT    NOT NULL,
+    CI_Notes             TEXT,
     CI_SecretMeta        BLOB,
 
-    -- Timestamps (UTC as Unix epoch)
     CI_CreateUTC         INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC         INTEGER NOT NULL DEFAULT (strftime('%s','now')),
 
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
-
-    -- Optional (redundant if you use secqa count in JSON)
     CI_NbrSecurityQuestions INTEGER DEFAULT 0,
 
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
 
--- Helpful index when listing items by category
 CREATE INDEX IF NOT EXISTS IX_CategoryItem_Category ON CategoryItem(Category_Key);
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItemPasswordHistory  (columns prefixed CIPaH_)
+-- Table: CategoryItemPasswordHistory
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
     CIPaH_PwHistId   INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CIPaH_CreatedAt  INTEGER NOT NULL,               -- Unix epoch
-    CIPaH_Version    INTEGER NOT NULL DEFAULT 1,     -- Crypto/key version
-    CIPaH_Password   BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext (envelope)
+    CIPaH_Version    INTEGER NOT NULL DEFAULT 1,
+    CIPaH_Password   BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
     CIPaH_PadLen     INTEGER
 );
 
--- Indexes (grouped with table)
 CREATE INDEX IF NOT EXISTS IX_CIPaH_Item_CreatedAt_Desc
   ON CategoryItemPasswordHistory(CIPaH_ItemId, CIPaH_CreatedAt DESC);
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItemPinHistory  (columns prefixed CIPiH_)
+-- Table: CategoryItemPinHistory
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItemPinHistory (
     CIPiH_PinHistId  INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPiH_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CIPiH_CreatedAt  INTEGER NOT NULL,               -- Unix epoch
-    CIPiH_Version    INTEGER NOT NULL DEFAULT 1,     -- Crypto/key version
-    CIPiH_Pin        BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext (envelope)
+    CIPiH_Version    INTEGER NOT NULL DEFAULT 1,
+    CIPiH_Pin        BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
     CIPiH_PadLen     INTEGER
 );
 
--- Indexes (grouped with table)
 CREATE INDEX IF NOT EXISTS IX_CIPiH_Item_CreatedAt_Desc
   ON CategoryItemPinHistory(CIPiH_ItemId, CIPiH_CreatedAt DESC);
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItemSecurityQuestions  (columns prefixed CISQ_)
+-- Table: CategoryItemSecurityQuestions
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItemSecurityQuestions (
     CISQ_SecQId    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,28 +224,31 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.0.0', strftime('%Y-%m-%d %H:%M:%S','now'), 'Initial schema creation (Category spelling fixed)', 1
+SELECT '1.2.0',
+       strftime('%Y-%m-%d %H:%M:%S','now'),
+       'Schema refresh: Category* corrected; add universal ComboType/ComboDetail (AUTOINCREMENT) and seed log filters.',
+       1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 -- ---------------------------------------------------------------------------
--- Table: Logs (canonical dev schema v1)
+-- Table: Logs
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
     WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     CreatedUtc    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    Level         TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','ERROR','FATAL','WARNING')),
+    Level         TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','WARNING','ERROR','FATAL')),
     Source        TEXT,
     EventCode     TEXT,
     SessionId     TEXT    NOT NULL DEFAULT '',
-    LoginId       TEXT,                       -- GUID per successful login
-    ItemId        INTEGER,                    -- affected item (no FK until review)
+    LoginId       TEXT,
+    ItemId        INTEGER,
     MachineId     TEXT,
-    DeviceMake    TEXT,                       -- e.g., Dell
-    DeviceModel   TEXT,                       -- e.g., XPS 15 9520
-    OSVersion     TEXT,                       -- e.g., Windows 11 23H2
-    DeviceIdHash  TEXT,                       -- salted SHA-256 hex
-    InstallType   TEXT,                       -- "Installed" | "Portable"
+    DeviceMake    TEXT,
+    DeviceModel   TEXT,
+    OSVersion     TEXT,
+    DeviceIdHash  TEXT,
+    InstallType   TEXT,
     AppVersion    TEXT    NOT NULL DEFAULT '',
     IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
     Payload       BLOB,        -- AES-256-GCM: nonce(12)|ciphertext|tag(16)
@@ -214,7 +258,6 @@ CREATE TABLE IF NOT EXISTS Logs (
     StackHash     TEXT
 );
 
--- Helpful indexes
 CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc        ON Logs(CreatedUtc);
 CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc_Desc   ON Logs(CreatedUtc DESC);
 CREATE INDEX IF NOT EXISTS IX_Logs_Level             ON Logs(Level);
@@ -224,7 +267,7 @@ CREATE INDEX IF NOT EXISTS IX_Logs_IsCrash           ON Logs(IsCrash);
 CREATE INDEX IF NOT EXISTS IX_Logs_StackHash         ON Logs(StackHash);
 
 -- ---------------------------------------------------------------------------
--- Table: AppSettings (key/value store)
+-- Table: AppSettings (key/value)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS AppSettings (
     Key            TEXT NOT NULL,
@@ -237,7 +280,7 @@ CREATE TABLE IF NOT EXISTS AppSettings (
 );
 CREATE INDEX IF NOT EXISTS IX_AppSettings_Key ON AppSettings(Key);
 
--- Seed defaults
+-- Seed defaults (idempotent)
 INSERT INTO AppSettings (Key, Scope, Value, ValueType, Description, LastUpdatedUtc)
 SELECT 'Portable.Enabled','Global','false','bool','Run in portable mode',strftime('%s','now')
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.Enabled' AND Scope='Global');
@@ -255,7 +298,41 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- ---------------------------------------------------------------------------
--- Views (point to new column names)
+-- SEED: Universal dropdowns (idempotent; no manual IDs)
+-- ---------------------------------------------------------------------------
+
+-- Ensure the log filter family exists
+INSERT OR IGNORE INTO ComboType (Code, Description, Active)
+VALUES ('log_filters', 'Filters for the Logs UI', 1);
+
+-- Optionally, another family for categories (left here as example; safe if kept)
+INSERT OR IGNORE INTO ComboType (Code, Description, Active)
+VALUES ('category_types', 'Category types in vault UI', 1);
+
+-- Insert log filter items by resolving ComboTypeId dynamically
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1
+  FROM ComboType t WHERE t.Code = 'log_filters';
+
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, 'EARLY_FAIL',       'Early Failure',      1
+  FROM ComboType t WHERE t.Code = 'log_filters';
+
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, 'CATEGORY_INSERTED','Category Inserted',  1
+  FROM ComboType t WHERE t.Code = 'log_filters';
+
+-- Example category types (optional)
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, 'personal', 'Personal', 1
+  FROM ComboType t WHERE t.Code = 'category_types';
+
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, 'work',     'Work',     1
+  FROM ComboType t WHERE t.Code = 'category_types';
+
+-- ---------------------------------------------------------------------------
+-- VIEWS (recreate)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
@@ -280,6 +357,21 @@ CREATE VIEW IF NOT EXISTS vw_CurrentPin AS
     ) latest
       ON h.CIPiH_ItemId = latest.CIPiH_ItemId
      AND h.CIPiH_CreatedAt = latest.MaxCreated;
+
+-- Active-only convenience views for dropdowns
+DROP VIEW IF EXISTS vComboTypeActive;
+CREATE VIEW IF NOT EXISTS vComboTypeActive AS
+SELECT ComboTypeId, Code, Description
+  FROM ComboType
+ WHERE Active = 1;
+
+DROP VIEW IF EXISTS vComboDetailActive;
+CREATE VIEW IF NOT EXISTS vComboDetailActive AS
+SELECT d.ComboDetailId, d.ComboTypeId, t.Code AS TypeCode, d.Seq, d.Code, d.Description
+  FROM ComboDetail d
+  JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+ WHERE t.Active = 1 AND d.Active = 1
+ ORDER BY d.ComboTypeId, d.Seq;
 
 COMMIT;
 

@@ -32,6 +32,8 @@ namespace Utilities.Sql
             "Logs_Exists_BySig.sql",
             "Logs_Select_All.sql",
             "Logs_Select_ById.sql",
+            "Logs_Select_Page_Filter.sql",
+            "ComboDetail_SelectByType.sql",
             "Logs_Select_Page.sql"
         };
 
@@ -47,6 +49,8 @@ namespace Utilities.Sql
             "InsertCategory.sql",
             "Logs_Select_All.sql",
             "Logs_Select_ById.sql",
+            "Logs_Select_Page_Filter.sql",
+            "ComboDetail_SelectByType.sql",
             "Logs_Select_Page.sql"
             // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
         };
