@@ -126,10 +126,6 @@ namespace MWPV.Services
             return v?.ToString() ?? "dev";
         }
 
-        /// <summary>
-        /// Forward-only JSON appender. Serializes the supplied DTO with AppJson options,
-        /// stores as UTF-8 bytes, and marks PayloadFmt = "json".
-        /// </summary>
         public static long AppendJson(
             string level,
             string source,
@@ -144,7 +140,6 @@ namespace MWPV.Services
             bool isCrash = false,
             Func<SqliteConnection>? openAppConnection = null)
         {
-            // Use the central AppJson options for stability across writers
             var json = Encoding.UTF8.GetBytes(AppJson.Serialize(dto, pretty: false));
 
             var req = new RequestV3
@@ -168,7 +163,6 @@ namespace MWPV.Services
             return Insert(req, openAppConnection);
         }
 
-        // Convenience overload for your AppJson.LogPayloadDto
         public static long AppendJson(
             string level,
             string source,
@@ -188,10 +182,6 @@ namespace MWPV.Services
         // READ
         // =====================================================================
 
-        /// <summary>
-        /// Rows for the grid (no payload).
-        /// Backed by Logs_Select_Page.sql (@limit, @offset).
-        /// </summary>
         public static IReadOnlyList<global::MWPV.Models.Logs> SelectPage(
             int offset,
             int limit,
@@ -234,10 +224,62 @@ namespace MWPV.Services
             return result;
         }
 
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectPageFiltered(
+            int offset,
+            int limit,
+            string? filterCode,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
+            var result = new List<global::MWPV.Models.Logs>();
+
+            try
+            {
+                using var cn = openAppConnection();
+                using var cmd = cn.CreateCommand();
+
+                var sql = SqlCagegory.GetSql("Logs_Select_Page_Filter.sql");
+                if (string.IsNullOrWhiteSpace(sql))
+                    throw new InvalidOperationException("SQL not loaded: Logs_Select_Page_Filter.sql");
+                cmd.CommandText = sql;
+
+                var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
+                var pOffset = cmd.CreateParameter(); pOffset.ParameterName = "@offset"; pOffset.Value = offset; cmd.Parameters.Add(pOffset);
+
+                var filterParam = cmd.CreateParameter();
+                filterParam.ParameterName = "@filter_code";
+                filterParam.Value = string.IsNullOrWhiteSpace(filterCode) ? DBNull.Value : filterCode!;
+                cmd.Parameters.Add(filterParam);
+
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    result.Add(new global::MWPV.Models.Logs
+                    {
+                        Id = Convert.ToInt64(r["Id"], CultureInfo.InvariantCulture),
+                        CreatedUtc = r["CreatedUtc"] as string ?? "",
+                        Level = r["Level"] as string ?? "",
+                        Source = r["Source"] as string ?? "",
+                        EventCode = r["EventCode"] as string ?? ""
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LOGS][SelectPageFiltered][FAIL] {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return result;
+        }
+
         public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(
             int limit = 200,
             Func<SqliteConnection>? openAppConnection = null)
             => SelectPage(offset: 0, limit: limit, openAppConnection);
+
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(string? filterCode, int limit = 200,
+            Func<SqliteConnection>? openAppConnection = null)
+            => SelectPageFiltered(offset: 0, limit: limit, filterCode: filterCode, openAppConnection);
 
         // ---- Details DTO returned to the window ----
         public sealed class LogDetailsRecord
@@ -249,16 +291,9 @@ namespace MWPV.Services
             public string EventCode { get; init; } = "";
             public string? PayloadFmt { get; init; }
             public int PayloadSize { get; init; }
-
-            /// <summary>
-            /// Decoded text for json/text payloads; null for encrypted/unknown formats.
-            /// </summary>
             public string? Payload { get; init; }
         }
 
-        /// <summary>
-        /// Full record for details (includes payload blob, decoded to text when json/text).
-        /// </summary>
         public static LogDetailsRecord? SelectById(long id, Func<SqliteConnection>? openAppConnection = null)
         {
             openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
@@ -309,6 +344,88 @@ namespace MWPV.Services
         }
 
         // =====================================================================
+        // Filter options (ComboType/ComboDetail) via packed SQL
+        // =====================================================================
+
+        // Legacy lightweight DTO (kept for backward-compat in existing callers)
+        public sealed class ComboItem
+        {
+            public int Id { get; init; }              // ComboDet
+            public string Code { get; init; } = "";
+            public string Description { get; init; } = "";
+            public int Seq { get; init; }
+        }
+
+        /// <summary>
+        /// New: return full model rows for a given ComboType.Code (e.g., "log_filters").
+        /// SQL: ComboDetail_SelectByType.sql
+        /// </summary>
+        public static IReadOnlyList<global::MWPV.Models.ComboDetail> GetComboDetailsByType(
+            string comboTypeCode,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
+            var list = new List<global::MWPV.Models.ComboDetail>();
+
+            try
+            {
+                using var cn = openAppConnection();
+                using var cmd = cn.CreateCommand();
+
+                var sql = SqlCagegory.GetSql("ComboDetail_SelectByType.sql");
+                if (string.IsNullOrWhiteSpace(sql))
+                    throw new InvalidOperationException("SQL not loaded: ComboDetail_SelectByType.sql");
+                cmd.CommandText = sql;
+
+                cmd.Parameters.AddWithValue("@type_code", comboTypeCode);
+
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    list.Add(new global::MWPV.Models.ComboDetail
+                    {
+                        ComboDet = SafeGetInt32(r, "ComboDet"),
+                        ComboTyp = SafeGetInt32(r, "ComboTyp"),
+                        Seq = SafeGetInt32(r, "Seq"),
+                        Code = ReadString(r, "Code") ?? "",
+                        Description = ReadString(r, "Description") ?? "",
+                        Active = SafeGetInt32(r, "Active"),
+                        CreatedUtc = ReadString(r, "CreatedUtc") ?? "",
+                        UpdatedUtc = ReadString(r, "UpdatedUtc") ?? ""
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LOGS][GetComboDetailsByType:{comboTypeCode}][FAIL] {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return list;
+        }
+
+        /// <summary>
+        /// Back-compat wrapper: map model rows to the legacy lightweight DTO.
+        /// </summary>
+        public static IReadOnlyList<ComboItem> GetComboItems(
+            string comboTypeCode,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            var rows = GetComboDetailsByType(comboTypeCode, openAppConnection);
+            var list = new List<ComboItem>(rows.Count);
+            foreach (var r in rows)
+            {
+                list.Add(new ComboItem
+                {
+                    Id = r.ComboDet,
+                    Code = r.Code,
+                    Description = r.Description,
+                    Seq = r.Seq
+                });
+            }
+            return list;
+        }
+
+        // =====================================================================
         // Helpers
         // =====================================================================
 
@@ -321,9 +438,6 @@ namespace MWPV.Services
                 case "json":
                 case "text":
                     return Encoding.UTF8.GetString(bytes);
-
-                // For encrypted/unknown formats, do not attempt to decode as text.
-                // Example: "gcm-json-v1" remains null here; the viewer can show a hint.
                 default:
                     return null;
             }
@@ -334,6 +448,13 @@ namespace MWPV.Services
             var ord = SafeOrdinal(r, name);
             if (ord < 0 || r.IsDBNull(ord)) return null;
             return r.GetString(ord);
+        }
+
+        private static int SafeGetInt32(SqliteDataReader r, string name)
+        {
+            var ord = SafeOrdinal(r, name);
+            if (ord < 0 || r.IsDBNull(ord)) return 0;
+            return r.GetInt32(ord);
         }
 
         private static int? ReadInt32Nullable(SqliteDataReader r, string name)
