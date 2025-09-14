@@ -4,113 +4,22 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
+    <!-- Pull in shared brushes -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="..\Common\LocalBrushes.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!-- =======================
          GLOBAL SIZES & PADDING
          ======================= -->
-    <sys:Double x:Key="StdButtonWidth">130</sys:Double>
-    <sys:Double x:Key="StdButtonHeight">20</sys:Double>
-    <Thickness  x:Key="StdButtonPadding">10,6,10,6</Thickness>
+    <!-- Original standard button size (used by pills, defaults, etc.) -->
+    <sys:Double   x:Key="StdButtonWidth">130</sys:Double>
+    <sys:Double   x:Key="StdButtonHeight">20</sys:Double>
+    <Thickness    x:Key="StdButtonPadding">10,6,10,6</Thickness>
 
-    <sys:Double x:Key="FatButtonHeight">28</sys:Double>
-    <Thickness  x:Key="FatButtonPadding">16,6,16,6</Thickness>
-
-    <!-- =======================
-         SHARED BRUSHES (inline)
-         ======================= -->
-    <!-- Primary (green) -->
-    <LinearGradientBrush x:Key="PrimaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#008A00" Offset="0"/>
-        <GradientStop Color="#BFFFCF" Offset="0.5"/>
-        <GradientStop Color="#008A00" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="PrimaryHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#00C800" Offset="0"/>
-        <GradientStop Color="#D9FFD9" Offset="0.5"/>
-        <GradientStop Color="#00C800" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="PrimaryPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#006400" Offset="0"/>
-        <GradientStop Color="#A0E8A0" Offset="0.5"/>
-        <GradientStop Color="#006400" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- Secondary (neutral gray) -->
-    <LinearGradientBrush x:Key="SecondaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#E3E3E3" Offset="0"/>
-        <GradientStop Color="#FFFFFF" Offset="0.5"/>
-        <GradientStop Color="#E3E3E3" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="SecondaryHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#B0B0B0" Offset="0"/>
-        <GradientStop Color="#F0F0F0" Offset="0.5"/>
-        <GradientStop Color="#B0B0B0" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="SecondaryPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#C8C8C8" Offset="0"/>
-        <GradientStop Color="#ECECEC" Offset="0.5"/>
-        <GradientStop Color="#C8C8C8" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- Danger (red) -->
-    <LinearGradientBrush x:Key="DangerNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#D60000" Offset="0"/>
-        <GradientStop Color="#FFCCCC" Offset="0.5"/>
-        <GradientStop Color="#D60000" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="DangerHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#FF1A1A" Offset="0"/>
-        <GradientStop Color="#FFD9D9" Offset="0.5"/>
-        <GradientStop Color="#FF1A1A" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="DangerPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#A80000" Offset="0"/>
-        <GradientStop Color="#FFB3B3" Offset="0.5"/>
-        <GradientStop Color="#A80000" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- Nav / Category (blue) -->
-    <LinearGradientBrush x:Key="NavNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#2B6CFF" Offset="0"/>
-        <GradientStop Color="#BBD1FF" Offset="0.5"/>
-        <GradientStop Color="#2B6CFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="NavHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#4A82FF" Offset="0"/>
-        <GradientStop Color="#D5E0FF" Offset="0.5"/>
-        <GradientStop Color="#4A82FF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="NavPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#1949B3" Offset="0"/>
-        <GradientStop Color="#A9BFFF" Offset="0.5"/>
-        <GradientStop Color="#1949B3" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- Item (purple) -->
-    <LinearGradientBrush x:Key="ItemNormalBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#6A0DAD" Offset="0"/>
-        <GradientStop Color="#D1B3FF" Offset="0.5"/>
-        <GradientStop Color="#6A0DAD" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="ItemHoverBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#7F26C9" Offset="0"/>
-        <GradientStop Color="#E0CCFF" Offset="0.5"/>
-        <GradientStop Color="#7F26C9" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="ItemPressedBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#4B007F" Offset="0"/>
-        <GradientStop Color="#C2A3FF" Offset="0.5"/>
-        <GradientStop Color="#4B007F" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- Disabled + focus -->
-    <LinearGradientBrush x:Key="DisabledBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#C9C9C9" Offset="0"/>
-        <GradientStop Color="#E2E2E2" Offset="0.5"/>
-        <GradientStop Color="#C9C9C9" Offset="1"/>
-    </LinearGradientBrush>
-    <SolidColorBrush x:Key="DisabledForeground" Color="#7A7A7A"/>
-    <SolidColorBrush x:Key="FocusBorder" Color="#3B82F6"/>
-    <SolidColorBrush x:Key="ShadowStroke" Color="#33000000"/>
+    <!-- Taller “action” variant (fat buttons) -->
+    <sys:Double   x:Key="FatButtonHeight">28</sys:Double>
+    <Thickness    x:Key="FatButtonPadding">16,6,16,6</Thickness>
 
     <!-- =======================
          BASE TEMPLATE (130×20)
@@ -145,6 +54,7 @@
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Grid>
 
+                        <!-- VSM -->
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">
@@ -209,11 +119,13 @@
     <!-- =======================
          SIZE / PURPOSE VARIANTS
          ======================= -->
+    <!-- Fat action buttons (use on Refresh/Close/Add Category/Prev/Next) -->
     <Style x:Key="ActionFat" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Height" Value="{StaticResource FatButtonHeight}"/>
         <Setter Property="Padding" Value="{StaticResource FatButtonPadding}"/>
     </Style>
 
+    <!-- Neutral action (gray) — keeps standard size unless combined with ActionFat -->
     <Style x:Key="ActionButton" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource SecondaryNormalBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
@@ -231,6 +143,7 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Dialog buttons (green/gray/red). Combine with ActionFat where you want the tall look -->
     <Style x:Key="DialogPrimary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource PrimaryNormalBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
@@ -282,7 +195,7 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Category / Item pills -->
+    <!-- Category / Item pills — identical size for consistency -->
     <Style x:Key="CategoryPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Background" Value="{StaticResource NavNormalBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
@@ -351,11 +264,12 @@
     </Style>
 
     <!-- =======================
-         ROUND 24×24 DETAILS BTN (existing)
+         ROUND 24×24 DETAILS BTN
          ======================= -->
     <Style x:Key="DialogPrimaryCheckSmall"
            TargetType="Button"
            BasedOn="{StaticResource RoundedButtonBase}">
+        <!-- remove the 130×20 from the base -->
         <Setter Property="Width" Value="24"/>
         <Setter Property="Height" Value="24"/>
         <Setter Property="Padding" Value="0"/>
@@ -384,22 +298,36 @@
 
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal"/>
+                                <VisualState x:Name="Normal">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </VisualState>
                                 <VisualState x:Name="MouseOver">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0.18" Duration="0:0:0.12"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.08"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0"    Duration="0:0:0.06"/>
                                         <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0.22" Duration="0:0:0.06"/>
                                     </Storyboard>
                                 </VisualState>
-                                <VisualState x:Name="Disabled"/>
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"  Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
+                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.06"/>
+                                    </Storyboard>
+                                </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="FocusStates">
                                 <VisualState x:Name="Unfocused"/>
-                                <VisualState x:Name="Focused"/>
+                                <VisualState x:Name="Focused">
+                                    <Storyboard/>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Border>
@@ -419,6 +347,7 @@
             </Setter.Value>
         </Setter>
 
+        <!-- glyph color on hover/press -->
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
@@ -434,134 +363,4 @@
             </Trigger>
         </Style.Triggers>
     </Style>
-
-    <!-- =======================
-         NEW: SQUARE ITEM ICON BUTTONS (purple, white glyphs)
-         ======================= -->
-    <!-- Base square icon style -->
-    <Style x:Key="ItemIconButtonBase" TargetType="Button">
-        <Setter Property="Width" Value="20"/>
-        <Setter Property="Height" Value="20"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="Margin" Value="2"/>
-        <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="White"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="SnapsToDevicePixels" Value="True"/>
-        <Setter Property="UseLayoutRounding" Value="True"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4"
-                            SnapsToDevicePixels="True">
-                        <Grid>
-                            <Border x:Name="HoverOverlay"  CornerRadius="4" Background="#40FFFFFF" Opacity="0"/>
-                            <Border x:Name="PressedOverlay" CornerRadius="4" Background="#20000000" Opacity="0"/>
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal"/>
-                                <VisualState x:Name="MouseOver">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0.18" Duration="0:0:0.10"/>
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="Pressed">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0" Duration="0:0:0.06"/>
-                                        <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         To="0.22" Duration="0:0:0.06"/>
-                                    </Storyboard>
-                                </VisualState>
-                                <VisualState x:Name="Disabled"/>
-                            </VisualStateGroup>
-                            <VisualStateGroup x:Name="FocusStates">
-                                <VisualState x:Name="Unfocused"/>
-                                <VisualState x:Name="Focused"/>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </Border>
-
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="bd" Property="Background" Value="{StaticResource DisabledBrush}"/>
-                            <Setter Property="Foreground" Value="{StaticResource DisabledForeground}"/>
-                            <Setter TargetName="bd" Property="BorderBrush" Value="#33000000"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-
-    <!-- 20×20 default -->
-    <Style x:Key="ItemIconButton20" TargetType="Button" BasedOn="{StaticResource ItemIconButtonBase}">
-        <Setter Property="Width" Value="20"/>
-        <Setter Property="Height" Value="20"/>
-        <Setter Property="FontSize" Value="12"/>
-    </Style>
-
-    <!-- 16×16 compact -->
-    <Style x:Key="ItemIconButton16" TargetType="Button" BasedOn="{StaticResource ItemIconButtonBase}">
-        <Setter Property="Width" Value="16"/>
-        <Setter Property="Height" Value="16"/>
-        <Setter Property="FontSize" Value="10"/>
-    </Style>
-
-    <!-- Convenience presets (set Content glyphs) -->
-    <!-- 20×20 -->
-    <Style x:Key="ItemIconEdit20" TargetType="Button" BasedOn="{StaticResource ItemIconButton20}">
-        <Setter Property="Content" Value="&#xE70F;"/>
-        <!-- Edit -->
-        <Setter Property="ToolTip" Value="Edit"/>
-    </Style>
-    <Style x:Key="ItemIconCopy20" TargetType="Button" BasedOn="{StaticResource ItemIconButton20}">
-        <Setter Property="Content" Value="&#xE8C8;"/>
-        <!-- Copy -->
-        <Setter Property="ToolTip" Value="Copy"/>
-    </Style>
-    <Style x:Key="ItemIconView20" TargetType="Button" BasedOn="{StaticResource ItemIconButton20}">
-        <Setter Property="Content" Value="&#xE8A7;"/>
-        <!-- View -->
-        <Setter Property="ToolTip" Value="View"/>
-    </Style>
-
-    <!-- 16×16 -->
-    <Style x:Key="ItemIconEdit16" TargetType="Button" BasedOn="{StaticResource ItemIconButton16}">
-        <Setter Property="Content" Value="&#xE70F;"/>
-        <Setter Property="ToolTip" Value="Edit"/>
-    </Style>
-    <Style x:Key="ItemIconCopy16" TargetType="Button" BasedOn="{StaticResource ItemIconButton16}">
-        <Setter Property="Content" Value="&#xE8C8;"/>
-        <Setter Property="ToolTip" Value="Copy"/>
-    </Style>
-    <Style x:Key="ItemIconView16" TargetType="Button" BasedOn="{StaticResource ItemIconButton16}">
-        <Setter Property="Content" Value="&#xE8A7;"/>
-        <Setter Property="ToolTip" Value="View"/>
-    </Style>
-
 </ResourceDictionary>
