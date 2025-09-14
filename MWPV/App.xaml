@@ -10,11 +10,10 @@
                  (order matters: brushes first, then consumers)
                  ======================= -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- Same-assembly pack URIs -->
-                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml" />
-                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuCombo.TitleClassic.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-
             <!-- =======================
                  APP-WIDE BRUSHES & TOKENS
                  ======================= -->

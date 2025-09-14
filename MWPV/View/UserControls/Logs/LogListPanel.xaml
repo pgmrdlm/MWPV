@@ -1,8 +1,9 @@
 ﻿<UserControl x:Class="MWPV.View.UserControls.LogListPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Local resources: round 24x24 button -->
+    <!-- Local resources -->
     <UserControl.Resources>
+        <!-- 24x24 round action button (reuses your DialogPrimary base) -->
         <Style x:Key="Round24Button" TargetType="Button" BasedOn="{StaticResource DialogPrimary}">
             <Setter Property="Width" Value="24"/>
             <Setter Property="Height" Value="24"/>
@@ -37,6 +38,41 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- DataGrid column header style: match title bar -->
+        <!-- Adjust the hex below if your title bar brush differs -->
+        <Style x:Key="LogHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#8B0000"/>
+            <!-- deep red like the title bar -->
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="BorderBrush" Value="#660000"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="Blue"/>
+                    <!-- hover to blue text -->
+                    <Setter Property="Cursor" Value="Hand"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Row style (unchanged except explicit selected colors) -->
+        <Style x:Key="LogRowStyle" TargetType="DataGridRow">
+            <Setter Property="Background" Value="Bisque"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#CDE3FF"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Background="Bisque">
@@ -68,41 +104,9 @@
                   ScrollViewer.CanContentScroll="True"
                   ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ItemsSource}"
                   SelectedItem="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=SelectedItem, Mode=TwoWay}"
-                  SelectionChanged="dgLogs_SelectionChanged">
-
-            <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="#FFEED5"/>
-                    <Setter Property="Foreground" Value="Black"/>
-                    <Setter Property="FontWeight" Value="SemiBold"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                    <Setter Property="BorderBrush" Value="#FFD8B8"/>
-                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                    <Setter Property="Padding" Value="6,4"/>
-                    <Style.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Foreground" Value="DarkBlue"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.ColumnHeaderStyle>
-
-            <DataGrid.RowStyle>
-                <Style TargetType="DataGridRow">
-                    <Setter Property="Background" Value="Bisque"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Foreground" Value="Black"/>
-                    <Setter Property="SnapsToDevicePixels" Value="True"/>
-                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#CDE3FF"/>
-                            <Setter Property="Foreground" Value="Black"/>
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </DataGrid.RowStyle>
+                  SelectionChanged="dgLogs_SelectionChanged"
+                  ColumnHeaderStyle="{StaticResource LogHeaderStyle}"
+                  RowStyle="{StaticResource LogRowStyle}">
 
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="80">

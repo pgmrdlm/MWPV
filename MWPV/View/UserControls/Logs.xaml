@@ -35,16 +35,73 @@
                        VerticalAlignment="Center"
                        Margin="0,0,6,0"/>
 
-            <!-- Filter combo -->
-            <ComboBox x:Name="cmbType"
-                      Grid.Column="4"
-                      Width="190"
-                      VerticalAlignment="Center"
-                      DisplayMemberPath="Description"
-                      SelectedValuePath="Code"
-                      SelectionChanged="Type_SelectionChanged"/>
+                <!-- 🔻 Only styles the dropdown items; leaves the closed box as-is -->
+                <!-- Closed box with rounded corners -->
+                <Border Grid.Column="4"
+                    CornerRadius="4"
+                    Background="{StaticResource SecondaryNormalBrush}"
+                    BorderBrush="#8A8A8A"
+                    BorderThickness="1">
+                    <ComboBox x:Name="cmbType"
+                        Width="190"
+                        Background="Transparent"   
+                        BorderThickness="0"
+                        VerticalAlignment="Center"
+                        DisplayMemberPath="Description"
+                        SelectedValuePath="Code"
+                        SelectionChanged="Type_SelectionChanged">
 
-            <!-- Title centered across the whole toolbar -->
+                        <!-- ⬇ local dropdown styling only -->
+                        <ComboBox.Resources>
+                            <!-- Title-like colors -->
+                            <SolidColorBrush x:Key="DropBg"           Color="#7A0000"/>
+                            <SolidColorBrush x:Key="DropBgHover"      Color="#8E1A1A"/>
+                            <SolidColorBrush x:Key="DropBgSelected"   Color="#5C0000"/>
+                            <SolidColorBrush x:Key="DropHoverText"    Color="#2B6CFF"/>
+
+                            <!-- 2) Round each dropdown item -->
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Background" Value="{StaticResource DropBg}"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                <Setter Property="Padding" Value="10,6"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ComboBoxItem">
+                                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="6"
+                                    Margin="2,2,2,2">
+                                                <ContentPresenter
+                                    Margin="8,4"
+                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource DropBgHover}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource DropHoverText}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource DropBgSelected}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Foreground" Value="#90FFFFFF"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ComboBox.Resources>
+                    </ComboBox>
+                </Border>
+
+
+
+
+                <!-- Title centered across the whole toolbar -->
             <TextBlock Grid.ColumnSpan="6"
                        Text="Log Display"
                        FontWeight="SemiBold"
