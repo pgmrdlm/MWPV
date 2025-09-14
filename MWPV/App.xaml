@@ -5,18 +5,26 @@
     <Application.Resources>
         <ResourceDictionary>
 
-            <!-- Theme resources -->
+            <!-- =======================
+                 THEME RESOURCES
+                 (order matters: brushes first, then consumers)
+                 ======================= -->
             <ResourceDictionary.MergedDictionaries>
-                <!-- If your assembly name is MWPV, this relative path is fine -->
-                <ResourceDictionary Source="Themes/Buttons/Buttons.xaml" />
+                <!-- Same-assembly pack URIs -->
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- App-wide brushes & tokens -->
+            <!-- =======================
+                 APP-WIDE BRUSHES & TOKENS
+                 ======================= -->
             <SolidColorBrush x:Key="BrandMaroon" Color="#8B0000" />
             <SolidColorBrush x:Key="DialogBackgroundBrush" Color="Bisque" />
             <CornerRadius   x:Key="DialogCornerRadius">8</CornerRadius>
 
-            <!-- Window defaults -->
+            <!-- =======================
+                 WINDOW DEFAULTS
+                 ======================= -->
             <Style TargetType="{x:Type Window}">
                 <Setter Property="SnapsToDevicePixels" Value="True" />
                 <Setter Property="UseLayoutRounding"  Value="True" />
@@ -24,14 +32,18 @@
                 <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             </Style>
 
-            <!-- Text defaults -->
+            <!-- =======================
+                 TEXT DEFAULTS
+                 ======================= -->
             <Style TargetType="{x:Type TextBlock}">
                 <Setter Property="SnapsToDevicePixels" Value="True" />
                 <Setter Property="TextOptions.TextRenderingMode"  Value="ClearType" />
                 <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             </Style>
 
-            <!-- Tooltip defaults -->
+            <!-- =======================
+                 TOOLTIP DEFAULTS
+                 ======================= -->
             <Style TargetType="{x:Type ToolTip}">
                 <Setter Property="SnapsToDevicePixels" Value="True" />
                 <Setter Property="Padding" Value="8,6" />

@@ -1,0 +1,103 @@
+﻿<!-- Themes/Common/LocalBrushes.xaml -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- =======================
+         SHARED BRUSHES
+         ======================= -->
+
+    <!-- Primary (green) -->
+    <LinearGradientBrush x:Key="PrimaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#008A00" Offset="0"/>
+        <GradientStop Color="#BFFFCF" Offset="0.5"/>
+        <GradientStop Color="#008A00" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00C800" Offset="0"/>
+        <GradientStop Color="#D9FFD9" Offset="0.5"/>
+        <GradientStop Color="#00C800" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#006400" Offset="0"/>
+        <GradientStop Color="#A0E8A0" Offset="0.5"/>
+        <GradientStop Color="#006400" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Secondary (neutral gray) -->
+    <LinearGradientBrush x:Key="SecondaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#E3E3E3" Offset="0"/>
+        <GradientStop Color="#FFFFFF" Offset="0.5"/>
+        <GradientStop Color="#E3E3E3" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SecondaryHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#B0B0B0" Offset="0"/>
+        <GradientStop Color="#F0F0F0" Offset="0.5"/>
+        <GradientStop Color="#B0B0B0" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SecondaryPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#C8C8C8" Offset="0"/>
+        <GradientStop Color="#ECECEC" Offset="0.5"/>
+        <GradientStop Color="#C8C8C8" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Danger (red) -->
+    <LinearGradientBrush x:Key="DangerNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#D60000" Offset="0"/>
+        <GradientStop Color="#FFCCCC" Offset="0.5"/>
+        <GradientStop Color="#D60000" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DangerHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FF1A1A" Offset="0"/>
+        <GradientStop Color="#FFD9D9" Offset="0.5"/>
+        <GradientStop Color="#FF1A1A" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DangerPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#A80000" Offset="0"/>
+        <GradientStop Color="#FFB3B3" Offset="0.5"/>
+        <GradientStop Color="#A80000" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Nav / Category (blue) -->
+    <LinearGradientBrush x:Key="NavNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#2B6CFF" Offset="0"/>
+        <GradientStop Color="#BBD1FF" Offset="0.5"/>
+        <GradientStop Color="#2B6CFF" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="NavHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#4A82FF" Offset="0"/>
+        <GradientStop Color="#D5E0FF" Offset="0.5"/>
+        <GradientStop Color="#4A82FF" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="NavPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#1949B3" Offset="0"/>
+        <GradientStop Color="#A9BFFF" Offset="0.5"/>
+        <GradientStop Color="#1949B3" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Item (purple) -->
+    <LinearGradientBrush x:Key="ItemNormalBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6A0DAD" Offset="0"/>
+        <GradientStop Color="#D1B3FF" Offset="0.5"/>
+        <GradientStop Color="#6A0DAD" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ItemHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#7F26C9" Offset="0"/>
+        <GradientStop Color="#E0CCFF" Offset="0.5"/>
+        <GradientStop Color="#7F26C9" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ItemPressedBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#4B007F" Offset="0"/>
+        <GradientStop Color="#C2A3FF" Offset="0.5"/>
+        <GradientStop Color="#4B007F" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Disabled + focus -->
+    <LinearGradientBrush x:Key="DisabledBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#C9C9C9" Offset="0"/>
+        <GradientStop Color="#E2E2E2" Offset="0.5"/>
+        <GradientStop Color="#C9C9C9" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="DisabledForeground" Color="#7A7A7A"/>
+    <SolidColorBrush x:Key="FocusBorder" Color="#3B82F6"/>
+    <SolidColorBrush x:Key="ShadowStroke" Color="#33000000"/>
+</ResourceDictionary>
