@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 
 namespace MWPV.View.UserControls
 {
@@ -10,11 +11,31 @@ namespace MWPV.View.UserControls
             InitializeComponent();
         }
 
-        // Wire your XAML like:
-        // <MenuItem Header="_Logs" Click="mnuToolsViewLogs_Click"/>
+        // NOTE: In XAML, set:
+        //   Placement="Custom"
+        //   CustomPopupPlacementCallback="OnPopupPlacement"
+        //   IsOpen="{TemplateBinding IsSubmenuOpen}"
+        //
+        // This callback right-aligns the submenu to its parent header and drops it directly below.
+        // We use a tiny inset from the right edge to soften the visual.
+        private const double RightInset = 6.0; // set to 0 for perfectly flush alignment
+
+        private static CustomPopupPlacement[] OnPopupPlacement(Size popupSize, Size targetSize, Point offset)
+        {
+            // x: align popup's right edge to header's right edge, minus a small inset
+            // y: place just below the header
+            var point = new Point(targetSize.Width - popupSize.Width - RightInset, targetSize.Height);
+
+            return new[]
+            {
+                new CustomPopupPlacement(point, PopupPrimaryAxis.Horizontal)
+            };
+        }
+
+        // Tools ▸ View Logs...
         private void mnuToolsViewLogs_Click(object sender, RoutedEventArgs e)
         {
-            if (Window.GetWindow(this) is MWPV.MainWindow mw)
+            if (Window.GetWindow(this) is MainWindow mw)
             {
                 mw.ShowLogsPanel();
             }

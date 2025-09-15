@@ -56,7 +56,7 @@
                     <TextBlock VerticalAlignment="Center"
                                Foreground="White"
                                FontWeight="SemiBold"
-                               Text="Create Key file and Password for MWPV"/>
+                               Text="MWPV Password and Key File Entry"/>
 
                     <StackPanel DockPanel.Dock="Right"
                                 Orientation="Horizontal"
@@ -260,7 +260,7 @@
                              TextAlignment="Center"
                              VerticalContentAlignment="Top"
                              IsReadOnly="True"
-                             Background="#10FF0000"
+                             Background="Transparent"
                              Foreground="Red"
                              BorderThickness="0"/>
 
