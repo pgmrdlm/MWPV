@@ -12,7 +12,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
-                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuCombo.TitleClassic.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/ComboBoxTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <!-- =======================
                  APP-WIDE BRUSHES & TOKENS

@@ -1,0 +1,70 @@
+﻿<!-- Themes/MenuCombo/ComboBoxTheme.xaml -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- =========================================================
+       Minimal, safe theme:
+       - Do NOT retemplate ComboBox (keeps default popup behavior)
+       - Scope popup tray color via SystemColors keys (style-local)
+       - Rounded item rows using your maroon brushes
+       - Brushes come from LocalBrushes.xaml:
+         ComboDropItemBrush, ComboDropItemHoverBrush,
+         ComboDropItemSelectedBrush, ComboDropHoverTextBrush
+     ========================================================= -->
+
+    <!-- Rounded dropdown items -->
+    <Style x:Key="FilterComboItemStyle" TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Background" Value="{StaticResource ComboDropItemBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd"
+                  Background="{TemplateBinding Background}"
+                  CornerRadius="6"
+                  Margin="2">
+                        <ContentPresenter Margin="8,4"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                      Value="{StaticResource ComboDropItemHoverBrush}"/>
+                            <Setter Property="Foreground"
+                      Value="{StaticResource ComboDropHoverTextBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background"
+                      Value="{StaticResource ComboDropItemSelectedBrush}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="#90FFFFFF"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Opt-in ComboBox style (no ControlTemplate) -->
+    <Style x:Key="FilterComboStyle" TargetType="ComboBox">
+        <!-- Scope the popup tray & border to THIS ComboBox only -->
+        <Style.Resources>
+            <!-- White tray killer: make the popup background maroon -->
+            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#7A0000"/>
+            <!-- Hide default popup border -->
+            <SolidColorBrush x:Key="{x:Static SystemColors.WindowFrameBrushKey}" Color="Transparent"/>
+        </Style.Resources>
+
+        <!-- Keep default template so dropdown works as usual -->
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource FilterComboItemStyle}"/>
+    </Style>
+
+</ResourceDictionary>

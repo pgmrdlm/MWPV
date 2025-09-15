@@ -100,4 +100,20 @@
     <SolidColorBrush x:Key="DisabledForeground" Color="#7A7A7A"/>
     <SolidColorBrush x:Key="FocusBorder" Color="#3B82F6"/>
     <SolidColorBrush x:Key="ShadowStroke" Color="#33000000"/>
+
+    <!-- =======================
+         COMBO DROPDOWN (MAROON)
+         Used by the Log filter ComboBox dropdown items
+         ======================= -->
+    <!-- Tray/background for the popup list -->
+    <SolidColorBrush x:Key="ComboDropTrayBrush" Color="#7A0000"/>
+    <!-- Individual item backgrounds -->
+    <SolidColorBrush x:Key="ComboDropItemBrush"        Color="#7A0000"/>
+    <SolidColorBrush x:Key="ComboDropItemHoverBrush"   Color="#8E1A1A"/>
+    <SolidColorBrush x:Key="ComboDropItemSelectedBrush" Color="#5C0000"/>
+    <!-- Hover text (blue) -->
+    <SolidColorBrush x:Key="ComboDropHoverTextBrush"   Color="#2B6CFF"/>
+    <!-- Optional: hide any popup border if needed -->
+    <SolidColorBrush x:Key="ComboDropBorderBrush"      Color="Transparent"/>
+
 </ResourceDictionary>
