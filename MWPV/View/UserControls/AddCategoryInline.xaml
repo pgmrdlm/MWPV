@@ -53,6 +53,12 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <!-- Name -->
+                    <RowDefinition Height="10"/>
+                    <!-- gap -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Category Type -->
+                    <RowDefinition Height="10"/>
+                    <!-- gap -->
                     <RowDefinition Height="Auto"/>
                     <!-- Description -->
                 </Grid.RowDefinitions>
@@ -69,17 +75,41 @@
                          MaxLength="17"
                          Background="White"
                          Foreground="Black"
-                         Margin="0,0,0,10"
+                         Margin="0,0,0,0"
                          TextChanged="tbCategoryName_TextChanged"/>
 
+                <!-- Category Type -->
+                <Label Grid.Row="2" Grid.Column="0"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       FontWeight="Bold"
+                       Content="Category Type:"/>
+
+                <!-- Themed Combo (like logs) -->
+                <Border Grid.Row="2" Grid.Column="2"
+                        CornerRadius="4"
+                        Background="{StaticResource SecondaryNormalBrush}"
+                        BorderBrush="#8A8A8A"
+                        BorderThickness="1"
+                        Height="28">
+                    <ComboBox x:Name="cmbCategoryType"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              VerticalAlignment="Center"
+                              DisplayMemberPath="Description"
+                              SelectedValuePath="Code"
+                              Style="{StaticResource FilterComboStyle}"
+                              MaxDropDownHeight="360"/>
+                </Border>
+
                 <!-- Description -->
-                <Label Grid.Row="1" Grid.Column="0"
+                <Label Grid.Row="4" Grid.Column="0"
                        HorizontalAlignment="Right"
                        VerticalAlignment="Top"
                        FontWeight="Bold"
                        Content="Category Description:"/>
                 <TextBox x:Name="tbCategoryDescription"
-                         Grid.Row="1" Grid.Column="2"
+                         Grid.Row="4" Grid.Column="2"
                          Height="220"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"

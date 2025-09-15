@@ -14,7 +14,23 @@ namespace MWPV.View.UserControls
         public AddCategoryInline()
         {
             InitializeComponent();
-            Loaded += (_, __) => tbCategoryName?.Focus();
+            Loaded += AddCategoryInline_Loaded;
+        }
+
+        private void AddCategoryInline_Loaded(object? sender, RoutedEventArgs e)
+        {
+            tbCategoryName?.Focus();
+
+            try
+            {
+                // Bind combo to available category types (provided by CategoryService)
+                // Expecting objects with { Code, Description } to satisfy DisplayMemberPath/SelectedValuePath
+                cmbCategoryType.ItemsSource = CategoryService.LoadCategoryTypes();
+            }
+            catch (Exception ex)
+            {
+                Fail($"Error loading category types: {ex.Message}");
+            }
         }
 
         private void tbCategoryName_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
@@ -27,7 +43,7 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // Validate name (centralized rules)
+                // Validate name
                 var nameRes = InputGuards.ValidateCategoryName(tbCategoryName?.Text, minLen: 4, maxLen: 17);
                 if (!nameRes.IsValid)
                 {
@@ -46,7 +62,16 @@ namespace MWPV.View.UserControls
                 }
                 var description = string.IsNullOrWhiteSpace(descRes.CleanText) ? name : descRes.CleanText;
 
-                // Duplicate check (uses corrected API name)
+                // Validate type selection
+                if (cmbCategoryType.SelectedValue == null)
+                {
+                    Fail("Please select a category type.");
+                    cmbCategoryType.Focus();
+                    return;
+                }
+                var typeCode = cmbCategoryType.SelectedValue!.ToString()!;
+
+                // Duplicate check
                 bool exists;
                 try
                 {
@@ -64,10 +89,10 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                // Insert
+                // Insert (new overload added in next file)
                 try
                 {
-                    CategoryService.InsertCategory(name, description);
+                    CategoryService.InsertCategory(name, description, typeCode);
                 }
                 catch (Exception ex)
                 {
@@ -76,7 +101,7 @@ namespace MWPV.View.UserControls
                 }
 
                 // Success
-                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description));
+                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description, typeCode));
             }
             finally
             {
@@ -124,6 +149,7 @@ namespace MWPV.View.UserControls
         {
             tbCategoryName.Text = string.Empty;
             tbCategoryDescription.Text = string.Empty;
+            cmbCategoryType.SelectedIndex = -1;
             ClearError();
             tbCategoryName.Focus();
         }
@@ -133,11 +159,13 @@ namespace MWPV.View.UserControls
     {
         public string Name { get; }
         public string? Description { get; }
+        public string TypeCode { get; }
 
-        public CategorySubmittedEventArgs(string name, string? description)
+        public CategorySubmittedEventArgs(string name, string? description, string typeCode)
         {
             Name = name;
             Description = string.IsNullOrWhiteSpace(description) ? null : description;
+            TypeCode = typeCode;
         }
     }
 }

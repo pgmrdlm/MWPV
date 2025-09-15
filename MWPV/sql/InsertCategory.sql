@@ -1,6 +1,18 @@
--- InsertCategory.sql
--- Inserts a new category with optional Description.
--- Assumes CategoryExists.sql has already checked for duplicates (case-insensitive).
+-- Inserts a new category with its type
+-- Expected params:
+--   @CategoryName  (TEXT)
+--   @Description   (TEXT)
+--   @TypeCode      (TEXT)  -- FK to ComboDetail.Code for header 'CATEGORY_TYPE'
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-VALUES (@CategoryName, @Description, 1);
+INSERT INTO Category (
+    CategoryName,
+    Description,
+    CategoryTypeCode,
+    CreatedUtc
+)
+VALUES (
+    @CategoryName,
+    @Description,
+    @TypeCode,
+    strftime('%Y-%m-%dT%H:%M:%fZ','now')
+);
