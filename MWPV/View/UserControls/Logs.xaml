@@ -61,15 +61,6 @@
          …then remove it once you see the list.
     -->
             </Border>
-
-
-
-            <!-- Title centered across the whole toolbar -->
-            <TextBlock Grid.ColumnSpan="6"
-                       Text="Log Display"
-                       FontWeight="SemiBold"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
         </Grid>
 
         <!-- Main content -->

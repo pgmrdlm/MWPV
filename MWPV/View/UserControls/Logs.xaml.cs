@@ -24,6 +24,10 @@ namespace MWPV.View.UserControls
         private string _selectedTypeCode = "ALL";
         private bool _loadedOnce;
 
+        // --- window title handling ------------------------------------------
+        private string? _origTitle;
+        private const string TitleSuffix = " – Log Display";
+
         public Logs()
         {
             InitializeComponent();
@@ -31,6 +35,7 @@ namespace MWPV.View.UserControls
             ListPanel.ItemsSource = _rows;
 
             Loaded += Logs_Loaded;
+            Unloaded += Logs_Unloaded;
             IsVisibleChanged += Logs_IsVisibleChanged;
         }
 
@@ -38,6 +43,9 @@ namespace MWPV.View.UserControls
 
         private async void Logs_Loaded(object? sender, RoutedEventArgs e)
         {
+            // Ensure the title is decorated as soon as we show
+            ApplyTitleSuffix(isActive: true);
+
             if (_loadedOnce) return;
             _loadedOnce = true;
 
@@ -47,12 +55,47 @@ namespace MWPV.View.UserControls
 
         private async void Logs_IsVisibleChanged(object? sender, DependencyPropertyChangedEventArgs e)
         {
+            // Keep title in sync with visibility of this view
+            ApplyTitleSuffix(isActive: IsVisible);
+
             if (IsVisible && _loadedOnce)
                 await LoadFirstPageAsync(silent: true);
         }
 
-        private void Close_Click(object sender, RoutedEventArgs e) =>
+        private void Logs_Unloaded(object? sender, RoutedEventArgs e)
+        {
+            // When the control is removed/swapped out, restore the title
+            ApplyTitleSuffix(isActive: false);
+        }
+
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            // If you trigger closing from inside the control, also restore
+            ApplyTitleSuffix(isActive: false);
             CloseRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        // --- title helpers ---------------------------------------------------
+
+        private void ApplyTitleSuffix(bool isActive)
+        {
+            var win = Window.GetWindow(this);
+            if (win == null) return;
+
+            if (_origTitle is null)
+                _origTitle = win.Title;
+
+            if (isActive)
+            {
+                if (!win.Title.EndsWith(TitleSuffix, StringComparison.OrdinalIgnoreCase))
+                    win.Title = $"{_origTitle}{TitleSuffix}";
+            }
+            else
+            {
+                if (_origTitle != null && win.Title != _origTitle)
+                    win.Title = _origTitle;
+            }
+        }
 
         // --- type filter -----------------------------------------------------
 
@@ -197,7 +240,6 @@ namespace MWPV.View.UserControls
                 Debug.WriteLine($"[LOGS][Details][FAIL] {ex}");
             }
         }
-
 
         // --- helper ----------------------------------------------------------
 
