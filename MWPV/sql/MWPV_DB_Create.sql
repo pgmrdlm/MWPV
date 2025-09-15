@@ -1,9 +1,10 @@
 /* ============================================================================
    MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
    ----------------------------------------------------------------------------
-   ⚠️ DANGER: This drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   Purpose: rebuild DB with corrected Category*, and universal ComboType/ComboDetail
-            for all dropdowns (AUTOINCREMENT keys; no hardcoded IDs).
+   ⚠️ DANGER: Drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
+   Purpose: Rebuild DB with Category.Category_Type (dev: no FK to ComboDetail),
+            universal ComboType/ComboDetail for dropdowns (auto IDs),
+            and Logs schema matching app (includes LoginId).
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -12,7 +13,7 @@ PRAGMA foreign_keys = OFF;
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- DROP VIEWS (drop all known)
+-- DROP VIEWS
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 DROP VIEW IF EXISTS vw_CurrentPin;
@@ -20,7 +21,7 @@ DROP VIEW IF EXISTS vComboTypeActive;
 DROP VIEW IF EXISTS vComboDetailActive;
 
 -- ---------------------------------------------------------------------------
--- DROP TABLES (be exhaustive/consistent)
+-- DROP TABLES (be exhaustive)
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS AppSettings;
 DROP TABLE IF EXISTS Logs;
@@ -55,11 +56,11 @@ PRAGMA foreign_keys = ON;
 BEGIN TRANSACTION;
 
 -- ---------------------------------------------------------------------------
--- Universal dropdowns: ComboType, ComboDetail (AUTOINCREMENT PKs)
+-- Universal dropdowns: ComboType, ComboDetail
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ComboType (
-    ComboTypeId   INTEGER  PRIMARY KEY AUTOINCREMENT,  -- auto-assigned
-    Code          TEXT     NOT NULL UNIQUE,            -- e.g., 'log_filters'
+    ComboTypeId   INTEGER  PRIMARY KEY AUTOINCREMENT,
+    Code          TEXT     NOT NULL UNIQUE,
     Description   TEXT     NOT NULL,
     Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
     CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
@@ -73,10 +74,10 @@ BEGIN
 END;
 
 CREATE TABLE IF NOT EXISTS ComboDetail (
-    ComboDetailId INTEGER  PRIMARY KEY AUTOINCREMENT,  -- auto-assigned
-    ComboTypeId   INTEGER  NOT NULL,                   -- FK to ComboType
+    ComboDetailId INTEGER  PRIMARY KEY AUTOINCREMENT,
+    ComboTypeId   INTEGER  NOT NULL,
     Seq           INTEGER  NOT NULL,                   -- display order
-    Code          TEXT     NOT NULL,                   -- stable item code (e.g., 'SMOKE')
+    Code          TEXT     NOT NULL,                   -- stable item code
     Description   TEXT     NOT NULL,                   -- display text
     Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
     CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
@@ -102,54 +103,93 @@ BEGIN
 END;
 
 -- ---------------------------------------------------------------------------
--- Table: Category
+-- Seed: Combo families and items
+-- ---------------------------------------------------------------------------
+INSERT OR IGNORE INTO ComboType (Code, Description, Active)
+VALUES ('log_filters','Filters for the Logs UI',1),
+       ('category_types','Category types in vault UI',1);
+
+-- log_filters
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, 'EARLY_FAIL',       'Early Failure',      1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, 'CATEGORY_INSERTED','Category Inserted',  1 FROM ComboType t WHERE t.Code='log_filters';
+
+-- category_types (authoritative set — "Web Pages" removed; default is Seq=0)
+DELETE FROM ComboDetail
+ WHERE ComboTypeId=(SELECT ComboTypeId FROM ComboType WHERE Code='category_types');
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, '0', 'Subscribed Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, '1', 'Paid Subscription Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE t.Code='category_types';
+
+-- ---------------------------------------------------------------------------
+-- Table: Category  (now with Category_Type INTEGER)
+--   Dev choice: no FK to ComboDetail to keep reseeds simple; app enforces.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
     Category_Description TEXT,
+    Category_Type        INTEGER NOT NULL,  -- intended to reference ComboDetailId (category_types)
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- Seed default categories (idempotent)
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Encryption', 'Encrypted local Files and or folders', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Encryption');
+-- Seed default categories (baked default = category_types.Seq=0)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Encryption','Encrypted local Files and or folders',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Financial', 'Financial web sites or applications (Banking/Credit Card)', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Financial');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Financial','Financial web sites or applications (Banking/Credit Card)',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Applications', 'Computer/Phone application logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Applications');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Applications','Computer/Phone application logins',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Application Forums', 'Login to forums that support applications', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Application Forums');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Application Forums','Login to forums that support applications',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Goverment', 'Any government web site login', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Goverment');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Goverment','Any government web site login',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Astro Forums', 'Logins for Astro forum web sites', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Astro Forums');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Astro Forums','Logins for Astro forum web sites',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Google Accounts', 'Logins for Gmail, Google Drive, or other Google services', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Google Accounts');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Google Accounts','Logins for Gmail, Google Drive, or other Google services',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Non Google Email', 'Non Google Email logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Non Google Email');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Non Google Email','Non Google Email logins',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
-INSERT INTO Category (Category_Name, Category_Description, IsActive)
-SELECT 'Political Forums', 'Political forum logins', 1
-WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name='Political Forums');
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Political Forums','Political forum logins',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=0), 1;
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItem
+-- Table: CategoryItem  (inherits type via Category join; keep FK to Category)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItem (
     ItemId               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,7 +222,6 @@ CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
     CIPaH_Password   BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
     CIPaH_PadLen     INTEGER
 );
-
 CREATE INDEX IF NOT EXISTS IX_CIPaH_Item_CreatedAt_Desc
   ON CategoryItemPasswordHistory(CIPaH_ItemId, CIPaH_CreatedAt DESC);
 
@@ -197,7 +236,6 @@ CREATE TABLE IF NOT EXISTS CategoryItemPinHistory (
     CIPiH_Pin        BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
     CIPiH_PadLen     INTEGER
 );
-
 CREATE INDEX IF NOT EXISTS IX_CIPiH_Item_CreatedAt_Desc
   ON CategoryItemPinHistory(CIPiH_ItemId, CIPiH_CreatedAt DESC);
 
@@ -224,14 +262,14 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.2.0',
+SELECT '1.3.0',
        strftime('%Y-%m-%d %H:%M:%S','now'),
-       'Schema refresh: Category* corrected; add universal ComboType/ComboDetail (AUTOINCREMENT) and seed log filters.',
+       'Add Category.Category_Type (dev: no FK); universal ComboType/ComboDetail; Logs includes LoginId.',
        1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 -- ---------------------------------------------------------------------------
--- Table: Logs
+-- Table: Logs (matches app expectations incl. LoginId)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,40 +336,6 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- ---------------------------------------------------------------------------
--- SEED: Universal dropdowns (idempotent; no manual IDs)
--- ---------------------------------------------------------------------------
-
--- Ensure the log filter family exists
-INSERT OR IGNORE INTO ComboType (Code, Description, Active)
-VALUES ('log_filters', 'Filters for the Logs UI', 1);
-
--- Optionally, another family for categories (left here as example; safe if kept)
-INSERT OR IGNORE INTO ComboType (Code, Description, Active)
-VALUES ('category_types', 'Category types in vault UI', 1);
-
--- Insert log filter items by resolving ComboTypeId dynamically
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1
-  FROM ComboType t WHERE t.Code = 'log_filters';
-
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 1, 'EARLY_FAIL',       'Early Failure',      1
-  FROM ComboType t WHERE t.Code = 'log_filters';
-
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 2, 'CATEGORY_INSERTED','Category Inserted',  1
-  FROM ComboType t WHERE t.Code = 'log_filters';
-
--- Example category types (optional)
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 0, 'personal', 'Personal', 1
-  FROM ComboType t WHERE t.Code = 'category_types';
-
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 1, 'work',     'Work',     1
-  FROM ComboType t WHERE t.Code = 'category_types';
-
--- ---------------------------------------------------------------------------
 -- VIEWS (recreate)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
@@ -358,7 +362,6 @@ CREATE VIEW IF NOT EXISTS vw_CurrentPin AS
       ON h.CIPiH_ItemId = latest.CIPiH_ItemId
      AND h.CIPiH_CreatedAt = latest.MaxCreated;
 
--- Active-only convenience views for dropdowns
 DROP VIEW IF EXISTS vComboTypeActive;
 CREATE VIEW IF NOT EXISTS vComboTypeActive AS
 SELECT ComboTypeId, Code, Description
@@ -375,6 +378,6 @@ SELECT d.ComboDetailId, d.ComboTypeId, t.Code AS TypeCode, d.Seq, d.Code, d.Desc
 
 COMMIT;
 
--- Optional tidy-up
+-- Optional maintenance
 -- VACUUM;
 -- ANALYZE;
