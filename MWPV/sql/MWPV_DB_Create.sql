@@ -134,59 +134,87 @@ SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE
 -- Table: Category  (now with Category_Type INTEGER)
 --   Dev choice: no FK to ComboDetail to keep reseeds simple; app enforces.
 -- ---------------------------------------------------------------------------
+-- =========================================================
+-- Category table (with CreatedUtc in ISO-8601 UTC)
+-- =========================================================
 CREATE TABLE IF NOT EXISTS Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
     Category_Description TEXT,
-    Category_Type        INTEGER NOT NULL,  -- intended to reference ComboDetailId (category_types)
+    Category_Type        INTEGER NOT NULL,         -- intended to reference ComboDetailId (category_types)
+    CreatedUtc           TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
+-- =========================================================
 -- Seed default categories (baked default = category_types.Seq=0)
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+-- Note: we set CreatedUtc explicitly; DEFAULT would also work,
+-- but this keeps the column list explicit and future-proof.
+-- =========================================================
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Encryption','Encrypted local Files and or folders',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Financial','Financial web sites or applications (Banking/Credit Card)',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Applications','Computer/Phone application logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Application Forums','Login to forums that support applications',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Goverment','Any government web site login',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Astro Forums','Logins for Astro forum web sites',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Google Accounts','Logins for Gmail, Google Drive, or other Google services',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Non Google Email','Non Google Email logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
 
-INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Political Forums','Political forum logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0), 1;
+        WHERE t.Code='category_types' AND d.Seq=0),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
+       1;
+
 
 -- ---------------------------------------------------------------------------
 -- Table: CategoryItem  (inherits type via Category join; keep FK to Category)

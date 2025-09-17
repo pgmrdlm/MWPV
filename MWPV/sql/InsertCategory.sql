@@ -5,9 +5,9 @@
 --   @TypeCode      (TEXT)  -- FK to ComboDetail.Code for header 'CATEGORY_TYPE'
 
 INSERT INTO Category (
-    CategoryName,
-    Description,
-    CategoryTypeCode,
+    Category_Name,
+    Category_Description,
+    Category_Type,
     CreatedUtc
 )
 VALUES (

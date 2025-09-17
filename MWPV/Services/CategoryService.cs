@@ -12,6 +12,13 @@ namespace MWPV.Services
 {
     public static class CategoryService
     {
+        // Small DTO for combo binding
+        public sealed class CategoryTypeOption
+        {
+            public string Code { get; init; } = "";
+            public string Description { get; init; } = "";
+        }
+
         // --------------------------------------------------------------------
         // Helpers
         // --------------------------------------------------------------------
@@ -22,6 +29,19 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(sql))
                 throw new InvalidOperationException($"SQL not loaded: {assetName}");
             return sql;
+        }
+
+        private static string? TryLoadSql(string assetName)
+        {
+            try
+            {
+                var sql = SqlCagegory.GetSql(assetName);
+                return string.IsNullOrWhiteSpace(sql) ? null : sql;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         // --------------------------------------------------------------------
@@ -81,6 +101,49 @@ namespace MWPV.Services
             return rows;
         }
 
+        /// <summary>
+        /// Load list of category types for combo binding.
+        /// Expects SQL to return columns: Code, Description.
+        /// </summary>
+        public static ObservableCollection<CategoryTypeOption> LoadCategoryTypes()
+        {
+            var rows = new ObservableCollection<CategoryTypeOption>();
+            try
+            {
+                // Prefer specific name; allow alternate in case a different asset id is used.
+                var sql = TryLoadSql("SelectCategoryTypes.sql")
+                          ?? TryLoadSql("Select_Combo_CategoryTypes.sql")
+                          ?? LoadSqlRequired("SelectCategoryTypes.sql"); // throws if none found
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                using var r = cmd.ExecuteReader();
+                int iCode = r.GetOrdinal("Code");
+                int iDesc = r.GetOrdinal("Description");
+
+                while (r.Read())
+                {
+                    rows.Add(new CategoryTypeOption
+                    {
+                        Code = r.IsDBNull(iCode) ? "" : r.GetString(iCode),
+                        Description = r.IsDBNull(iDesc) ? "" : r.GetString(iDesc),
+                    });
+                }
+
+#if DEBUG
+                try { Debug.WriteLine($"[CAT_TYPES][LOAD] rows={rows.Count}"); } catch { }
+#endif
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading category types");
+            }
+
+            return rows;
+        }
+
         // --------------------------------------------------------------------
         // Exists
         // --------------------------------------------------------------------
@@ -113,6 +176,21 @@ namespace MWPV.Services
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription)
         {
+            InsertCategoryCore(newCategory, newDescription, categoryTypeCode: null);
+        }
+
+        /// <summary>
+        /// Overload to support a category type code from the Add Category UI.
+        /// Matches InsertCategory.sql which expects @TypeCode (TEXT),
+        /// resolves it to ComboDetailId inside SQL, and sets CreatedUtc via strftime(...).
+        /// </summary>
+        public static void InsertCategory(string newCategory, string? newDescription, string? categoryTypeCode)
+        {
+            InsertCategoryCore(newCategory, newDescription, categoryTypeCode);
+        }
+
+        private static void InsertCategoryCore(string newCategory, string? newDescription, string? categoryTypeCode)
+        {
             if (newCategory is null) throw new ArgumentNullException(nameof(newCategory));
 
             var check = InputGuards.ValidateCategoryName(newCategory, minLen: 4, maxLen: 17);
@@ -122,6 +200,11 @@ namespace MWPV.Services
             string cleanName = check.CleanName;
             string? desc = Security.Utility.InputGuards.NormalizeFreeText(newDescription, maxLen: 512);
             if (string.IsNullOrWhiteSpace(desc)) desc = cleanName;
+
+            // Type code from the combo (not sensitive; trim only). Required by SQL.
+            string? typeCode = string.IsNullOrWhiteSpace(categoryTypeCode) ? null : categoryTypeCode.Trim();
+            if (string.IsNullOrWhiteSpace(typeCode))
+                throw new ArgumentException("Category type is required.", nameof(categoryTypeCode));
 
             if (DoesCategoryExist(cleanName))
             {
@@ -135,8 +218,6 @@ namespace MWPV.Services
                         dto: new
                         {
                             message = $"Duplicate category '{cleanName}' detected; insert skipped",
-                            source = "CategoryService",
-                            eventCode = "CATEGORY_DUPLICATE",
                             occurredUtc = DateTime.UtcNow,
                             categoryName = cleanName
                         }
@@ -146,6 +227,7 @@ namespace MWPV.Services
                 return;
             }
 
+            // Use the single canonical insert that expects @TypeCode (TEXT).
             var insertSql = LoadSqlRequired("InsertCategory.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
@@ -158,11 +240,15 @@ namespace MWPV.Services
                 cmd.Transaction = tx;
                 cmd.CommandText = insertSql;
 
-                // Forward-only: canonical param names expected by InsertCategory.sql
+                // Param names must match InsertCategory.sql
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
+                cmd.Parameters.AddWithValue("@TypeCode", typeCode);
 
-                cmd.ExecuteNonQuery();
+                // Do NOT set @CreatedUtc here; the SQL sets it with strftime(...)
+                int affected = cmd.ExecuteNonQuery();
+                if (affected == 0)
+                    throw new InvalidOperationException("Insert failed (no rows affected). Check @TypeCode mapping.");
             }
 
             using (var last = conn.CreateCommand())
@@ -184,11 +270,10 @@ namespace MWPV.Services
                     dto: new
                     {
                         message = $"Category '{cleanName}' inserted",
-                        source = "CategoryService",
-                        eventCode = "CATEGORY_INSERTED",
                         occurredUtc = DateTime.UtcNow,
                         categoryId = newId,
-                        categoryName = cleanName
+                        categoryName = cleanName,
+                        typeCode = typeCode
                     }
                 );
             }
