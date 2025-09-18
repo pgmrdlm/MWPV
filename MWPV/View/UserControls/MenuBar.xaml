@@ -26,8 +26,8 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Menu">
                         <Border Background="{TemplateBinding Background}"
-                    BorderBrush="{StaticResource MenuBorder}"
-                    BorderThickness="0,0,0,1">
+                                BorderBrush="{StaticResource MenuBorder}"
+                                BorderThickness="0,0,0,1">
                             <ItemsPresenter Margin="8,0"/>
                         </Border>
                     </ControlTemplate>
@@ -37,7 +37,6 @@
 
         <!-- MENU ITEM (top-level & submenu) -->
         <Style TargetType="MenuItem">
-            <!-- default text color -->
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Padding" Value="{StaticResource TopPadding}"/>
@@ -47,24 +46,24 @@
                         <Grid SnapsToDevicePixels="True">
                             <!-- Top-level header (File/Tools/Help) -->
                             <Border x:Name="TopItemBg"
-                      Background="Transparent"
-                      CornerRadius="6"
-                      Padding="{TemplateBinding Padding}"
-                      Margin="2,0"
-                      Visibility="Collapsed">
+                                    Background="Transparent"
+                                    CornerRadius="6"
+                                    Padding="{TemplateBinding Padding}"
+                                    Margin="2,0"
+                                    Visibility="Collapsed">
                                 <ContentPresenter ContentSource="Header"
-                                  RecognizesAccessKey="True"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                             </Border>
 
                             <!-- Submenu item visuals -->
                             <Border x:Name="SubItemBg"
-                      Background="Transparent"
-                      CornerRadius="6"
-                      Padding="{StaticResource SubPadding}"
-                      Margin="2"
-                      Visibility="Collapsed">
+                                    Background="Transparent"
+                                    CornerRadius="6"
+                                    Padding="{StaticResource SubPadding}"
+                                    Margin="2"
+                                    Visibility="Collapsed">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -73,32 +72,32 @@
                                     </Grid.ColumnDefinitions>
 
                                     <ContentPresenter Grid.Column="0"
-                                    Margin="0,0,8,0"
-                                    VerticalAlignment="Center"
-                                    ContentSource="Icon"/>
+                                                      Margin="0,0,8,0"
+                                                      VerticalAlignment="Center"
+                                                      ContentSource="Icon"/>
                                     <ContentPresenter Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    RecognizesAccessKey="True"
-                                    ContentSource="Header"/>
+                                                      VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True"
+                                                      ContentSource="Header"/>
                                     <ContentPresenter Grid.Column="2"
-                                    Margin="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    ContentSource="InputGestureText"/>
+                                                      Margin="8,0,0,0"
+                                                      VerticalAlignment="Center"
+                                                      ContentSource="InputGestureText"/>
                                 </Grid>
                             </Border>
 
                             <!-- Submenu popup -->
                             <Popup x:Name="PART_Popup"
-                     Placement="Bottom"
-                     StaysOpen="False"
-                     AllowsTransparency="True"
-                     Focusable="False"
-                     IsOpen="{TemplateBinding IsSubmenuOpen}">
+                                   Placement="Bottom"
+                                   StaysOpen="False"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}">
                                 <Border Background="{StaticResource PopupBg}"
-                        BorderBrush="{StaticResource PopupBorder}"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Padding="4">
+                                        BorderBrush="{StaticResource PopupBorder}"
+                                        BorderThickness="0"
+                                        CornerRadius="8"
+                                        Padding="4">
                                     <StackPanel IsItemsHost="True" Margin="2"/>
                                 </Border>
                             </Popup>
@@ -126,22 +125,27 @@
                                 <Setter Property="Padding" Value="{StaticResource SubPadding}"/>
                             </Trigger>
 
-                            <!-- SUPER OBVIOUS: change text color on hover/open/pressed -->
+                            <!-- Hover / keyboard highlight -->
                             <Trigger Property="IsHighlighted" Value="True">
-                                <!-- keep your bg if you want; main cue is the text -->
-                                <!--<Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
-                <Setter TargetName="SubItemBg" Property="Background" Value="{StaticResource ItemHover}"/>-->
-                                <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
+                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
+                                <Setter TargetName="SubItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
+                                <!-- shared accent -->
+                                <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
 
+                            <!-- Open submenu (top-level active) -->
                             <Trigger Property="IsSubmenuOpen" Value="True">
-                                <!--<Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemPressed}"/>-->
-                                <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
+                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
 
+                            <!-- Pressed -->
                             <Trigger Property="IsPressed" Value="True">
-                                <!--<Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemPressed}"/>-->
-                                <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
+                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemPressed}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
 
                             <Trigger Property="IsEnabled" Value="False">
@@ -167,7 +171,7 @@
                 <MenuItem Header="_Reset DB Encryption" Name="mnuToolsReset"/>
                 <Separator/>
                 <MenuItem Header="_View Logs..." Name="mnuToolsViewLogs"
-                  Click="mnuToolsViewLogs_Click"/>
+                          Click="mnuToolsViewLogs_Click"/>
             </MenuItem>
 
             <MenuItem Header="_Help"/>

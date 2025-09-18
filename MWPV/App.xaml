@@ -11,9 +11,13 @@
                  ======================= -->
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml"/>
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/InteractiveTheme.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/ComboBoxTheme.xaml"/>
+                <!-- keep this path matching where your file actually lives -->
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuTheme.xaml"/>
+                <!-- if yours is under MenuCombo instead, use this: -->
+                <!-- <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuTheme.xaml"/> -->
             </ResourceDictionary.MergedDictionaries>
 
             <!-- =======================
