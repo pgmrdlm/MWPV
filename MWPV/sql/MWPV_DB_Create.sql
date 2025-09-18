@@ -110,8 +110,8 @@ VALUES ('log_filters','Filters for the Logs UI',1),
        ('category_types','Category types in vault UI',1);
 
 -- log_filters
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1 FROM ComboType t WHERE t.Code='log_filters';
+-- INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+-- SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 1, 'EARLY_FAIL',       'Early Failure',      1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)

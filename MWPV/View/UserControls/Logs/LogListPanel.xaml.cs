@@ -1,5 +1,4 @@
-﻿// File: MWPV/View/UserControls/LogListPanel.xaml.cs
-using System.Collections;
+﻿using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -39,7 +38,7 @@ namespace MWPV.View.UserControls
             DependencyProperty.Register(nameof(StatusText), typeof(string), typeof(LogListPanel),
                 new PropertyMetadata("Page 1 • Showing 15 rows"));
 
-        // Routed Events
+        // Routed Events (Prev/Next + SelectionChanged only)
         public static readonly RoutedEvent PrevRequestedEvent =
             EventManager.RegisterRoutedEvent(nameof(PrevRequested), RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(LogListPanel));
         public event RoutedEventHandler PrevRequested { add => AddHandler(PrevRequestedEvent, value); remove => RemoveHandler(PrevRequestedEvent, value); }
@@ -47,10 +46,6 @@ namespace MWPV.View.UserControls
         public static readonly RoutedEvent NextRequestedEvent =
             EventManager.RegisterRoutedEvent(nameof(NextRequested), RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(LogListPanel));
         public event RoutedEventHandler NextRequested { add => AddHandler(NextRequestedEvent, value); remove => RemoveHandler(NextRequestedEvent, value); }
-
-        public static readonly RoutedEvent ViewRequestedEvent =
-            EventManager.RegisterRoutedEvent(nameof(ViewRequested), RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(LogListPanel));
-        public event RoutedEventHandler ViewRequested { add => AddHandler(ViewRequestedEvent, value); remove => RemoveHandler(ViewRequestedEvent, value); }
 
         public static readonly RoutedEvent SelectionChangedRoutedEvent =
             EventManager.RegisterRoutedEvent(nameof(SelectionChangedRouted), RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(LogListPanel));
@@ -62,9 +57,6 @@ namespace MWPV.View.UserControls
 
         private void _btnNext_Click(object sender, RoutedEventArgs e) =>
             RaiseEvent(new RoutedEventArgs(NextRequestedEvent));
-
-        private void ViewLog_Click(object sender, RoutedEventArgs e) =>
-            RaiseEvent(new RoutedEventArgs(ViewRequestedEvent));
 
         private void dgLogs_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
             RaiseEvent(new RoutedEventArgs(SelectionChangedRoutedEvent));
