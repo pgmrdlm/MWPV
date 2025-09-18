@@ -1,21 +1,35 @@
-﻿// Utilities/Helpers/ErrorHandler.cs — full file (modern + compat overloads)
+﻿// Utilities/Helpers/ErrorHandler.cs
+// Repo-free, pluggable sink ready, preserves existing public surface (InfoTitled/Abend overloads).
+
+#nullable enable
 using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;                     // MessageBox
-using MWPV.Services;                      // LogRepository
 using Security.Utility.Logging;           // LogSeverity + extensions
 using LogSeverity = Security.Utility.Logging.LogSeverity;
-
 
 namespace Utilities.Helpers
 {
     public enum ErrorSeverity { Info, Warning, Error, Critical }
 
+    /// <summary>
+    /// Centralized UI + diagnostic logging helper.
+    /// - Shows MessageBoxes for user-visible info/errors.
+    /// - Writes developer diagnostics to Debug output.
+    /// - (Optional) Can forward events to a caller-provided sink (e.g., DB/file) without a hard dependency.
+    /// </summary>
     public static class ErrorHandler
     {
-        private static LogRepository? _repo;
-        public static void Initialize(LogRepository repo) => _repo = repo;
+        /// <summary>
+        /// Optional async sink for forwarding log events (e.g., to DB/file). Assign at app startup if desired.
+        /// Signature: (whenUtc, level, category, message, exType, exMessage, exStack, relatedFile, contentHashHex, source)
+        /// </summary>
+        public static Func<DateTime, LogSeverity, string, string,
+                           string?, string?, string?,
+                           string?, string?, string,
+                           System.Threading.Tasks.Task>? LogSinkAsync
+        { get; set; }
 
         // -------- Core logger --------
         public static void Log(
@@ -28,37 +42,34 @@ namespace Utilities.Helpers
             string source = "app")
         {
             var sev = MapLevel(severity);
+            var now = DateTime.UtcNow;
 
-            // dev visibility
+            // Dev visibility
             try
             {
-                global::System.Diagnostics.Debug.WriteLine($"[{DateTime.UtcNow:O}] [{sev.ToShortTag()}] {category}: {message}");
-                if (ex != null) global::System.Diagnostics.Debug.WriteLine(ex.ToString());
+                System.Diagnostics.Debug.WriteLine($"[{now:O}] [{sev.ToShortTag()}] {category}: {message}");
+                if (ex != null) System.Diagnostics.Debug.WriteLine(ex.ToString());
             }
-            catch { }
+            catch { /* ignore debug channel failures */ }
 
-            // repo sink (fire-and-forget)
+            // Optional external sink (fire-and-forget)
             try
             {
-                if (_repo != null)
+                var sink = LogSinkAsync;
+                if (sink != null)
                 {
-                    _ = _repo.LogAsync(
-                        whenUtc: DateTime.UtcNow,
-                        severity: sev,
-                        category: category,
-                        message: message,
-                        relatedFile: relatedFile,
-                        exType: ex?.GetType().FullName,
-                        exMessage: ex?.Message,
-                        exStack: ex?.StackTrace ?? ex?.ToString(),
-                        contentHashHex: contentHashHex,
-                        source: source
-                    );
+                    _ = sink(now, sev, category, message,
+                             ex?.GetType().FullName,
+                             ex?.Message,
+                             ex?.StackTrace ?? ex?.ToString(),
+                             relatedFile,
+                             contentHashHex,
+                             source);
                 }
             }
-            catch (Exception repoEx)
+            catch (Exception sinkEx)
             {
-                try { global::System.Diagnostics.Debug.WriteLine($"[LOGFAIL] {repoEx}"); } catch { }
+                try { System.Diagnostics.Debug.WriteLine($"[LOGSINK FAIL] {sinkEx}"); } catch { }
             }
         }
 
@@ -76,15 +87,14 @@ namespace Utilities.Helpers
             Log(ErrorSeverity.Critical, category, message, ex, relatedFile, source: "critical");
 
         // -------- Primary UI helpers (UNAMBIGUOUS) --------
-
-        // Canonical 3-string overload (keep ONE ONLY to avoid ambiguity)
+        /// <summary>Show info dialog + log at Info level with explicit stage/category.</summary>
         public static void InfoTitled(string title, string message, string stage)
         {
             try { MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information); } catch { }
             Info(stage, message);
         }
 
-        // UI error with explicit category (stage). Distinct signature.
+        /// <summary>Show error dialog + log at Critical level with explicit category.</summary>
         public static void Abend(string title, string category, string message, Exception? ex)
         {
             try
@@ -97,31 +107,24 @@ namespace Utilities.Helpers
         }
 
         // -------- Back-compat overloads (bind old call sites) --------
-
-        // Old pattern: InfoTitled(title, message) with no stage.
         public static void InfoTitled(string title, string message)
         {
             try { MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Information); } catch { }
             Info("Info", message);
         }
 
-        // Old pattern: InfoTitled(title, message, Enum stageEnum) — e.g., EarlyFailType
         public static void InfoTitled(string title, string message, Enum stageEnum) =>
             InfoTitled(title, message, stageEnum.ToString());
 
-        // Old pattern: Abend(ex, message, stage)
         public static void Abend(Exception ex, string message, string stage) =>
             Abend("Error", stage, message, ex);
 
-        // Old pattern: Abend(ex, message)
         public static void Abend(Exception ex, string message) =>
             Abend("Error", "Abend", message, ex);
 
-        // Old pattern: Abend(ex)
         public static void Abend(Exception ex) =>
             Abend("Error", "Abend", ex.Message, ex);
 
-        // Old pattern: Abend(ex, message, Enum stageEnum)
         public static void Abend(Exception ex, string message, Enum stageEnum) =>
             Abend("Error", stageEnum.ToString(), message, ex);
 
