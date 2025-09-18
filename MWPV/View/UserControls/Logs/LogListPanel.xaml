@@ -11,10 +11,25 @@
             <Setter Property="BorderBrush" Value="#660000"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="Padding" Value="6,4"/>
+
             <Style.Triggers>
+                <!-- Hover = match menu/combo loud text -->
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="Blue"/>
+                    <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
                     <Setter Property="Cursor" Value="Hand"/>
+                </Trigger>
+
+                <!-- Pressed -->
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
+                </Trigger>
+
+                <!-- Sorted column = stay highlighted -->
+                <Trigger Property="SortDirection" Value="Ascending">
+                    <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
+                </Trigger>
+                <Trigger Property="SortDirection" Value="Descending">
+                    <Setter Property="Foreground" Value="{DynamicResource Menu.HoverFg}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
