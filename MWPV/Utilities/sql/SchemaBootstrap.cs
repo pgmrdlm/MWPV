@@ -16,18 +16,7 @@ namespace Utilities.Sql
         // Set to false if you want zero output even in DEBUG builds.
         private const bool VerboseBootstrap = true;
 
-        /// <summary>
-        /// Call this after the DB is open and after SqlCagegory.LoadAll() has loaded scripts into the secure store.
-        /// </summary>
-        public static void EnsureLogsSchema(SqliteConnection openConn)
-        {
-            if (openConn == null) throw new ArgumentNullException(nameof(openConn));
-
-            // Scripts may contain their own BEGIN/COMMIT; do NOT wrap in another transaction here.
-            ExecScriptIdempotent(openConn, SecureSql.Require("Logs_Init.sql"));
-            ExecScriptIdempotent(openConn, SecureSql.Require("Logs_Indexes.sql"));
-        }
-
+       
         private static void ExecScriptIdempotent(SqliteConnection conn, string script)
         {
             var stats = new BootstrapStats();

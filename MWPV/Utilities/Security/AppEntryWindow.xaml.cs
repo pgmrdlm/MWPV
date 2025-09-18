@@ -149,7 +149,7 @@ namespace Utilities.Security
                 {
                     Title = "Save your encrypted key archive",
                     Filter = "7-Zip archive (*.7z)|*.7z|All files (*.*)|*.*",
-                    FileName = "Key.7z",
+                    FileName = "Kb.7z",
                     InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     AddExtension = false,
                     OverwritePrompt = true
@@ -316,29 +316,6 @@ namespace Utilities.Security
                     Close();
                     return;
                 }
-
-                // 🧱 Ensure Logs schema exists (idempotent)
-                try
-                {
-                    using var openConn = DatabaseHelper.OpenConnection();
-                    SchemaBootstrap.EnsureLogsSchema(openConn);
-
-#if DEBUG
-                    // 🔎 DEBUG-only smoke test
-                    Utilities.Diagnostics.SmokeTester.Run();
-
-#endif
-                }
-                catch (Exception ex)
-                {
-                    // Non-fatal: surface a friendly message and continue
-                    ErrorHandler.InfoTitled(
-                        "Schema Bootstrap",
-                        $"Log schema bootstrap failed: {ex.Message}\n\n(This error has been logged.)",
-                        "SchemaBootstrap.EnsureLogsSchema"
-                    );
-                }
-
                 // ✅ Close the form
                 DialogResult = true;
                 Close();
