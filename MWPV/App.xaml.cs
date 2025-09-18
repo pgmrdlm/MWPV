@@ -7,7 +7,6 @@ using System.Runtime.InteropServices;
 using SevenZip;                       // path configured via SevenZipHelper
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;              // SevenZipHelper, ErrorHandler
-using MWPV.Services;                  // LogRepository
 using Utilities.Security;
 
 namespace MWPV

@@ -21,8 +21,6 @@ namespace Utilities.Sql
             "CategoryExists.sql",
             DatabaseHelper.DbPasswordKey,   // maps to DB_Password.txt in archive (secret, not SQL)
             "InsertCategory.sql",
-            "Logs_Indexes.sql",
-            "Logs_Init.sql",
             "Logs_Insert_V3.sql",
             "Logs_Select_Recent.sql",       // NEW
             "Logs_LastInsertId.sql",        // NEW
@@ -43,8 +41,6 @@ namespace Utilities.Sql
         {
             "Logs_Insert_V3.sql",
             "Logs_Select_Recent.sql",
-            "Logs_Init.sql",
-            "Logs_Indexes.sql",
             "SelectCategories.sql",
             "CategoryExists.sql",
             "InsertCategory.sql",
