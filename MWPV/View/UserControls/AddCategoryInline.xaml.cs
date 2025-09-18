@@ -1,8 +1,12 @@
-﻿using System;
+﻿// File: MWPV/View/UserControls/AddCategoryInline.xaml.cs
+using System;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using MWPV.Services;          // CategoryService
-using Security.Utility;       // InputGuards
+using MWPV.Services;               // CategoryService
+using Security.Utility;            // InputGuards
+using Utilities.Helpers;           // ErrorHandler
+using MWPV.Utilities.Json;         // AppJson
 
 namespace MWPV.View.UserControls
 {
@@ -23,8 +27,7 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // Bind combo to available category types (provided by CategoryService)
-                // Expecting objects with { Code, Description } to satisfy DisplayMemberPath/SelectedValuePath
+                // Bind combo to available category types (expects { Code, Description } objects)
                 cmbCategoryType.ItemsSource = CategoryService.LoadCategoryTypes();
             }
             catch (Exception ex)
@@ -36,14 +39,14 @@ namespace MWPV.View.UserControls
         private void tbCategoryName_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
         private void tbCategoryDescription_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
 
-        private void btnAddCategory_Click(object sender, RoutedEventArgs e)
+        private async void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
             ClearError();
             SetBusy(true);
 
             try
             {
-                // Validate name
+                // --- Validate name
                 var nameRes = InputGuards.ValidateCategoryName(tbCategoryName?.Text, minLen: 4, maxLen: 17);
                 if (!nameRes.IsValid)
                 {
@@ -52,7 +55,7 @@ namespace MWPV.View.UserControls
                 }
                 var name = nameRes.CleanName!;
 
-                // Validate description
+                // --- Validate description
                 var descRes = InputGuards.ValidateDescription(tbCategoryDescription?.Text, maxLen: 512);
                 if (!descRes.IsValid)
                 {
@@ -62,7 +65,7 @@ namespace MWPV.View.UserControls
                 }
                 var description = string.IsNullOrWhiteSpace(descRes.CleanText) ? name : descRes.CleanText;
 
-                // Validate type selection
+                // --- Validate type selection
                 if (cmbCategoryType.SelectedValue == null)
                 {
                     Fail("Please select a category type.");
@@ -71,7 +74,7 @@ namespace MWPV.View.UserControls
                 }
                 var typeCode = cmbCategoryType.SelectedValue!.ToString()!;
 
-                // Duplicate check
+                // --- Duplicate check
                 bool exists;
                 try
                 {
@@ -89,7 +92,7 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                // Insert (new overload added in next file)
+                // --- Insert
                 try
                 {
                     CategoryService.InsertCategory(name, description, typeCode);
@@ -100,7 +103,30 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                // Success
+                // --- Structured log (fire-and-forget)
+                try
+                {
+                    var payload = new AppJson.LogPayloadDto
+                    {
+                        Message = "Category inserted",
+                        Source = "AddCategoryInline",
+                        EventCode = "CATEGORY_INSERTED",
+                        OccurredUtc = DateTime.UtcNow,
+                        Context = BuildContext(new { name, description, typeCode })
+                    };
+
+                    // Keep log lightweight: serialize with persist options (no indentation)
+                    var json = AppJson.SerializeLogPayload(payload, pretty: false);
+
+                    // Use ErrorHandler to route to your repository sink
+                    ErrorHandler.Info("CategoryService", json);
+                }
+                catch
+                {
+                    // Never let logging side-effects break UX
+                }
+
+                // --- Notify host
                 Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description, typeCode));
             }
             finally
@@ -114,6 +140,8 @@ namespace MWPV.View.UserControls
             ClearError();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
+
+        // -------- UI helpers --------
 
         private void SetBusy(bool isBusy)
         {
@@ -144,14 +172,35 @@ namespace MWPV.View.UserControls
             tbCategoryName?.SelectAll();
         }
 
-        // Host can call this after a successful add or cancel
+        /// <summary>Host can call this after a successful add or cancel.</summary>
         public void ResetForm()
         {
-            tbCategoryName.Text = string.Empty;
-            tbCategoryDescription.Text = string.Empty;
-            cmbCategoryType.SelectedIndex = -1;
+            if (tbCategoryName != null) tbCategoryName.Text = string.Empty;
+            if (tbCategoryDescription != null) tbCategoryDescription.Text = string.Empty;
+            if (cmbCategoryType != null) cmbCategoryType.SelectedIndex = -1;
             ClearError();
-            tbCategoryName.Focus();
+            tbCategoryName?.Focus();
+        }
+
+        // -------- JSON helpers --------
+
+        /// <summary>
+        /// Wraps an anonymous object as a JsonElement so it fits AppJson.LogPayloadDto.Context.
+        /// </summary>
+        private static JsonElement? BuildContext(object obj)
+        {
+            try
+            {
+                // serialize with Default options, then parse to get a JsonElement
+                var json = AppJson.Serialize(obj, pretty: false);
+                using var doc = JsonDocument.Parse(json);
+                // Clone to detach from the document's lifetime
+                return doc.RootElement.Clone();
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 
