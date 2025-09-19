@@ -10,15 +10,20 @@
                  (order matters: brushes first, then consumers)
                  ======================= -->
             <ResourceDictionary.MergedDictionaries>
+                <!-- Foundation: semantic slots (do NOT hardcode colors in other files) -->
+                <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/BrandTheme.xaml"/>
+
+                <!-- Existing libraries that should use Brush.Primary/Secondary -->
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Common/LocalBrushes.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/InteractiveTheme.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Buttons/Buttons.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/ComboBoxTheme.xaml"/>
-                <!-- keep this path matching where your file actually lives -->
                 <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuTheme.xaml"/>
-                <!-- if yours is under MenuCombo instead, use this: -->
-                <!-- <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/MenuCombo/MenuTheme.xaml"/> -->
+
+                <!-- (later) Current theme LAST to override slots above -->
+                <!-- <ResourceDictionary Source="pack://application:,,,/MWPV;component/Themes/Light.xaml"/> -->
             </ResourceDictionary.MergedDictionaries>
+
 
             <!-- =======================
                  APP-WIDE BRUSHES & TOKENS

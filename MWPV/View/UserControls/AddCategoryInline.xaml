@@ -4,14 +4,16 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d">
-    <Grid Background="Bisque">
+    <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Title Bar -->
-        <Border Grid.Row="0" Background="#810000" Padding="12,0,6,0">
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Primary}"
+                Padding="12,0,6,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -54,11 +56,9 @@
                     <RowDefinition Height="Auto"/>
                     <!-- Name -->
                     <RowDefinition Height="10"/>
-                    <!-- gap -->
                     <RowDefinition Height="Auto"/>
                     <!-- Category Type -->
                     <RowDefinition Height="10"/>
-                    <!-- gap -->
                     <RowDefinition Height="Auto"/>
                     <!-- Description -->
                 </Grid.RowDefinitions>
@@ -75,7 +75,7 @@
                          MaxLength="17"
                          Background="White"
                          Foreground="Black"
-                         Margin="0,0,0,0"
+                         Margin="0"
                          TextChanged="tbCategoryName_TextChanged"/>
 
                 <!-- Category Type -->
@@ -85,10 +85,10 @@
                        FontWeight="Bold"
                        Content="Category Type:"/>
 
-                <!-- Themed Combo (like logs) -->
+                <!-- Themed Combo (wrapper kept, but transparent) -->
                 <Border Grid.Row="2" Grid.Column="2"
                         CornerRadius="4"
-                        Background="{StaticResource SecondaryNormalBrush}"
+                        Background="Transparent"
                         BorderBrush="#8A8A8A"
                         BorderThickness="1"
                         Height="28">

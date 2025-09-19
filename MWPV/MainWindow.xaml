@@ -21,28 +21,29 @@
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
 
-    <Grid Background="Bisque">
+    <!-- CHANGED: background uses theme secondary -->
+    <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
-            <!-- Title Bar -->
             <RowDefinition Height="36"/>
+            <!-- Title Bar -->
+            <RowDefinition Height="20"/>
             <!-- Menu Bar -->
-            <RowDefinition Height="20"/>
-            <!-- Panel -->
             <RowDefinition Height="Auto"/>
-            <!-- Status -->
+            <!-- Panel -->
             <RowDefinition Height="20"/>
+            <!-- Status -->
         </Grid.RowDefinitions>
 
-        <!-- TITLE BAR -->
-        <Border Grid.Row="0" Background="#810000">
+        <!-- TITLE BAR (CHANGED: uses theme primary) -->
+        <Border Grid.Row="0" Background="{DynamicResource Brush.Primary}">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <!-- icon -->
                     <ColumnDefinition Width="28"/>
-                    <!-- title / drag area -->
+                    <!-- icon -->
                     <ColumnDefinition Width="*"/>
-                    <!-- caption buttons -->
+                    <!-- title / drag area -->
                     <ColumnDefinition Width="Auto"/>
+                    <!-- caption buttons -->
                 </Grid.ColumnDefinitions>
 
                 <!-- App icon (visible in custom chrome) -->
@@ -59,7 +60,6 @@
                       MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown"
                       MouseRightButtonUp="TitleBar_OnMouseRightButtonUp">
                     <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
-                               Margin="0,0,0,0"
                                VerticalAlignment="Center"
                                Foreground="White"
                                FontWeight="SemiBold"
@@ -95,7 +95,7 @@
             </Grid>
         </Border>
 
-        <!-- Your original controls, shifted down one row -->
+        <!-- Menu & content -->
         <userControls:MenuBar Grid.Row="1"/>
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>
 

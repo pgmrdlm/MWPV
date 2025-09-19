@@ -1,4 +1,15 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    
+
+    <!-- Colors (dynamic so brushes can follow theme swaps) -->
+    <!-- DarkBlue #FF00008B -->
+    <Color x:Key="Color.Primary">Maroon</Color>
+    <!-- DarkBlue -->
+    <Color x:Key="Color.Secondary">#FFFFE4C4</Color>
+    <!-- Bisque -->
+
+    <!-- Brushes built from the colors -->
+    <SolidColorBrush x:Key="Brush.Primary"   Color="{DynamicResource Color.Primary}"/>
+    <SolidColorBrush x:Key="Brush.Secondary" Color="{DynamicResource Color.Secondary}"/>
+
 </ResourceDictionary>
