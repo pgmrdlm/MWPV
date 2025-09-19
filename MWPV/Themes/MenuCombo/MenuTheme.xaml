@@ -2,26 +2,79 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Implicit MenuItem style: hover/open/pressed → accent + bold -->
-    <Style TargetType="MenuItem">
-        <Setter Property="Foreground" Value="White"/>
+    <!-- ============================
+         Menu (implicit)
+         Transparent surface so it inherits parent
+       ============================ -->
+    <Style TargetType="Menu">
         <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Primary}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- ============================
+         MenuItem (implicit)
+         Transparent by default; text uses brand slot
+       ============================ -->
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Primary}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Cursor" Value="Arrow"/>
 
         <Style.Triggers>
+            <!-- Hover (pointer) -->
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                 <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Cursor" Value="Hand"/>
             </Trigger>
 
+            <!-- Open submenu -->
             <Trigger Property="IsSubmenuOpen" Value="True">
                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                 <Setter Property="FontWeight" Value="Bold"/>
             </Trigger>
 
+            <!-- Pressed -->
             <Trigger Property="IsPressed" Value="True">
                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                 <Setter Property="FontWeight" Value="Bold"/>
             </Trigger>
+
+            <!-- Disabled -->
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="#7F000000"/>
+            </Trigger>
         </Style.Triggers>
     </Style>
+
+    <!-- ============================
+         ContextMenu (optional, stays transparent too)
+       ============================ -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Primary}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- ============================
+         Separator (keeps a subtle line; inherits parent bg)
+       ============================ -->
+    <Style TargetType="Separator">
+        <Setter Property="Margin" Value="4,2"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Background="Transparent" Height="1" Margin="2,3">
+                        <Rectangle Height="1" Fill="#33000000"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

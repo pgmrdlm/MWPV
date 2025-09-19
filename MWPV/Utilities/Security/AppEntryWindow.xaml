@@ -17,10 +17,10 @@
 
     <!-- Brushes for password-strength meter -->
     <Window.Resources>
-        <SolidColorBrush x:Key="PwWeak" Color="#D32F2F"/>
-        <SolidColorBrush x:Key="PwFair" Color="#FBC02D"/>
-        <SolidColorBrush x:Key="PwStrong" Color="#388E3C"/>
-        <SolidColorBrush x:Key="PwVeryStrong" Color="#2E7D32"/>
+        <SolidColorBrush x:Key="PwWeak"        Color="#D32F2F"/>
+        <SolidColorBrush x:Key="PwFair"        Color="#FBC02D"/>
+        <SolidColorBrush x:Key="PwStrong"      Color="#388E3C"/>
+        <SolidColorBrush x:Key="PwVeryStrong"  Color="#2E7D32"/>
     </Window.Resources>
 
     <shell:WindowChrome.WindowChrome>
@@ -43,9 +43,9 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Title Bar -->
+            <!-- Title Bar (brand) -->
             <Border Grid.Row="0"
-                    Background="#810000"
+                    Background="{DynamicResource Brush.Primary}"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
                     Padding="10,0,8,0">
                 <DockPanel LastChildFill="True">
@@ -99,9 +99,9 @@
                 </DockPanel>
             </Border>
 
-            <!-- Content -->
+            <!-- Content (surface) -->
             <Border Grid.Row="1"
-                    Background="Bisque"
+                    Background="{DynamicResource Brush.Secondary}"
                     Padding="18">
                 <!-- 3 columns: labels/button | gutter | inputs -->
                 <Grid>
@@ -205,9 +205,7 @@
                             ToolTip="Create/Choose the encrypted key archive"
                             Margin="0,0,10,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <!-- Key glyph (MDL2 E72E) -->
                             <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72E;" Margin="0,0,8,0"/>
-                            <!-- Named so code-behind can change text depending on first-run vs login -->
                             <TextBlock x:Name="tbKeyButtonText" Text="Create Key File"/>
                         </StackPanel>
                     </Button>
@@ -264,7 +262,7 @@
                              Foreground="Red"
                              BorderThickness="0"/>
 
-                    <!-- Advisory banner -->
+                    <!-- Advisory banner (left as-is) -->
                     <Border x:Name="InfoBanner"
                             Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
                             Visibility="Visible"

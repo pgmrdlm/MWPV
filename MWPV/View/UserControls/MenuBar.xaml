@@ -7,26 +7,20 @@
              Height="22" d:DesignWidth="800">
 
     <UserControl.Resources>
-        <!-- Local-only brushes -->
-        <SolidColorBrush x:Key="MenuBg"      Color="#810000"/>
-        <SolidColorBrush x:Key="MenuBorder"  Color="#640000"/>
-        <SolidColorBrush x:Key="ItemHover"   Color="#8E1A1A"/>
-        <SolidColorBrush x:Key="ItemPressed" Color="#5C0000"/>
-        <SolidColorBrush x:Key="PopupBg"     Color="#6F0000"/>
-        <SolidColorBrush x:Key="PopupBorder" Color="#3A0000"/>
-
+        <!-- keep your spacing -->
         <Thickness x:Key="TopPadding">12,0,12,0</Thickness>
         <Thickness x:Key="SubPadding">10,6</Thickness>
 
         <!-- MENU (container) -->
         <Style TargetType="Menu">
-            <Setter Property="Background" Value="{StaticResource MenuBg}"/>
+            <!-- brand-colored bar; readable text -->
+            <Setter Property="Background" Value="{DynamicResource Brush.Primary}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Menu">
                         <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{StaticResource MenuBorder}"
+                                BorderBrush="{DynamicResource Brush.Primary}"
                                 BorderThickness="0,0,0,1">
                             <ItemsPresenter Margin="8,0"/>
                         </Border>
@@ -86,15 +80,15 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Submenu popup -->
+                            <!-- Submenu popup (keep background visible) -->
                             <Popup x:Name="PART_Popup"
                                    Placement="Bottom"
                                    StaysOpen="False"
                                    AllowsTransparency="True"
                                    Focusable="False"
                                    IsOpen="{TemplateBinding IsSubmenuOpen}">
-                                <Border Background="{StaticResource PopupBg}"
-                                        BorderBrush="{StaticResource PopupBorder}"
+                                <Border Background="{DynamicResource Brush.Primary}"
+                                        BorderBrush="{DynamicResource Brush.Primary}"
                                         BorderThickness="0"
                                         CornerRadius="8"
                                         Padding="4">
@@ -127,23 +121,19 @@
 
                             <!-- Hover / keyboard highlight -->
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
-                                <Setter TargetName="SubItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
-                                <!-- shared accent -->
+                                <!-- keep surfaces simple; accent the text -->
                                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
 
                             <!-- Open submenu (top-level active) -->
                             <Trigger Property="IsSubmenuOpen" Value="True">
-                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemHover}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>
 
                             <!-- Pressed -->
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="TopItemBg" Property="Background" Value="{StaticResource ItemPressed}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource Interactive.HoverFg}"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                             </Trigger>

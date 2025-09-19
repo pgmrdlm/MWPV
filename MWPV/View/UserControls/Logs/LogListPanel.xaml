@@ -5,8 +5,11 @@
 
         <!-- Column header style -->
         <Style x:Key="LogHeaderStyle" TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#8B0000"/>
+            <!-- brand slots -->
+            <Setter Property="Background" Value="{DynamicResource Brush.Primary}"/>
+            <!-- was #8B0000 -->
             <Setter Property="Foreground" Value="White"/>
+            <!-- keep white for now -->
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="BorderBrush" Value="#660000"/>
@@ -41,7 +44,9 @@
 
         <!-- Row style -->
         <Style x:Key="LogRowStyle" TargetType="DataGridRow">
-            <Setter Property="Background" Value="Bisque"/>
+            <!-- brand slots -->
+            <Setter Property="Background" Value="{DynamicResource Brush.Secondary}"/>
+            <!-- was Bisque -->
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="Black"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -56,7 +61,8 @@
 
     </UserControl.Resources>
 
-    <Grid Background="Bisque">
+    <!-- brand background for the panel -->
+    <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
@@ -73,8 +79,8 @@
                   CanUserResizeRows="False"
                   HeadersVisibility="Column"
                   GridLinesVisibility="None"
-                  Background="Bisque"
-                  BorderThickness="0"
+                  Background="{DynamicResource Brush.Secondary}"  
+            BorderThickness="0"
                   RowHeaderWidth="0"
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
