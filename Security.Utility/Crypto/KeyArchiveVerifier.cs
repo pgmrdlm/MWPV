@@ -1,11 +1,11 @@
-﻿// Security.Utility/Crypto/KeyArchiveVerifier.cs
-// Verifies an encrypted 7z "keyset.json" archive using SevenZipSharp.
+﻿// Verifies an encrypted 7z "keyset.json" archive using SevenZipSharp.
 
 using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using SevenZip; // Squid-Box.SevenZipSharp (1.6.x)
+using Security.Utility.Archives;       // SevenZipCore
+using SevenZip;                        // Squid-Box.SevenZipSharp (1.6.x)
 
 namespace Security.Utility.Crypto
 {
@@ -34,11 +34,18 @@ namespace Security.Utility.Crypto
 
             try
             {
+                var (ok, coreReason) = SevenZipCore.EnsureConfigured();
+                if (!ok)
+                {
+                    reason = coreReason ?? "SevenZip not configured";
+                    return false;
+                }
+
 #if DEBUG
                 System.Diagnostics.Debug.WriteLine(
                     $"[KAV] path='{archivePath}' pw='{password}' len={password?.Length ?? 0}");
 #endif
-                using var extractor = new SevenZipExtractor(archivePath, password);
+                using var extractor = SevenZipCore.CreateExtractor(archivePath, password);
 
                 // find "keyset.json" (either full path or file name)
                 var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
@@ -76,7 +83,6 @@ namespace Security.Utility.Crypto
             }
             catch (SevenZipException ex)
             {
-                // This is the most common failure path for a wrong password / unsupported archive.
                 reason = $"SevenZip:{ex.Message}";
 #if DEBUG
                 System.Diagnostics.Debug.WriteLine($"[KAV] SevenZip error: {ex.Message}");
