@@ -1,18 +1,16 @@
-﻿// Utilities/Security/ServiceSetUp.cs
-// First-run provisioning and secure loading utilities (JSON-only archive).
+﻿// First-run provisioning and secure loading utilities (JSON-only archive).
 
-using SevenZip;                       // Squid-Box.SevenZipSharp
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-
-using Utilities.Helpers;              // ErrorHandler, DatabaseHelper
-using Security.Utility.Storage;       // SecureEncryptedDataStore
-using Security.Utility.Wiping;        // SensitiveDataCleaner
-using Security.Utility.Crypto;        // KeysetJsonV2, KeysetJsonBuilder
+using Security.Utility.Archives;        // SevenZipCore
+using Security.Utility.Storage;         // SecureEncryptedDataStore
+using Security.Utility.Wiping;          // SensitiveDataCleaner
+using Security.Utility.Crypto;          // KeysetJsonV2, KeysetJsonBuilder
+using Utilities.Helpers;                // ErrorHandler, DatabaseHelper
 
 namespace Utilities.Security
 {
@@ -40,11 +38,6 @@ namespace Utilities.Security
 
         #region Database setup
 
-        /// <summary>
-        /// Ensures local root + SQL staging folder exist, initializes DB from
-        /// %LOCALAPPDATA%/MWPV/sql/MWPV_DB_Create.sql, and caches the passwordless connection string.
-        /// </summary>
-        /// <returns>Local root path on success; "error" on failure.</returns>
         public string SetUpDataBase()
         {
             try
@@ -79,7 +72,6 @@ namespace Utilities.Security
                     cmd.ExecuteNonQuery();
                 }
 
-                // Optional convenience for callers; harmless to keep.
                 SecureEncryptedDataStore.SetString("DB_String", $"Data Source={DbPath}");
             }
             catch (Exception ex)
@@ -99,10 +91,6 @@ namespace Utilities.Security
 
         #region Archive build (JSON-only -> encrypted 7z)
 
-        /// <summary>
-        /// Builds (or rebuilds) the encrypted key archive as a single "keyset.json" entry.
-        /// keyset.json includes: dbPassword (base64 UTF8), two 32-byte app keys, and ALL *.sql text.
-        /// </summary>
         public string SetUpKeyFile()
         {
             string archivePath = null!;
@@ -128,7 +116,6 @@ namespace Utilities.Security
                 if (!Directory.Exists(SqlFolder))
                     Directory.CreateDirectory(SqlFolder);
 
-                // Load all SQL files currently in staging
                 var sqlMap = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var file in Directory.EnumerateFiles(SqlFolder, "*.sql", SearchOption.TopDirectoryOnly))
                 {
@@ -137,11 +124,9 @@ namespace Utilities.Security
                     sqlMap[name] = text;
                 }
 
-                // Generate two 32-byte keys for your app (adjust as needed)
                 logPayloadKey = RandomNumberGenerator.GetBytes(32);
                 userSecretsKey = RandomNumberGenerator.GetBytes(32);
 
-                // Build JSON
                 var json = KeysetJsonBuilder.BuildV2(
                     dbPassword: dbPw,
                     logPayloadKey: logPayloadKey,
@@ -150,7 +135,6 @@ namespace Utilities.Security
                     appVersionOverride: null
                 );
 
-                // Remove any existing archive first (best-effort secure delete)
                 if (File.Exists(archivePath))
                 {
                     SensitiveDataCleaner.SecureFileDelete(
@@ -160,7 +144,6 @@ namespace Utilities.Security
                         finalZeroPass: true);
                 }
 
-                // Write keyset.json to a temp file, then pack as encrypted 7z
                 var tempDir = Path.Combine(Path.GetTempPath(), "mwpv_keyset_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempDir);
                 var keysetPath = Path.Combine(tempDir, KeysetJsonName);
@@ -169,15 +152,7 @@ namespace Utilities.Security
                 var pwString = new string(keyPw);
                 try
                 {
-                    var comp = new SevenZipCompressor
-                    {
-                        ArchiveFormat = OutArchiveFormat.SevenZip,
-                        CompressionLevel = CompressionLevel.Normal,
-                        CompressionMethod = CompressionMethod.Lzma2,
-                        EncryptHeaders = true,
-                        ZipEncryptionMethod = ZipEncryptionMethod.Aes256,
-                        PreserveDirectoryRoot = false
-                    };
+                    var comp = SevenZipCore.CreateCompressor();
 
                     // Single-entry archive; internal name is "keyset.json"
                     comp.CompressFilesEncrypted(archivePath, pwString, keysetPath);
@@ -197,7 +172,6 @@ namespace Utilities.Security
                     catch { /* best-effort */ }
                 }
 
-                // Scrub staging folder now that everything lives in the archive
                 SecurelyScrubSqlStagingFolder();
 
                 return $"Encrypted archive created at: {archivePath}";
@@ -222,10 +196,8 @@ namespace Utilities.Security
         {
             if (!Directory.Exists(SqlFolder)) return;
 
-            // Wipe contents…
             SensitiveDataCleaner.SecureDeleteAllFiles(SqlFolder, overwritePasses: 3);
 
-            // …then remove the directory (name shredding).
             try
             {
                 SensitiveDataCleaner.SecureDeleteDirectory(
@@ -242,10 +214,6 @@ namespace Utilities.Security
 
         #region Archive read (JSON-only)
 
-        /// <summary>
-        /// Open the encrypted 7z from KeyFile using KeyPW, parse keyset.json,
-        /// and load the DB password + all SQL entries into SecureEncryptedDataStore.
-        /// </summary>
         public static void EnsureKeySetFromArchive()
         {
             char[]? keyPw = null;
@@ -258,10 +226,9 @@ namespace Utilities.Security
                 keyPw = SecureEncryptedDataStore.GetChars(Key_KeyPW);
                 var pwString = new string(keyPw ?? Array.Empty<char>());
 
-                using var extractor = new SevenZipExtractor(archivePath, pwString);
+                using var extractor = SevenZipCore.CreateExtractor(archivePath, pwString);
                 SensitiveDataCleaner.WipeString(ref pwString);
 
-                // Find "keyset.json" (match either full name or base name)
                 var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
                     string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
                     string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal));
@@ -277,13 +244,11 @@ namespace Utilities.Security
                 using (var sr = new StreamReader(ms, Encoding.UTF8, true, 1024, leaveOpen: true))
                     json = sr.ReadToEnd();
 
-                var ks = KeysetJsonV2.Deserialize(json); // validates version & presence
+                var ks = KeysetJsonV2.Deserialize(json);
 
-                // ---- Secrets ----
                 var dbPwChars = KeysetJsonV2.DecodeDbPasswordToChars(ks.secrets.dbPassword);
                 SecureEncryptedDataStore.SetAndWipe(DatabaseHelper.DbPasswordKey, dbPwChars);
 
-                // ---- SQL ----
                 foreach (var kvp in ks.sql)
                 {
                     if (!string.IsNullOrWhiteSpace(kvp.Key))
@@ -300,12 +265,6 @@ namespace Utilities.Security
             }
         }
 
-        /// <summary>
-        /// JSON-only archives don't expose individual files. We rely on EnsureKeySetFromArchive()
-        /// having already populated SEDS. For compatibility with existing call sites, we just
-        /// report whether the requested key is present in SEDS.
-        /// </summary>
-        /// <returns>"worked" if key exists in SEDS, otherwise "not_found".</returns>
         public static string LoadSqlFromEncryptedArchive(string fileNameInArchive)
         {
             return SecureEncryptedDataStore.HasKey(fileNameInArchive) ? "worked" : "not_found";

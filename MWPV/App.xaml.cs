@@ -4,10 +4,11 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Runtime.InteropServices;
-using SevenZip;                       // path configured via SevenZipHelper
+// using SevenZip;                   // ❌ no longer needed here
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyLogIngestor
-using Utilities.Helpers;              // SevenZipHelper, ErrorHandler
+using Utilities.Helpers;              // ErrorHandler
 using Utilities.Security;
+using Security.Utility.Archives;      // ✅ SevenZipCore
 
 namespace MWPV
 {
@@ -55,14 +56,17 @@ namespace MWPV
                 try { EarlyLoginFailures.Write("App", "Failed to start BringToFront listener", ex: ex); } catch { }
             }
 
-            // ---- Initialize SevenZip native DLL early ----
+            // ---- Initialize SevenZip native DLL early (centralized) ----
             try
             {
                 var explicitPath = Path.Combine(AppContext.BaseDirectory, "7z.dll");
-                if (!SevenZipHelper.ConfigureLibraryPath(explicitPath))
-                    throw new InvalidOperationException($"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}");
+                var (ok, reason) = SevenZipCore.EnsureConfigured(explicitPath);
+                if (!ok)
+                    throw new InvalidOperationException(
+                        $"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}. {reason}");
+
 #if DEBUG
-                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + SevenZipHelper.GetConfiguredPath());
+                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
 #endif
             }
             catch (Exception ex)
@@ -181,7 +185,6 @@ namespace MWPV
         {
             try
             {
-                // snapshot to avoid races with field being nulled/disposed
                 var evt = _bringToFrontEvent;
                 if (evt is null) return;
 
@@ -189,12 +192,11 @@ namespace MWPV
                 {
                     try
                     {
-                        if (!evt.WaitOne()) continue;   // blocks until signaled
+                        if (!evt.WaitOne()) continue;
                     }
-                    catch (ThreadInterruptedException) { break; }   // normal shutdown
-                    catch (ObjectDisposedException) { break; }      // event disposed during shutdown
+                    catch (ThreadInterruptedException) { break; }
+                    catch (ObjectDisposedException) { break; }
 
-                    // marshal to UI thread
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         try
