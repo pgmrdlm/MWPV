@@ -1,7 +1,7 @@
-﻿// File: MWPV/Utilities/Json/AppJson.cs
-using System;
+﻿using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Security.Utility;   // for JsonCore
 
 namespace MWPV.Utilities.Json
 {
@@ -10,40 +10,25 @@ namespace MWPV.Utilities.Json
     /// </summary>
     public static class AppJson
     {
-        // ---- Serializer option profiles ----
-        private static readonly JsonSerializerOptions DefaultOptions = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            NumberHandling = JsonNumberHandling.Strict,
-            AllowTrailingCommas = false,
-            ReadCommentHandling = JsonCommentHandling.Disallow,
-            Converters =
-            {
-                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase),
-            }
-        };
-
-        private static readonly JsonSerializerOptions PrettyOptions = new(DefaultOptions)
-        {
-            WriteIndented = true
-        };
-
-        // If you later need persist-specific tweaks, fork from DefaultOptions here.
-        private static readonly JsonSerializerOptions PersistOptions = new(DefaultOptions);
-
         // ---- Generic helpers ----
         public static string Serialize<T>(T value, bool pretty = false) =>
-            JsonSerializer.Serialize(value, pretty ? PrettyOptions : DefaultOptions);
+            JsonSerializer.Serialize(value, pretty ? JsonCore.Pretty : JsonCore.Default);
 
         public static T? Deserialize<T>(string json) =>
-            JsonSerializer.Deserialize<T>(json, DefaultOptions);
+            JsonSerializer.Deserialize<T>(json, JsonCore.Default);
 
         public static bool TryDeserialize<T>(string json, out T? value)
         {
-            try { value = JsonSerializer.Deserialize<T>(json, DefaultOptions); return true; }
-            catch { value = default; return false; }
+            try
+            {
+                value = JsonSerializer.Deserialize<T>(json, JsonCore.Default);
+                return true;
+            }
+            catch
+            {
+                value = default;
+                return false;
+            }
         }
 
         // ===================== Domain: Logs =====================
@@ -64,9 +49,9 @@ namespace MWPV.Utilities.Json
         }
 
         public static string SerializeLogPayload(LogPayloadDto dto, bool pretty = false) =>
-            JsonSerializer.Serialize(dto, pretty ? PrettyOptions : PersistOptions);
+            JsonSerializer.Serialize(dto, pretty ? JsonCore.Pretty : JsonCore.Default);
 
         public static LogPayloadDto? DeserializeLogPayload(string json) =>
-            JsonSerializer.Deserialize<LogPayloadDto>(json, DefaultOptions);
+            JsonSerializer.Deserialize<LogPayloadDto>(json, JsonCore.Default);
     }
 }

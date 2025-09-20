@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-// File: Crypto/KeyArchiveVerifier.cs (example)
 using Security.Utility.Storage;   // SEDS lives here
 using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
 
@@ -37,7 +36,8 @@ namespace Security.Utility.Crypto
                     meta = new Meta
                     {
                         archiveId = Guid.NewGuid().ToString("D"),
-                        appVersion = appVersionOverride ?? (Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "0.0.0")
+                        appVersion = appVersionOverride ??
+                                     (Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "0.0.0")
                     },
                     secrets = new Secrets
                     {
@@ -48,11 +48,13 @@ namespace Security.Utility.Crypto
                     sql = new Dictionary<string, string>(sqlMap, StringComparer.Ordinal)
                 };
 
-                return JsonSerializer.Serialize(ks, new JsonSerializerOptions { WriteIndented = true });
+                // Use centralized pretty-print options
+                return JsonSerializer.Serialize(ks, JsonCore.Pretty);
             }
             finally
             {
-                if (pwUtf8 != null) Array.Clear(pwUtf8, 0, pwUtf8.Length);
+                if (pwUtf8 != null)
+                    Array.Clear(pwUtf8, 0, pwUtf8.Length);
             }
         }
     }
