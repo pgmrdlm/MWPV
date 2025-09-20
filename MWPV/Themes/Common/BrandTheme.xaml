@@ -4,9 +4,10 @@
     <!-- Colors (dynamic so brushes can follow theme swaps) -->
     <!-- DarkBlue #FF00008B -->
     <Color x:Key="Color.Primary">Maroon</Color>
-    <!-- DarkBlue -->
     <Color x:Key="Color.Secondary">#FFFFE4C4</Color>
     <!-- Bisque -->
+    <!-- single knob for all interactive text states -->
+    <SolidColorBrush x:Key="Interactive.HoverFg" Color="Yellow"/>
 
     <!-- Brushes built from the colors -->
     <SolidColorBrush x:Key="Brush.Primary"   Color="{DynamicResource Color.Primary}"/>
