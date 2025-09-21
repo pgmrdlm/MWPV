@@ -4,51 +4,57 @@
     <!-- =======================
        CORE BRAND PALETTE
        ======================= -->
-    <!-- Descriptive keys -->
     <Color x:Key="Color.BrandPrimary">Maroon</Color>
-    <!-- title/menu/headers -->
+    <!-- headers/menus/chrome -->
     <Color x:Key="Color.BrandSecondary">#FFFFE4C4</Color>
-    <!-- Bisque: panel bodies -->
+    <!-- Bisque: panels/body -->
 
-    <!-- Legacy keys used across existing XAML -->
+    <!-- Legacy keys (for existing bindings) -->
     <Color x:Key="Color.Primary">Maroon</Color>
     <Color x:Key="Color.Secondary">#FFFFE4C4</Color>
 
-    <!-- Button family base colors (flat identity; kept for reference) -->
+    <!-- Optional base role colors (reference only; gradients live in LocalBrushes) -->
     <Color x:Key="Color.ActionPrimary">#008A00</Color>
-    <!-- Green -->
     <Color x:Key="Color.ActionSecondary">#E3E3E3</Color>
-    <!-- Gray/Silver -->
     <Color x:Key="Color.Category">#2B6CFF</Color>
-    <!-- Blue -->
     <Color x:Key="Color.Item">#6A0DAD</Color>
-    <!-- Purple -->
     <Color x:Key="Color.Danger">#D60000</Color>
-    <!-- Red -->
 
     <!-- =======================
-       INTERACTIVE TEXT STATES
+       TEXT & INTERACTIVE FG
        ======================= -->
-    <!-- Keep Yellow for maroon surfaces (menus/title, etc.) -->
+    <!-- Hover text specifically for maroon-brand surfaces -->
     <SolidColorBrush x:Key="Interactive.HoverFg" Color="Yellow"/>
-    <!-- NEW: all buttons use MAROON for hover/press text -->
+    <!-- Buttons: maroon text on hover/press -->
     <SolidColorBrush x:Key="Interactive.ButtonHoverFg"   Color="{DynamicResource Color.BrandPrimary}"/>
     <SolidColorBrush x:Key="Interactive.ButtonPressedFg" Color="{DynamicResource Color.BrandPrimary}"/>
     <SolidColorBrush x:Key="Interactive.DisabledFg" Color="#7A7A7A"/>
 
+    <!-- General text -->
+    <SolidColorBrush x:Key="Brush.Text"        Color="Black"/>
+    <SolidColorBrush x:Key="Brush.TextInverse" Color="White"/>
+
     <!-- =======================
-       BRUSH WRAPPERS
+       BRAND BRUSH WRAPPERS
        ======================= -->
-    <!-- Descriptive -->
     <SolidColorBrush x:Key="Brush.BrandPrimary"   Color="{DynamicResource Color.BrandPrimary}"/>
     <SolidColorBrush x:Key="Brush.BrandSecondary" Color="{DynamicResource Color.BrandSecondary}"/>
 
-    <!-- Legacy (what panels/windows expect) -->
+    <!-- Legacy wrappers (used by panels/windows today) -->
     <SolidColorBrush x:Key="Brush.Primary"   Color="{DynamicResource Color.Primary}"/>
     <SolidColorBrush x:Key="Brush.Secondary" Color="{DynamicResource Color.Secondary}"/>
 
-    <!-- Optional general text brushes -->
-    <SolidColorBrush x:Key="Brush.Text" Color="Black"/>
-    <SolidColorBrush x:Key="Brush.TextInverse" Color="White"/>
+    <!-- =======================
+       MENUS / COMBO DROPDOWNS
+       ======================= -->
+    <SolidColorBrush x:Key="ComboDropTrayBrush"          Color="{DynamicResource Color.BrandPrimary}"/>
+    <SolidColorBrush x:Key="ComboDropItemBrush"          Color="{DynamicResource Color.BrandPrimary}"/>
+    <SolidColorBrush x:Key="ComboDropItemHoverBrush"     Color="#8E1A1A"/>
+    <SolidColorBrush x:Key="ComboDropItemSelectedBrush"  Color="#5C0000"/>
+    <SolidColorBrush x:Key="ComboDropTextBrush"          Color="{DynamicResource Brush.TextInverse}"/>
+    <!-- white -->
+    <SolidColorBrush x:Key="ComboDropHoverTextBrush"     Color="{DynamicResource Interactive.HoverFg}"/>
+    <!-- yellow -->
+    <SolidColorBrush x:Key="ComboDropBorderBrush"        Color="Transparent"/>
 
 </ResourceDictionary>

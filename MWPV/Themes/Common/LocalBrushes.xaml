@@ -2,8 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- =======================
-         SHARED BUTTON ROLE BRUSHES
-         (Backgrounds only; text color changes live in BrandThemes)
+         BUTTON ROLE BACKGROUNDS
          ======================= -->
 
     <!-- Primary (green) -->
@@ -106,15 +105,11 @@
     <!-- =======================
          COMBO DROPDOWN (MAROON)
          ======================= -->
-    <!-- Tray/background for the popup list -->
-    <SolidColorBrush x:Key="ComboDropTrayBrush" Color="#7A0000"/>
-    <!-- Individual item backgrounds -->
+    <SolidColorBrush x:Key="ComboDropTrayBrush"          Color="#7A0000"/>
     <SolidColorBrush x:Key="ComboDropItemBrush"          Color="#7A0000"/>
     <SolidColorBrush x:Key="ComboDropItemHoverBrush"     Color="#8E1A1A"/>
     <SolidColorBrush x:Key="ComboDropItemSelectedBrush"  Color="#5C0000"/>
-    <!-- Hover text (blue) -->
     <SolidColorBrush x:Key="ComboDropHoverTextBrush"     Color="#2B6CFF"/>
-    <!-- Optional: hide any popup border if needed -->
     <SolidColorBrush x:Key="ComboDropBorderBrush"        Color="Transparent"/>
 
 </ResourceDictionary>
