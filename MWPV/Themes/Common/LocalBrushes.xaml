@@ -1,9 +1,9 @@
-﻿<!-- Themes/Common/LocalBrushes.xaml -->
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- =======================
-         SHARED BRUSHES
+         SHARED BUTTON ROLE BRUSHES
+         (Backgrounds only; text color changes live in BrandThemes)
          ======================= -->
 
     <!-- Primary (green) -->
@@ -23,7 +23,7 @@
         <GradientStop Color="#006400" Offset="1"/>
     </LinearGradientBrush>
 
-    <!-- Secondary (neutral gray) -->
+    <!-- Secondary (neutral gray / silver) -->
     <LinearGradientBrush x:Key="SecondaryNormalBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#E3E3E3" Offset="0"/>
         <GradientStop Color="#FFFFFF" Offset="0.5"/>
@@ -57,7 +57,7 @@
         <GradientStop Color="#A80000" Offset="1"/>
     </LinearGradientBrush>
 
-    <!-- Nav / Category (blue) -->
+    <!-- Category (blue) -->
     <LinearGradientBrush x:Key="NavNormalBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#2B6CFF" Offset="0"/>
         <GradientStop Color="#BBD1FF" Offset="0.5"/>
@@ -91,7 +91,9 @@
         <GradientStop Color="#4B007F" Offset="1"/>
     </LinearGradientBrush>
 
-    <!-- Disabled + focus -->
+    <!-- =======================
+         DISABLED / FOCUS / SHADOW
+         ======================= -->
     <LinearGradientBrush x:Key="DisabledBrush" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#C9C9C9" Offset="0"/>
         <GradientStop Color="#E2E2E2" Offset="0.5"/>
@@ -103,17 +105,16 @@
 
     <!-- =======================
          COMBO DROPDOWN (MAROON)
-         Used by the Log filter ComboBox dropdown items
          ======================= -->
     <!-- Tray/background for the popup list -->
     <SolidColorBrush x:Key="ComboDropTrayBrush" Color="#7A0000"/>
     <!-- Individual item backgrounds -->
-    <SolidColorBrush x:Key="ComboDropItemBrush"        Color="#7A0000"/>
-    <SolidColorBrush x:Key="ComboDropItemHoverBrush"   Color="#8E1A1A"/>
-    <SolidColorBrush x:Key="ComboDropItemSelectedBrush" Color="#5C0000"/>
+    <SolidColorBrush x:Key="ComboDropItemBrush"          Color="#7A0000"/>
+    <SolidColorBrush x:Key="ComboDropItemHoverBrush"     Color="#8E1A1A"/>
+    <SolidColorBrush x:Key="ComboDropItemSelectedBrush"  Color="#5C0000"/>
     <!-- Hover text (blue) -->
-    <SolidColorBrush x:Key="ComboDropHoverTextBrush"   Color="#2B6CFF"/>
+    <SolidColorBrush x:Key="ComboDropHoverTextBrush"     Color="#2B6CFF"/>
     <!-- Optional: hide any popup border if needed -->
-    <SolidColorBrush x:Key="ComboDropBorderBrush"      Color="Transparent"/>
+    <SolidColorBrush x:Key="ComboDropBorderBrush"        Color="Transparent"/>
 
 </ResourceDictionary>

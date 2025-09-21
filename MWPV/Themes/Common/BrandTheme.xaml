@@ -1,16 +1,54 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Colors (dynamic so brushes can follow theme swaps) -->
-    <!-- DarkBlue #FF00008B -->
+    <!-- =======================
+       CORE BRAND PALETTE
+       ======================= -->
+    <!-- Descriptive keys -->
+    <Color x:Key="Color.BrandPrimary">Maroon</Color>
+    <!-- title/menu/headers -->
+    <Color x:Key="Color.BrandSecondary">#FFFFE4C4</Color>
+    <!-- Bisque: panel bodies -->
+
+    <!-- Legacy keys used across existing XAML -->
     <Color x:Key="Color.Primary">Maroon</Color>
     <Color x:Key="Color.Secondary">#FFFFE4C4</Color>
-    <!-- Bisque -->
-    <!-- single knob for all interactive text states -->
-    <SolidColorBrush x:Key="Interactive.HoverFg" Color="Yellow"/>
 
-    <!-- Brushes built from the colors -->
+    <!-- Button family base colors (flat identity; kept for reference) -->
+    <Color x:Key="Color.ActionPrimary">#008A00</Color>
+    <!-- Green -->
+    <Color x:Key="Color.ActionSecondary">#E3E3E3</Color>
+    <!-- Gray/Silver -->
+    <Color x:Key="Color.Category">#2B6CFF</Color>
+    <!-- Blue -->
+    <Color x:Key="Color.Item">#6A0DAD</Color>
+    <!-- Purple -->
+    <Color x:Key="Color.Danger">#D60000</Color>
+    <!-- Red -->
+
+    <!-- =======================
+       INTERACTIVE TEXT STATES
+       ======================= -->
+    <!-- Keep Yellow for maroon surfaces (menus/title, etc.) -->
+    <SolidColorBrush x:Key="Interactive.HoverFg" Color="Yellow"/>
+    <!-- NEW: all buttons use MAROON for hover/press text -->
+    <SolidColorBrush x:Key="Interactive.ButtonHoverFg"   Color="{DynamicResource Color.BrandPrimary}"/>
+    <SolidColorBrush x:Key="Interactive.ButtonPressedFg" Color="{DynamicResource Color.BrandPrimary}"/>
+    <SolidColorBrush x:Key="Interactive.DisabledFg" Color="#7A7A7A"/>
+
+    <!-- =======================
+       BRUSH WRAPPERS
+       ======================= -->
+    <!-- Descriptive -->
+    <SolidColorBrush x:Key="Brush.BrandPrimary"   Color="{DynamicResource Color.BrandPrimary}"/>
+    <SolidColorBrush x:Key="Brush.BrandSecondary" Color="{DynamicResource Color.BrandSecondary}"/>
+
+    <!-- Legacy (what panels/windows expect) -->
     <SolidColorBrush x:Key="Brush.Primary"   Color="{DynamicResource Color.Primary}"/>
     <SolidColorBrush x:Key="Brush.Secondary" Color="{DynamicResource Color.Secondary}"/>
+
+    <!-- Optional general text brushes -->
+    <SolidColorBrush x:Key="Brush.Text" Color="Black"/>
+    <SolidColorBrush x:Key="Brush.TextInverse" Color="White"/>
 
 </ResourceDictionary>
