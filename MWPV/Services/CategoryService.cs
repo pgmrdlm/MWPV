@@ -54,7 +54,7 @@ namespace MWPV.Services
 
             try
             {
-                var selectSql = LoadSqlRequired("SelectCategories.sql");
+                var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -111,9 +111,9 @@ namespace MWPV.Services
             try
             {
                 // Prefer specific name; allow alternate in case a different asset id is used.
-                var sql = TryLoadSql("SelectCategoryTypes.sql")
+                var sql = TryLoadSql("s_Combo_CategoryType.sql")
                           ?? TryLoadSql("Select_Combo_CategoryTypes.sql")
-                          ?? LoadSqlRequired("SelectCategoryTypes.sql"); // throws if none found
+                          ?? LoadSqlRequired("s_Combo_CategoryType.sql"); // throws if none found
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -153,7 +153,7 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(categoryName))
                 return false;
 
-            var existsSql = LoadSqlRequired("CategoryExists.sql");
+            var existsSql = LoadSqlRequired("s_Category_Exists.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var cmd = conn.CreateCommand();
@@ -181,7 +181,7 @@ namespace MWPV.Services
 
         /// <summary>
         /// Overload to support a category type code from the Add Category UI.
-        /// Matches InsertCategory.sql which expects @TypeCode (TEXT),
+        /// Matches s_Category_Insert.sql which expects @TypeCode (TEXT),
         /// resolves it to ComboDetailId inside SQL, and sets CreatedUtc via strftime(...).
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription, string? categoryTypeCode)
@@ -228,7 +228,7 @@ namespace MWPV.Services
             }
 
             // Use the single canonical insert that expects @TypeCode (TEXT).
-            var insertSql = LoadSqlRequired("InsertCategory.sql");
+            var insertSql = LoadSqlRequired("s_Category_Insert.sql");
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
             using var tx = conn.BeginTransaction();
@@ -240,7 +240,7 @@ namespace MWPV.Services
                 cmd.Transaction = tx;
                 cmd.CommandText = insertSql;
 
-                // Param names must match InsertCategory.sql
+                // Param names must match s_Category_Insert.sql
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
                 cmd.Parameters.AddWithValue("@TypeCode", typeCode);

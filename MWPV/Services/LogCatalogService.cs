@@ -52,9 +52,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("Logs_Insert_V3.sql");
+                var sql = SqlCagegory.GetSql("s_Logs_Insert.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: Logs_Insert_V3.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Logs_Insert.sql");
                 cmd.CommandText = sql;
 
                 var createdIso = string.IsNullOrWhiteSpace(req.CreatedUtc) ? DateTime.UtcNow.ToString("o") : req.CreatedUtc!;
@@ -96,7 +96,7 @@ namespace MWPV.Services
                 if (affected != 1) return -1;
 
                 using var last = cn.CreateCommand();
-                last.CommandText = SqlCagegory.GetSql("Logs_LastInsertId.sql");
+                last.CommandText = SqlCagegory.GetSql("s_Logs_LastInsertId.sql");
                 return Convert.ToInt64(last.ExecuteScalar(), CultureInfo.InvariantCulture);
             }
             catch (Exception ex)
@@ -195,9 +195,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("Logs_Select_Page.sql");
+                var sql = SqlCagegory.GetSql("s_Logs_SelectPage.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: Logs_Select_Page.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPage.sql");
                 cmd.CommandText = sql;
 
                 var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
@@ -238,9 +238,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("Logs_Select_Page_Filter.sql");
+                var sql = SqlCagegory.GetSql("s_Logs_SelectPageFilter.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: Logs_Select_Page_Filter.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPageFilter.sql");
                 cmd.CommandText = sql;
 
                 var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
@@ -303,9 +303,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("Logs_Select_ById.sql");
+                var sql = SqlCagegory.GetSql("s_Logs_SelectById.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: Logs_Select_ById.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Logs_SelectById.sql");
                 cmd.CommandText = sql;
 
                 cmd.Parameters.AddWithValue("@id", id);
@@ -358,7 +358,7 @@ namespace MWPV.Services
 
         /// <summary>
         /// New: return full model rows for a given ComboType.Code (e.g., "log_filters").
-        /// SQL: ComboDetail_SelectByType.sql
+        /// SQL: s_Combo_LogsDetailSelectByType.sql
         /// </summary>
         public static IReadOnlyList<global::MWPV.Models.ComboDetail> GetComboDetailsByType(
             string comboTypeCode,
@@ -372,9 +372,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("ComboDetail_SelectByType.sql");
+                var sql = SqlCagegory.GetSql("s_Combo_LogsDetailSelectByType.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: ComboDetail_SelectByType.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Combo_LogsDetailSelectByType.sql");
                 cmd.CommandText = sql;
 
                 cmd.Parameters.AddWithValue("@type_code", comboTypeCode);

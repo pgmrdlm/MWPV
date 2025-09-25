@@ -18,38 +18,38 @@ namespace Utilities.Sql
         // Includes SQL scripts + the DB password entry (secret).
         private static readonly string[] RequiredArtifacts =
         {
-            "CategoryExists.sql",
+            "s_Category_Exists.sql",
             DatabaseHelper.DbPasswordKey,   // maps to DB_Password.txt in archive (secret, not SQL)
-            "InsertCategory.sql",
-            "Logs_Insert_V3.sql",
-            "Logs_Select_Recent.sql",       // NEW
-            "Logs_LastInsertId.sql",        // NEW
+            "s_Category_Insert.sql",
+            "s_Logs_Insert.sql",
+            "s_Logs_SelectRecent.sql",       // NEW only used here
+            "s_Logs_LastInsertId.sql",        // NEW
             "MWPV_DB_Create.sql",
-            "SelectCategories.sql",
-            "Logs_Purge_OlderThan.sql",
+            "s_CategorySelectAll.sql",    // only found here
+            "s_Logs_PurgeOlderThan.sql",
             "Logs_Exists_BySig.sql",
-            "Logs_Select_All.sql",
-            "Logs_Select_ById.sql",
-            "Logs_Select_Page_Filter.sql",
-            "ComboDetail_SelectByType.sql",
-            "SelectCategoryTypes.sql",
-            "Logs_Select_Page.sql"
+            "s_Logs_SelectAll.sql", // only found here
+            "s_Logs_SelectById.sql",
+            "s_Logs_SelectPageFilter.sql",
+            "s_Combo_LogsDetailSelectByType.sql",
+            "s_Combo_CategoryType.sql",
+            "s_Logs_SelectPage.sql"
         };
 
         // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.
         public static readonly string[] MustHaveScripts =
         {
-            "Logs_Insert_V3.sql",
-            "Logs_Select_Recent.sql",
-            "SelectCategories.sql",
-            "CategoryExists.sql",
-            "InsertCategory.sql",
-            "Logs_Select_All.sql",
-            "Logs_Select_ById.sql",
-            "Logs_Select_Page_Filter.sql",
-            "ComboDetail_SelectByType.sql",
-            "SelectCategoryTypes.sql",
-            "Logs_Select_Page.sql"
+            "s_Logs_Insert.sql",
+            "s_Logs_SelectRecent.sql",
+            "s_CategorySelectAll.sql",
+            "s_Category_Exists.sql",
+            "s_Category_Insert.sql",
+            "s_Logs_SelectAll.sql",
+            "s_Logs_SelectById.sql",
+            "s_Logs_SelectPageFilter.sql",
+            "s_Combo_LogsDetailSelectByType.sql",
+            "s_Combo_CategoryType.sql",
+            "s_Logs_SelectPage.sql"
             // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
         };
 
