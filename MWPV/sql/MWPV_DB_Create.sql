@@ -41,6 +41,8 @@ DROP TABLE IF EXISTS CategoryItemPinHistory;
 DROP TABLE IF EXISTS CatagoryItemPasswordHistory;
 DROP TABLE IF EXISTS CategoryItemPasswordHistory;
 
+DROP TABLE IF EXISTS BankCards;        -- NEW: ensure clean rebuild of new table
+
 DROP TABLE IF EXISTS CatagoryItem;
 DROP TABLE IF EXISTS CategoryItem;
 
@@ -107,7 +109,8 @@ END;
 -- ---------------------------------------------------------------------------
 INSERT OR IGNORE INTO ComboType (Code, Description, Active)
 VALUES ('log_filters','Filters for the Logs UI',1),
-       ('category_types','Category types in vault UI',1);
+       ('category_types','Category types in vault UI',1),
+       ('debit_credit_cards','Debit and Credit Cards',1);
 
 -- log_filters
 -- INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -129,14 +132,42 @@ INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE t.Code='category_types';
+-- Added per request:
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, '4', 'Banks/Credit unions', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, '5', 'Store web sites', 1
+FROM ComboType t WHERE t.Code='category_types';
+-- debit_credit_cards (authoritative set)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, '0', 'Debit Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, '1', 'VISA', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, '2', 'Master Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 3, '3', 'Discover Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, '4', 'American Express', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, '5', 'Store Credit Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
 
 -- ---------------------------------------------------------------------------
 -- Table: Category  (now with Category_Type INTEGER)
 --   Dev choice: no FK to ComboDetail to keep reseeds simple; app enforces.
 -- ---------------------------------------------------------------------------
--- =========================================================
--- Category table (with CreatedUtc in ISO-8601 UTC)
--- =========================================================
 CREATE TABLE IF NOT EXISTS Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
@@ -146,78 +177,63 @@ CREATE TABLE IF NOT EXISTS Category (
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- =========================================================
--- Seed default categories (baked default = category_types.Seq=0)
--- Note: we set CreatedUtc explicitly; DEFAULT would also work,
--- but this keeps the column list explicit and future-proof.
--- =========================================================
-
+-- Seeds
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Encryption','Encrypted local Files and or folders',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Financial','Financial web sites or applications (Banking/Credit Card)',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Applications','Computer/Phone application logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Application Forums','Login to forums that support applications',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Goverment','Any government web site login',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Astro Forums','Logins for Astro forum web sites',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Google Accounts','Logins for Gmail, Google Drive, or other Google services',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Non Google Email','Non Google Email logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Political Forums','Political forum logins',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),
-       1;
-
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 -- ---------------------------------------------------------------------------
--- Table: CategoryItem  (inherits type via Category join; keep FK to Category)
+-- Table: CategoryItem
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS CategoryItem (
     ItemId               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,6 +254,26 @@ CREATE TABLE IF NOT EXISTS CategoryItem (
 );
 
 CREATE INDEX IF NOT EXISTS IX_CategoryItem_Category ON CategoryItem(Category_Key);
+
+-- ---------------------------------------------------------------------------
+-- NEW: BankCards (encrypted JSON payload per CategoryItem)
+-- Bc_Secret holds AES-GCM blob of JSON: {"cardNumber":"...","expDate":"YYYY-MM","seqCode":"..."}
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS BankCards (
+    Bc_BankCardId   INTEGER PRIMARY KEY AUTOINCREMENT,
+    Bc_ItemId       INTEGER NOT NULL
+                        REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    Bc_Secret       BLOB    NOT NULL,
+    Bc_IsActive     INTEGER NOT NULL DEFAULT 1 CHECK (Bc_IsActive IN (0,1)),
+    Bc_CreatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    Bc_UpdatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE INDEX IF NOT EXISTS IX_BankCards_Item
+  ON BankCards(Bc_ItemId);
+
+CREATE INDEX IF NOT EXISTS IX_BankCards_ItemActive
+  ON BankCards(Bc_ItemId, Bc_IsActive);
 
 -- ---------------------------------------------------------------------------
 -- Table: CategoryItemPasswordHistory
@@ -317,8 +353,8 @@ CREATE TABLE IF NOT EXISTS Logs (
     InstallType   TEXT,
     AppVersion    TEXT    NOT NULL DEFAULT '',
     IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
-    Payload       BLOB,        -- AES-256-GCM: nonce(12)|ciphertext|tag(16)
-    PayloadFmt    TEXT,        -- e.g. 'gcm-json-v1'
+    Payload       BLOB,
+    PayloadFmt    TEXT,
     PayloadVer    INTEGER NOT NULL DEFAULT 1,
     KeySetVersion INTEGER NOT NULL DEFAULT 1,
     StackHash     TEXT
@@ -364,7 +400,7 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- ---------------------------------------------------------------------------
--- VIEWS (recreate)
+-- VIEWS (recreate)  (unchanged per request)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
