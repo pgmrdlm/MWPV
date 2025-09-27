@@ -109,7 +109,8 @@ END;
 -- ---------------------------------------------------------------------------
 INSERT OR IGNORE INTO ComboType (Code, Description, Active)
 VALUES ('log_filters','Filters for the Logs UI',1),
-       ('category_types','Category types in vault UI',1);
+       ('category_types','Category types in vault UI',1),
+       ('debit_credit_cards','Debit and Credit Cards',1);
 
 -- log_filters
 -- INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -134,6 +135,34 @@ SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE
 -- Added per request:
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 4, '4', 'Banks/Credit unions', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, '5', 'Store web sites', 1
+FROM ComboType t WHERE t.Code='category_types';
+-- debit_credit_cards (authoritative set)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, '0', 'Debit Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, '1', 'VISA', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, '2', 'Master Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 3, '3', 'Discover Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, '4', 'American Express', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, '5', 'Store Credit Card', 1
+FROM ComboType t WHERE t.Code='debit_credit_cards';
+
 
 -- ---------------------------------------------------------------------------
 -- Table: Category  (now with Category_Type INTEGER)
