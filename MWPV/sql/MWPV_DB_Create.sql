@@ -129,6 +129,9 @@ INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE t.Code='category_types';
+-- Added per request:
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, '4', 'Banks/Credit unions', 1 FROM ComboType t WHERE t.Code='category_types';
 
 -- ---------------------------------------------------------------------------
 -- Table: Category  (now with Category_Type INTEGER)
