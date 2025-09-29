@@ -1,4 +1,4 @@
-﻿// File: Security/Hash/Sha256Common.cs
+﻿// File: Security.Utility/Sha256Common.cs
 using System;
 using System.Buffers;
 using System.Globalization;
@@ -6,7 +6,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Security.Hash
+namespace Security.Utility
 {
     /// <summary>
     /// Central SHA-256 helper covering strings, spans, byte[], streams, and files.

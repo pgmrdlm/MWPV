@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using MWPV.Services;          // LogCatalogService
 using MWPV.Utilities.Json;    // AppJson
-using Security.Hash;          // <-- added
+using Security.Utility;
 
 namespace Utilities.Diagnostics
 {

@@ -3,7 +3,7 @@
 
 using System;
 using MWPV.Utilities.Json;   // AppJson
-using Security.Hash;         // Sha256Common
+using Security.Utility;
 
 namespace Utilities.Diagnostics
 {

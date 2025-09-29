@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
-using Security.Hash; // <-- added
+using Security.Utility;
 
 namespace MWPV.Services
 {

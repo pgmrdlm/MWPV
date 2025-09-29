@@ -8,7 +8,7 @@ using System.Text;
 using System.Windows;                     // MessageBox
 using Security.Utility.Logging;           // LogSeverity + extensions
 using LogSeverity = Security.Utility.Logging.LogSeverity;
-using Security.Hash;                      // <-- added
+using Security.Utility;
 
 namespace Utilities.Helpers
 {
