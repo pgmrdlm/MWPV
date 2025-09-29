@@ -203,7 +203,7 @@ SELECT 'Application Forums','Login to forums that support applications',
        STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Goverment','Any government web site login',
+SELECT 'Government','Any government web site login',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
         WHERE t.Code='category_types' AND d.Seq=0),
        STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
@@ -398,6 +398,28 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.KeyFilePath' AND
 INSERT INTO AppSettings (Key, Scope, Value, ValueType, Description, LastUpdatedUtc)
 SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startup (portable)',strftime('%s','now')
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
+
+-- =========================
+-- Key file (archive) meta: SINGLE ROW
+-- =========================
+CREATE TABLE IF NOT EXISTS KeyFileMeta (
+    kfma_Id            INTEGER PRIMARY KEY CHECK (kfma_Id = 1), -- enforce single row
+    kfma_VersionString TEXT    NOT NULL,   -- e.g., "1.0.0"
+    kfma_ArchiveSha256 TEXT    NOT NULL,   -- SHA-256 of entire kb.7z
+    kfma_ArchiveSize   INTEGER NOT NULL,   -- bytes
+    kfma_WrittenUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- =========================
+-- Current manifest entries: one row per file INSIDE key file
+-- =========================
+CREATE TABLE IF NOT EXISTS KeyFileManifest (
+    kfme_RelPath    TEXT    PRIMARY KEY,  -- normalized path within archive
+    kfme_FileSize   INTEGER NOT NULL,     -- uncompressed bytes
+    kfme_FileSha256 TEXT    NOT NULL,     -- SHA-256 of file contents
+    kfme_WrittenUtc TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 
 -- ---------------------------------------------------------------------------
 -- VIEWS (recreate)  (unchanged per request)
