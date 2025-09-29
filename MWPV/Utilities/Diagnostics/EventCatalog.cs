@@ -2,23 +2,14 @@
 // Canonical .elog shape + helpers (normalize, (de)serialize, dedupe).
 
 using System;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using MWPV.Utilities.Json;   // AppJson
+using Security.Hash;         // Sha256Common
 
 namespace Utilities.Diagnostics
 {
     public static class EventCatalog
     {
         public const string CurrentVersion = "elog-v1";
-
-        private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.General)
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = false
-        };
 
         // ---- .elog V1 shape ----
         // Record class so we can use `with { ... }` for normalization.
@@ -63,23 +54,23 @@ namespace Utilities.Diagnostics
             var ver = string.IsNullOrWhiteSpace(e.Version) ? CurrentVersion : e.Version;
             var etag = string.IsNullOrWhiteSpace(e.Etag) ? ComputeEtag(e) : e.Etag;
 
-            // `with` requires ElogV1 to be a record (this fixes CS8858).
+            // `with` requires ElogV1 to be a record.
             return e with { OccurredUtc = utc, Version = ver, Etag = etag };
         }
 
-        // Serialize to json (one line).
+        // Serialize to json (one line) via AppJson.
         public static string ToJson(ElogV1 e)
         {
             e = Normalize(e);
-            return JsonSerializer.Serialize(e, JsonOpts);
+            return AppJson.Serialize(e);
         }
 
-        // Try parse from json.
+        // Try parse from json via AppJson.
         public static bool TryParse(string json, out ElogV1? e)
         {
             try
             {
-                e = JsonSerializer.Deserialize<ElogV1>(json, JsonOpts);
+                e = AppJson.Deserialize<ElogV1>(json);
                 if (e is null) return false;
                 e = Normalize(e);
                 return true;
@@ -109,13 +100,16 @@ namespace Utilities.Diagnostics
             return ShortHash(raw, 16); // 16 hex chars is plenty for bucketing
         }
 
-        // Utility: short SHA256 hex.
+        // Utility: short SHA256 hex (uses common helper).
         private static string ShortHash(string input, int hexLength)
         {
-            var bytes = Encoding.UTF8.GetBytes(input ?? string.Empty);
-            var hash = SHA256.HashData(bytes);
-            var hex = Convert.ToHexString(hash);
-            return hexLength > 0 && hexLength < hex.Length ? hex[..hexLength] : hex;
+            // Map requested hex length to number of bytes from the 32-byte digest.
+            // e.g., 16 hex chars => 8 bytes.
+            int takeBytes = hexLength <= 0 ? 1 : (hexLength + 1) / 2;
+            if (takeBytes > 32) takeBytes = 32;
+
+            var hex = Sha256Common.ShortHex(input ?? string.Empty, takeBytes);
+            return (hexLength > 0 && hexLength < hex.Length) ? hex[..hexLength] : hex;
         }
     }
 }

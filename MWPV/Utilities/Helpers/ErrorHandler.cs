@@ -8,6 +8,7 @@ using System.Text;
 using System.Windows;                     // MessageBox
 using Security.Utility.Logging;           // LogSeverity + extensions
 using LogSeverity = Security.Utility.Logging.LogSeverity;
+using Security.Hash;                      // <-- added
 
 namespace Utilities.Helpers
 {
@@ -143,12 +144,7 @@ namespace Utilities.Helpers
         public static string ShortHash(string s)
         {
             if (string.IsNullOrEmpty(s)) return "0";
-            using var sha = SHA256.Create();
-            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(s));
-            var sb = new StringBuilder(12);
-            for (int i = 0; i < 6 && i < bytes.Length; i++)
-                sb.Append(bytes[i].ToString("x2"));
-            return sb.ToString();
+            return Sha256Common.ShortHex(s, takeBytes: 6); // 12 hex chars
         }
     }
 }

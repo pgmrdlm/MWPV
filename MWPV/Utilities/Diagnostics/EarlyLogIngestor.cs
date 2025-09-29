@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using MWPV.Services;          // LogCatalogService
 using MWPV.Utilities.Json;    // AppJson
+using Security.Hash;          // <-- added
 
 namespace Utilities.Diagnostics
 {
@@ -126,11 +127,8 @@ namespace Utilities.Diagnostics
 
         private static string Sha256Hex(byte[] data)
         {
-            using var sha = SHA256.Create();
-            var b = sha.ComputeHash(data);
-            var sb = new StringBuilder(b.Length * 2);
-            foreach (var t in b) sb.Append(t.ToString("x2"));
-            return sb.ToString();
+            // swapped to common routine
+            return Sha256Common.Hex(data);
         }
 
         private static void SecureDelete(string path)

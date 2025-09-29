@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Security.Hash; // <-- added
 
 namespace MWPV.Services
 {
@@ -130,11 +131,11 @@ namespace MWPV.Services
                     payload = payloadNorm
                 };
                 string canonical = JsonSerializer.Serialize(core);
-                return Sha256Hex(Encoding.UTF8.GetBytes(canonical));
+                return Sha256Common.Hex(Encoding.UTF8.GetBytes(canonical)); // <-- swapped to common helper
             }
             catch
             {
-                return Sha256Hex(File.ReadAllBytes(filePath));
+                return Sha256Common.Hex(File.ReadAllBytes(filePath));       // <-- swapped to common helper
             }
         }
 
@@ -160,15 +161,7 @@ namespace MWPV.Services
             }
         }
 
-        private static string Sha256Hex(ReadOnlySpan<byte> data)
-        {
-            Span<byte> hash = stackalloc byte[32];
-            using var sha = SHA256.Create();
-            sha.TryComputeHash(data, hash, out _);
-            var sb = new StringBuilder(64);
-            foreach (var b in hash) sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
-            return sb.ToString();
-        }
+        // NOTE: local Sha256Hex(ReadOnlySpan<byte>) removed; all hashing goes through Security.Hash.Sha256Common
 
         public sealed class DedupResult
         {
