@@ -16,9 +16,16 @@
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<!-- We also don’t want the auto TargetFramework attribute -->
 		<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+		<ApplicationIcon>Assets\Icons\MWPV.ico</ApplicationIcon>
 
 		<!-- (Versions now come from AssemblyInfo.cs below) -->
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <Resource Include="Assets\Icons\MWPV.ico">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Resource>
+	</ItemGroup>
 
 	<!-- NuGet packages -->
 	<ItemGroup>
@@ -32,7 +39,6 @@
 
 	<!-- App resources / content -->
 	<ItemGroup>
-		<Resource Include="Assets\Icons\MWPV_TitleBarIcon_16by16.ico" />
 		<None Update="7z.dll">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
