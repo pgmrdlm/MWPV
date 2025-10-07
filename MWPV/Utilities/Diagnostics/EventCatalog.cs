@@ -3,7 +3,8 @@
 
 using System;
 using MWPV.Utilities.Json;   // AppJson
-using Security.Utility;
+// Explicit alias to centralized SHA-256 helper (avoid clash with any legacy helper)
+using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 
 namespace Utilities.Diagnostics
 {
@@ -100,7 +101,7 @@ namespace Utilities.Diagnostics
             return ShortHash(raw, 16); // 16 hex chars is plenty for bucketing
         }
 
-        // Utility: short SHA256 hex (uses common helper).
+        // Utility: short SHA256 hex (uses centralized helper).
         private static string ShortHash(string input, int hexLength)
         {
             // Map requested hex length to number of bytes from the 32-byte digest.
@@ -108,7 +109,7 @@ namespace Utilities.Diagnostics
             int takeBytes = hexLength <= 0 ? 1 : (hexLength + 1) / 2;
             if (takeBytes > 32) takeBytes = 32;
 
-            var hex = Sha256Common.ShortHex(input ?? string.Empty, takeBytes);
+            var hex = HashSha256.ShortHex(input ?? string.Empty, takeBytes);
             return (hexLength > 0 && hexLength < hex.Length) ? hex[..hexLength] : hex;
         }
     }

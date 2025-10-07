@@ -2,14 +2,12 @@
 // Scope: Only dedup helpers & file utilities. Ingestion logic is considered complete elsewhere.
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Data.Sqlite;
-using Security.Utility;
+// Explicit alias to avoid clash with legacy Security.Utility.Sha256Common
+using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 
 namespace MWPV.Services
 {
@@ -131,11 +129,14 @@ namespace MWPV.Services
                     payload = payloadNorm
                 };
                 string canonical = JsonSerializer.Serialize(core);
-                return Sha256Common.Hex(Encoding.UTF8.GetBytes(canonical)); // <-- swapped to common helper
+
+                // Hash canonicalized representation via common helper
+                return HashSha256.Hex(Encoding.UTF8.GetBytes(canonical));
             }
             catch
             {
-                return Sha256Common.Hex(File.ReadAllBytes(filePath));       // <-- swapped to common helper
+                // Fallback: hash raw file bytes via common helper
+                return HashSha256.Hex(File.ReadAllBytes(filePath));
             }
         }
 
@@ -161,7 +162,7 @@ namespace MWPV.Services
             }
         }
 
-        // NOTE: local Sha256Hex(ReadOnlySpan<byte>) removed; all hashing goes through Security.Hash.Sha256Common
+        // NOTE: all hashing goes through Security.Utility.Crypto.Hash.Sha256Common (aliased as HashSha256)
 
         public sealed class DedupResult
         {
@@ -238,10 +239,12 @@ namespace MWPV.Services
                     return MoveDuplicate(fi, guid, hash, "sibling_guid");
                 }
             }
+
             var hashMatch = Directory.EnumerateFiles(fi.DirectoryName ?? EarlyDir, "*.elog", SearchOption.TopDirectoryOnly)
                 .Where(p => !Path.GetFileName(p).Equals(fi.Name, StringComparison.OrdinalIgnoreCase))
                 .Select(p => (p, ComputeContentHash(p)))
                 .FirstOrDefault(t => t.Item2 == hash);
+
             if (!string.IsNullOrEmpty(hashMatch.p))
             {
                 return MoveDuplicate(fi, guid, hash, "sibling_hash");
