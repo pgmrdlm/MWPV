@@ -3,12 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MWPV.Services;          // LogCatalogService
 using MWPV.Utilities.Json;    // AppJson
-using Security.Utility;
+// Explicit alias to the centralized SHA-256 helper (avoid clash with any legacy helper)
+using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 
 namespace Utilities.Diagnostics
 {
@@ -127,8 +127,8 @@ namespace Utilities.Diagnostics
 
         private static string Sha256Hex(byte[] data)
         {
-            // swapped to common routine
-            return Sha256Common.Hex(data);
+            // Centralized SHA-256 (lowercase hex)
+            return HashSha256.Hex(data);
         }
 
         private static void SecureDelete(string path)

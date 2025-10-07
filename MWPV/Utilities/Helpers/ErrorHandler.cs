@@ -3,12 +3,12 @@
 
 #nullable enable
 using System;
-using System.Security.Cryptography;
 using System.Text;
 using System.Windows;                     // MessageBox
 using Security.Utility.Logging;           // LogSeverity + extensions
 using LogSeverity = Security.Utility.Logging.LogSeverity;
-using Security.Utility;
+// Explicit alias to centralized SHA-256 helper (avoid clash with any legacy helper)
+using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 
 namespace Utilities.Helpers
 {
@@ -140,11 +140,11 @@ namespace Utilities.Helpers
                 _ => LogSeverity.Info
             };
 
-        /// <summary>Short SHA256 hex for identifiers/titles.</summary>
+        /// <summary>Short SHA256 hex for identifiers/titles (12 hex chars).</summary>
         public static string ShortHash(string s)
         {
             if (string.IsNullOrEmpty(s)) return "0";
-            return Sha256Common.ShortHex(s, takeBytes: 6); // 12 hex chars
+            return HashSha256.ShortHex(s, takeBytes: 6); // centralized helper
         }
     }
 }
