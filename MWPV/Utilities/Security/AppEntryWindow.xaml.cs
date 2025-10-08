@@ -13,7 +13,7 @@ using Utilities.Sql;                  // SqlCagegory, SchemaBootstrap
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
 using EDT = Utilities.Diagnostics.EarlyFailType;
-using Security.Utility.Crypto;        // KeyArchiveVerifier
+using Security.Utility.Crypto;        // KeyArchiveVerifier, KeyProvisioner
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
 using MWPV.Utilities.Security;        // PasswordStrengthEvaluator, PasswordStrength
 
@@ -237,7 +237,7 @@ namespace Utilities.Security
                         return;
                     }
 
-                    // KeyArchiveVerifier needs a string (short-lived)
+                    // Verify archive/password with sentinels
                     string? pwTemp = null;
                     bool isCorrect = false;
                     try
@@ -284,6 +284,25 @@ namespace Utilities.Security
                     SecureEncryptedDataStore.SetString(Key_KeyFile, keyArchivePath);
                     SecureEncryptedDataStore.SetAndWipe(Key_KeyPW, pwChars);
                     pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
+
+                    // === Read-only JSON/base64 validation — existing keyfile ONLY ===
+                    // Loader delegate uses ServiceSetUp to read raw keyset.json bytes from the unlocked archive.
+                    var service = new ServiceSetUp();
+                    bool jsonOk = KeyProvisioner.ValidateKeysetJson(service.LoadKeysetJsonBytes);
+
+                    if (!jsonOk)
+                    {
+                        // Show a blocking window about corrupt key file, then terminate.
+                        ErrorHandler.InfoTitled(
+                            "Corrupt Key File Detected",
+                            "The selected encrypted key file appears to be corrupt (invalid keyset.json).\n\n" +
+                            "The application will now exit.",
+                            "KeyFile.Corrupt"
+                        );
+
+                        Application.Current?.Shutdown(); // terminate app
+                        return;
+                    }
                 }
 
                 // 🔐 UI-only cleanup
@@ -316,6 +335,7 @@ namespace Utilities.Security
                     Close();
                     return;
                 }
+
                 // ✅ Close the form
                 DialogResult = true;
                 Close();

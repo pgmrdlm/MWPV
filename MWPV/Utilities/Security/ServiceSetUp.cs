@@ -265,6 +265,53 @@ namespace Utilities.Security
             }
         }
 
+        /// <summary>
+        /// Minimal loader used by KeyProvisioner.ValidateKeysetJson.
+        /// Reads raw bytes of "keyset.json" from the encrypted archive using SEDS path/password.
+        /// Returns Array.Empty&lt;byte&gt; on any failure.
+        /// </summary>
+        public byte[] LoadKeysetJsonBytes()
+        {
+            char[]? keyPw = null;
+            try
+            {
+                var archivePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
+                if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
+                    return Array.Empty<byte>();
+
+                keyPw = SecureEncryptedDataStore.GetChars(Key_KeyPW);
+                var pwString = new string(keyPw ?? Array.Empty<char>());
+                try
+                {
+                    using var extractor = SevenZipCore.CreateExtractor(archivePath, pwString);
+
+                    var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
+                        !f.IsDirectory && (
+                            string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
+                            string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal)));
+
+                    if (entry.FileName == null || entry.IsDirectory)
+                        return Array.Empty<byte>();
+
+                    using var ms = new MemoryStream();
+                    extractor.ExtractFile(entry.Index, ms);
+                    return ms.ToArray();
+                }
+                finally
+                {
+                    SensitiveDataCleaner.WipeString(ref pwString);
+                }
+            }
+            catch
+            {
+                return Array.Empty<byte>();
+            }
+            finally
+            {
+                if (keyPw != null) SensitiveDataCleaner.WipeCharArray(keyPw);
+            }
+        }
+
         public static string LoadSqlFromEncryptedArchive(string fileNameInArchive)
         {
             return SecureEncryptedDataStore.HasKey(fileNameInArchive) ? "worked" : "not_found";
