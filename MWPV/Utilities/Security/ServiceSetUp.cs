@@ -1,4 +1,5 @@
-﻿// First-run provisioning and secure loading utilities (JSON-only archive).
+﻿// File: Utilities/Security/ServiceSetUp.cs
+// First-run provisioning and secure loading utilities (JSON-only archive).
 
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,7 @@ using Security.Utility.Storage;         // SecureEncryptedDataStore
 using Security.Utility.Wiping;          // SensitiveDataCleaner
 using Security.Utility.Crypto;          // KeysetJsonV2, KeysetJsonBuilder
 using Utilities.Helpers;                // ErrorHandler, DatabaseHelper
+using Utilities.Security;               // KeyArchiveIntegrityService
 
 namespace Utilities.Security
 {
@@ -23,7 +25,7 @@ namespace Utilities.Security
     {
         #region Constants / Keys
 
-        private const string Key_KeyPW = "KeyPW";       // char[] (archive password)
+        private const string Key_KeyPW = "KeyPW";     // char[] (archive password)
         private const string Key_KeyFile = "KeyFile";   // string (archive path)
 
         private static string LocalRoot =>
@@ -93,7 +95,7 @@ namespace Utilities.Security
 
         public string SetUpKeyFile()
         {
-            string archivePath = null!;
+            string? archivePath = null;
             char[]? keyPw = null;
             char[]? dbPw = null;
             byte[]? logPayloadKey = null;
@@ -116,6 +118,7 @@ namespace Utilities.Security
                 if (!Directory.Exists(SqlFolder))
                     Directory.CreateDirectory(SqlFolder);
 
+                // Gather *.sql from staging folder (these get embedded into keyset.json)
                 var sqlMap = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var file in Directory.EnumerateFiles(SqlFolder, "*.sql", SearchOption.TopDirectoryOnly))
                 {
@@ -124,9 +127,17 @@ namespace Utilities.Security
                     sqlMap[name] = text;
                 }
 
+                // NEW: Seed SEDS with SQL now so SecureSql.Require(...) works on first run
+                foreach (var kv in sqlMap)
+                {
+                    SecureEncryptedDataStore.SetString(kv.Key, kv.Value ?? string.Empty);
+                }
+
+                // Generate additional keys
                 logPayloadKey = RandomNumberGenerator.GetBytes(32);
                 userSecretsKey = RandomNumberGenerator.GetBytes(32);
 
+                // Build keyset.json from secrets + SQL catalog
                 var json = KeysetJsonBuilder.BuildV2(
                     dbPassword: dbPw,
                     logPayloadKey: logPayloadKey,
@@ -135,6 +146,7 @@ namespace Utilities.Security
                     appVersionOverride: null
                 );
 
+                // Replace existing archive (secure delete first)
                 if (File.Exists(archivePath))
                 {
                     SensitiveDataCleaner.SecureFileDelete(
@@ -144,6 +156,7 @@ namespace Utilities.Security
                         finalZeroPass: true);
                 }
 
+                // Write temporary keyset.json and compress into encrypted archive
                 var tempDir = Path.Combine(Path.GetTempPath(), "mwpv_keyset_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempDir);
                 var keysetPath = Path.Combine(tempDir, KeysetJsonName);
@@ -172,6 +185,19 @@ namespace Utilities.Security
                     catch { /* best-effort */ }
                 }
 
+                // Record size + sha of the archive we just created.
+                // (DDL creates KeyArchiveIntegrity; required SQL is already in SEDS.)
+                try
+                {
+                    KeyArchiveIntegrityService.UpsertFromArchivePath(archivePath);
+                }
+                catch (Exception upsertEx)
+                {
+                    ErrorHandler.Abend(upsertEx, "Failed to record key archive integrity.");
+                    return "error";
+                }
+
+                // Clean up any staged SQL now that it is sealed into the archive
                 SecurelyScrubSqlStagingFolder();
 
                 return $"Encrypted archive created at: {archivePath}";
@@ -188,7 +214,7 @@ namespace Utilities.Security
                 if (keyPw != null) SensitiveDataCleaner.WipeCharArray(keyPw);
                 if (logPayloadKey != null) Array.Clear(logPayloadKey, 0, logPayloadKey.Length);
                 if (userSecretsKey != null) Array.Clear(userSecretsKey, 0, userSecretsKey.Length);
-                archivePath = null!;
+                archivePath = null;
             }
         }
 

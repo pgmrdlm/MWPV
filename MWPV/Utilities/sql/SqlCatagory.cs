@@ -17,41 +17,69 @@ namespace Utilities.Sql
         // 📦 Master catalog — update here and nowhere else.
         // Includes SQL scripts + the DB password entry (secret).
         private static readonly string[] RequiredArtifacts =
-        {
-            "s_Category_Exists.sql",
-            DatabaseHelper.DbPasswordKey,   // maps to DB_Password.txt in archive (secret, not SQL)
-            "s_Category_Insert.sql",
-            "s_Logs_Insert.sql",
-            "s_Logs_SelectRecent.sql",       // NEW only used here
-            "s_Logs_LastInsertId.sql",        // NEW
-            "MWPV_DB_Create.sql",
-            "s_CategorySelectAll.sql",    // only found here
-            "s_Logs_PurgeOlderThan.sql",
-            "Logs_Exists_BySig.sql",
-            "s_Logs_SelectAll.sql", // only found here
-            "s_Logs_SelectById.sql",
-            "s_Logs_SelectPageFilter.sql",
-            "s_Combo_LogsDetailSelectByType.sql",
-            "s_Combo_CategoryType.sql",
-            "s_Logs_SelectPage.sql"
-        };
+{
+    // Category
+    "s_Category_Exists.sql",
+    "s_Category_Insert.sql",
+    "s_CategorySelectAll.sql",
+
+    // Secrets (not SQL) packaged alongside
+    DatabaseHelper.DbPasswordKey,          // maps to DB_Password.txt in archive (secret, not SQL)
+
+    // Logs
+    "s_Logs_Insert.sql",
+    "s_Logs_SelectRecent.sql",
+    "s_Logs_LastInsertId.sql",
+    "s_Logs_PurgeOlderThan.sql",
+    "s_Logs_Exists_BySig.sql",
+    "s_Logs_SelectAll.sql",
+    "s_Logs_SelectById.sql",
+    "s_Logs_SelectPageFilter.sql",
+    "s_Logs_SelectPage.sql",
+
+    // Combos
+    "s_Combo_LogsDetailSelectByType.sql",
+    "s_Combo_CategoryType.sql",
+
+    // KeyArchiveIntegrity
+    "s_KeyArchiveIntegrity_upsert.sql",
+    "s_KeyArchiveIntegrity_select.sql",
+    "s_KeyArchiveIntegrity_exists.sql",
+
+    // DDL included in archive for completeness (not required at runtime)
+    "MWPV_DB_Create.sql"
+};
 
         // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.
         public static readonly string[] MustHaveScripts =
         {
-            "s_Logs_Insert.sql",
-            "s_Logs_SelectRecent.sql",
-            "s_CategorySelectAll.sql",
-            "s_Category_Exists.sql",
-            "s_Category_Insert.sql",
-            "s_Logs_SelectAll.sql",
-            "s_Logs_SelectById.sql",
-            "s_Logs_SelectPageFilter.sql",
-            "s_Combo_LogsDetailSelectByType.sql",
-            "s_Combo_CategoryType.sql",
-            "s_Logs_SelectPage.sql"
-            // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
-        };
+    // Logs
+    "s_Logs_Insert.sql",
+    "s_Logs_SelectRecent.sql",
+    "s_Logs_LastInsertId.sql",
+    "s_Logs_PurgeOlderThan.sql",
+    "s_Logs_Exists_BySig.sql",
+    "s_Logs_SelectAll.sql",
+    "s_Logs_SelectById.sql",
+    "s_Logs_SelectPageFilter.sql",
+    "s_Logs_SelectPage.sql",
+
+    // Category
+    "s_CategorySelectAll.sql",
+    "s_Category_Exists.sql",
+    "s_Category_Insert.sql",
+
+    // Combos
+    "s_Combo_LogsDetailSelectByType.sql",
+    "s_Combo_CategoryType.sql",
+
+    // KeyArchiveIntegrity
+    "s_KeyArchiveIntegrity_upsert.sql",
+    "s_KeyArchiveIntegrity_select.sql",
+    "s_KeyArchiveIntegrity_exists.sql"
+    // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
+};
+
 
         // In-memory SQL cache by filename (not used for secrets).
         private static readonly Dictionary<string, string> _sqlCache =
