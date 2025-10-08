@@ -16,15 +16,15 @@
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<!-- We also don’t want the auto TargetFramework attribute -->
 		<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-		<ApplicationIcon>Assets\Icons\MWPV.ico</ApplicationIcon>
 
-		<!-- (Versions now come from AssemblyInfo.cs below) -->
+		<ApplicationIcon>Assets\Icons\MWPV.ico</ApplicationIcon>
+		<!-- Use default Win32 manifest (no explicit ApplicationManifest entry) -->
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Resource Include="Assets\Icons\MWPV.ico">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Resource>
+		<Resource Include="Assets\Icons\MWPV.ico">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Resource>
 	</ItemGroup>
 
 	<!-- NuGet packages -->
@@ -33,8 +33,9 @@
 		<PackageReference Include="SevenZipSharp" Version="0.64.0" />
 		<PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
 	</ItemGroup>
+
 	<ItemGroup>
-	  <ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
+		<ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
 	</ItemGroup>
 
 	<!-- App resources / content -->
@@ -47,7 +48,5 @@
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
-
-	<!-- Reference the Security.Utility project that sits alongside MWPV.csproj -->
 
 </Project>

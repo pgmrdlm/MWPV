@@ -2,9 +2,9 @@
    MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
    ----------------------------------------------------------------------------
    ⚠️ DANGER: Drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   Purpose: Rebuild DB with Category.Category_Type (dev: no FK to ComboDetail),
-            universal ComboType/ComboDetail for dropdowns (auto IDs),
-            and Logs schema matching app (includes LoginId).
+   Purpose: Rebuild DB with Category.Category_Type, universal ComboType/ComboDetail,
+            Logs schema matching app, and a SINGLE key-archive integrity table
+            (size + hash only).
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -41,13 +41,20 @@ DROP TABLE IF EXISTS CategoryItemPinHistory;
 DROP TABLE IF EXISTS CatagoryItemPasswordHistory;
 DROP TABLE IF EXISTS CategoryItemPasswordHistory;
 
-DROP TABLE IF EXISTS BankCards;        -- NEW: ensure clean rebuild of new table
+DROP TABLE IF EXISTS BankCards;
 
 DROP TABLE IF EXISTS CatagoryItem;
 DROP TABLE IF EXISTS CategoryItem;
 
 DROP TABLE IF EXISTS Catagory;
 DROP TABLE IF EXISTS Category;
+
+-- Manifest / integrity-related (old tables)
+DROP TABLE IF EXISTS KeyFileMeta;
+DROP TABLE IF EXISTS KeyFileManifest;
+
+-- New single-row integrity table (if present from prior runs)
+DROP TABLE IF EXISTS KeyArchiveIntegrity;
 
 COMMIT;
 PRAGMA foreign_keys = ON;
@@ -78,9 +85,9 @@ END;
 CREATE TABLE IF NOT EXISTS ComboDetail (
     ComboDetailId INTEGER  PRIMARY KEY AUTOINCREMENT,
     ComboTypeId   INTEGER  NOT NULL,
-    Seq           INTEGER  NOT NULL,                   -- display order
-    Code          TEXT     NOT NULL,                   -- stable item code
-    Description   TEXT     NOT NULL,                   -- display text
+    Seq           INTEGER  NOT NULL,
+    Code          TEXT     NOT NULL,
+    Description   TEXT     NOT NULL,
     Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
     CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
     UpdatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
@@ -112,15 +119,11 @@ VALUES ('log_filters','Filters for the Logs UI',1),
        ('category_types','Category types in vault UI',1),
        ('debit_credit_cards','Debit and Credit Cards',1);
 
--- log_filters
--- INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
--- SELECT t.ComboTypeId, 0, 'SMOKE',            'Smoke Test',         1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 1, 'EARLY_FAIL',       'Early Failure',      1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, 'CATEGORY_INSERTED','Category Inserted',  1 FROM ComboType t WHERE t.Code='log_filters';
 
--- category_types (authoritative set — "Web Pages" removed; default is Seq=0)
 DELETE FROM ComboDetail
  WHERE ComboTypeId=(SELECT ComboTypeId FROM ComboType WHERE Code='category_types');
 
@@ -132,47 +135,38 @@ INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 3, '3', 'App/File/Folder Logins', 1 FROM ComboType t WHERE t.Code='category_types';
--- Added per request:
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 4, '4', 'Banks/Credit unions', 1 FROM ComboType t WHERE t.Code='category_types';
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 5, '5', 'Store web sites', 1
-FROM ComboType t WHERE t.Code='category_types';
--- debit_credit_cards (authoritative set)
+SELECT t.ComboTypeId, 5, '5', 'Store web sites', 1 FROM ComboType t WHERE t.Code='category_types';
+
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 0, '0', 'Debit Card', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
-
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 1, '1', 'VISA', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
-
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, '2', 'Master Card', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
-
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 3, '3', 'Discover Card', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
-
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 4, '4', 'American Express', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
-
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 5, '5', 'Store Credit Card', 1
 FROM ComboType t WHERE t.Code='debit_credit_cards';
 
-
 -- ---------------------------------------------------------------------------
--- Table: Category  (now with Category_Type INTEGER)
---   Dev choice: no FK to ComboDetail to keep reseeds simple; app enforces.
+-- Table: Category
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
     Category_Description TEXT,
-    Category_Type        INTEGER NOT NULL,         -- intended to reference ComboDetailId (category_types)
+    Category_Type        INTEGER NOT NULL,
     CreatedUtc           TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
@@ -256,8 +250,7 @@ CREATE TABLE IF NOT EXISTS CategoryItem (
 CREATE INDEX IF NOT EXISTS IX_CategoryItem_Category ON CategoryItem(Category_Key);
 
 -- ---------------------------------------------------------------------------
--- NEW: BankCards (encrypted JSON payload per CategoryItem)
--- Bc_Secret holds AES-GCM blob of JSON: {"cardNumber":"...","expDate":"YYYY-MM","seqCode":"..."}
+-- NEW: BankCards
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS BankCards (
     Bc_BankCardId   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,9 +274,9 @@ CREATE INDEX IF NOT EXISTS IX_BankCards_ItemActive
 CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
     CIPaH_PwHistId   INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPaH_CreatedAt  INTEGER NOT NULL,               -- Unix epoch
+    CIPaH_CreatedAt  INTEGER NOT NULL,
     CIPaH_Version    INTEGER NOT NULL DEFAULT 1,
-    CIPaH_Password   BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
+    CIPaH_Password   BLOB    NOT NULL,
     CIPaH_PadLen     INTEGER
 );
 CREATE INDEX IF NOT EXISTS IX_CIPaH_Item_CreatedAt_Desc
@@ -295,9 +288,9 @@ CREATE INDEX IF NOT EXISTS IX_CIPaH_Item_CreatedAt_Desc
 CREATE TABLE IF NOT EXISTS CategoryItemPinHistory (
     CIPiH_PinHistId  INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPiH_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPiH_CreatedAt  INTEGER NOT NULL,               -- Unix epoch
+    CIPiH_CreatedAt  INTEGER NOT NULL,
     CIPiH_Version    INTEGER NOT NULL DEFAULT 1,
-    CIPiH_Pin        BLOB    NOT NULL,               -- version|nonce|tag|padLen|ciphertext
+    CIPiH_Pin        BLOB    NOT NULL,
     CIPiH_PadLen     INTEGER
 );
 CREATE INDEX IF NOT EXISTS IX_CIPiH_Item_CreatedAt_Desc
@@ -326,14 +319,14 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.3.0',
+SELECT '1.3.1',
        strftime('%Y-%m-%d %H:%M:%S','now'),
-       'Add Category.Category_Type (dev: no FK); universal ComboType/ComboDetail; Logs includes LoginId.',
+       'Replace manifest tables with single KeyArchiveIntegrity (size + hash).',
        1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 -- ---------------------------------------------------------------------------
--- Table: Logs (matches app expectations incl. LoginId)
+-- Table: Logs
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -382,7 +375,6 @@ CREATE TABLE IF NOT EXISTS AppSettings (
 );
 CREATE INDEX IF NOT EXISTS IX_AppSettings_Key ON AppSettings(Key);
 
--- Seed defaults (idempotent)
 INSERT INTO AppSettings (Key, Scope, Value, ValueType, Description, LastUpdatedUtc)
 SELECT 'Portable.Enabled','Global','false','bool','Run in portable mode',strftime('%s','now')
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.Enabled' AND Scope='Global');
@@ -400,29 +392,17 @@ SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startu
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
 -- =========================
--- Key file (archive) meta: SINGLE ROW
+-- Single-row key archive integrity (size + hash only)
 -- =========================
-CREATE TABLE IF NOT EXISTS KeyFileMeta (
-    kfma_Id            INTEGER PRIMARY KEY CHECK (kfma_Id = 1), -- enforce single row
-    kfma_VersionString TEXT    NOT NULL,   -- e.g., "1.0.0"
-    kfma_ArchiveSha256 TEXT    NOT NULL,   -- SHA-256 of entire kb.7z
-    kfma_ArchiveSize   INTEGER NOT NULL,   -- bytes
-    kfma_WrittenUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS KeyArchiveIntegrity (
+    kai_Id            INTEGER PRIMARY KEY CHECK (kai_Id = 1),
+    kai_ArchiveSha256 TEXT    NOT NULL,             -- SHA-256 of entire key archive
+    kai_ArchiveSize   INTEGER NOT NULL,             -- bytes
+    kai_WrittenUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-
--- =========================
--- Current manifest entries: one row per file INSIDE key file
--- =========================
-CREATE TABLE IF NOT EXISTS KeyFileManifest (
-    kfme_RelPath    TEXT    PRIMARY KEY,  -- normalized path within archive
-    kfme_FileSize   INTEGER NOT NULL,     -- uncompressed bytes
-    kfme_FileSha256 TEXT    NOT NULL,     -- SHA-256 of file contents
-    kfme_WrittenUtc TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
 
 -- ---------------------------------------------------------------------------
--- VIEWS (recreate)  (unchanged per request)
+-- VIEWS (recreate)
 -- ---------------------------------------------------------------------------
 DROP VIEW IF EXISTS vw_CurrentPassword;
 CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
@@ -463,7 +443,5 @@ SELECT d.ComboDetailId, d.ComboTypeId, t.Code AS TypeCode, d.Seq, d.Code, d.Desc
  ORDER BY d.ComboTypeId, d.Seq;
 
 COMMIT;
-
--- Optional maintenance
 -- VACUUM;
 -- ANALYZE;
