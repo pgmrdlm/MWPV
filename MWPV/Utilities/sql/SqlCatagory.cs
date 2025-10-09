@@ -41,11 +41,6 @@ namespace Utilities.Sql
     "s_Combo_LogsDetailSelectByType.sql",
     "s_Combo_CategoryType.sql",
 
-    // KeyArchiveIntegrity
-    "s_KeyArchiveIntegrity_upsert.sql",
-    "s_KeyArchiveIntegrity_select.sql",
-    "s_KeyArchiveIntegrity_exists.sql",
-
     // DDL included in archive for completeness (not required at runtime)
     "MWPV_DB_Create.sql"
 };
@@ -71,12 +66,7 @@ namespace Utilities.Sql
 
     // Combos
     "s_Combo_LogsDetailSelectByType.sql",
-    "s_Combo_CategoryType.sql",
-
-    // KeyArchiveIntegrity
-    "s_KeyArchiveIntegrity_upsert.sql",
-    "s_KeyArchiveIntegrity_select.sql",
-    "s_KeyArchiveIntegrity_exists.sql"
+    "s_Combo_CategoryType.sql"
     // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
 };
 

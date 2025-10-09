@@ -391,15 +391,6 @@ INSERT INTO AppSettings (Key, Scope, Value, ValueType, Description, LastUpdatedU
 SELECT 'Portable.SqlCatalog','Global','[]','json','SQL scripts to load at startup (portable)',strftime('%s','now')
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings WHERE Key='Portable.SqlCatalog' AND Scope='Global');
 
--- =========================
--- Single-row key archive integrity (size + hash only)
--- =========================
-CREATE TABLE IF NOT EXISTS KeyArchiveIntegrity (
-    kai_Id            INTEGER PRIMARY KEY CHECK (kai_Id = 1),
-    kai_ArchiveSha256 TEXT    NOT NULL,             -- SHA-256 of entire key archive
-    kai_ArchiveSize   INTEGER NOT NULL,             -- bytes
-    kai_WrittenUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
-);
 
 -- ---------------------------------------------------------------------------
 -- VIEWS (recreate)

@@ -7,12 +7,13 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Data;
 using Security.Utility.Archives;        // SevenZipCore
 using Security.Utility.Storage;         // SecureEncryptedDataStore
 using Security.Utility.Wiping;          // SensitiveDataCleaner
 using Security.Utility.Crypto;          // KeysetJsonV2, KeysetJsonBuilder
 using Utilities.Helpers;                // ErrorHandler, DatabaseHelper
-using Utilities.Security;               // KeyArchiveIntegrityService
+// NOTE: No KeyArchiveIntegrity references
 
 namespace Utilities.Security
 {
@@ -70,10 +71,12 @@ namespace Utilities.Security
                 using (var cn = DatabaseHelper.OpenConnection())
                 using (var cmd = cn.CreateCommand())
                 {
+                    // Run your main schema file only (no integrity table).
                     cmd.CommandText = schemaSql;
                     cmd.ExecuteNonQuery();
                 }
 
+                // Persist the DB connection string in SEDS (if that's your pattern).
                 SecureEncryptedDataStore.SetString("DB_String", $"Data Source={DbPath}");
             }
             catch (Exception ex)
@@ -127,7 +130,7 @@ namespace Utilities.Security
                     sqlMap[name] = text;
                 }
 
-                // NEW: Seed SEDS with SQL now so SecureSql.Require(...) works on first run
+                // Seed SEDS with SQL now so any SecureSql.Require(...) works on first run
                 foreach (var kv in sqlMap)
                 {
                     SecureEncryptedDataStore.SetString(kv.Key, kv.Value ?? string.Empty);
@@ -166,7 +169,6 @@ namespace Utilities.Security
                 try
                 {
                     var comp = SevenZipCore.CreateCompressor();
-
                     // Single-entry archive; internal name is "keyset.json"
                     comp.CompressFilesEncrypted(archivePath, pwString, keysetPath);
                 }
@@ -185,17 +187,7 @@ namespace Utilities.Security
                     catch { /* best-effort */ }
                 }
 
-                // Record size + sha of the archive we just created.
-                // (DDL creates KeyArchiveIntegrity; required SQL is already in SEDS.)
-                try
-                {
-                    KeyArchiveIntegrityService.UpsertFromArchivePath(archivePath);
-                }
-                catch (Exception upsertEx)
-                {
-                    ErrorHandler.Abend(upsertEx, "Failed to record key archive integrity.");
-                    return "error";
-                }
+                // NOTE: No integrity table update or verification here anymore.
 
                 // Clean up any staged SQL now that it is sealed into the archive
                 SecurelyScrubSqlStagingFolder();
@@ -294,7 +286,7 @@ namespace Utilities.Security
         /// <summary>
         /// Minimal loader used by KeyProvisioner.ValidateKeysetJson.
         /// Reads raw bytes of "keyset.json" from the encrypted archive using SEDS path/password.
-        /// Returns Array.Empty&lt;byte&gt; on any failure.
+        /// Returns Array.Empty<byte> on any failure.
         /// </summary>
         public byte[] LoadKeysetJsonBytes()
         {
