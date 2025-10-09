@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Utilities.Helpers;      // DatabaseHelper.DbPasswordKey
-using Security.Utility;     // SecureEncryptedDataStore
+using Security.Utility;       // SecureEncryptedDataStore
 using MWPV.Services;          // ServiceSetUp
 using Utilities.Security;
 
@@ -17,59 +17,33 @@ namespace Utilities.Sql
         // 📦 Master catalog — update here and nowhere else.
         // Includes SQL scripts + the DB password entry (secret).
         private static readonly string[] RequiredArtifacts =
-{
-    // Category
-    "s_Category_Exists.sql",
-    "s_Category_Insert.sql",
-    "s_CategorySelectAll.sql",
-
-    // Secrets (not SQL) packaged alongside
-    DatabaseHelper.DbPasswordKey,          // maps to DB_Password.txt in archive (secret, not SQL)
-
-    // Logs
-    "s_Logs_Insert.sql",
-    "s_Logs_SelectRecent.sql",
-    "s_Logs_LastInsertId.sql",
-    "s_Logs_PurgeOlderThan.sql",
-    "s_Logs_Exists_BySig.sql",
-    "s_Logs_SelectAll.sql",
-    "s_Logs_SelectById.sql",
-    "s_Logs_SelectPageFilter.sql",
-    "s_Logs_SelectPage.sql",
-
-    // Combos
-    "s_Combo_LogsDetailSelectByType.sql",
-    "s_Combo_CategoryType.sql",
-
-    // DDL included in archive for completeness (not required at runtime)
-    "MWPV_DB_Create.sql"
-};
-
-        // ✅ Must-haves at runtime (SQL only) — used for warnings/verification.
-        public static readonly string[] MustHaveScripts =
         {
-    // Logs
-    "s_Logs_Insert.sql",
-    "s_Logs_SelectRecent.sql",
-    "s_Logs_LastInsertId.sql",
-    "s_Logs_PurgeOlderThan.sql",
-    "s_Logs_Exists_BySig.sql",
-    "s_Logs_SelectAll.sql",
-    "s_Logs_SelectById.sql",
-    "s_Logs_SelectPageFilter.sql",
-    "s_Logs_SelectPage.sql",
+            // Category
+            "s_Category_Exists.sql",
+            "s_Category_Insert.sql",
+            "s_CategorySelectAll.sql",
 
-    // Category
-    "s_CategorySelectAll.sql",
-    "s_Category_Exists.sql",
-    "s_Category_Insert.sql",
+            // Secrets (not SQL) packaged alongside
+            DatabaseHelper.DbPasswordKey,          // maps to DB_Password.txt in archive (secret, not SQL)
 
-    // Combos
-    "s_Combo_LogsDetailSelectByType.sql",
-    "s_Combo_CategoryType.sql"
-    // Note: DB password is a secret, not SQL; MWPV_DB_Create.sql not required at runtime.
-};
+            // Logs
+            "s_Logs_Insert.sql",
+            "s_Logs_SelectRecent.sql",
+            "s_Logs_LastInsertId.sql",
+            "s_Logs_PurgeOlderThan.sql",
+            "s_Logs_Exists_BySig.sql",
+            "s_Logs_SelectAll.sql",
+            "s_Logs_SelectById.sql",
+            "s_Logs_SelectPageFilter.sql",
+            "s_Logs_SelectPage.sql",
 
+            // Combos
+            "s_Combo_LogsDetailSelectByType.sql",
+            "s_Combo_CategoryType.sql",
+
+            // DDL included in archive for completeness
+            "MWPV_DB_Create.sql"
+        };
 
         // In-memory SQL cache by filename (not used for secrets).
         private static readonly Dictionary<string, string> _sqlCache =
@@ -83,7 +57,7 @@ namespace Utilities.Sql
         {
             ServiceSetUp.EnsureKeySetFromArchive();
             LoadAll();                 // push artifacts into SecureEncryptedDataStore
-            CacheSqlArtifactsOrWarn(); // build _sqlCache + verify secret presence
+            CacheSqlArtifactsOrWarn(); // build _sqlCache + verify presence
         }
 
         /// <summary>
@@ -98,7 +72,8 @@ namespace Utilities.Sql
 
         /// <summary>
         /// Populate the in-memory SQL cache from SecureEncryptedDataStore and
-        /// verify the DB password secret exists. Emits DEBUG hits/misses.
+        /// verify that all required artifacts are present. The DB password is
+        /// treated as a secret (presence only, not cached).
         /// </summary>
         public static void CacheSqlArtifactsOrWarn()
         {
@@ -106,22 +81,30 @@ namespace Utilities.Sql
 
             foreach (var key in RequiredArtifacts)
             {
-                if (!SecureEncryptedDataStore.HasKey(key))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key}");
-                    misses++;
-                    continue;
-                }
-
                 // Secret: database password — verify presence only (do not load).
                 if (string.Equals(key, DatabaseHelper.DbPasswordKey, StringComparison.OrdinalIgnoreCase))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][HIT ] {key} (secret present)");
-                    hits++;
+                    if (SecureEncryptedDataStore.HasKey(key))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][HIT ] {key} (secret present)");
+                        hits++;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (secret missing)");
+                        misses++;
+                    }
                     continue;
                 }
 
                 // Normal SQL artifact: cache the text
+                if (!SecureEncryptedDataStore.HasKey(key))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (not in secure store)");
+                    misses++;
+                    continue;
+                }
+
                 try
                 {
                     var sqlText = SecureEncryptedDataStore.GetString(key); // non-sensitive helper
@@ -144,13 +127,7 @@ namespace Utilities.Sql
                 }
             }
 
-            // Verify must-haves (SQL scripts needed at runtime)
-            foreach (var name in MustHaveScripts)
-            {
-                if (!_sqlCache.ContainsKey(name))
-                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][WARN] Must-have script not cached: {name}");
-            }
-
+            // Final summary
             System.Diagnostics.Debug.WriteLine($"[SQLCAT] summary: hits={hits} misses={misses} cached={_sqlCache.Count}");
         }
 
@@ -171,13 +148,19 @@ namespace Utilities.Sql
         public static IReadOnlyList<string> List => RequiredArtifacts;
 
         /// <summary>
-        /// Optional: return missing must-have scripts (DEBUG helper).
+        /// Optional: return required scripts (non-secret) that are not cached.
         /// </summary>
         public static string[] GetMissingMustHaves()
         {
             var missing = new List<string>();
-            foreach (var name in MustHaveScripts)
-                if (!_sqlCache.ContainsKey(name)) missing.Add(name);
+            foreach (var name in RequiredArtifacts)
+            {
+                if (string.Equals(name, DatabaseHelper.DbPasswordKey, StringComparison.OrdinalIgnoreCase))
+                    continue; // secret is not part of SQL cache
+
+                if (!_sqlCache.ContainsKey(name))
+                    missing.Add(name);
+            }
             return missing.ToArray();
         }
     }
