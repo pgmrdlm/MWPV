@@ -1,15 +1,17 @@
 ﻿namespace MWPV.Models
 {
-    public class CategoryItemGriud
+    public class CategoryItemGrid
     {
-        public string strCategoryItem1 { get; set; }
-        public string strCategoryItem2 { get; set; }
-        public string strCategoryItem3 { get; set; }
-        public string strCategoryItemToolTip1 { get; set; }
-        public string strCategoryItemToolTip2 { get; set; }
-        public string strCategoryItemToolTip3 { get; set; }
-        public string strCategoryItemKey1 { get; set; } 
-        public string strCategoryItemKey2 { get; set; }
-        public string strCategoryItemKey3 { get; set; }
+        public int? Key1 { get; set; }
+        public int? Key2 { get; set; }
+        public int? Key3 { get; set; }
+
+        public string? Col1 { get; set; }
+        public string? Col2 { get; set; }
+        public string? Col3 { get; set; }
+
+        public string? Des1 { get; set; }
+        public string? Des2 { get; set; }
+        public string? Des3 { get; set; }
     }
 }
