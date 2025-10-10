@@ -41,6 +41,9 @@ namespace Utilities.Sql
             "s_Combo_LogsDetailSelectByType.sql",
             "s_Combo_CategoryType.sql",
 
+            // Category Items
+            "s_CategoryItem_SelectGrid.sql",
+
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"
         };
