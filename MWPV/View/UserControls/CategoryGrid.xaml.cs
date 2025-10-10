@@ -8,83 +8,87 @@ using System.Windows.Controls;
 namespace MWPV.View.UserControls
 {
     /// <summary>
-    /// Interaction logic for CategoryGrid.xaml
+    /// A 3-column category button grid that:
+    /// - Preserves the app's themed button style (pill look)
+    /// - Collapses empty cells
+    /// - Raises SelectedCategoryChanged with (Key, Name) when a button is clicked
     /// </summary>
     public partial class CategoryGrid : UserControl
     {
-        public event EventHandler? CategoryItemClicked;
+        /* ================== Routed Event (with payload) ================== */
 
-        // ObservableCollection to hold the categories
-        public ObservableCollection<Categories> BoundCatagories { get; set; } = new ObservableCollection<Categories>();
+        public readonly struct CategorySelected
+        {
+            public int Key { get; }
+            public string Name { get; }
+            public CategorySelected(int key, string name)
+            {
+                Key = key;
+                Name = name ?? string.Empty;
+            }
+        }
+
+        public static readonly RoutedEvent SelectedCategoryChangedEvent =
+            EventManager.RegisterRoutedEvent(
+                nameof(SelectedCategoryChanged),
+                RoutingStrategy.Bubble,
+                typeof(RoutedEventHandler),
+                typeof(CategoryGrid));
+
+        /// <summary>
+        /// Fired when any category button is clicked.
+        /// Use GetSelectedCategory(e) to read (Key, Name).
+        /// </summary>
+        public event RoutedEventHandler SelectedCategoryChanged
+        {
+            add => AddHandler(SelectedCategoryChangedEvent, value);
+            remove => RemoveHandler(SelectedCategoryChangedEvent, value);
+        }
+
+        public static CategorySelected GetSelectedCategory(RoutedEventArgs e)
+            => e is CategorySelectedRoutedEventArgs ce ? ce.Payload : default;
+
+        private sealed class CategorySelectedRoutedEventArgs : RoutedEventArgs
+        {
+            public CategorySelected Payload { get; }
+            public CategorySelectedRoutedEventArgs(RoutedEvent routedEvent, object source, CategorySelected payload)
+                : base(routedEvent, source) => Payload = payload;
+        }
+
+        /* ================== Data ================== */
+
+        public ObservableCollection<Categories> BoundCategories { get; } = new();
 
         public CategoryGrid()
         {
             InitializeComponent();
-            this.DataContext = this;
-
-            // Also wire when the visual tree is ready (e.g., to access named elements)
-            this.Loaded += CategoryGrid_Loaded;
+            DataContext = this;
+            Loaded += (_, __) => Refresh();
         }
 
-        private void CategoryGrid_Loaded(object sender, RoutedEventArgs e)
+        /// <summary>Reloads from service.</summary>
+        public void Refresh()
         {
-            EnsureInternalWiring();
+            BoundCategories.Clear();
+            foreach (var c in CategoryService.LoadCategories())
+                BoundCategories.Add(c);
         }
 
-        /// <summary>
-        /// Ensure internal event wiring (idempotent). Safe to call anytime.
-        /// Wires SelectionChanged on the data grid if present.
-        /// </summary>
-        public void EnsureInternalWiring()
+        /* ================== UI handlers ================== */
+
+        private void OnCategoryButtonClick(object sender, RoutedEventArgs e)
         {
-            // If your XAML has a DataGrid named "CategoryDataGrid", wire its SelectionChanged
-            var grid = this.FindName("CategoryDataGrid") as DataGrid;
-            if (grid != null)
-            {
-                grid.SelectionChanged -= CategoryDataGrid_SelectionChanged;
-                grid.SelectionChanged += CategoryDataGrid_SelectionChanged;
-            }
-        }
+            if (sender is not Button btn) return;
 
-        public void RefreshCategoryGrid()
-        {
-            BoundCatagories.Clear();
-            var catagories = CategoryService.LoadCategories();
-            foreach (var cat in catagories)
-                BoundCatagories.Add(cat);
-        }
+            var name = btn.Content as string ?? string.Empty;
+            int key = 0;
+            if (btn.Tag is int k) key = k;
+            else if (btn.Tag is long l) key = (int)l;
+            else if (btn.Tag is string s && int.TryParse(s, out var parsed)) key = parsed;
 
-        // --- Button click handlers inside the grid/list ---
-
-        private void Button1_Click(object sender, RoutedEventArgs e)
-        {
-            RaiseCategorySelected();
-        }
-
-        private void Button2_Click(object sender, RoutedEventArgs e)
-        {
-            RaiseCategorySelected();
-        }
-
-        private void Button3_Click(object sender, RoutedEventArgs e)
-        {
-            RaiseCategorySelected();
-        }
-
-        // --- Selection change handler (covers row clicks, keyboard nav, etc.) ---
-
-        private void CategoryDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            // Only fire if a real category is selected
-            if ((sender as DataGrid)?.SelectedItem is Categories)
-            {
-                RaiseCategorySelected();
-            }
-        }
-
-        private void RaiseCategorySelected()
-        {
-            CategoryItemClicked?.Invoke(this, EventArgs.Empty);
+            var payload = new CategorySelected(key, name);
+            var args = new CategorySelectedRoutedEventArgs(SelectedCategoryChangedEvent, this, payload);
+            RaiseEvent(args);
         }
     }
 }
