@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS CategoryItem (
                                   REFERENCES Category (Category_Key) ON DELETE CASCADE,
 
     CI_Name                  TEXT    NOT NULL,
+	CI_Description			 TEXT,
     CI_Notes                 TEXT,
     CI_SecretMeta            BLOB,
 
