@@ -50,7 +50,7 @@ namespace MWPV.View.UserControls
         {
             if (CategoryGrid == null) return;
 
-            // Subscribe to the NEW routed event (SelectedCategoryChanged)
+            // Subscribe to the routed event (SelectedCategoryChanged)
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
             CategoryGrid.SelectedCategoryChanged += CategoryGrid_SelectedCategoryChanged;
 
@@ -75,9 +75,11 @@ namespace MWPV.View.UserControls
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
 
+            // CHANGE: show the button on ANY category click (no Key check)
             if (btnAddCategoryItem != null)
-                btnAddCategoryItem.Visibility = _selectedCategoryKey > 0 ? Visibility.Visible : Visibility.Collapsed;
+                btnAddCategoryItem.Visibility = Visibility.Visible;
 
+            // Update header with selected category name
             if (txtCategoryItemsTitle != null)
                 txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
                     ? "Category Items"
