@@ -5,7 +5,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:uc="clr-namespace:MWPV.View.UserControls"
              mc:Ignorable="d"
-             d:DesignHeight="600" d:DesignWidth="1000">
+             d:DesignHeight="600"
+             d:DesignWidth="1000">
 
     <!-- Base split first; overlay last to sit on top -->
     <Grid x:Name="Root">
@@ -18,7 +19,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- LEFT: Categories (Add Category + CategoryGrid + inline host) -->
-            <DockPanel Grid.Column="0" LastChildFill="True" Margin="8,8,8,8">
+            <DockPanel Grid.Column="0" LastChildFill="True" Margin="8">
                 <TextBlock DockPanel.Dock="Top"
                            Text="Categories"
                            FontSize="14"
@@ -34,7 +35,7 @@
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
-                <!-- Default: visible category grid -->
+                <!-- CategoryGrid raises SelectedCategoryChanged; subscribed in code-behind -->
                 <uc:CategoryGrid x:Name="CategoryGrid"/>
 
                 <!-- Inline Add Category host -->
@@ -51,10 +52,10 @@
             </DockPanel>
 
             <!-- RIGHT: Items (Add Item button + Items host) -->
-            <DockPanel Grid.Column="1" LastChildFill="True" Margin="8,8,8,8">
+            <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
                 <TextBlock DockPanel.Dock="Top"
-                           Text="Category Items"
                            Name="txtCategoryItemsTitle"
+                           Text="Category Items"
                            FontSize="14"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
@@ -62,7 +63,7 @@
                 <StackPanel DockPanel.Dock="Top"
                             Orientation="Horizontal"
                             Margin="0,0,0,8">
-                    <!-- Shown after a category is clicked -->
+                    <!-- Shown after a category is clicked (code-behind sets Visible) -->
                     <Button x:Name="btnAddCategoryItem"
                             Content="Add Item"
                             Visibility="Collapsed"
