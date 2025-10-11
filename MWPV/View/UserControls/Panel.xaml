@@ -18,14 +18,16 @@
                 <ColumnDefinition Width="*" MinWidth="420"/>
             </Grid.ColumnDefinitions>
 
-            <!-- LEFT: Categories (Add Category + CategoryGrid + inline host) -->
+            <!-- ================= LEFT: Categories ================= -->
             <DockPanel Grid.Column="0" LastChildFill="True" Margin="8">
+                <!-- Header -->
                 <TextBlock DockPanel.Dock="Top"
                            Text="Categories"
                            FontSize="14"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
+                <!-- Add Category button -->
                 <StackPanel DockPanel.Dock="Top"
                             Orientation="Horizontal"
                             Margin="0,0,0,8">
@@ -35,7 +37,7 @@
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
-                <!-- CategoryGrid raises SelectedCategoryChanged; subscribed in code-behind -->
+                <!-- Category Grid -->
                 <uc:CategoryGrid x:Name="CategoryGrid"/>
 
                 <!-- Inline Add Category host -->
@@ -51,8 +53,9 @@
                 </Border>
             </DockPanel>
 
-            <!-- RIGHT: Items (Add Item button + Items host) -->
+            <!-- ================= RIGHT: Category Items ================= -->
             <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
+                <!-- Header -->
                 <TextBlock DockPanel.Dock="Top"
                            Name="txtCategoryItemsTitle"
                            Text="Category Items"
@@ -60,17 +63,20 @@
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
+                <!-- Add Item button (shown when category selected) -->
                 <StackPanel DockPanel.Dock="Top"
                             Orientation="Horizontal"
                             Margin="0,0,0,8">
-                    <!-- Shown after a category is clicked (code-behind sets Visible) -->
                     <Button x:Name="btnAddCategoryItem"
                             Content="Add Item"
                             Visibility="Collapsed"
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
-                <ContentControl x:Name="CategoryItemsHost"/>
+                <!-- Category Item Grid (new) -->
+                <uc:CategoryItemGrid x:Name="CategoryItemGrid"
+                                     Visibility="Visible"
+                                     Margin="0,4,0,0"/>
             </DockPanel>
         </Grid>
 

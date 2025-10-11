@@ -1,0 +1,89 @@
+﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItemGrid"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="400" d:DesignWidth="600">
+
+    <UserControl.Resources>
+
+        <!-- Hide a button when its Content is null/empty -->
+        <Style x:Key="HideIfBlankPill"
+               TargetType="Button"
+               BasedOn="{StaticResource CategoryPill}">
+            <Setter Property="Visibility" Value="Visible"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}"
+                             Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <Trigger Property="Content" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Fallback if CategoryPill not found -->
+        <Style x:Key="HideIfBlankPill_Fallback"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Visibility" Value="Visible"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <Trigger Property="Content" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding BoundCategoryItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <!-- one “row” of up to 3 category item pills -->
+                    <Grid Margin="6,8,6,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Item 1 -->
+                        <Button Grid.Column="0"
+                                Style="{StaticResource HideIfBlankPill}"
+                                Content="{Binding strCategoryItem1}"
+                                Tag="{Binding strCategoryItemKey1}"
+                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip1}"
+                                Click="OnCategoryItemButtonClick"/>
+
+                        <!-- Spacer 1 -->
+
+                        <!-- Item 2 -->
+                        <Button Grid.Column="2"
+                                Style="{StaticResource HideIfBlankPill}"
+                                Content="{Binding strCategoryItem2}"
+                                Tag="{Binding strCategoryItemKey2}"
+                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip2}"
+                                Click="OnCategoryItemButtonClick"/>
+
+                        <!-- Spacer 2 -->
+
+                        <!-- Item 3 -->
+                        <Button Grid.Column="4"
+                                Style="{StaticResource HideIfBlankPill}"
+                                Content="{Binding strCategoryItem3}"
+                                Tag="{Binding strCategoryItemKey3}"
+                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip3}"
+                                Click="OnCategoryItemButtonClick"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>
