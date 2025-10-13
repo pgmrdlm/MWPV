@@ -4,16 +4,13 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
-using Utilities.Sql;      // SqlCategory
-using Security.Utility;   // InputGuards
-using MWPV.Services;      // LogCatalogService
+using Utilities.Sql;      // SqlCagegory
+// using Security.Utility; // no longer needed
 
 namespace MWPV.Services
 {
     public static class CategoryItemService
     {
-        // --------------------------- Helpers ---------------------------------
-
         private static string LoadSqlRequired(string assetName)
         {
             var sql = SqlCagegory.GetSql(assetName);
@@ -22,24 +19,40 @@ namespace MWPV.Services
             return sql;
         }
 
-        // ---------------------------- Reads ----------------------------------
-
         /// <summary>
-        /// Load category items for a given category key.
-        /// Maps directly to the CategoryItemGriud model.
+        /// Loads items for a category into 3-column row model.
         /// </summary>
         public static ObservableCollection<CategoryItemGriud> LoadCategoryItems(int categoryKey)
         {
+            // Minimal sanity check (don’t throw on 0; just return empty)
+            if (categoryKey < 0)
+                throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
+
             var rows = new ObservableCollection<CategoryItemGriud>();
 
             try
             {
                 var selectSql = LoadSqlRequired("s_CategoryItem_SelectGrid.sql");
 
+#if DEBUG
+                Debug.WriteLine("[SQL][TEXT] >>>");
+                Debug.WriteLine(selectSql);
+                Debug.WriteLine("[SQL][TEXT] <<<");
+#endif
+
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = selectSql;
-                cmd.Parameters.AddWithValue("@Category_Key", categoryKey);
+
+                var p = cmd.CreateParameter();
+                p.ParameterName = "@Category_Key";
+                p.SqliteType = SqliteType.Integer;
+                p.Value = categoryKey;
+                cmd.Parameters.Add(p);
+
+#if DEBUG
+                Debug.WriteLine($"[SQL][PARAM] @Category_Key = {categoryKey}  (type=Int32)");
+#endif
 
                 using var r = cmd.ExecuteReader();
 
@@ -70,14 +83,10 @@ namespace MWPV.Services
                 }
 
 #if DEBUG
-                try
-                {
-                    Debug.WriteLine($"[CAT_ITEMS][LOAD] rows={rows.Count} for CatKey={categoryKey}");
-                    int idx = 0;
-                    foreach (var c in rows)
-                        Debug.WriteLine($"[CAT_ITEMS][{idx++}] '{c.strCategoryItem1}' | '{c.strCategoryItem2}' | '{c.strCategoryItem3}'");
-                }
-                catch { }
+                Debug.WriteLine($"[CAT_ITEMS][LOAD] rows={rows.Count} for CatKey={categoryKey}");
+                int idx = 0;
+                foreach (var c in rows)
+                    Debug.WriteLine($"[CAT_ITEMS][{idx++}] '{c.strCategoryItem1}' | '{c.strCategoryItem2}' | '{c.strCategoryItem3}'");
 #endif
             }
             catch (Exception ex)

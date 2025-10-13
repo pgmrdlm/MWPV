@@ -8,18 +8,19 @@
              d:DesignHeight="600"
              d:DesignWidth="1000">
 
-    <!-- Base split first; overlay last to sit on top -->
+    <!-- Root: base split plus an overlay host for logs -->
     <Grid x:Name="Root">
 
-        <!-- ===== Base split (DEFAULT VIEW) ===== -->
+        <!-- ====================== MAIN SPLIT ====================== -->
         <Grid x:Name="SplitRoot">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="260"/>
                 <ColumnDefinition Width="*" MinWidth="420"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ================= LEFT: Categories ================= -->
+            <!-- ================= LEFT: Categories ================== -->
             <DockPanel Grid.Column="0" LastChildFill="True" Margin="8">
+
                 <!-- Header -->
                 <TextBlock DockPanel.Dock="Top"
                            Text="Categories"
@@ -40,30 +41,29 @@
                 <!-- Category Grid -->
                 <uc:CategoryGrid x:Name="CategoryGrid"/>
 
-                <!-- Inline Add Category host -->
+                <!-- Inline Add Category Host (collapsed by default) -->
                 <Border x:Name="AddCategoryHost"
                         Visibility="Collapsed"
                         Background="Transparent"
-                        BorderBrush="{x:Null}"
                         BorderThickness="0"
-                        CornerRadius="0"
                         Padding="0"
                         Margin="0">
                     <ContentControl x:Name="AddCategoryContent"/>
                 </Border>
             </DockPanel>
 
-            <!-- ================= RIGHT: Category Items ================= -->
+            <!-- ============== RIGHT: Category Items ================ -->
             <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
-                <!-- Header -->
+
+                <!-- Right Header -->
                 <TextBlock DockPanel.Dock="Top"
-                           Name="txtCategoryItemsTitle"
+                           x:Name="txtCategoryItemsTitle"
                            Text="Category Items"
                            FontSize="14"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
-                <!-- Add Item button (shown when category selected) -->
+                <!-- Add Item (shown once a category is selected) -->
                 <StackPanel DockPanel.Dock="Top"
                             Orientation="Horizontal"
                             Margin="0,0,0,8">
@@ -75,12 +75,11 @@
 
                 <!-- Category Item Grid (new) -->
                 <uc:CategoryItemGrid x:Name="CategoryItemGrid"
-                                     Visibility="Visible"
                                      Margin="0,4,0,0"/>
             </DockPanel>
         </Grid>
 
-        <!-- ===== FULL LOGS OVERLAY ===== -->
+        <!-- ====================== LOGS OVERLAY ===================== -->
         <Border x:Name="OverlayHost"
                 Visibility="Collapsed"
                 Panel.ZIndex="1000"

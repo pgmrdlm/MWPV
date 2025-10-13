@@ -4,7 +4,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
-using Utilities.Sql;      // SqlCagegory
+using Utilities.Sql;      // SqlCagegory  (intentional spelling to match existing)
 using Security.Utility;   // InputGuards
 using MWPV.Services;      // LogCatalogService
 
@@ -41,13 +41,23 @@ namespace MWPV.Services
 
         // ---------------------------- Reads ----------------------------------
 
+        /// <summary>
+        /// Loads the 3-column category grid rows.
+        /// Expects SQL to project: Key1/Key2/Key3, Col1/Col2/Col3, Des1/Des2/Des3.
+        /// </summary>
         public static ObservableCollection<Categories> LoadCategories()
         {
             var rows = new ObservableCollection<Categories>();
 
             try
             {
+                // This is your grid SQL (already returns Key*, Col*, Des*).
+                // Keeping the existing asset name you’re using in the app/logs.
                 var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
+
+#if DEBUG
+                try { Debug.WriteLine("[CATEGORIES][SQL] Using asset: s_CategorySelectAll.sql"); } catch { }
+#endif
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -55,24 +65,40 @@ namespace MWPV.Services
 
                 using var r = cmd.ExecuteReader();
 
-                int iCol1 = r.GetOrdinal("Col1");
-                int iCol2 = r.GetOrdinal("Col2");
-                int iCol3 = r.GetOrdinal("Col3");
-                int iDes1 = r.GetOrdinal("Des1");
-                int iDes2 = r.GetOrdinal("Des2");
-                int iDes3 = r.GetOrdinal("Des3");
+                // Ordinals (null-safe; keys may come back as Int64 from SQLite)
+                int iKey1 = SafeGetOrdinal(r, "Key1");
+                int iKey2 = SafeGetOrdinal(r, "Key2");
+                int iKey3 = SafeGetOrdinal(r, "Key3");
+
+                int iCol1 = SafeGetOrdinal(r, "Col1");
+                int iCol2 = SafeGetOrdinal(r, "Col2");
+                int iCol3 = SafeGetOrdinal(r, "Col3");
+
+                int iDes1 = SafeGetOrdinal(r, "Des1");
+                int iDes2 = SafeGetOrdinal(r, "Des2");
+                int iDes3 = SafeGetOrdinal(r, "Des3");
 
                 while (r.Read())
                 {
-                    rows.Add(new Categories
+                    var row = new Categories
                     {
-                        strCategory1 = r.IsDBNull(iCol1) ? "" : r.GetString(iCol1),
-                        strCategory2 = r.IsDBNull(iCol2) ? "" : r.GetString(iCol2),
-                        strCategory3 = r.IsDBNull(iCol3) ? "" : r.GetString(iCol3),
-                        strCategoryToolTip1 = r.IsDBNull(iDes1) ? "" : r.GetString(iDes1),
-                        strCategoryToolTip2 = r.IsDBNull(iDes2) ? "" : r.GetString(iDes2),
-                        strCategoryToolTip3 = r.IsDBNull(iDes3) ? "" : r.GetString(iDes3),
-                    });
+                        // Keys (nullable ints in model)
+                        intCategoryKey1 = ReadNullableInt(r, iKey1),
+                        intCategoryKey2 = ReadNullableInt(r, iKey2),
+                        intCategoryKey3 = ReadNullableInt(r, iKey3),
+
+                        // Names
+                        strCategory1 = ReadNullableString(r, iCol1),
+                        strCategory2 = ReadNullableString(r, iCol2),
+                        strCategory3 = ReadNullableString(r, iCol3),
+
+                        // Tooltips
+                        strCategoryToolTip1 = ReadNullableString(r, iDes1),
+                        strCategoryToolTip2 = ReadNullableString(r, iDes2),
+                        strCategoryToolTip3 = ReadNullableString(r, iDes3),
+                    };
+
+                    rows.Add(row);
                 }
 
 #if DEBUG
@@ -81,7 +107,13 @@ namespace MWPV.Services
                     Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
                     int idx = 0;
                     foreach (var c in rows)
-                        Debug.WriteLine($"[CATEGORIES][{idx++}] '{c.strCategory1}' | '{c.strCategory2}' | '{c.strCategory3}'");
+                    {
+                        Debug.WriteLine(
+                            $"[CATEGORIES][{idx++}] " +
+                            $"K1={c.intCategoryKey1?.ToString() ?? "null"} '{c.strCategory1}' | " +
+                            $"K2={c.intCategoryKey2?.ToString() ?? "null"} '{c.strCategory2}' | " +
+                            $"K3={c.intCategoryKey3?.ToString() ?? "null"} '{c.strCategory3}'");
+                    }
                 }
                 catch { }
 #endif
@@ -111,15 +143,15 @@ namespace MWPV.Services
                 cmd.CommandText = sql;
 
                 using var r = cmd.ExecuteReader();
-                int iCode = r.GetOrdinal("Code");
-                int iDesc = r.GetOrdinal("Description");
+                int iCode = SafeGetOrdinal(r, "Code");
+                int iDesc = SafeGetOrdinal(r, "Description");
 
                 while (r.Read())
                 {
                     rows.Add(new CategoryTypeOption
                     {
-                        Code = r.IsDBNull(iCode) ? "" : r.GetString(iCode),
-                        Description = r.IsDBNull(iDesc) ? "" : r.GetString(iDesc),
+                        Code = ReadNullableString(r, iCode) ?? "",
+                        Description = ReadNullableString(r, iDesc) ?? "",
                     });
                 }
 
@@ -249,6 +281,37 @@ namespace MWPV.Services
                     });
             }
             catch { }
+        }
+
+        // ------------------------- Internal utils ----------------------------
+
+        private static int SafeGetOrdinal(SqliteDataReader r, string name)
+        {
+            try { return r.GetOrdinal(name); } catch { return -1; }
+        }
+
+        private static int? ReadNullableInt(SqliteDataReader r, int ordinal)
+        {
+            if (ordinal < 0 || r.IsDBNull(ordinal)) return null;
+            // SQLite integer often comes back as Int64
+            try
+            {
+                // Try direct Int32 first
+                return r.GetFieldType(ordinal) == typeof(int)
+                    ? r.GetInt32(ordinal)
+                    : Convert.ToInt32(r.GetValue(ordinal));
+            }
+            catch
+            {
+                try { return Convert.ToInt32(r.GetInt64(ordinal)); }
+                catch { return null; }
+            }
+        }
+
+        private static string? ReadNullableString(SqliteDataReader r, int ordinal)
+        {
+            if (ordinal < 0 || r.IsDBNull(ordinal)) return "";
+            try { return r.GetString(ordinal); } catch { return r.GetValue(ordinal)?.ToString() ?? ""; }
         }
     }
 }

@@ -3,8 +3,8 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- =======================
-       GLOBAL SIZES & PADDING
-       ======================= -->
+         GLOBAL SIZES & PADDING
+         ======================= -->
     <sys:Double   x:Key="StdButtonWidth">130</sys:Double>
     <sys:Double   x:Key="StdButtonHeight">20</sys:Double>
     <Thickness    x:Key="StdButtonPadding">10,6,10,6</Thickness>
@@ -13,8 +13,8 @@
     <Thickness    x:Key="FatButtonPadding">16,6,16,6</Thickness>
 
     <!-- =======================
-       BASE TEMPLATE (130×20)
-       ======================= -->
+         BASE TEMPLATE (130×20)
+         ======================= -->
     <Style x:Key="RoundedButtonBase" TargetType="Button">
         <Setter Property="Width" Value="{StaticResource StdButtonWidth}"/>
         <Setter Property="Height" Value="{StaticResource StdButtonHeight}"/>
@@ -22,7 +22,7 @@
         <Setter Property="Padding" Value="{StaticResource StdButtonPadding}"/>
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="UseLayoutRounding" Value="True"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -32,17 +32,17 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
-                  Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="14"
-                  SnapsToDevicePixels="True">
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="14"
+                            SnapsToDevicePixels="True">
                         <Grid>
                             <Border x:Name="HoverOverlay"  CornerRadius="14" Background="#40FFFFFF" Opacity="0"/>
                             <Border x:Name="PressedOverlay" CornerRadius="14" Background="#20000000" Opacity="0"/>
                             <ContentPresenter RecognizesAccessKey="True"
-                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Grid>
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
@@ -50,15 +50,15 @@
                                 <VisualState x:Name="MouseOver">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="HoverOverlay"
-                                     Storyboard.TargetProperty="Opacity"
-                                     To="0.18" Duration="0:0:0.12"/>
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.18" Duration="0:0:0.12"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="PressedOverlay"
-                                     Storyboard.TargetProperty="Opacity"
-                                     To="0.22" Duration="0:0:0.06"/>
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         To="0.22" Duration="0:0:0.06"/>
                                     </Storyboard>
                                 </VisualState>
                                 <VisualState x:Name="Disabled"/>
@@ -75,7 +75,7 @@
                             <Setter Property="Padding" Value="10,7,10,7"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource FocusBorder}"/>
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
                             <Setter Property="BorderThickness" Value="2"/>
                         </Trigger>
                         <Trigger Property="IsDefault" Value="True">
@@ -85,8 +85,8 @@
                             <Setter TargetName="bd" Property="BorderBrush" Value="#FF7B7B"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="bd" Property="Background" Value="{StaticResource DisabledBrush}"/>
-                            <Setter Property="Foreground" Value="{StaticResource Interactive.DisabledFg}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{DynamicResource DisabledBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}"/>
                             <Setter TargetName="bd" Property="BorderBrush" Value="#33000000"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -96,107 +96,98 @@
     </Style>
 
     <!-- =======================
-       SIZE / PURPOSE VARIANTS
-       ======================= -->
+         SIZE / PURPOSE VARIANTS
+         ======================= -->
     <Style x:Key="ActionFat" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
         <Setter Property="Height" Value="{StaticResource FatButtonHeight}"/>
         <Setter Property="Padding" Value="{StaticResource FatButtonPadding}"/>
     </Style>
 
     <!-- =======================
-       DIALOG BUTTONS
-       ======================= -->
+         DIALOG BUTTONS
+         ======================= -->
+
     <!-- Primary (green) -->
     <Style x:Key="DialogPrimary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource PrimaryNormalBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PrimaryNormalBrush}"/>
         <Setter Property="Foreground" Value="Black"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource PrimaryHoverBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonHoverFg}"/>
+                <Setter Property="Background" Value="{DynamicResource PrimaryHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource PrimaryPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonPressedFg}"/>
+                <Setter Property="Background" Value="{DynamicResource PrimaryPressedBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <!-- Secondary (gray/silver) -->
     <Style x:Key="DialogSecondary" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource SecondaryNormalBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource SecondaryNormalBrush}"/>
         <Setter Property="Foreground" Value="Black"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource SecondaryHoverBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonHoverFg}"/>
+                <Setter Property="Background" Value="{DynamicResource SecondaryHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource SecondaryPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonPressedFg}"/>
+                <Setter Property="Background" Value="{DynamicResource SecondaryPressedBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <!-- Danger (red) -->
     <Style x:Key="DialogDanger" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource DangerNormalBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource DangerNormalBrush}"/>
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="BorderBrush" Value="#40000000"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource DangerHoverBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonHoverFg}"/>
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource DangerPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonPressedFg}"/>
+                <Setter Property="Background" Value="{DynamicResource DangerPressedBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <!-- =======================
-       CATEGORY / ITEM PILLS
-       ======================= -->
+         CATEGORY / ITEM PILLS
+         ======================= -->
     <Style x:Key="CategoryPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource NavNormalBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource NavNormalBrush}"/>
         <Setter Property="Foreground" Value="Black"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource NavHoverBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonHoverFg}"/>
+                <Setter Property="Background" Value="{DynamicResource NavHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource NavPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonPressedFg}"/>
+                <Setter Property="Background" Value="{DynamicResource NavPressedBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <Style x:Key="ItemPill" TargetType="Button" BasedOn="{StaticResource RoundedButtonBase}">
-        <Setter Property="Background" Value="{StaticResource ItemNormalBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ItemNormalBrush}"/>
         <Setter Property="Foreground" Value="White"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="BorderBrush" Value="{StaticResource ShadowStroke}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonHoverFg}"/>
+                <Setter Property="Background" Value="{DynamicResource ItemHoverBrush}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
-                <Setter Property="Foreground" Value="{StaticResource Interactive.ButtonPressedFg}"/>
+                <Setter Property="Background" Value="{DynamicResource ItemPressedBrush}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
     <!-- =======================
-       TITLEBAR BUTTONS
-       ======================= -->
+         TITLEBAR BUTTONS
+         ======================= -->
     <Style x:Key="TitleButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="Transparent"/>

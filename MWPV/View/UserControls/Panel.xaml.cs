@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -16,14 +17,12 @@ namespace MWPV.View.UserControls
         {
             InitializeComponent();
 
-            // Visual lifecycle
+            // lifecycle
             Loaded += Panel_Loaded;
             Unloaded += Panel_Unloaded;
 
-            // Default left-pane state
+            // default visual
             ShowCategoryGrid();
-
-            // Prepare inline “Add Category” user control
             InitializeAddCategoryInline();
         }
 
@@ -31,15 +30,19 @@ namespace MWPV.View.UserControls
 
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
         {
+#if DEBUG
+            Debug.WriteLine("[PANEL][LOADED]");
+#endif
             WireCategoryGridEvents();
             WireOverlayEvents();
-
-            // Refresh categories on first show
             SafeRefreshCategories();
         }
 
         private void Panel_Unloaded(object? sender, RoutedEventArgs e)
         {
+#if DEBUG
+            Debug.WriteLine("[PANEL][UNLOADED]");
+#endif
             UnwireCategoryGridEvents();
             UnwireOverlayEvents();
         }
@@ -50,22 +53,28 @@ namespace MWPV.View.UserControls
         {
             if (CategoryGrid == null) return;
 
-            // Subscribe to the routed event (SelectedCategoryChanged)
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
             CategoryGrid.SelectedCategoryChanged += CategoryGrid_SelectedCategoryChanged;
 
-            // Header + button initial state
             if (txtCategoryItemsTitle != null)
                 txtCategoryItemsTitle.Text = "Category Items";
 
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Collapsed;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events wired.");
+#endif
         }
 
         private void UnwireCategoryGridEvents()
         {
             if (CategoryGrid == null) return;
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events unwired.");
+#endif
         }
 
         // RoutedEvent handler — extract payload via CategoryGrid.GetSelectedCategory(e)
@@ -75,28 +84,65 @@ namespace MWPV.View.UserControls
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
 
-            // CHANGE: show the button on ANY category click (no Key check)
+#if DEBUG
+            Debug.WriteLine($"[PANEL][LEFT→RIGHT] Category selected: key={_selectedCategoryKey}, name='{_selectedCategoryName}'");
+#endif
+
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Visible;
 
-            // Update header with selected category name
             if (txtCategoryItemsTitle != null)
+            {
                 txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
                     ? "Category Items"
                     : $"Category Items — {_selectedCategoryName}";
+            }
 
-            // TODO (later): load right-side CategoryItem grid for _selectedCategoryKey
-            // await ItemsGrid.LoadForCategoryAsync(_selectedCategoryKey, _selectedCategoryName);
+            // Right-side items refresh
+            try
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][RIGHT][REFRESH][CALL] CategoryItemGrid.Refresh(...)");
+#endif
+                CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
+#if DEBUG
+                Debug.WriteLine("[PANEL][RIGHT][REFRESH][RETURN]");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[PANEL][RIGHT][REFRESH][ERR] {ex}");
+#endif
+            }
         }
 
         public void RefreshCategoryGrid()
         {
+#if DEBUG
+            Debug.WriteLine("[PANEL][LEFT][REFRESH][PUBLIC] RefreshCategoryGrid() called.");
+#endif
             SafeRefreshCategories();
         }
 
         private void SafeRefreshCategories()
         {
-            try { CategoryGrid?.Refresh(); } catch { /* no-op */ }
+#if DEBUG
+            Debug.WriteLine("[PANEL][LEFT][REFRESH][ENTER] SafeRefreshCategories()");
+#endif
+            try
+            {
+                CategoryGrid?.Refresh();
+#if DEBUG
+                Debug.WriteLine("[PANEL][LEFT][REFRESH][EXIT] CategoryGrid.Refresh() returned.");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[PANEL][LEFT][REFRESH][ERR] {ex}");
+#endif
+            }
         }
 
         /* =================== Add Category Inline =================== */
@@ -116,11 +162,18 @@ namespace MWPV.View.UserControls
             _addCategoryInline.Canceled += AddCategoryInline_Canceled;
 
             AddCategoryContent.Content = _addCategoryInline;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] Initialized.");
+#endif
         }
 
-        // XAML references this handler – keep it
+        // XAML wires this handler
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
+#if DEBUG
+            Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] ShowAddCategory() requested.");
+#endif
             ShowAddCategory();
         }
 
@@ -140,6 +193,12 @@ namespace MWPV.View.UserControls
 
             if (txtCategoryItemsTitle != null)
                 txtCategoryItemsTitle.Text = "Category Items";
+
+            try { CategoryItemGrid?.Clear(); } catch { /* ignore */ }
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] Visible; category grid hidden; right cleared.");
+#endif
         }
 
         private void ShowCategoryGrid()
@@ -158,6 +217,10 @@ namespace MWPV.View.UserControls
 
             if (txtCategoryItemsTitle != null)
                 txtCategoryItemsTitle.Text = "Category Items";
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] Hidden; category grid visible.");
+#endif
         }
 
         private void AddCategoryInline_Submitted(object? sender, CategorySubmittedEventArgs e)
@@ -166,8 +229,11 @@ namespace MWPV.View.UserControls
             _isHandlingInlineEvent = true;
             try
             {
+#if DEBUG
+                Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE][SUBMIT] Returning to grid and refreshing.");
+#endif
                 ShowCategoryGrid();
-                SafeRefreshCategories();        // repopulate left grid
+                SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
             finally { _isHandlingInlineEvent = false; }
@@ -179,8 +245,11 @@ namespace MWPV.View.UserControls
             _isHandlingInlineEvent = true;
             try
             {
+#if DEBUG
+                Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE][CANCEL] Returning to grid and refreshing.");
+#endif
                 ShowCategoryGrid();
-                SafeRefreshCategories();        // keep wiring fresh even after cancel
+                SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
             finally { _isHandlingInlineEvent = false; }
@@ -191,30 +260,45 @@ namespace MWPV.View.UserControls
         private void WireOverlayEvents()
         {
             if (LogsOverlay == null) return;
-
             LogsOverlay.CloseRequested -= LogsOverlay_CloseRequested;
             LogsOverlay.CloseRequested += LogsOverlay_CloseRequested;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][OVERLAY] LogsOverlay events wired.");
+#endif
         }
 
         private void UnwireOverlayEvents()
         {
             if (LogsOverlay == null) return;
             LogsOverlay.CloseRequested -= LogsOverlay_CloseRequested;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][OVERLAY] LogsOverlay events unwired.");
+#endif
         }
 
-        // MainWindow calls this – keep the public signature
+        // Called by MainWindow
         public void ShowLogs()
         {
             if (OverlayHost != null)
                 OverlayHost.Visibility = Visibility.Visible;
 
             try { LogsOverlay?.Focus(); } catch { /* ignore */ }
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][OVERLAY] ShowLogs() visible.");
+#endif
         }
 
         private void LogsOverlay_CloseRequested(object? sender, EventArgs e)
         {
             if (OverlayHost != null)
                 OverlayHost.Visibility = Visibility.Collapsed;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][OVERLAY] Close requested; overlay hidden.");
+#endif
         }
     }
 }
