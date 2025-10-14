@@ -2,16 +2,19 @@
 using MWPV.Services;
 using System;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 namespace MWPV.View.UserControls
 {
     /// <summary>
-    /// A 3-column category button grid that:
-    /// - Preserves the app's themed button style (pill look)
-    /// - Collapses empty cells
-    /// - Raises SelectedCategoryChanged with (Key, Name) when a button is clicked
+    /// 3-column category grid with fixed pill width. Button text shows:
+    /// - full text if length <= 17
+    /// - otherwise first 14 chars + "..."
+    /// Tooltip shows full text + extra tooltip line.
+    /// Raises SelectedCategoryChanged with (Key, Name).
     /// </summary>
     public partial class CategoryGrid : UserControl
     {
@@ -35,10 +38,6 @@ namespace MWPV.View.UserControls
                 typeof(RoutedEventHandler),
                 typeof(CategoryGrid));
 
-        /// <summary>
-        /// Fired when any category button is clicked.
-        /// Use GetSelectedCategory(e) to read (Key, Name).
-        /// </summary>
         public event RoutedEventHandler SelectedCategoryChanged
         {
             add => AddHandler(SelectedCategoryChangedEvent, value);
@@ -66,7 +65,6 @@ namespace MWPV.View.UserControls
             Loaded += (_, __) => Refresh();
         }
 
-        /// <summary>Reloads from service.</summary>
         public void Refresh()
         {
             BoundCategories.Clear();
@@ -74,13 +72,16 @@ namespace MWPV.View.UserControls
                 BoundCategories.Add(c);
         }
 
-        /* ================== UI handlers ================== */
+        /* ================== UI ================== */
 
         private void OnCategoryButtonClick(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn) return;
 
-            var name = btn.Content as string ?? string.Empty;
+            // Content is a TextBlock
+            var name = (btn.Content as TextBlock)?.Text ?? string.Empty;
+
+            // Tag holds the key
             int key = 0;
             if (btn.Tag is int k) key = k;
             else if (btn.Tag is long l) key = (int)l;
@@ -90,5 +91,38 @@ namespace MWPV.View.UserControls
             var args = new CategorySelectedRoutedEventArgs(SelectedCategoryChangedEvent, this, payload);
             RaiseEvent(args);
         }
+    }
+
+    /// <summary>
+    /// If text length <= max (parameter, default 17), return as-is.
+    /// Otherwise return first 14 chars + "...".
+    /// You can override both with ConverterParameter "max,keep".
+    /// e.g. "17,14" or just "17".
+    /// </summary>
+    public sealed class CategoryCropConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var s = value as string ?? string.Empty;
+
+            int max = 17;
+            int keep = 14;
+
+            if (parameter is string p && !string.IsNullOrWhiteSpace(p))
+            {
+                var parts = p.Split(',');
+                if (parts.Length >= 1 && int.TryParse(parts[0], out var m)) max = m;
+                if (parts.Length >= 2 && int.TryParse(parts[1], out var k)) keep = k;
+            }
+
+            if (s.Length <= max) return s;
+            if (keep < 0) keep = 0;
+            if (keep > s.Length) keep = Math.Min(keep, s.Length);
+
+            return (keep > 0 ? s.Substring(0, keep) : string.Empty) + "...";
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => Binding.DoNothing;
     }
 }

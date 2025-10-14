@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.Sqlite;
+﻿// File: MWPV/Services/CategoryService.cs
+using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
@@ -12,6 +13,11 @@ namespace MWPV.Services
 {
     public static class CategoryService
     {
+        // ===== Centralized limits to keep UI/Backend consistent =====
+        private const int MinCategoryNameLength = 4;
+        private const int MaxCategoryNameLength = 64; // was 17
+        private const int MaxDescriptionLength = 512;
+
         // DTO for combo binding
         public sealed class CategoryTypeOption
         {
@@ -51,8 +57,6 @@ namespace MWPV.Services
 
             try
             {
-                // This is your grid SQL (already returns Key*, Col*, Des*).
-                // Keeping the existing asset name you’re using in the app/logs.
                 var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
 
 #if DEBUG
@@ -65,7 +69,6 @@ namespace MWPV.Services
 
                 using var r = cmd.ExecuteReader();
 
-                // Ordinals (null-safe; keys may come back as Int64 from SQLite)
                 int iKey1 = SafeGetOrdinal(r, "Key1");
                 int iKey2 = SafeGetOrdinal(r, "Key2");
                 int iKey3 = SafeGetOrdinal(r, "Key3");
@@ -82,17 +85,14 @@ namespace MWPV.Services
                 {
                     var row = new Categories
                     {
-                        // Keys (nullable ints in model)
                         intCategoryKey1 = ReadNullableInt(r, iKey1),
                         intCategoryKey2 = ReadNullableInt(r, iKey2),
                         intCategoryKey3 = ReadNullableInt(r, iKey3),
 
-                        // Names
                         strCategory1 = ReadNullableString(r, iCol1),
                         strCategory2 = ReadNullableString(r, iCol2),
                         strCategory3 = ReadNullableString(r, iCol3),
 
-                        // Tooltips
                         strCategoryToolTip1 = ReadNullableString(r, iDes1),
                         strCategoryToolTip2 = ReadNullableString(r, iDes2),
                         strCategoryToolTip3 = ReadNullableString(r, iDes3),
@@ -201,12 +201,20 @@ namespace MWPV.Services
         {
             if (newCategory is null) throw new ArgumentNullException(nameof(newCategory));
 
-            var check = InputGuards.ValidateCategoryName(newCategory, minLen: 4, maxLen: 17);
+            // >>> Only change here: maxLen now uses constant (64)
+            var check = InputGuards.ValidateCategoryName(
+                newCategory,
+                minLen: MinCategoryNameLength,
+                maxLen: MaxCategoryNameLength
+            );
+
             if (!check.IsValid)
-                throw new ArgumentException(check.Error ?? "Invalid category name.", nameof(newCategory));
+                throw new ArgumentException(
+                    check.Error ?? $"Category name must be {MaxCategoryNameLength} characters or fewer.",
+                    nameof(newCategory));
 
             string cleanName = check.CleanName;
-            string? desc = InputGuards.NormalizeFreeText(newDescription, maxLen: 512);
+            string? desc = InputGuards.NormalizeFreeText(newDescription, maxLen: MaxDescriptionLength);
             if (string.IsNullOrWhiteSpace(desc)) desc = cleanName;
 
             string? typeDescription = string.IsNullOrWhiteSpace(typeDescriptionFromUi) ? null : typeDescriptionFromUi.Trim();
@@ -293,10 +301,8 @@ namespace MWPV.Services
         private static int? ReadNullableInt(SqliteDataReader r, int ordinal)
         {
             if (ordinal < 0 || r.IsDBNull(ordinal)) return null;
-            // SQLite integer often comes back as Int64
             try
             {
-                // Try direct Int32 first
                 return r.GetFieldType(ordinal) == typeof(int)
                     ? r.GetInt32(ordinal)
                     : Convert.ToInt32(r.GetValue(ordinal));

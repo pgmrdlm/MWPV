@@ -15,6 +15,10 @@ namespace MWPV.View.UserControls
         public event EventHandler<CategorySubmittedEventArgs>? Submitted;
         public event EventHandler? Canceled;
 
+        // Single place to control max length for the name
+        private const int MinCategoryNameLength = 4;
+        private const int MaxCategoryNameLength = 64; // was 17
+
         public AddCategoryInline()
         {
             InitializeComponent();
@@ -46,11 +50,17 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // --- Validate name
-                var nameRes = InputGuards.ValidateCategoryName(tbCategoryName?.Text, minLen: 4, maxLen: 17);
+                // --- Validate name (only change: max length -> 64)
+                var nameRes = InputGuards.ValidateCategoryName(
+                    tbCategoryName?.Text,
+                    minLen: MinCategoryNameLength,
+                    maxLen: MaxCategoryNameLength
+                );
+
                 if (!nameRes.IsValid)
                 {
-                    FailAndFocus(nameRes.Error ?? "Invalid category name.");
+                    // If guard didn’t provide a message, show one that reflects the new max
+                    FailAndFocus(nameRes.Error ?? $"Category name must be {MaxCategoryNameLength} characters or fewer.");
                     return;
                 }
                 var name = nameRes.CleanName!;
@@ -115,10 +125,7 @@ namespace MWPV.View.UserControls
                         Context = BuildContext(new { name, description, typeCode })
                     };
 
-                    // Keep log lightweight: serialize with persist options (no indentation)
                     var json = AppJson.SerializeLogPayload(payload, pretty: false);
-
-                    // Use ErrorHandler to route to your repository sink
                     ErrorHandler.Info("CategoryService", json);
                 }
                 catch
@@ -191,10 +198,8 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                // serialize with Default options, then parse to get a JsonElement
                 var json = AppJson.Serialize(obj, pretty: false);
                 using var doc = JsonDocument.Parse(json);
-                // Clone to detach from the document's lifetime
                 return doc.RootElement.Clone();
             }
             catch
