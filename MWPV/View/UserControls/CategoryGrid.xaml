@@ -3,35 +3,42 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:MWPV.View.UserControls"
              mc:Ignorable="d"
              d:DesignHeight="400" d:DesignWidth="600">
 
     <UserControl.Resources>
+        <!-- Crops to 14 when length > 17 -->
+        <local:CategoryCropConverter x:Key="CategoryCrop" />
 
-        <!-- Hide a button when its Content is null/empty.
-             Based on your themed pill so the look stays consistent. -->
-        <Style x:Key="HideIfBlankPill"
-               TargetType="Button"
-               BasedOn="{StaticResource CategoryPill}">
-            <Setter Property="Visibility" Value="Visible"/>
+        <!-- Hide button when text is blank; keep theme via BasedOn -->
+        <Style x:Key="HideIfBlankPill" TargetType="Button" BasedOn="{StaticResource CategoryPill}">
+            <!-- Lock width so columns don't shift -->
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="MaxWidth" Value="180"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Style.Triggers>
-                <!-- empty string -->
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}"
-                             Value="">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
-                <!-- null -->
                 <Trigger Property="Content" Value="{x:Null}">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- If CategoryPill isn’t found for some reason, fall back to your default Button style -->
-        <Style x:Key="HideIfBlankPill_Fallback"
-               TargetType="Button"
-               BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Visibility" Value="Visible"/>
+        <!-- Fallback if CategoryPill isn't present -->
+        <Style x:Key="HideIfBlankPill_Fallback" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="MinWidth" Value="180"/>
+            <Setter Property="MaxWidth" Value="180"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -47,7 +54,7 @@
         <ItemsControl ItemsSource="{Binding BoundCategories, RelativeSource={RelativeSource AncestorType=UserControl}}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <!-- one “row” of up to 3 category pills -->
+                    <!-- one row of up to 3 pills -->
                     <Grid Margin="6,8,6,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -57,33 +64,62 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Col 1 -->
+                        <!-- COL 1 -->
                         <Button Grid.Column="0"
                                 Style="{StaticResource HideIfBlankPill}"
-                                Content="{Binding strCategory1}"
                                 Tag="{Binding intCategoryKey1}"
-                                ToolTipService.ToolTip="{Binding strCategoryToolTip1}"
-                                Click="OnCategoryButtonClick"/>
+                                Click="OnCategoryButtonClick">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategory1, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategory1}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryToolTip1}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
 
-                        <!-- Spacer 1 is Grid.Column=1 -->
-
-                        <!-- Col 2 -->
+                        <!-- COL 2 -->
                         <Button Grid.Column="2"
                                 Style="{StaticResource HideIfBlankPill}"
-                                Content="{Binding strCategory2}"
                                 Tag="{Binding intCategoryKey2}"
-                                ToolTipService.ToolTip="{Binding strCategoryToolTip2}"
-                                Click="OnCategoryButtonClick"/>
+                                Click="OnCategoryButtonClick">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategory2, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategory2}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryToolTip2}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
 
-                        <!-- Spacer 2 is Grid.Column=3 -->
-
-                        <!-- Col 3 -->
+                        <!-- COL 3 -->
                         <Button Grid.Column="4"
                                 Style="{StaticResource HideIfBlankPill}"
-                                Content="{Binding strCategory3}"
                                 Tag="{Binding intCategoryKey3}"
-                                ToolTipService.ToolTip="{Binding strCategoryToolTip3}"
-                                Click="OnCategoryButtonClick"/>
+                                Click="OnCategoryButtonClick">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategory3, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategory3}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryToolTip3}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

@@ -56,6 +56,7 @@ namespace MWPV.View.UserControls
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
             CategoryGrid.SelectedCategoryChanged += CategoryGrid_SelectedCategoryChanged;
 
+            // Reset right header and button
             if (txtCategoryItemsTitle != null)
                 txtCategoryItemsTitle.Text = "Category Items";
 
@@ -88,9 +89,11 @@ namespace MWPV.View.UserControls
             Debug.WriteLine($"[PANEL][LEFT→RIGHT] Category selected: key={_selectedCategoryKey}, name='{_selectedCategoryName}'");
 #endif
 
+            // Show Add Item button
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Visible;
 
+            // Update header to include selected name
             if (txtCategoryItemsTitle != null)
             {
                 txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
@@ -98,7 +101,7 @@ namespace MWPV.View.UserControls
                     : $"Category Items — {_selectedCategoryName}";
             }
 
-            // Right-side items refresh
+            // Refresh right grid
             try
             {
 #if DEBUG

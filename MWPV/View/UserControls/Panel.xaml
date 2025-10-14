@@ -8,7 +8,6 @@
              d:DesignHeight="600"
              d:DesignWidth="1000">
 
-    <!-- Root: base split plus an overlay host for logs -->
     <Grid x:Name="Root">
 
         <!-- ====================== MAIN SPLIT ====================== -->
@@ -55,7 +54,7 @@
             <!-- ============== RIGHT: Category Items ================ -->
             <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
 
-                <!-- Right Header -->
+                <!-- Right Header (will become: Category Items — {Selected}) -->
                 <TextBlock DockPanel.Dock="Top"
                            x:Name="txtCategoryItemsTitle"
                            Text="Category Items"
@@ -73,7 +72,7 @@
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
-                <!-- Category Item Grid (new) -->
+                <!-- Category Item Grid -->
                 <uc:CategoryItemGrid x:Name="CategoryItemGrid"
                                      Margin="0,4,0,0"/>
             </DockPanel>
