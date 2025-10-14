@@ -3,12 +3,13 @@
    ----------------------------------------------------------------------------
    ⚠️ DANGER: Drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
    This build includes:
-     - Category/CategoryItem tables + tuned indexes
-     - Password history with reuse fingerprint (CIPaH_PwSig) + versioning
-     - vw_CurrentPassword view for newest-first fetch
-     - Combo seeds for log filters & category types
-     - Combo types "Bank Cards" and "Account Number Types"
-     - ComboDetail requirement flags for account/card types
+     - Category / CategoryItem core tables
+     - CategoryItem* history tables (password/pin/security-questions)
+     - BankCards + NEW CategoryItemAccounts (encrypted payload siblings)
+     - ComboType/ComboDetail with requirement flags + seeds
+     - Views: vw_CurrentPassword, active Combo views
+     - Logs table + indexes
+     - DbVersion + KeyArchiveIntegrity
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -45,15 +46,18 @@ DROP TABLE IF EXISTS CategoryItemPinHistory;
 DROP TABLE IF EXISTS CatagoryItemPasswordHistory;
 DROP TABLE IF EXISTS CategoryItemPasswordHistory;
 
+-- Sibling tables for item details
 DROP TABLE IF EXISTS BankCards;
+DROP TABLE IF EXISTS CategoryItemAccounts;
 
+-- Core
 DROP TABLE IF EXISTS CatagoryItem;
 DROP TABLE IF EXISTS CategoryItem;
 
 DROP TABLE IF EXISTS Catagory;
 DROP TABLE IF EXISTS Category;
 
--- Key-archive integrity (current simple approach)
+-- Integrity/meta
 DROP TABLE IF EXISTS KeyArchiveIntegrity;
 
 COMMIT;
@@ -129,7 +133,7 @@ BEGIN
 END;
 
 -- ---------------------------------------------------------------------------
--- Seed: Combo families (log_filters, category_types, debit_credit_cards, etc.)
+-- Seed: Combo families
 -- ---------------------------------------------------------------------------
 INSERT OR IGNORE INTO ComboType (Code, Description, Active)
 VALUES ('log_filters','Filters for the Logs UI',1),
@@ -171,7 +175,7 @@ SELECT t.ComboTypeId, 4, 'APP_START', 'Application started', 1 FROM ComboType t 
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 5, 'APP_EXIT', 'Application exited', 1 FROM ComboType t WHERE t.Code='log_filters';
 
--- Bank Cards using UNION ALL subquery (avoid VALUES aliasing)
+-- Bank Cards using UNION ALL subquery
 WITH ct AS (SELECT ComboTypeId AS id FROM ComboType WHERE Code='bank_cards'),
 sub AS (
   SELECT 10 AS seq, 'VISA'        AS code, 'VISA'           AS label UNION ALL
@@ -222,7 +226,7 @@ CREATE TABLE IF NOT EXISTS Category (
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- Example seeds
+-- Default Categories (correctly mapped to category_types)
 INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Application Forums','Login to forums that support applications',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
@@ -232,7 +236,7 @@ SELECT 'Application Forums','Login to forums that support applications',
 INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
 SELECT 'Government','Any government web site login',
        (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
+        WHERE t.Code='category_types' AND d.Seq=2),
        STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
 INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
@@ -259,10 +263,35 @@ SELECT 'Political Forums','Political forum logins',
         WHERE t.Code='category_types' AND d.Seq=0),
        STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
 
+-- Newly requested default categories
+INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
+SELECT 'Utilities','Utility provider logins',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=3),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
+
+INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
+SELECT 'Banks/Savings and Loans','Banking and S&L logins',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=4),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
+
+INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
+SELECT 'Encrypted Files/Folders','Local encrypted file/folder entries',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=5),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
+
+INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
+SELECT 'Applications','Local desktop/application credentials',
+       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
+        WHERE t.Code='category_types' AND d.Seq=6),
+       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
+
 -- ---------------------------------------------------------------------------
 -- CategoryItem
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CategoryItem (
+CREATE TABLE CategoryItem (
     ItemId                   INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Key             INTEGER NOT NULL
                                   REFERENCES Category (Category_Key) ON DELETE CASCADE,
@@ -272,14 +301,21 @@ CREATE TABLE IF NOT EXISTS CategoryItem (
     CI_Notes                 TEXT,
     CI_SecretMeta            BLOB,
 
+    -- New: catch-all encrypted data + storage indicator
+    CI_SecretData            BLOB,
+    CI_SecretStorage         TEXT    NOT NULL DEFAULT '0'   -- '0'=none, '1'=CI_SecretData, '2'=Accounts
+                                  CHECK (CI_SecretStorage IN ('0','1','2')),
+
     CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
 
     IsActive                 INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
     CI_NbrSecurityQuestions  INTEGER DEFAULT 0,
 
+    CHECK (length(trim(CI_Name)) > 0),
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
+
 
 CREATE INDEX IF NOT EXISTS IX_CategoryItem_Category
   ON CategoryItem(Category_Key);
@@ -299,7 +335,46 @@ BEGIN
 END;
 
 -- ---------------------------------------------------------------------------
--- BankCards
+-- Seed: Default storage guidance as inactive templates per Category
+-- ---------------------------------------------------------------------------
+-- Utilities: store account/customer number in CI_SecretData ('1')
+INSERT OR IGNORE INTO CategoryItem
+  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
+SELECT c.Category_Key,
+       'Template: Utilities storage','Default storage indicator for Utilities','Inactive template; set to active or duplicate as needed.',
+       NULL, NULL, '1',
+       strftime('%s','now'), strftime('%s','now'), 0, 0
+FROM Category c WHERE c.Category_Name='Utilities';
+
+-- Banks/S&L: store account/routing in CI_SecretData ('1')
+INSERT OR IGNORE INTO CategoryItem
+  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
+SELECT c.Category_Key,
+       'Template: Bank/S&L storage','Default storage indicator for Banks/S&L','Inactive template; set to active or duplicate as needed.',
+       NULL, NULL, '1',
+       strftime('%s','now'), strftime('%s','now'), 0, 0
+FROM Category c WHERE c.Category_Name='Banks/Savings and Loans';
+
+-- Encrypted Files/Folders: no account number ('0')
+INSERT OR IGNORE INTO CategoryItem
+  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
+SELECT c.Category_Key,
+       'Template: Encrypted Files/Folders storage','No account number storage for this category','Inactive template.',
+       NULL, NULL, '0',
+       strftime('%s','now'), strftime('%s','now'), 0, 0
+FROM Category c WHERE c.Category_Name='Encrypted Files/Folders';
+
+-- Applications: no account number ('0')
+INSERT OR IGNORE INTO CategoryItem
+  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
+SELECT c.Category_Key,
+       'Template: Applications storage','No account number storage for this category','Inactive template.',
+       NULL, NULL, '0',
+       strftime('%s','now'), strftime('%s','now'), 0, 0
+FROM Category c WHERE c.Category_Name='Applications';
+
+-- ---------------------------------------------------------------------------
+-- BankCards (encrypted payload)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS BankCards (
     Bc_BankCardId   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,6 +390,45 @@ CREATE INDEX IF NOT EXISTS IX_BankCards_Item
 
 CREATE INDEX IF NOT EXISTS IX_BankCards_ItemActive
   ON BankCards(Bc_ItemId, Bc_IsActive);
+
+-- ---------------------------------------------------------------------------
+-- CategoryItemAccounts (encrypted account/routing payloads)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS CategoryItemAccounts (
+    Cia_AccountId     INTEGER PRIMARY KEY AUTOINCREMENT,
+    Cia_ItemId        INTEGER NOT NULL
+                           REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+
+    -- points to ComboDetail under 'account_number_types' (e.g., BANK, CHECKING…)
+    Cia_TypeDetailId  INTEGER NOT NULL
+                           REFERENCES ComboDetail (ComboDetailId),
+
+    -- encrypted blob (e.g., JSON: {accountNumber, routingNumber, label, last4, notes})
+    Cia_Secret        BLOB    NOT NULL,
+
+    Cia_IsActive      INTEGER NOT NULL DEFAULT 1 CHECK (Cia_IsActive IN (0,1)),
+    Cia_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    Cia_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+
+    CHECK (Cia_TypeDetailId > 0)
+);
+
+CREATE INDEX IF NOT EXISTS IX_CIA_Item
+  ON CategoryItemAccounts (Cia_ItemId);
+
+CREATE INDEX IF NOT EXISTS IX_CIA_ItemActive
+  ON CategoryItemAccounts (Cia_ItemId, Cia_IsActive);
+
+CREATE INDEX IF NOT EXISTS IX_CIA_ItemType
+  ON CategoryItemAccounts (Cia_ItemId, Cia_TypeDetailId);
+
+CREATE TRIGGER IF NOT EXISTS trg_CIA_TouchUpdateUtc
+AFTER UPDATE ON CategoryItemAccounts
+BEGIN
+  UPDATE CategoryItemAccounts
+     SET Cia_UpdatedAt = strftime('%s','now')
+   WHERE Cia_AccountId = NEW.Cia_AccountId;
+END;
 
 -- ---------------------------------------------------------------------------
 -- CategoryItemPasswordHistory
@@ -407,9 +521,9 @@ CREATE TABLE IF NOT EXISTS DbVersion (
 );
 
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.5.0',
+SELECT '1.5.1',
        strftime('%Y-%m-%d %H:%M:%S','now'),
-       'Add ComboDetail requirement flags for accounts/cards; seed Bank Cards + Account Number Types; keep password-reuse fingerprint and indexes.',
+       'Add CategoryItemAccounts (encrypted), keep BankCards; seeds for bank_cards and account_number_types; requirement flags.',
        1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
