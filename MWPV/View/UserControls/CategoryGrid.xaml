@@ -8,11 +8,14 @@
              d:DesignHeight="400" d:DesignWidth="600">
 
     <UserControl.Resources>
-        <!-- Crops to 14 when length > 17 -->
+
+        <!-- Crops to 14 when length > 17 (converter already in your code) -->
         <local:CategoryCropConverter x:Key="CategoryCrop" />
 
-        <!-- Hide button when text is blank; keep theme via BasedOn -->
-        <Style x:Key="HideIfBlankPill" TargetType="Button" BasedOn="{StaticResource CategoryPill}">
+        <!-- Hide button when the *text content* is blank/null; keep CategoryPill look -->
+        <Style x:Key="HideIfBlankPill"
+               TargetType="Button"
+               BasedOn="{StaticResource CategoryPill}">
             <!-- Lock width so columns don't shift -->
             <Setter Property="Width" Value="180"/>
             <Setter Property="MinWidth" Value="180"/>
@@ -21,33 +24,43 @@
             <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
+                <!-- If the TextBlock inside Content is empty, hide the pill -->
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
-                <Trigger Property="Content" Value="{x:Null}">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="{x:Null}">
                     <Setter Property="Visibility" Value="Collapsed"/>
-                </Trigger>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Fallback if CategoryPill isn't present -->
-        <Style x:Key="HideIfBlankPill_Fallback" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <!-- Fallback if CategoryPill isn’t present -->
+        <Style x:Key="HideIfBlankPill_Fallback"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Width" Value="180"/>
             <Setter Property="MinWidth" Value="180"/>
             <Setter Property="MaxWidth" Value="180"/>
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
-                <Trigger Property="Content" Value="{x:Null}">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="{x:Null}">
                     <Setter Property="Visibility" Value="Collapsed"/>
-                </Trigger>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
+
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -68,7 +81,8 @@
                         <Button Grid.Column="0"
                                 Style="{StaticResource HideIfBlankPill}"
                                 Tag="{Binding intCategoryKey1}"
-                                Click="OnCategoryButtonClick">
+                                Click="OnCategoryButtonClick"
+                                AutomationProperties.Name="{Binding strCategory1}">
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategory1, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"
@@ -87,7 +101,8 @@
                         <Button Grid.Column="2"
                                 Style="{StaticResource HideIfBlankPill}"
                                 Tag="{Binding intCategoryKey2}"
-                                Click="OnCategoryButtonClick">
+                                Click="OnCategoryButtonClick"
+                                AutomationProperties.Name="{Binding strCategory2}">
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategory2, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"
@@ -106,7 +121,8 @@
                         <Button Grid.Column="4"
                                 Style="{StaticResource HideIfBlankPill}"
                                 Tag="{Binding intCategoryKey3}"
-                                Click="OnCategoryButtonClick">
+                                Click="OnCategoryButtonClick"
+                                AutomationProperties.Name="{Binding strCategory3}">
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategory3, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"
