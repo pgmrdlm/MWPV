@@ -125,6 +125,37 @@ INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 1, '1', 'Paid Subscription Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
+---
+-- *** Need additional inserts for category_types
+-- Please add Utilities, Banks/Savings and Loans, Encrypted Files/Folders, Applications 
+-- *** These will be inserts for category_types
+---
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 3, '3', 'Utilities', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, '4', 'Banks/Savings and Loans', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, '5', 'Encrypted Files/Folders', 1 FROM ComboType t WHERE t.Code='category_types';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 6, '6', 'Applications', 1 FROM ComboType t WHERE t.Code='category_types';
+
+-- *** Need additional inserts for log_filters
+-- Please add  CATEGORY_DUPLICATE, CATEGORY_INSERTED, LOGIN, EARLY_FAIL
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 0, 'CATEGORY_DUPLICATE', 'Duplicate category detected', 1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 1, 'CATEGORY_INSERTED', 'Category successfully inserted', 1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 2, 'LOGIN', 'Login events', 1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 3, 'EARLY_FAIL', 'Early-fail events', 1 FROM ComboType t WHERE t.Code='log_filters';
+-- Additional inserts for log events.
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 4, 'APP_START', 'Application started', 1 FROM ComboType t WHERE t.Code='log_filters';
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT t.ComboTypeId, 5, 'APP_EXIT', 'Application exited', 1 FROM ComboType t WHERE t.Code='log_filters';
+-- LOGIN + EARLY_FAIL already seeded; LOGIN_FAILED exists per your note
+
 
 -- ---------------------------------------------------------------------------
 -- Category

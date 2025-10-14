@@ -9,7 +9,7 @@ namespace MWPV.View.UserControls
 {
     public partial class CategoryItemGrid : UserControl
     {
-        // Keep model name as-is to match existing services.
+        // Keeping the model type name as-is to match your existing service contract.
         public ObservableCollection<CategoryItemGriud> BoundCategoryItems { get; } = new();
 
         private int _currentCategoryKey = 0;
@@ -23,9 +23,7 @@ namespace MWPV.View.UserControls
 #endif
         }
 
-        /// <summary>
-        /// Clears the bound rows.
-        /// </summary>
+        /// <summary>Clear bound rows.</summary>
         public void Clear()
         {
 #if DEBUG
@@ -39,9 +37,7 @@ namespace MWPV.View.UserControls
 #endif
         }
 
-        /// <summary>
-        /// Load items for the given category. No header or button here—those live in Panel.
-        /// </summary>
+        /// <summary>Populate items for a category (3-up rows; blanks auto-collapse via style).</summary>
         public void Refresh(int categoryKey, string? categoryName = null)
         {
 #if DEBUG

@@ -8,15 +8,14 @@
 
     <UserControl.Resources>
 
-        <!-- EXACT COPY of CategoryGrid’s HideIfBlankPill -->
-        <Style x:Key="HideIfBlankPill"
+        <!-- Local-only style: keep ItemPill look, but hide when content is blank/null -->
+        <Style x:Key="ItemPillWhenNotEmpty"
                TargetType="Button"
-               BasedOn="{StaticResource CategoryPill}">
+               BasedOn="{StaticResource ItemPill}">
             <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
                 <!-- empty string -->
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}"
-                             Value="">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
                 <!-- null -->
@@ -26,8 +25,8 @@
             </Style.Triggers>
         </Style>
 
-        <!-- EXACT COPY fallback (if CategoryPill not found) -->
-        <Style x:Key="HideIfBlankPill_Fallback"
+        <!-- Fallback in case ItemPill isn’t available for some reason -->
+        <Style x:Key="ItemPillWhenNotEmpty_Fallback"
                TargetType="Button"
                BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Visibility" Value="Visible"/>
@@ -40,14 +39,14 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <!-- IMPORTANT: use BoundCategoryItems (mirrors BoundCategories pattern) -->
         <ItemsControl ItemsSource="{Binding BoundCategoryItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <!-- one “row” of up to 3 item pills, same grid pattern as CategoryGrid -->
+                    <!-- one row of up to three item pills -->
                     <Grid Margin="6,8,6,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -59,25 +58,25 @@
 
                         <!-- Col 1 -->
                         <Button Grid.Column="0"
-                                Style="{StaticResource ItemPill}"
+                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Content="{Binding strCategoryItem1}"
                                 Tag="{Binding strCategoryItemKey1}"
                                 ToolTipService.ToolTip="{Binding strCategoryItemToolTip1}"/>
 
-                        <!-- Spacer 1 is Grid.Column=1 -->
+                        <!-- spacer @ col 1 -->
 
                         <!-- Col 2 -->
                         <Button Grid.Column="2"
-                                Style="{StaticResource ItemPill}"
+                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Content="{Binding strCategoryItem2}"
                                 Tag="{Binding strCategoryItemKey2}"
                                 ToolTipService.ToolTip="{Binding strCategoryItemToolTip2}"/>
 
-                        <!-- Spacer 2 is Grid.Column=3 -->
+                        <!-- spacer @ col 3 -->
 
                         <!-- Col 3 -->
                         <Button Grid.Column="4"
-                                Style="{StaticResource ItemPill}"
+                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Content="{Binding strCategoryItem3}"
                                 Tag="{Binding strCategoryItemKey3}"
                                 ToolTipService.ToolTip="{Binding strCategoryItemToolTip3}"/>
