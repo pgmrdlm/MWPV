@@ -1,6 +1,5 @@
 ﻿// File: Utilities/Diagnostics/EarlyLogIngestor.cs
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -13,9 +12,10 @@ using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 namespace Utilities.Diagnostics
 {
     /// <summary>
-    /// Ingests *.elogp from EarlyLoginFailures.StoreDir into DB with dedupe & quarantine.
+    /// Ingests *.elogp from EarlyLoginFailures.StoreDir into DB (no dedupe).
     /// Payload JSON is built centrally via AppJson and stored as UTF-8 with PayloadFmt="json".
     /// Forward-only: original payload goes into dto.Context as structured JSON (not string).
+    /// Quarantine is ONLY used for read/decrypt failures, empty payloads, insert failures, or exceptions.
     /// </summary>
     public static class EarlyLogIngestor
     {
@@ -31,8 +31,7 @@ namespace Utilities.Diagnostics
                 return;
             }
 
-            var seenHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int total = 0, inserted = 0, dupes = 0, failed = 0, quarantined = 0;
+            int total = 0, inserted = 0, quarantined = 0, failed = 0;
 
             foreach (var path in files)
             {
@@ -53,14 +52,8 @@ namespace Utilities.Diagnostics
                         continue;
                     }
 
-                    // Hash of the original raw JSON for dedupe/quarantine signatures
+                    // Hash of the original raw JSON (kept for analysis/StackHash only; NOT used for dedupe)
                     var hashHex = Sha256Hex(rawJson);
-                    if (!seenHashes.Add(hashHex))
-                    {
-                        Quarantine(path, "duplicate in same run (hash)");
-                        dupes++;
-                        continue;
-                    }
 
                     // Timestamps
                     var createdIso = DateTime.UtcNow.ToString("o");
@@ -83,7 +76,7 @@ namespace Utilities.Diagnostics
                         Context = contextJson
                     };
 
-                    // Serialize payload
+                    // Serialize payload to UTF-8 bytes
                     var payloadJson = AppJson.SerializeLogPayload(dto);
                     var payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
 
@@ -122,7 +115,7 @@ namespace Utilities.Diagnostics
                 }
             }
 
-            Debug.WriteLine($"[EarlyIngest] total={total} inserted={inserted} dupes={dupes} quarantined={quarantined} failed={failed}");
+            Debug.WriteLine($"[EarlyIngest] total={total} inserted={inserted} quarantined={quarantined} failed={failed}");
         }
 
         private static string Sha256Hex(byte[] data)
