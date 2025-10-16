@@ -4,11 +4,11 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Runtime.InteropServices;
-// using SevenZip;                   // ❌ no longer needed here
-using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyLogIngestor
-using Utilities.Helpers;              // ErrorHandler
+using System.Windows.Controls;         // ✅ for TextBlock (StatusText)
+using Utilities.Diagnostics;           // EarlyLoginFailures, EarlyLogIngestor
+using Utilities.Helpers;               // ErrorHandler
 using Utilities.Security;
-using Security.Utility.Archives;      // ✅ SevenZipCore
+using Security.Utility.Archives;       // ✅ SevenZipCore
 
 namespace MWPV
 {
@@ -106,7 +106,7 @@ namespace MWPV
                     return;
                 }
 
-                // Heads-up if prior invalid attempts exist (same run or earlier)
+                // Count any pending early logs (quiet status later; no modal)
                 int pending = 0;
                 try
                 {
@@ -115,15 +115,6 @@ namespace MWPV
                         pending = Directory.GetFiles(earlyDir, "*.elogp", SearchOption.TopDirectoryOnly).Length;
                 }
                 catch { /* best-effort */ }
-
-                if (pending > 0)
-                {
-                    ErrorHandler.InfoTitled(
-                        "Previous Invalid Logins Detected",
-                        $"{pending} prior invalid login attempt(s) were found.\n\n" +
-                        "They will be ingested into the audit log now.",
-                        "EarlyLoginNotice");
-                }
 
                 // Post-login ingest to catch files created during THIS run (e.g., bad pw then good)
                 try
@@ -135,6 +126,11 @@ namespace MWPV
                     try { EarlyLoginFailures.Write("EarlyIngestor", "Post-login ingest failed", ex: ex); } catch { }
                 }
 
+                // Quiet one-line status to show after MainWindow is up (only if there were pending files)
+                string? startupStatus = null;
+                if (pending > 0)
+                    startupStatus = $"{pending} prior invalid login attempt(s) were ingested into the audit log.";
+
                 // Create and show main window, THEN restore normal shutdown behavior
                 if (!Dispatcher.HasShutdownStarted)
                 {
@@ -142,6 +138,21 @@ namespace MWPV
                     MainWindow = main;
                     ShutdownMode = ShutdownMode.OnMainWindowClose;  // <-- set ONLY after MainWindow exists
                     main.Show();
+
+                    // ✅ NEW: show status in MainWindow's status row (no modal dialog)
+                    if (!string.IsNullOrWhiteSpace(startupStatus))
+                    {
+                        try
+                        {
+                            var statusText = main.FindName("StatusText") as TextBlock;
+                            if (statusText != null)
+                            {
+                                statusText.Text = startupStatus;
+                                statusText.Visibility = Visibility.Visible;
+                            }
+                        }
+                        catch { /* best-effort: if StatusText not found, silently ignore */ }
+                    }
                 }
             }
             catch (Exception ex)
