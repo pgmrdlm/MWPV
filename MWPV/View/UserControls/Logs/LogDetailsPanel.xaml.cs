@@ -1,5 +1,4 @@
-﻿// File: MWPV/View/UserControls/LogDetailsPanel.xaml.cs
-using System;
+﻿using System;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +16,27 @@ namespace MWPV.View.UserControls
             InitializeComponent();
             btnCopy.Click += BtnCopy_Click;
             btnClear.Click += BtnClear_Click;
+
+            // NEW: wipe when hidden
+            IsVisibleChanged += (_, e) =>
+            {
+                if (e.NewValue is bool b && !b)
+                {
+#if DEBUG
+                    System.Diagnostics.Debug.WriteLine("[LOGS][Details] IsVisible=false -> Clear()");
+#endif
+                    Clear();
+                }
+            };
+
+            // NEW: wipe when unloaded (e.g., overlay closed or view swapped)
+            Unloaded += (_, __) =>
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine("[LOGS][Details] Unloaded -> Clear()");
+#endif
+                Clear();
+            };
         }
 
         // ===========================
@@ -97,6 +117,10 @@ namespace MWPV.View.UserControls
         {
             if (row == null) { Clear(); return; }
 
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[LOGS][Details] Begin LoadFromAsync id={row.Id}");
+#endif
+
             EntryId = row.Id.ToString(CultureInfo.InvariantCulture);
             CreatedText = SafeToUtcText(row.CreatedUtc);
             MetaText = $"{(row.Level ?? "").Trim()} / {(row.Source ?? "").Trim()} / {(row.EventCode ?? "").Trim()}".Trim().Trim('/').Trim();
@@ -110,10 +134,14 @@ namespace MWPV.View.UserControls
             PayloadSize = row.PayloadSize;
 
             await LoadPayloadAsync(row.Id);
+
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[LOGS][Details] End LoadFromAsync id={row.Id}");
+#endif
         }
 
         /// <summary>
-        /// Explicitly clear the panel UI.
+        /// Explicitly clear the panel UI and backing fields.
         /// </summary>
         public void Clear()
         {
@@ -121,9 +149,22 @@ namespace MWPV.View.UserControls
             CreatedText = "";
             MetaText = "";
             Message = "";
+
+            // Defensive: overwrite large strings first where feasible
+            if (!string.IsNullOrEmpty(_rawPayload))
+            {
+                try
+                {
+                    // Replace visible payload text with cheap placeholder before dropping reference
+                    PayloadText = "";
+                }
+                catch { /* ignore */ }
+            }
+
             PayloadText = "";
             PayloadFmt = "none";
             PayloadSize = null;
+
             _rawPayload = "";
             _rawCreatedUtc = "";
             _rawLevel = _rawSource = _rawEvent = "";
@@ -318,6 +359,9 @@ namespace MWPV.View.UserControls
                 }
 
                 Clipboard.SetText(sb.ToString());
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine("[LOGS][Details] Copied details to clipboard.");
+#endif
             }
             catch
             {
@@ -325,6 +369,12 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private void BtnClear_Click(object sender, RoutedEventArgs e) => Clear();
+        private void BtnClear_Click(object sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine("[LOGS][Details] Clear button clicked.");
+#endif
+            Clear();
+        }
     }
 }
