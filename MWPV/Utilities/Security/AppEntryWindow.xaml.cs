@@ -8,10 +8,10 @@ using System.Windows.Media;           // Brush for meter coloring
 
 using Microsoft.Data.Sqlite;          // ok if not used directly here
 
-using Utilities.Helpers;              // DatabaseHelper, ErrorHandler
+using Utilities.Helpers;              // DatabaseHelper (keep), no popup usage
 using Utilities.Sql;                  // SqlCagegory, SchemaBootstrap
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
-using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType, SmokeTester (DEBUG-only)
+using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType
 using EDT = Utilities.Diagnostics.EarlyFailType;
 using Security.Utility.Crypto;        // KeyArchiveVerifier, KeyProvisioner
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
@@ -29,8 +29,8 @@ namespace Utilities.Security
     {
         // SecureEncryptedDataStore keys (file/key names in the archive)
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
-        private const string Key_KeyFile = "KeyFile";            // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";                // sensitive password
+        private const string Key_KeyFile = "KeyFile";         // non-sensitive path
+        private const string Key_KeyPW = "KeyPW";           // sensitive password
 
         // Full path to local encrypted database
         private readonly string _localDbPath = Path.Combine(
@@ -70,7 +70,6 @@ namespace Utilities.Security
             else
             {
                 // ==== First run ====
-                // Ensure label is "Create Key File" (also set in XAML)
                 try { tbKeyButtonText.Text = "Create Key File"; } catch { /* ignore */ }
 
                 // Wire advisory meter (no policy gating)
@@ -173,6 +172,9 @@ namespace Utilities.Security
 
             try
             {
+                // clear any stale error first
+                SurfaceError(null);
+
                 keyArchivePath = tbKeyFile.Text;
 
                 if (!File.Exists(_localDbPath))
@@ -183,8 +185,7 @@ namespace Utilities.Security
 
                     if (!ValidateFirstRunInputs(pwChars, verifyChars, keyArchivePath, out string inputError))
                     {
-                        tbErrorMessage.Text = inputError;
-                        tbErrorMessage.Visibility = Visibility.Visible;
+                        SurfaceError(inputError);
                         return;
                     }
 
@@ -204,18 +205,14 @@ namespace Utilities.Security
                     string resultDb = service.SetUpDataBase();
                     if (string.Equals(resultDb, "error", StringComparison.OrdinalIgnoreCase))
                     {
-                        ErrorHandler.InfoTitled("Setup",
-                            "Database creation failed.\n\n(This error has been logged.)",
-                            "AppEntryWindow/SetUpDataBase");
+                        SurfaceLoggedError("Database creation failed.");
                         return;
                     }
 
                     string resultKey = service.SetUpKeyFile();
                     if (resultKey.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
                     {
-                        ErrorHandler.InfoTitled("Setup",
-                            "Key archive creation failed.\n\n(This error has been logged.)",
-                            "AppEntryWindow/SetUpKeyFile");
+                        SurfaceLoggedError("Key archive creation failed.");
                         return;
                     }
                 }
@@ -224,16 +221,14 @@ namespace Utilities.Security
                     // --- Existing DB (user selects key file + enters password) ---
                     if (string.IsNullOrWhiteSpace(keyArchivePath))
                     {
-                        tbErrorMessage.Text = "Please select key file location.";
-                        tbErrorMessage.Visibility = Visibility.Visible;
+                        SurfaceError("Please select key file location.");
                         return;
                     }
 
                     pwChars = SecureStringToChars(pbPassword.SecurePassword);
                     if (pwChars.Length == 0)
                     {
-                        tbErrorMessage.Text = "Please enter a password.";
-                        tbErrorMessage.Visibility = Visibility.Visible;
+                        SurfaceError("Please enter a password.");
                         return;
                     }
 
@@ -251,12 +246,7 @@ namespace Utilities.Security
                             EDT.KeyFileVerifyError,
                             $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
                         );
-
-                        ErrorHandler.InfoTitled("Key File Verification",
-                            "Error verifying key file.\n\n(This error has been logged.)",
-                            "KeyFileVerify");
-                        tbErrorMessage.Text = "Error verifying key file.";
-                        tbErrorMessage.Visibility = Visibility.Visible;
+                        SurfaceLoggedError("Error verifying key file.");
                         return;
                     }
                     finally
@@ -271,12 +261,7 @@ namespace Utilities.Security
                             $"Invalid key-file password or unsupported/unencrypted archive. Path='{keyArchivePath}'"
                         );
 
-                        ErrorHandler.InfoTitled("Key File Verification",
-                            "Invalid Key File Password or invalid key file selected.\n\n(This error has been logged.)",
-                            "KeyFileVerify");
-
-                        tbErrorMessage.Text = "Invalid Key File Password or invalid key file selected.";
-                        tbErrorMessage.Visibility = Visibility.Visible;
+                        SurfaceLoggedError("Invalid Key File Password or invalid key file selected.");
                         return;
                     }
 
@@ -286,20 +271,13 @@ namespace Utilities.Security
                     pwChars = Array.Empty<char>(); // defensive; already wiped by SetAndWipe
 
                     // === Read-only JSON/base64 validation — existing keyfile ONLY ===
-                    // Loader delegate uses ServiceSetUp to read raw keyset.json bytes from the unlocked archive.
                     var service = new ServiceSetUp();
                     bool jsonOk = KeyProvisioner.ValidateKeysetJson(service.LoadKeysetJsonBytes);
 
                     if (!jsonOk)
                     {
-                        // Show a blocking window about corrupt key file, then terminate.
-                        ErrorHandler.InfoTitled(
-                            "Corrupt Key File Detected",
-                            "The selected encrypted key file appears to be corrupt (invalid keyset.json).\n\n" +
-                            "The application will now exit.",
-                            "KeyFile.Corrupt"
-                        );
-
+                        // Hard fail per policy (no popup)
+                        SurfaceLoggedError("Corrupt key file detected: invalid keyset.json. The application will now exit.");
                         Application.Current?.Shutdown(); // terminate app
                         return;
                     }
@@ -323,16 +301,11 @@ namespace Utilities.Security
 #if DEBUG
                     System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
 #endif
-                    ErrorHandler.InfoTitled(
-                        "SQL Catalog",
-                        "Required SQL scripts are missing from the key archive:\n" +
-                        string.Join(", ", missing) +
-                        "\n\nPlease verify you selected the correct encrypted archive. (This error has been logged.)",
-                        "SQLCatalog.Missing"
+                    SurfaceLoggedError(
+                        "Required SQL scripts are missing from the key archive: " +
+                        string.Join(", ", missing)
                     );
-
-                    DialogResult = false;
-                    Close();
+                    // keep the window open for correction
                     return;
                 }
 
@@ -484,10 +457,7 @@ namespace Utilities.Security
                 if (tbErrorMessage != null && tbErrorMessage.Visibility == Visibility.Visible)
                 {
                     if (PasswordsMatchSecure())
-                    {
-                        tbErrorMessage.Text = string.Empty;
-                        tbErrorMessage.Visibility = Visibility.Collapsed;
-                    }
+                        SurfaceError(null);
                 }
             }
             finally
@@ -500,15 +470,9 @@ namespace Utilities.Security
         {
             // Advisory-only: surface mismatch message; does not block submit
             if (!PasswordsMatchSecure())
-            {
-                tbErrorMessage.Text = "Passwords do not match.";
-                tbErrorMessage.Visibility = Visibility.Visible;
-            }
+                SurfaceError("Passwords do not match.");
             else
-            {
-                tbErrorMessage.Text = string.Empty;
-                tbErrorMessage.Visibility = Visibility.Collapsed;
-            }
+                SurfaceError(null);
         }
 
         private bool PasswordsMatchSecure()
@@ -537,6 +501,30 @@ namespace Utilities.Security
                 if (pa != IntPtr.Zero) Marshal.ZeroFreeGlobalAllocUnicode(pa);
                 if (pb != IntPtr.Zero) Marshal.ZeroFreeGlobalAllocUnicode(pb);
             }
+        }
+
+        // =========================
+        // Local helpers
+        // =========================
+        private void SurfaceError(string? message)
+        {
+            if (tbErrorMessage == null) return;
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                tbErrorMessage.Text = string.Empty;
+                tbErrorMessage.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                tbErrorMessage.Text = message;
+                tbErrorMessage.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SurfaceLoggedError(string baseMessage)
+        {
+            SurfaceError($"{baseMessage}\n\n(This error has been logged.)");
         }
     }
 }
