@@ -170,10 +170,11 @@ INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 2, 'LOGIN', 'Login events', 1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT t.ComboTypeId, 3, 'EARLY_FAIL', 'Early-fail events', 1 FROM ComboType t WHERE t.Code='log_filters';
+-- CHANGED: replace APP_START/APP_EXIT with SESSION_START/SESSION_END
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 4, 'APP_START', 'Application started', 1 FROM ComboType t WHERE t.Code='log_filters';
+SELECT t.ComboTypeId, 4, 'SESSION_START', 'Session started (post-login)', 1 FROM ComboType t WHERE t.Code='log_filters';
 INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 5, 'APP_EXIT', 'Application exited', 1 FROM ComboType t WHERE t.Code='log_filters';
+SELECT t.ComboTypeId, 5, 'SESSION_END', 'Session ended', 1 FROM ComboType t WHERE t.Code='log_filters';
 
 -- Bank Cards using UNION ALL subquery
 WITH ct AS (SELECT ComboTypeId AS id FROM ComboType WHERE Code='bank_cards'),

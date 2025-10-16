@@ -9,6 +9,7 @@ using Utilities.Diagnostics;           // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;               // ErrorHandler
 using Utilities.Security;
 using Security.Utility.Archives;       // ✅ SevenZipCore
+using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
 
 namespace MWPV
 {
@@ -95,6 +96,35 @@ namespace MWPV
                 try { EarlyLoginFailures.Write("EarlyIngestor", "Failed to ensure early log directories", ex: ex); } catch { }
             }
 
+            // ===== Abnormal-exit hooks (best-effort) =====
+            // Only log SESSION_END if a valid login occurred this run.
+            AppDomain.CurrentDomain.UnhandledException += (_, __) =>
+            {
+                try
+                {
+                    if (AppRunState.DbOpenedThisRun && !AppRunState.EndLogged)
+                    {
+                        LogCatalogService.InsertSessionEnd("UnhandledException", isError: true, exitCode: 1);
+                        AppRunState.EndLogged = true;
+                    }
+                }
+                catch { /* swallow */ }
+            };
+
+            this.DispatcherUnhandledException += (_, __) =>
+            {
+                try
+                {
+                    if (AppRunState.DbOpenedThisRun && !AppRunState.EndLogged)
+                    {
+                        LogCatalogService.InsertSessionEnd("DispatcherUnhandledException", isError: true, exitCode: 1);
+                        AppRunState.EndLogged = true;
+                    }
+                }
+                catch { /* swallow */ }
+            };
+            // =============================================
+
             // ---- Entry flow (modal) -> then MainWindow ----
             try
             {
@@ -166,6 +196,21 @@ namespace MWPV
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // >>> SESSION_END on normal exit (if login happened this run)
+            try
+            {
+                if (AppRunState.DbOpenedThisRun && !AppRunState.EndLogged)
+                {
+                    LogCatalogService.InsertSessionEnd(
+                        reason: "NormalExit",
+                        isError: false,
+                        exitCode: e?.ApplicationExitCode
+                    );
+                    AppRunState.EndLogged = true;
+                }
+            }
+            catch { /* swallow */ }
+
             // Order matters: stop thread -> signal -> dispose, then mutex
             try { _bringToFrontListener?.Interrupt(); } catch { }     // break WaitOne()
             try { _bringToFrontEvent?.Set(); } catch { }              // nudge if not interrupted
