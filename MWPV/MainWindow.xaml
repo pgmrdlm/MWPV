@@ -21,7 +21,7 @@
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
 
-    <!-- CHANGED: background uses theme secondary -->
+    <!-- Background uses theme secondary -->
     <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
@@ -34,7 +34,7 @@
             <!-- Status -->
         </Grid.RowDefinitions>
 
-        <!-- TITLE BAR (CHANGED: uses theme primary) -->
+        <!-- TITLE BAR (uses theme primary) -->
         <Border Grid.Row="0" Background="{DynamicResource Brush.Primary}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -99,7 +99,13 @@
         <userControls:MenuBar Grid.Row="1"/>
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>
 
-        <!-- Footer
-        <Rectangle Grid.Row="3" Fill="green"/> -->
+        <!-- Status line (bold + red per request) -->
+        <TextBlock x:Name="StatusText"
+                   Grid.Row="3"
+                   Margin="8,2,8,4"
+                   TextWrapping="Wrap"
+                   FontSize="12"
+                   FontWeight="Bold"
+                   Foreground="#CC0000"/>
     </Grid>
 </Window>
