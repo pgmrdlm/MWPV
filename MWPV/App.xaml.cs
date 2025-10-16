@@ -79,18 +79,20 @@ namespace MWPV
                 return;
             }
 
-            // ---- Startup ingest of any pre-existing early logs ----
+            // ---- Early log folders only (no ingest before login) ----
             try
             {
                 Directory.CreateDirectory(EarlyLoginFailures.StoreDir);
                 Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
-
-                // CHANGED: parameterless ingest (matches new EarlyLogIngestor signature)
-                EarlyLogIngestor.IngestAll();
+                // NOTE: We intentionally DO NOT call EarlyLogIngestor.IngestAll() here.
+                // Ingest runs ONLY after a successful key/database login.
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
+#endif
             }
             catch (Exception ex)
             {
-                try { EarlyLoginFailures.Write("EarlyIngestor", "Failed during startup ingest", ex: ex); } catch { }
+                try { EarlyLoginFailures.Write("EarlyIngestor", "Failed to ensure early log directories", ex: ex); } catch { }
             }
 
             // ---- Entry flow (modal) -> then MainWindow ----
@@ -126,7 +128,6 @@ namespace MWPV
                 // Post-login ingest to catch files created during THIS run (e.g., bad pw then good)
                 try
                 {
-                    // CHANGED: parameterless ingest (matches new EarlyLogIngestor signature)
                     EarlyLogIngestor.IngestAll();
                 }
                 catch (Exception ex)
