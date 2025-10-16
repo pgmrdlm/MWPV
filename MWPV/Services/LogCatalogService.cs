@@ -120,6 +120,43 @@ namespace MWPV.Services
             return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
         }
 
+        // ---------------------------------------------------------------------
+        // NEW: Session lifecycle convenience wrappers
+        // ---------------------------------------------------------------------
+        public static long InsertSessionStart(Func<SqliteConnection>? openAppConnection = null)
+        {
+            var req = new RequestV3
+            {
+                Level = "INFO",
+                Source = "Session",
+                EventCode = "SESSION_START",
+                Payload = null,
+                PayloadFmt = "none",
+                AppVersion = AppVersion()
+            };
+            return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
+        }
+
+        public static long InsertSessionEnd(
+            string reason = "NormalExit",
+            bool isError = false,
+            int? exitCode = null,
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            // Keep payload empty; reason/exitCode can be added later via JSON if desired.
+            var req = new RequestV3
+            {
+                Level = isError ? "ERROR" : "INFO",
+                Source = "Session",
+                EventCode = "SESSION_END",
+                Payload = null,
+                PayloadFmt = "none",
+                AppVersion = AppVersion()
+            };
+            return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
+        }
+        // ---------------------------------------------------------------------
+
         private static string AppVersion()
         {
             var v = System.Reflection.Assembly.GetEntryAssembly()?.GetName()?.Version;

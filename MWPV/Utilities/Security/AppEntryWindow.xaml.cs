@@ -16,6 +16,7 @@ using EDT = Utilities.Diagnostics.EarlyFailType;
 using Security.Utility.Crypto;        // KeyArchiveVerifier, KeyProvisioner
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
 using MWPV.Utilities.Security;        // PasswordStrengthEvaluator, PasswordStrength
+using MWPV.Services;                  // LogCatalogService
 
 namespace Utilities.Security
 {
@@ -308,6 +309,12 @@ namespace Utilities.Security
                     // keep the window open for correction
                     return;
                 }
+
+                // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                // ✅ Valid login complete, DB open, SQL loaded: write SESSION_START
+                try { LogCatalogService.InsertSessionStart(); } catch { /* best-effort */ }
+                MWPV.AppRunState.DbOpenedThisRun = true;  // <<< ONLY ADDED LINE
+                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                 // ✅ Close the form
                 DialogResult = true;
