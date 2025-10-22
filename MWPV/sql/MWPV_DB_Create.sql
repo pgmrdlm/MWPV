@@ -77,7 +77,8 @@ CREATE TABLE CategoryItem (
     CI_MFAType               TEXT,
     CI_MFABackupCodes        BLOB,
     CI_SecretMeta            BLOB,
-    CI_SecretData            BLOB,
+    CI_SecretData            BLOB,  -- Primary Bank card type(credit/debit/store), card #, exp date, csv, pin #
+									-- Account number, other payment types(bank account)
     CI_SecretStorage         TEXT    NOT NULL DEFAULT '0' CHECK (CI_SecretStorage IN ('0','1','2')),
     CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
@@ -188,12 +189,9 @@ vals AS (
   SELECT 50,         'ENTERTAINMENT',         'Entertainment / Streaming'            UNION ALL
   SELECT 60,         'HEALTHCARE',            'Healthcare & Medical'                 UNION ALL
   SELECT 70,         'INSURANCE',             'Insurance'                            UNION ALL
-  SELECT 80,         'SOCIAL',                'Social / Messaging'                   UNION ALL
+  SELECT 80,         'SOCIAL/CLOUD',           'Social / Messaging / CLOUD'          UNION ALL
   SELECT 90,         'EMAIL',                 'Email & Identity'                     UNION ALL
-  SELECT 100,        'CLOUD',                 'Cloud Services'                       UNION ALL
-  SELECT 110,        'DEVELOPMENT',           'Developer Services'                   UNION ALL
-  SELECT 120,        'EDUCATION',             'Education'                            UNION ALL
-  SELECT 130,        'TRAVEL',                'Travel & Transport'                   UNION ALL
+  SELECT 100,        'APP/FILE/FOLDER',       'Application / Encrypted File or Folder'       UNION ALL
   SELECT 900,        'MISC',                  'Misc / Other'
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)

@@ -191,8 +191,7 @@ namespace MWPV.Services
             => InsertCategoryCore(newCategory, newDescription, typeDescriptionFromUi: null);
 
         /// <summary>
-        /// Insert using the combo's displayed Description text.
-        /// SQL resolves the Description to the proper ComboDetail row.
+        /// Insert using the combo's selected Code (SelectedValuePath="Code").
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription, string? categoryTypeDescription)
             => InsertCategoryCore(newCategory, newDescription, categoryTypeDescription);
@@ -254,14 +253,14 @@ namespace MWPV.Services
 
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
-                cmd.Parameters.AddWithValue("@TypeDescription", typeDescription);
+                cmd.Parameters.AddWithValue("@TypeCode", typeDescription); // CHANGED: was @TypeDescription
 
 #if DEBUG
                 try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}' typeDesc='{typeDescription}'"); } catch { }
 #endif
                 int affected = cmd.ExecuteNonQuery();
                 if (affected == 0)
-                    throw new InvalidOperationException("Insert failed (no rows affected). Check @TypeDescription mapping to ComboDetail.");
+                    throw new InvalidOperationException("Insert failed (no rows affected). Check @TypeCode mapping to ComboDetail."); // CHANGED: mentions @TypeCode
             }
 
             using (var last = conn.CreateCommand())

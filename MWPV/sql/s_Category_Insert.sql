@@ -1,7 +1,7 @@
 -- Params:
---   @CategoryName     (TEXT)
---   @Description      (TEXT)
---   @TypeDescription  (TEXT)  -- exact UI text
+--   @CategoryName  (TEXT)
+--   @Description   (TEXT)
+--   @TypeCode      (TEXT)  -- ComboDetail.Code from UI
 
 INSERT INTO Category (
     Category_Name,
@@ -15,7 +15,9 @@ SELECT
     cd.ComboDetailId,
     strftime('%Y-%m-%dT%H:%M:%fZ','now')
 FROM ComboDetail cd
-WHERE cd.ComboTypeId = 2      -- Categories bucket (per your DB)
+JOIN ComboType ct
+  ON ct.ComboTypeId = cd.ComboTypeId
+WHERE ct.Code = 'category_types'   -- resolve bucket by Code (no hard-coded Id)
   AND cd.Active = 1
-  AND cd.Code = @TypeDescription
+  AND cd.Code = @TypeCode          -- match by Code from UI
 LIMIT 1;
