@@ -1,15 +1,7 @@
 /* ============================================================================
-   MWPV - FRESH LOAD / Nuke-and-Pave SCRIPT  (SQLite)
-   ----------------------------------------------------------------------------
-   ⚠️ DANGER: Drops and recreates schema. ALL EXISTING DATA WILL BE LOST.
-   This build includes:
-     - Category / CategoryItem core tables
-     - CategoryItem* history tables (password/pin/security-questions)
-     - BankCards + NEW CategoryItemAccounts (encrypted payload siblings)
-     - ComboType/ComboDetail with requirement flags + seeds
-     - Views: vw_CurrentPassword, active Combo views
-     - Logs table + indexes
-     - DbVersion + KeyArchiveIntegrity
+   MWPV - MASTER DDL (FULL REWRITE WITH SEEDS)  -- v2025-10-16b
+   Fix: seed inserts now use UNION ALL SELECT blocks (no VALUES(...) alias).
+   Change in this revision: add back ComboType 'log_filters' + ComboDetail rows.
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -17,61 +9,31 @@ PRAGMA foreign_keys = OFF;
 
 BEGIN TRANSACTION;
 
--- ---------------------------------------------------------------------------
--- DROP VIEWS
--- ---------------------------------------------------------------------------
-DROP VIEW IF EXISTS vw_CurrentPassword;
-DROP VIEW IF EXISTS vw_CurrentPin;
-DROP VIEW IF EXISTS vComboTypeActive;
-DROP VIEW IF EXISTS vComboDetailActive;
+-- Drops
+DROP VIEW  IF EXISTS vw_CurrentPassword;
+DROP VIEW  IF EXISTS vw_CurrentPin;
 
--- ---------------------------------------------------------------------------
--- DROP TABLES (be exhaustive; includes legacy misspellings)
--- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS AppSettings;
-DROP TABLE IF EXISTS Logs;
-DROP TABLE IF EXISTS DbVersion;
-
--- Universal dropdowns
 DROP TABLE IF EXISTS ComboDetail;
 DROP TABLE IF EXISTS ComboType;
-
--- Per-item history / lookups (legacy + current names)
-DROP TABLE IF EXISTS CatagoryItemSecurityQuestions;
-DROP TABLE IF EXISTS CategoryItemSecurityQuestions;
-
-DROP TABLE IF EXISTS CatagoryItemPinHistory;
-DROP TABLE IF EXISTS CategoryItemPinHistory;
-
-DROP TABLE IF EXISTS CatagoryItemPasswordHistory;
 DROP TABLE IF EXISTS CategoryItemPasswordHistory;
-
--- Sibling tables for item details
-DROP TABLE IF EXISTS BankCards;
+DROP TABLE IF EXISTS CategoryItemSecurityQuestions;
 DROP TABLE IF EXISTS CategoryItemAccounts;
-
--- Core
-DROP TABLE IF EXISTS CatagoryItem;
+DROP TABLE IF EXISTS BankCards;
 DROP TABLE IF EXISTS CategoryItem;
-
-DROP TABLE IF EXISTS Catagory;
 DROP TABLE IF EXISTS Category;
-
--- Integrity/meta
 DROP TABLE IF EXISTS KeyArchiveIntegrity;
+DROP TABLE IF EXISTS DbVersion;
+DROP TABLE IF EXISTS Logs;
+
+DROP TABLE IF EXISTS CategoryItemPinHistory;
 
 COMMIT;
 PRAGMA foreign_keys = ON;
 
--- =============================================================================
--- CREATE OBJECTS
--- =============================================================================
 BEGIN TRANSACTION;
 
--- ---------------------------------------------------------------------------
--- Universal dropdowns: ComboType, ComboDetail
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS ComboType (
+-- Lookups
+CREATE TABLE ComboType (
     ComboTypeId   INTEGER  PRIMARY KEY AUTOINCREMENT,
     Code          TEXT     NOT NULL UNIQUE,
     Description   TEXT     NOT NULL,
@@ -80,361 +42,54 @@ CREATE TABLE IF NOT EXISTS ComboType (
     UpdatedUtc    TEXT     NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TRIGGER IF NOT EXISTS trg_ComboType_UpdateUtc
-AFTER UPDATE ON ComboType
-BEGIN
-  UPDATE ComboType SET UpdatedUtc = datetime('now') WHERE ComboTypeId = NEW.ComboTypeId;
-END;
-
-CREATE TABLE IF NOT EXISTS ComboDetail (
+CREATE TABLE ComboDetail (
     ComboDetailId   INTEGER  PRIMARY KEY AUTOINCREMENT,
-    ComboTypeId     INTEGER  NOT NULL,
+    ComboTypeId     INTEGER  NOT NULL REFERENCES ComboType (ComboTypeId) ON DELETE CASCADE,
     Seq             INTEGER  NOT NULL,
     Code            TEXT     NOT NULL,
     Description     TEXT     NOT NULL,
-
-    -- requirement flags for account & card types
-    IsAccountType     INTEGER NOT NULL DEFAULT 0 CHECK (IsAccountType IN (0,1)),
-    IsCardType        INTEGER NOT NULL DEFAULT 0 CHECK (IsCardType    IN (0,1)),
-
-    -- account requirements
-    ReqAccountNumber  INTEGER NOT NULL DEFAULT 0 CHECK (ReqAccountNumber IN (0,1)),
-    ReqRoutingNumber  INTEGER NOT NULL DEFAULT 0 CHECK (ReqRoutingNumber IN (0,1)),
-
-    -- card requirements
-    ReqCardNumber     INTEGER NOT NULL DEFAULT 0 CHECK (ReqCardNumber  IN (0,1)),
-    ReqCardExpiry     INTEGER NOT NULL DEFAULT 0 CHECK (ReqCardExpiry  IN (0,1)),
-    ReqCardCvv        INTEGER NOT NULL DEFAULT 0 CHECK (ReqCardCvv     IN (0,1)),
-
-    -- whether UI should allow 1..N rows of this kind under a single item
-    AllowsMultiple    INTEGER NOT NULL DEFAULT 0 CHECK (AllowsMultiple IN (0,1)),
-
     Active          INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
     CreatedUtc      TEXT     NOT NULL DEFAULT (datetime('now')),
-    UpdatedUtc      TEXT     NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (ComboTypeId) REFERENCES ComboType (ComboTypeId) ON DELETE CASCADE
+    UpdatedUtc      TEXT     NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_ComboDetail_Type_Seq
-    ON ComboDetail (ComboTypeId, Seq);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ux_ComboDetail_Type_Code
-    ON ComboDetail (ComboTypeId, Code);
-
-CREATE INDEX IF NOT EXISTS ix_ComboDetail_TypeActiveSeq
-    ON ComboDetail (ComboTypeId, Active, Seq);
-
-CREATE TRIGGER IF NOT EXISTS trg_ComboDetail_UpdateUtc
-AFTER UPDATE ON ComboDetail
-BEGIN
-  UPDATE ComboDetail
-     SET UpdatedUtc = datetime('now')
-   WHERE ComboDetailId = NEW.ComboDetailId;
-END;
-
--- ---------------------------------------------------------------------------
--- Seed: Combo families
--- ---------------------------------------------------------------------------
-INSERT OR IGNORE INTO ComboType (Code, Description, Active)
-VALUES ('log_filters','Filters for the Logs UI',1),
-       ('category_types','Category types in vault UI',1),
-       ('debit_credit_cards','Debit and Credit Cards',1),
-       ('bank_cards','Card brands and types used with financial accounts',1),
-       ('account_number_types','Types of financial accounts and numbers',1);
-
--- Reset and seed category_types
-DELETE FROM ComboDetail
- WHERE ComboTypeId=(SELECT ComboTypeId FROM ComboType WHERE Code='category_types');
-
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 0, '0', 'Subscribed Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 1, '1', 'Paid Subscription Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 2, '2', 'Government/Retirement/Investment Web Pages', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 3, '3', 'Utilities', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 4, '4', 'Banks/Savings and Loans', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 5, '5', 'Encrypted Files/Folders', 1 FROM ComboType t WHERE t.Code='category_types';
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 6, '6', 'Applications', 1 FROM ComboType t WHERE t.Code='category_types';
-
--- log_filters ensure
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 0, 'CATEGORY_DUPLICATE', 'Duplicate category detected', 1 FROM ComboType t WHERE t.Code='log_filters';
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 1, 'CATEGORY_INSERTED', 'Category successfully inserted', 1 FROM ComboType t WHERE t.Code='log_filters';
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 2, 'LOGIN', 'Login events', 1 FROM ComboType t WHERE t.Code='log_filters';
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 3, 'EARLY_FAIL', 'Early-fail events', 1 FROM ComboType t WHERE t.Code='log_filters';
--- CHANGED: replace APP_START/APP_EXIT with SESSION_START/SESSION_END
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 4, 'SESSION_START', 'Session started (post-login)', 1 FROM ComboType t WHERE t.Code='log_filters';
-INSERT OR IGNORE INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT t.ComboTypeId, 5, 'SESSION_END', 'Session ended', 1 FROM ComboType t WHERE t.Code='log_filters';
-
--- Bank Cards using UNION ALL subquery
-WITH ct AS (SELECT ComboTypeId AS id FROM ComboType WHERE Code='bank_cards'),
-sub AS (
-  SELECT 10 AS seq, 'VISA'        AS code, 'VISA'           AS label UNION ALL
-  SELECT 20       , 'MASTERCARD'  , 'MasterCard'                        UNION ALL
-  SELECT 30       , 'DISCOVER'    , 'Discover'                          UNION ALL
-  SELECT 40       , 'AMEX'        , 'American Express'                  UNION ALL
-  SELECT 50       , 'DEBIT'       , 'Debit'
-)
-INSERT OR IGNORE INTO ComboDetail
-(ComboTypeId, Seq, Code, Description, IsAccountType, IsCardType,
- ReqAccountNumber, ReqRoutingNumber, ReqCardNumber, ReqCardExpiry, ReqCardCvv, AllowsMultiple, Active)
-SELECT ct.id, s.seq, s.code, s.label, 0, 1,
-       0, 0, 1, 1, 1, 1, 1
-FROM ct CROSS JOIN sub s;
-
--- Account Number Types using UNION ALL subquery
-WITH ct AS (SELECT ComboTypeId AS id FROM ComboType WHERE Code='account_number_types'),
-sub AS (
-  SELECT 10 AS seq, 'BANK'         AS code, 'Bank'               AS label, 1 AS reqAcct, 1 AS reqRoute UNION ALL
-  SELECT 20       , 'CREDIT_CARD'           , 'Credit Card'                    , 0          , 0          UNION ALL
-  SELECT 30       , 'SAVINGS'               , 'Savings'                        , 1          , 1          UNION ALL
-  SELECT 40       , 'CHECKING'              , 'Checking'                       , 1          , 1          UNION ALL
-  SELECT 50       , 'CHRISTMAS'             , 'Christmas'                      , 1          , 0          UNION ALL
-  SELECT 60       , 'STORE'                 , 'Store'                          , 0          , 0          UNION ALL
-  SELECT 70       , 'LOAN_MORTGAGE'         , 'Loan - Mortgage'                , 1          , 0          UNION ALL
-  SELECT 80       , 'LOAN_BUSINESS'         , 'Loan - Business'                , 1          , 0          UNION ALL
-  SELECT 90       , 'LOAN_PERSONAL'         , 'Loan - Personal'                , 1          , 0          UNION ALL
-  SELECT 100      , 'LOAN_AUTO'             , 'Loan - Auto'                    , 1          , 0          UNION ALL
-  SELECT 110      , 'INVESTMENT'            , 'Investment'                     , 1          , 0
-)
-INSERT OR IGNORE INTO ComboDetail
-(ComboTypeId, Seq, Code, Description, IsAccountType, IsCardType,
- ReqAccountNumber, ReqRoutingNumber, ReqCardNumber, ReqCardExpiry, ReqCardCvv, AllowsMultiple, Active)
-SELECT ct.id, s.seq, s.code, s.label, 1, 0,
-       s.reqAcct, s.reqRoute, 0, 0, 0, 1, 1
-FROM ct CROSS JOIN sub s;
-
--- ---------------------------------------------------------------------------
--- Category
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS Category (
+-- Categories
+CREATE TABLE Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL UNIQUE,
     Category_Description TEXT,
-    Category_Type        INTEGER NOT NULL
-                              REFERENCES ComboDetail (ComboDetailId),
+    Category_Type        INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId),
     CreatedUtc           TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- Default Categories (correctly mapped to category_types)
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Application Forums','Login to forums that support applications',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Government','Any government web site login',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=2),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Astro Forums','Logins for Astro forum web sites',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Google Accounts','Logins for Gmail, Google Drive, or other Google services',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Non Google Email','Non Google Email logins',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Political Forums','Political forum logins',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=0),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
--- Newly requested default categories
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Utilities','Utility provider logins',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=3),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Banks/Savings and Loans','Banking and S&L logins',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=4),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Encrypted Files/Folders','Local encrypted file/folder entries',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=5),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
-INSERT OR IGNORE INTO Category (Category_Name, Category_Description, Category_Type, CreatedUtc, IsActive)
-SELECT 'Applications','Local desktop/application credentials',
-       (SELECT d.ComboDetailId FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId=d.ComboTypeId
-        WHERE t.Code='category_types' AND d.Seq=6),
-       STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'),1;
-
--- ---------------------------------------------------------------------------
--- CategoryItem
--- ---------------------------------------------------------------------------
+-- CategoryItem (+ added CI_* fields)
 CREATE TABLE CategoryItem (
     ItemId                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    Category_Key             INTEGER NOT NULL
-                                  REFERENCES Category (Category_Key) ON DELETE CASCADE,
-
+    Category_Key             INTEGER NOT NULL REFERENCES Category (Category_Key) ON DELETE CASCADE,
     CI_Name                  TEXT    NOT NULL,
     CI_Description           TEXT,
     CI_Notes                 TEXT,
+    CI_Username              TEXT,
+    CI_SignInUrl             TEXT,
+    CI_RecoveryEmail         TEXT,
+    CI_RecoveryPhone         TEXT,
+    CI_MFAType               TEXT,
+    CI_MFABackupCodes        BLOB,
     CI_SecretMeta            BLOB,
-
-    -- New: catch-all encrypted data + storage indicator
-    CI_SecretData            BLOB,
-    CI_SecretStorage         TEXT    NOT NULL DEFAULT '0'   -- '0'=none, '1'=CI_SecretData, '2'=Accounts
-                                  CHECK (CI_SecretStorage IN ('0','1','2')),
-
+    CI_SecretData            BLOB,  -- Primary Bank card type(credit/debit/store), card #, exp date, csv, pin #
+									-- Account number, other payment types(bank account)
+    CI_SecretStorage         TEXT    NOT NULL DEFAULT '0' CHECK (CI_SecretStorage IN ('0','1','2')),
     CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-
     IsActive                 INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
     CI_NbrSecurityQuestions  INTEGER DEFAULT 0,
-
     CHECK (length(trim(CI_Name)) > 0),
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
 
-
-CREATE INDEX IF NOT EXISTS IX_CategoryItem_Category
-  ON CategoryItem(Category_Key);
-
-CREATE INDEX IF NOT EXISTS ix_CategoryItem_CategoryActiveName
-  ON CategoryItem(Category_Key, IsActive, CI_Name);
-
-CREATE INDEX IF NOT EXISTS ix_CategoryItem_CategoryUpdatedDesc
-  ON CategoryItem(Category_Key, CI_UpdateUTC DESC);
-
-CREATE TRIGGER IF NOT EXISTS trg_CategoryItem_TouchUpdateUtc
-AFTER UPDATE ON CategoryItem
-BEGIN
-  UPDATE CategoryItem
-     SET CI_UpdateUTC = strftime('%s','now')
-   WHERE ItemId = NEW.ItemId;
-END;
-
--- ---------------------------------------------------------------------------
--- Seed: Default storage guidance as inactive templates per Category
--- ---------------------------------------------------------------------------
--- Utilities: store account/customer number in CI_SecretData ('1')
-INSERT OR IGNORE INTO CategoryItem
-  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
-SELECT c.Category_Key,
-       'Template: Utilities storage','Default storage indicator for Utilities','Inactive template; set to active or duplicate as needed.',
-       NULL, NULL, '1',
-       strftime('%s','now'), strftime('%s','now'), 0, 0
-FROM Category c WHERE c.Category_Name='Utilities';
-
--- Banks/S&L: store account/routing in CI_SecretData ('1')
-INSERT OR IGNORE INTO CategoryItem
-  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
-SELECT c.Category_Key,
-       'Template: Bank/S&L storage','Default storage indicator for Banks/S&L','Inactive template; set to active or duplicate as needed.',
-       NULL, NULL, '1',
-       strftime('%s','now'), strftime('%s','now'), 0, 0
-FROM Category c WHERE c.Category_Name='Banks/Savings and Loans';
-
--- Encrypted Files/Folders: no account number ('0')
-INSERT OR IGNORE INTO CategoryItem
-  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
-SELECT c.Category_Key,
-       'Template: Encrypted Files/Folders storage','No account number storage for this category','Inactive template.',
-       NULL, NULL, '0',
-       strftime('%s','now'), strftime('%s','now'), 0, 0
-FROM Category c WHERE c.Category_Name='Encrypted Files/Folders';
-
--- Applications: no account number ('0')
-INSERT OR IGNORE INTO CategoryItem
-  (Category_Key, CI_Name, CI_Description, CI_Notes, CI_SecretMeta, CI_SecretData, CI_SecretStorage, CI_CreateUTC, CI_UpdateUTC, IsActive, CI_NbrSecurityQuestions)
-SELECT c.Category_Key,
-       'Template: Applications storage','No account number storage for this category','Inactive template.',
-       NULL, NULL, '0',
-       strftime('%s','now'), strftime('%s','now'), 0, 0
-FROM Category c WHERE c.Category_Name='Applications';
-
--- ---------------------------------------------------------------------------
--- BankCards (encrypted payload)
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS BankCards (
-    Bc_BankCardId   INTEGER PRIMARY KEY AUTOINCREMENT,
-    Bc_ItemId       INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    Bc_Secret       BLOB    NOT NULL,
-    Bc_IsActive     INTEGER NOT NULL DEFAULT 1 CHECK (Bc_IsActive IN (0,1)),
-    Bc_CreatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    Bc_UpdatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-);
-
-CREATE INDEX IF NOT EXISTS IX_BankCards_Item
-  ON BankCards(Bc_ItemId);
-
-CREATE INDEX IF NOT EXISTS IX_BankCards_ItemActive
-  ON BankCards(Bc_ItemId, Bc_IsActive);
-
--- ---------------------------------------------------------------------------
--- CategoryItemAccounts (encrypted account/routing payloads)
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CategoryItemAccounts (
-    Cia_AccountId     INTEGER PRIMARY KEY AUTOINCREMENT,
-    Cia_ItemId        INTEGER NOT NULL
-                           REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-
-    -- points to ComboDetail under 'account_number_types' (e.g., BANK, CHECKING…)
-    Cia_TypeDetailId  INTEGER NOT NULL
-                           REFERENCES ComboDetail (ComboDetailId),
-
-    -- encrypted blob (e.g., JSON: {accountNumber, routingNumber, label, last4, notes})
-    Cia_Secret        BLOB    NOT NULL,
-
-    Cia_IsActive      INTEGER NOT NULL DEFAULT 1 CHECK (Cia_IsActive IN (0,1)),
-    Cia_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    Cia_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-
-    CHECK (Cia_TypeDetailId > 0)
-);
-
-CREATE INDEX IF NOT EXISTS IX_CIA_Item
-  ON CategoryItemAccounts (Cia_ItemId);
-
-CREATE INDEX IF NOT EXISTS IX_CIA_ItemActive
-  ON CategoryItemAccounts (Cia_ItemId, Cia_IsActive);
-
-CREATE INDEX IF NOT EXISTS IX_CIA_ItemType
-  ON CategoryItemAccounts (Cia_ItemId, Cia_TypeDetailId);
-
-CREATE TRIGGER IF NOT EXISTS trg_CIA_TouchUpdateUtc
-AFTER UPDATE ON CategoryItemAccounts
-BEGIN
-  UPDATE CategoryItemAccounts
-     SET Cia_UpdatedAt = strftime('%s','now')
-   WHERE Cia_AccountId = NEW.Cia_AccountId;
-END;
-
--- ---------------------------------------------------------------------------
--- CategoryItemPasswordHistory
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
+-- Encrypted detail siblings
+CREATE TABLE CategoryItemPasswordHistory (
     CIPaH_PwHistId    INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId      INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CIPaH_CreatedAt   INTEGER NOT NULL,
@@ -445,75 +100,41 @@ CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory (
     CIPaH_SigVersion  INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE INDEX IF NOT EXISTS IX_CIPaH_Item_CreatedAt_Desc
-  ON CategoryItemPasswordHistory(CIPaH_ItemId, CIPaH_CreatedAt DESC);
-
-CREATE INDEX IF NOT EXISTS ix_CIPaH_Item_PwSig
-  ON CategoryItemPasswordHistory(CIPaH_ItemId, CIPaH_PwSig);
-
--- ---------------------------------------------------------------------------
--- CategoryItemPinHistory
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CategoryItemPinHistory (
-    CIPiH_PinHistId  INTEGER PRIMARY KEY AUTOINCREMENT,
-    CIPiH_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPiH_CreatedAt  INTEGER NOT NULL,
-    CIPiH_Version    INTEGER NOT NULL DEFAULT 1,
-    CIPiH_Pin        BLOB    NOT NULL,
-    CIPiH_PadLen     INTEGER
-);
-
-CREATE INDEX IF NOT EXISTS IX_CIPiH_Item_CreatedAt_Desc
-  ON CategoryItemPinHistory(CIPiH_ItemId, CIPiH_CreatedAt DESC);
-
--- ---------------------------------------------------------------------------
--- CategoryItemSecurityQuestions
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS CategoryItemSecurityQuestions (
+CREATE TABLE CategoryItemSecurityQuestions (
     CISQ_SecQId    INTEGER PRIMARY KEY AUTOINCREMENT,
     CISQ_ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CISQ_Question  TEXT    NOT NULL,
-    CISQ_Answer    BLOB    NOT NULL,
-    UNIQUE (CISQ_ItemId, CISQ_Question COLLATE NOCASE)
+    CISQ_Answer    BLOB    NOT NULL
 );
 
--- ---------------------------------------------------------------------------
--- KeyArchiveIntegrity
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS KeyArchiveIntegrity (
+CREATE TABLE BankCards (
+    Bc_BankCardId   INTEGER PRIMARY KEY AUTOINCREMENT,
+    Bc_ItemId       INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    Bc_Secret       BLOB    NOT NULL,
+    Bc_IsActive     INTEGER NOT NULL DEFAULT 1 CHECK (Bc_IsActive IN (0,1)),
+    Bc_CreatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    Bc_UpdatedAt    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE CategoryItemAccounts (
+    Cia_AccountId     INTEGER PRIMARY KEY AUTOINCREMENT,
+    Cia_ItemId        INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    Cia_TypeDetailId  INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId),
+    Cia_Secret        BLOB    NOT NULL,
+    Cia_IsActive      INTEGER NOT NULL DEFAULT 1 CHECK (Cia_IsActive IN (0,1)),
+    Cia_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    Cia_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+-- Integrity / versions / logs
+CREATE TABLE KeyArchiveIntegrity (
     Kai_Id           INTEGER PRIMARY KEY AUTOINCREMENT,
     Kai_SizeBytes    INTEGER NOT NULL,
     Kai_Sha256Hex    TEXT    NOT NULL,
     Kai_RecordedUtc  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_KeyArchiveIntegrity_Size_Hash
-  ON KeyArchiveIntegrity(Kai_SizeBytes, Kai_Sha256Hex);
-
--- ---------------------------------------------------------------------------
--- Views
--- ---------------------------------------------------------------------------
-CREATE VIEW IF NOT EXISTS vw_CurrentPassword AS
-SELECT h.*
-FROM CategoryItemPasswordHistory h
-JOIN (
-  SELECT CIPaH_ItemId, MAX(CIPaH_CreatedAt) AS MaxCreated
-  FROM CategoryItemPasswordHistory
-  GROUP BY CIPaH_ItemId
-) latest
-  ON latest.CIPaH_ItemId = h.CIPaH_ItemId
- AND latest.MaxCreated   = h.CIPaH_CreatedAt;
-
-CREATE VIEW IF NOT EXISTS vComboTypeActive AS
-SELECT * FROM ComboType WHERE Active = 1;
-
-CREATE VIEW IF NOT EXISTS vComboDetailActive AS
-SELECT * FROM ComboDetail WHERE Active = 1;
-
--- ---------------------------------------------------------------------------
--- DbVersion
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS DbVersion (
+CREATE TABLE DbVersion (
     Id          INTEGER PRIMARY KEY AUTOINCREMENT,
     Version     TEXT    NOT NULL,
     AppliedOn   TEXT    NOT NULL,
@@ -521,17 +142,7 @@ CREATE TABLE IF NOT EXISTS DbVersion (
     IsCurrent   INTEGER NOT NULL CHECK (IsCurrent IN (0, 1))
 );
 
-INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
-SELECT '1.5.1',
-       strftime('%Y-%m-%d %H:%M:%S','now'),
-       'Add CategoryItemAccounts (encrypted), keep BankCards; seeds for bank_cards and account_number_types; requirement flags.',
-       1
-WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
-
--- ---------------------------------------------------------------------------
--- Logs
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS Logs (
+CREATE TABLE Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
     WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     CreatedUtc    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -556,13 +167,149 @@ CREATE TABLE IF NOT EXISTS Logs (
     StackHash     TEXT
 );
 
-CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc        ON Logs(CreatedUtc);
-CREATE INDEX IF NOT EXISTS IX_Logs_CreatedUtc_Desc   ON Logs(CreatedUtc DESC);
-CREATE INDEX IF NOT EXISTS IX_Logs_Level             ON Logs(Level);
-CREATE INDEX IF NOT EXISTS IX_Logs_Level_CreatedUtc  ON Logs(Level, CreatedUtc DESC);
-CREATE INDEX IF NOT EXISTS IX_Logs_EventCode         ON Logs(EventCode);
-CREATE INDEX IF NOT EXISTS IX_Logs_IsCrash           ON Logs(IsCrash);
-CREATE INDEX IF NOT EXISTS IX_Logs_StackHash         ON Logs(StackHash);
+COMMIT;
+
+-- =========================
+-- SEEDS (idempotent)
+-- =========================
+BEGIN TRANSACTION;
+
+-- Ensure ComboType: category_types
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'category_types', 'Category Types', 1
+WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'category_types');
+
+-- Ensure ComboDetail for category_types (UNION ALL pattern)
+WITH ct AS (SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'category_types'),
+vals AS (
+  SELECT 10  AS Seq, 'UTILITIES'     AS Code, 'Utilities'                 AS Description UNION ALL
+  SELECT 20,         'GOVERNMENT',            'Government'                           UNION ALL
+  SELECT 30,         'BANKS',                 'Banks / Credit Unions'                UNION ALL
+  SELECT 40,         'SHOPPING',              'Shopping & Retail'                    UNION ALL
+  SELECT 50,         'ENTERTAINMENT',         'Entertainment / Streaming'            UNION ALL
+  SELECT 60,         'HEALTHCARE',            'Healthcare & Medical'                 UNION ALL
+  SELECT 70,         'INSURANCE',             'Insurance'                            UNION ALL
+  SELECT 80,         'SOCIAL/CLOUD',           'Social / Messaging / CLOUD'          UNION ALL
+  SELECT 90,         'EMAIL',                 'Email & Identity'                     UNION ALL
+  SELECT 100,        'APP/FILE/FOLDER',       'Application / Encrypted File or Folder'       UNION ALL
+  SELECT 900,        'MISC',                  'Misc / Other'
+)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT ct.Id, v.Seq, v.Code, v.Description, 1
+FROM ct CROSS JOIN vals v
+WHERE NOT EXISTS (
+  SELECT 1 FROM ComboDetail d
+  WHERE d.ComboTypeId = ct.Id AND d.Code = v.Code
+);
+
+-- *** NEW in this revision: Ensure ComboType/ComboDetail for LOG FILTERS ***
+
+-- Ensure ComboType: log_filters
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'log_filters', 'Filters for the Logs UI', 1
+WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'log_filters');
+
+-- Ensure ComboDetail for log_filters (mirrors original list)
+WITH ct AS (SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'log_filters'),
+vals AS (
+  SELECT 0 AS Seq, 'CATEGORY_DUPLICATE' AS Code, 'Duplicate category detected'      AS Description UNION ALL
+  SELECT 1,        'CATEGORY_INSERTED',           'Category successfully inserted'                    UNION ALL
+  SELECT 2,        'LOGIN',                       'Login events'                                     UNION ALL
+  SELECT 3,        'EARLY_FAIL',                  'Early-fail events'                                UNION ALL
+  SELECT 4,        'SESSION_START',               'Session started (post-login)'                      UNION ALL
+  SELECT 5,        'SESSION_END',                 'Session ended'
+)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT ct.Id, v.Seq, v.Code, v.Description, 1
+FROM ct CROSS JOIN vals v
+WHERE NOT EXISTS (
+  SELECT 1 FROM ComboDetail d
+  WHERE d.ComboTypeId = ct.Id AND d.Code = v.Code
+);
+
+-- Starter Categories (unchanged)
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Utilities', 'Bills and essential services', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'UTILITIES'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Utilities');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Government', 'Government portals & services', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'GOVERNMENT'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Government');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Banks', 'Banks & credit unions', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'BANKS'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Banks');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Shopping', 'Retail & e-commerce', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'SHOPPING'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Shopping');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Entertainment', 'Streaming & media', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'ENTERTAINMENT'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Entertainment');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Healthcare', 'Health & medical portals', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'HEALTHCARE'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Healthcare');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Insurance', 'Insurance accounts', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'INSURANCE'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Insurance');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Social', 'Social networks & messaging', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'SOCIAL'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Social');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Email', 'Email providers & identity', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'EMAIL'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Email');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Cloud', 'Cloud & hosting', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'CLOUD'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Cloud');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Development', 'Dev tools & repos', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'DEVELOPMENT'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Development');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Education', 'Schools, courses, LMS', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'EDUCATION'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Education');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Travel', 'Airlines, hotels, transport', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'TRAVEL'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Travel');
+
+INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
+SELECT 'Misc', 'Everything else', d.ComboDetailId, 1
+FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
+WHERE t.Code = 'category_types' AND d.Code = 'MISC'
+  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Misc');
 
 COMMIT;
-PRAGMA foreign_keys = ON;
