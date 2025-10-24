@@ -70,7 +70,6 @@ CREATE TABLE CategoryItem (
     Category_Key             INTEGER NOT NULL REFERENCES Category (Category_Key) ON DELETE CASCADE,
     CI_Name                  TEXT    NOT NULL,
     CI_Description           TEXT,
-    CI_Notes                 TEXT,
     CI_Username              TEXT,
     CI_SignInUrl             TEXT,
     CI_AccountEmail          BLOB,
