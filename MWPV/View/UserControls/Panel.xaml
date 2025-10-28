@@ -68,7 +68,6 @@
                             Margin="0,0,0,8">
                     <Button x:Name="btnAddCategoryItem"
                             Content="Add Item"
-                            Click="btnAddCategoryItem_Click"
                             Visibility="Collapsed"
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
@@ -76,17 +75,6 @@
                 <!-- Category Item Grid -->
                 <uc:CategoryItemGrid x:Name="CategoryItemGrid"
                                      Margin="0,4,0,0"/>
-
-                <!-- Inline Add Item Host (collapsed by default) -->
-                <Border x:Name="AddItemHost"
-                        Visibility="Collapsed"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Padding="0"
-                        Margin="0">
-                    <!-- Real Item Detail UI -->
-                    <uc:CategoryItemDetail x:Name="CategoryItemDetailControl"/>
-                </Border>
             </DockPanel>
         </Grid>
 
