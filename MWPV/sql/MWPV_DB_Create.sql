@@ -100,12 +100,64 @@ CREATE TABLE CategoryItemPasswordHistory (
     CIPaH_SigVersion  INTEGER NOT NULL DEFAULT 1
 );
 
-/* NOTE:
-   The following child tables were intentionally removed in this edition:
-   - CategoryItemSecurityQuestions
-   - BankCards
-   - CategoryItemAccounts
-*/
+/* =========================
+   CategoryItemSecurityQuestions
+   ========================= */
+CREATE TABLE CategoryItemSecurityQuestions (
+    CISQ_Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    CISQ_ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    CISQ_Seq       INTEGER NOT NULL,           -- display/order index
+    CISQ_Question  BLOB    NOT NULL,           -- encrypted question text
+    CISQ_Answer    BLOB    NOT NULL,           -- encrypted answer
+    CISQ_CreatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    CISQ_UpdatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    UNIQUE (CISQ_ItemId, CISQ_Seq)
+);
+
+/* =========================
+   BankCards
+   (Card type points to ComboDetail; seed the card-type ComboDetail separately)
+   ========================= */
+CREATE TABLE BankCards (
+    BC_Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    BC_ItemId        INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    BC_CardType      INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId), -- e.g., CREDIT/DEBIT/STORE/etc.
+    BC_Cardholder    TEXT,                  -- optional display name (non-secret)
+    BC_Number        BLOB    NOT NULL,      -- encrypted PAN (digits only; Luhn-validated in app)
+    BC_ExpMonth      INTEGER NOT NULL CHECK (BC_ExpMonth BETWEEN 1 AND 12),
+    BC_ExpYear       INTEGER NOT NULL,      -- 4-digit year (range validated in app)
+    BC_CVV           BLOB,                  -- encrypted
+    BC_Pin           BLOB,                  -- encrypted (if applicable)
+    BC_BillingZip    BLOB,                  -- encrypted (if applicable)
+    BC_IsPrimary     INTEGER NOT NULL DEFAULT 0 CHECK (BC_IsPrimary IN (0,1)),
+    BC_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    BC_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+/* =========================
+   CategoryItemAccounts
+   (General account numbers separate from cards)
+   ========================= */
+CREATE TABLE CategoryItemAccounts (
+    CIA_Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    CIA_ItemId        INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    CIA_AccountLabel  TEXT,                 -- friendly label (non-secret)
+    CIA_AccountNumber BLOB    NOT NULL,     -- encrypted (normalize/validate in app)
+    CIA_RoutingNumber BLOB,                 -- encrypted (US ABA) - optional
+    CIA_IBAN          BLOB,                 -- encrypted - optional
+    CIA_SWIFT         BLOB,                 -- encrypted - optional
+    CIA_Meta          BLOB,                 -- encrypted misc (e.g., branch, notes)
+
+    -- NEW: optional type from combo, same principle as BankCards
+    CIA_AccountType      INTEGER REFERENCES ComboDetail (ComboDetailId),  -- from ComboType='account_types'
+    CIA_AccountTypeOther TEXT,                 -- user freeform when type = OTHER
+
+    CIA_IsPrimary     INTEGER NOT NULL DEFAULT 0 CHECK (CIA_IsPrimary IN (0,1)),
+    CIA_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    CIA_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+
 
 -- Integrity / versions / logs
 CREATE TABLE KeyArchiveIntegrity (
@@ -154,6 +206,66 @@ COMMIT;
 -- SEEDS (idempotent)
 -- =========================
 BEGIN TRANSACTION;
+/* =========================================================
+   Combo: account_types  (bucket for common account kinds)
+   Used by CategoryItemAccounts.CIA_AccountType (optional)
+   ========================================================= */
+
+/* Ensure ComboType: account_types */
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'account_types', 'Common financial account types', 1
+WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'account_types');
+
+/* Ensure ComboDetail for account_types */
+WITH ct AS (
+  SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'account_types'
+),
+vals AS (
+  SELECT 0 AS Seq, 'CHECKING'   AS Code, 'Checking'            AS Description UNION ALL
+  SELECT 1,        'SAVINGS',               'Savings'                                 UNION ALL
+  SELECT 2,        'CHRISTMAS',             'Christmas Club'                          UNION ALL
+  SELECT 3,        'MONEY_MARKET',          'Money Market'                            UNION ALL
+  SELECT 4,        'IRA',                   'IRA'                                      UNION ALL
+  SELECT 5,        'RETIREMENT',            'Retirement'                              UNION ALL
+  SELECT 6,        '401K',                  '401(k)'                                  UNION ALL
+  SELECT 7,        'OTHER',                 'Other (freeform)'
+)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT ct.Id, v.Seq, v.Code, v.Description, 1
+FROM vals v
+CROSS JOIN ct
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM ComboDetail cd
+  WHERE cd.ComboTypeId = ct.Id
+    AND cd.Code = v.Code
+);
+
+/* ComboType: credit_cards (mixed: types + brands) */
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'credit_cards', 'Credit/Bank card options (mixed)', 1
+WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'credit_cards');
+
+WITH ct AS (
+  SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'credit_cards'
+),
+vals AS (
+  SELECT 0 AS Seq, 'DEBIT_CARD'      AS Code, 'Debit card'               AS Description UNION ALL
+  SELECT 1,        'MASTERCARD',                'Mastercard'                                  UNION ALL
+  SELECT 2,        'VISA',                      'Visa'                                        UNION ALL
+  SELECT 3,        'AMERICAN_EXPRESS',          'American Express'                             UNION ALL
+  SELECT 4,        'DISCOVER',                  'Discover'                                     UNION ALL
+  SELECT 5,        'STORE_CARD',                'Store card (private label)'                   UNION ALL
+  SELECT 6,        'VIRTUAL_CARD',              'Virtual card'
+)
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT ct.Id, v.Seq, v.Code, v.Description, 1
+FROM vals v
+CROSS JOIN ct
+WHERE NOT EXISTS (
+  SELECT 1 FROM ComboDetail cd
+  WHERE cd.ComboTypeId = ct.Id AND cd.Code = v.Code
+);
 
 -- Ensure ComboType: category_types
 INSERT INTO ComboType (Code, Description, Active)
