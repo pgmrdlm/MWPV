@@ -40,7 +40,7 @@
                 <!-- Category Grid -->
                 <uc:CategoryGrid x:Name="CategoryGrid"/>
 
-                <!-- Inline Add Category Host (collapsed by default) -->
+                <!-- Inline Add Category Host -->
                 <Border x:Name="AddCategoryHost"
                         Visibility="Collapsed"
                         Background="Transparent"
@@ -54,7 +54,7 @@
             <!-- ============== RIGHT: Category Items ================ -->
             <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
 
-                <!-- Right Header (will become: Category Items — {Selected}) -->
+                <!-- Header -->
                 <TextBlock DockPanel.Dock="Top"
                            x:Name="txtCategoryItemsTitle"
                            Text="Category Items"
@@ -62,13 +62,14 @@
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
-                <!-- Add Item (shown once a category is selected) -->
+                <!-- Add Item button -->
                 <StackPanel DockPanel.Dock="Top"
                             Orientation="Horizontal"
                             Margin="0,0,0,8">
                     <Button x:Name="btnAddCategoryItem"
                             Content="Add Item"
                             Visibility="Collapsed"
+                            Click="btnAddCategoryItem_Click"
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
@@ -78,15 +79,23 @@
             </DockPanel>
         </Grid>
 
+        <!-- =================== ITEM EDIT OVERLAY =================== -->
+        <!-- CHANGED from Border -> ContentControl so code-behind can set .Content -->
+        <ContentControl x:Name="AddEditItemOverlayHost"
+                        Visibility="Collapsed"
+                        Panel.ZIndex="500"
+                        Background="{DynamicResource Brush.PrimaryBackground}"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"/>
+
         <!-- ====================== LOGS OVERLAY ===================== -->
         <Border x:Name="OverlayHost"
                 Visibility="Collapsed"
                 Panel.ZIndex="1000"
-                Background="#00000000">
+                Background="#AA000000">
             <uc:Logs x:Name="LogsOverlay"
                      HorizontalAlignment="Stretch"
                      VerticalAlignment="Stretch"/>
         </Border>
-
     </Grid>
 </UserControl>

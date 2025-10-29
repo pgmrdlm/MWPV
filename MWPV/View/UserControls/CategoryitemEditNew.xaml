@@ -4,54 +4,51 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DesignHeight="720"
-             d:DesignWidth="1100"
-             Background="Transparent">
+             d:DesignHeight="560"
+             d:DesignWidth="940"
+             Focusable="True">
 
-    <!-- Use your body surface if present -->
-    <Grid Background="{DynamicResource Brush.BrandSecondary}">
+    <!-- Full overlay with branded background -->
+    <Grid Background="Bisque">
         <Grid.RowDefinitions>
-            <RowDefinition Height="48"/>
+            <RowDefinition Height="36"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Top button bar -->
-        <Border Grid.Row="0" Background="{DynamicResource Brush.BrandChrome}" Padding="12,6">
-            <DockPanel LastChildFill="False">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button x:Name="btnSaveAndExit"
-                            Style="{StaticResource DialogPrimary}"
-                            Margin="0,0,10,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74E;" Margin="0,0,8,0"/>
-                            <TextBlock Text="Save &amp; Exit"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="btnClear"
-                            Style="{StaticResource DialogSecondary}"
-                            Margin="0,0,10,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74D;" Margin="0,0,8,0"/>
-                            <TextBlock Text="Clear"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="btnExit"
-                            Style="{StaticResource DialogSecondary}"
-                            IsCancel="True">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" Margin="0,0,8,0"/>
-                            <TextBlock Text="Exit"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </DockPanel>
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Primary}"
+                Padding="12,0,6,0">
+            <TextBlock VerticalAlignment="Center"
+                       Foreground="White"
+                       FontWeight="SemiBold"
+                       FontSize="16"
+                       Text="Add / Edit Category Item"/>
         </Border>
 
-        <!-- Body -->
+        <!-- Scrollable Form -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <Grid Margin="20">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="160"/>
+                    <RowDefinition Height="16"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="24"/>
@@ -60,121 +57,121 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Column 1 -->
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="Category Item Name" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_Name" Height="28" MaxLength="128" Margin="0,0,0,10"/>
+                <!-- Row 0 -->
+                <Label Grid.Row="0" Grid.Column="0" Content="Category Item Name" FontWeight="Bold"/>
+                <TextBox x:Name="txtItemName" Grid.Row="0" Grid.Column="0" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="User Name" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_Username" Height="28" MaxLength="128" Margin="0,0,0,10"/>
+                <Label Grid.Row="0" Grid.Column="2" Content="Password" FontWeight="Bold"/>
+                <PasswordBox x:Name="pwdPassword" Grid.Row="0" Grid.Column="2" Margin="0,22,0,0" Height="28"/>
 
-                    <TextBlock Text="Phone Number" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_PhoneNumber" Height="28" MaxLength="64" Margin="0,0,0,10"/>
+                <Label Grid.Row="0" Grid.Column="4" Content="URL or Absolute Location" FontWeight="Bold"/>
+                <TextBox x:Name="txtUrl" Grid.Row="0" Grid.Column="4" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="Freeform Notes" FontWeight="Bold" Margin="0,6,0,6"/>
-                    <TextBox x:Name="tbCI_FreeformNotes"
-                             Height="220"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             MaxLength="4000"
-                             Margin="0,0,0,10"/>
-                </StackPanel>
+                <!-- Row 2 -->
+                <Label Grid.Row="2" Grid.Column="0" Content="User Name" FontWeight="Bold"/>
+                <TextBox x:Name="txtUsername" Grid.Row="2" Grid.Column="0" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                <!-- Column 2 -->
-                <StackPanel Grid.Column="2">
-                    <TextBlock Text="Category Item Description" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_Description" Height="28" MaxLength="256" Margin="0,0,0,10"/>
+                <Label Grid.Row="2" Grid.Column="2" Content="Item Type" FontWeight="Bold"/>
+                <Border Grid.Row="2" Grid.Column="2" Margin="0,22,0,0" Height="28"
+                        CornerRadius="4" Background="Transparent" BorderBrush="#8A8A8A" BorderThickness="1">
+                    <ComboBox x:Name="cboItemType"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              IsEditable="True"
+                              Style="{StaticResource FilterComboStyle}"/>
+                </Border>
 
-                    <TextBlock Text="Password" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <PasswordBox x:Name="pbCI_Password" Height="28" Margin="0,0,0,10"/>
+                <Label Grid.Row="2" Grid.Column="4" Content="Email" FontWeight="Bold"/>
+                <TextBox x:Name="txtEmail" Grid.Row="2" Grid.Column="4" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="Security Question" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <DockPanel LastChildFill="False" Margin="0,0,0,10">
-                        <TextBox x:Name="tbCI_SecurityQuestion" Height="28" MaxLength="256" DockPanel.Dock="Left" Width="Auto" MinWidth="200"/>
-                        <Button x:Name="btnAddSecurityQA"
-                                Style="{StaticResource DialogSecondary}"
-                                Margin="8,0,0,0">
-                            <TextBlock Text="+" FontSize="16" VerticalAlignment="Center"/>
-                        </Button>
-                    </DockPanel>
+                <!-- Row 4 -->
+                <Label Grid.Row="4" Grid.Column="0" Content="Phone Number" FontWeight="Bold"/>
+                <TextBox x:Name="txtPhone" Grid.Row="4" Grid.Column="0" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="Security Answer" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_SecurityAnswer" Height="28" MaxLength="256" Margin="0,0,0,10"/>
-                </StackPanel>
+                <Label Grid.Row="4" Grid.Column="2" Content="Security Question" FontWeight="Bold"/>
+                <TextBox x:Name="txtSecQuestion" Grid.Row="4" Grid.Column="2" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                <!-- Column 3 -->
-                <StackPanel Grid.Column="4">
-                    <TextBlock Text="URL or Absolute Location" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_SignInUrl" Height="28" MaxLength="512" Margin="0,0,0,10"/>
+                <Label Grid.Row="4" Grid.Column="4" Content="Security Answer" FontWeight="Bold"/>
+                <TextBox x:Name="txtSecAnswer" Grid.Row="4" Grid.Column="4" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="Email" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <TextBox x:Name="tbCI_Email" Height="28" MaxLength="128" Margin="0,0,0,10"/>
+                <!-- Notes -->
+                <Label Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5"
+                       Content="Freeform Notes" FontWeight="Bold"/>
+                <TextBox x:Name="txtDescription" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5"
+                         Margin="0,22,0,0"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         Background="White" Foreground="Black"/>
 
-                    <Separator Margin="0,10,0,6"/>
-                    <TextBlock Text="Bank Cards" FontWeight="Bold" FontSize="14" Margin="0,0,0,6"/>
+                <!-- Bank Section -->
+                <TextBlock Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="5"
+                           Text="Bank Cards / Accounts"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
 
-                    <TextBlock Text="Card Type" Margin="0,0,0,4"/>
-                    <Border CornerRadius="4" Background="Transparent" BorderBrush="#8A8A8A" BorderThickness="1" Height="28" Margin="0,0,0,10">
-                        <ComboBox x:Name="cmbCardType"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  VerticalAlignment="Center"
-                                  Style="{StaticResource FilterComboStyle}"
-                                  MaxDropDownHeight="360"/>
-                    </Border>
+                <!-- Row 10 -->
+                <Label Grid.Row="10" Grid.Column="0" Content="Card Type"/>
+                <Border Grid.Row="10" Grid.Column="0" Margin="0,22,0,0" Height="28"
+                        CornerRadius="4" Background="Transparent" BorderBrush="#8A8A8A" BorderThickness="1">
+                    <ComboBox x:Name="cboCardType"
+                              Background="Transparent" BorderThickness="0"
+                              Style="{StaticResource FilterComboStyle}"/>
+                </Border>
 
-                    <TextBlock Text="Expiration Date" Margin="0,0,0,4"/>
-                    <TextBox x:Name="tbCardExpiration" Height="28" MaxLength="10" Margin="0,0,0,10" ToolTip="MM/YY or MM/YYYY"/>
+                <Label Grid.Row="10" Grid.Column="2" Content="Expiration Date"/>
+                <TextBox x:Name="txtExpDate" Grid.Row="10" Grid.Column="2" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="CVS Code" Margin="0,0,0,4"/>
-                    <TextBox x:Name="tbCardCvs" Height="28" MaxLength="4" Margin="0,0,0,10"/>
+                <Label Grid.Row="10" Grid.Column="4" Content="CVS Code"/>
+                <TextBox x:Name="txtCvv" Grid.Row="10" Grid.Column="4" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="PIN" Margin="0,0,0,4"/>
-                    <DockPanel LastChildFill="False" Margin="0,0,0,10">
-                        <TextBox x:Name="tbCardPin" Height="28" MaxLength="12" DockPanel.Dock="Left" Width="Auto" MinWidth="120"/>
-                        <Button x:Name="btnAddCard"
-                                Style="{StaticResource DialogSecondary}"
-                                Margin="8,0,0,0">
-                            <TextBlock Text="+" FontSize="16" VerticalAlignment="Center"/>
-                        </Button>
-                    </DockPanel>
+                <!-- Row 12 -->
+                <Label Grid.Row="12" Grid.Column="0" Content="Account Name"/>
+                <Border Grid.Row="12" Grid.Column="0" Margin="0,22,0,0" Height="28"
+                        CornerRadius="4" Background="Transparent" BorderBrush="#8A8A8A" BorderThickness="1">
+                    <ComboBox x:Name="cboAccountName"
+                              Background="Transparent" BorderThickness="0"
+                              Style="{StaticResource FilterComboStyle}"/>
+                </Border>
 
-                    <Separator Margin="0,10,0,6"/>
-                    <TextBlock Text="Account Numbers" FontWeight="Bold" FontSize="14" Margin="0,0,0,6"/>
+                <Label Grid.Row="12" Grid.Column="2" Content="Account Number"/>
+                <TextBox x:Name="txtAccountNumber" Grid.Row="12" Grid.Column="2" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
 
-                    <TextBlock Text="Account Name" Margin="0,0,0,4"/>
-                    <Border CornerRadius="4" Background="Transparent" BorderBrush="#8A8A8A" BorderThickness="1" Height="28" Margin="0,0,0,10">
-                        <ComboBox x:Name="cmbAccountName"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  VerticalAlignment="Center"
-                                  Style="{StaticResource FilterComboStyle}"
-                                  MaxDropDownHeight="360"/>
-                    </Border>
-
-                    <TextBlock Text="Account Number" Margin="0,0,0,4"/>
-                    <TextBox x:Name="tbAccountNumber" Height="28" MaxLength="64" Margin="0,0,0,10"/>
-
-                    <TextBlock Text="CVS Code" Margin="0,0,0,4"/>
-                    <TextBox x:Name="tbAccountCvs" Height="28" MaxLength="8" Margin="0,0,0,10"/>
-
-                    <Button x:Name="btnAddAccount"
-                            Style="{StaticResource DialogSecondary}"
-                            Margin="0,6,0,0">
-                        <TextBlock Text="+ Add Account"/>
-                    </Button>
-                </StackPanel>
-
-                <!-- Error line -->
-                <TextBlock x:Name="txtErrorMessage"
-                           Grid.ColumnSpan="5"
-                           Margin="0,16,0,0"
-                           Foreground="Red"
-                           FontWeight="Bold"
-                           Visibility="Collapsed"
-                           TextWrapping="Wrap"/>
+                <Label Grid.Row="12" Grid.Column="4" Content="PIN"/>
+                <TextBox x:Name="txtPin" Grid.Row="12" Grid.Column="4" Margin="0,22,0,0" Height="28"
+                         Background="White" Foreground="Black"/>
             </Grid>
         </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center">
+            <Button x:Name="btnSubmit"
+                    Style="{StaticResource DialogPrimary}"
+                    Margin="0,0,12,0"
+                    Click="btnSubmit_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8FB;" Margin="0,0,8,0"/>
+                    <TextBlock Text="Submit"/>
+                </StackPanel>
+            </Button>
+
+            <Button x:Name="btnCancel"
+                    Style="{StaticResource DialogSecondary}"
+                    Click="btnCancel_Click">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" Margin="0,0,8,0"/>
+                    <TextBlock Text="Cancel"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
     </Grid>
 </UserControl>
