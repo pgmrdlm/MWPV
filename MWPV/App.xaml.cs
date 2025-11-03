@@ -169,19 +169,14 @@ namespace MWPV
                     ShutdownMode = ShutdownMode.OnMainWindowClose;  // <-- set ONLY after MainWindow exists
                     main.Show();
 
-                    // ✅ NEW: show status in MainWindow's status row (no modal dialog)
+                    // ✅ CHANGE: route through MainWindow helper so it auto-hides & clears on input
                     if (!string.IsNullOrWhiteSpace(startupStatus))
                     {
                         try
                         {
-                            var statusText = main.FindName("StatusText") as TextBlock;
-                            if (statusText != null)
-                            {
-                                statusText.Text = startupStatus;
-                                statusText.Visibility = Visibility.Visible;
-                            }
+                            (main as MainWindow)?.ShowStartupStatus(startupStatus, TimeSpan.FromSeconds(8));
                         }
-                        catch { /* best-effort: if StatusText not found, silently ignore */ }
+                        catch { /* best-effort; if MainWindow not ready, silently ignore */ }
                     }
                 }
             }

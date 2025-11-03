@@ -1,13 +1,25 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace MWPV
 {
     public partial class MainWindow : Window
     {
+        // ---- Status line auto-hide timer ----
+        private readonly DispatcherTimer _statusTimer = new DispatcherTimer();
+
         public MainWindow()
         {
             InitializeComponent();
+
+            // Clear the status on any user input
+            this.PreviewKeyDown += (_, __) => ClearStatus();
+            this.PreviewMouseDown += (_, __) => ClearStatus();
+
+            // Timer tick clears the status
+            _statusTimer.Tick += (_, __) => ClearStatus();
         }
 
         // ---------------- Logs overlay bridge ----------------
@@ -15,6 +27,42 @@ namespace MWPV
         public void ShowLogsPanel()
         {
             try { Panel?.ShowLogs(); } catch { /* no-op */ }
+        }
+
+        // ---------------- Status line helpers ----------------
+        /// <summary>
+        /// Show a one-line startup/status message and auto-hide after the given duration.
+        /// Pass null/empty to clear immediately. Default auto-hide = 8 seconds.
+        /// </summary>
+        public void ShowStartupStatus(string message, TimeSpan? autoHide = null)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                ClearStatus();
+                return;
+            }
+
+            // StatusText is defined in MainWindow.xaml (TextBlock)
+            StatusText.Text = message;
+            StatusText.Visibility = Visibility.Visible;
+
+            _statusTimer.Stop();
+            var delay = autoHide ?? TimeSpan.FromSeconds(8);
+            _statusTimer.Interval = delay;
+            _statusTimer.Start();
+        }
+
+        /// <summary>
+        /// Hide the status line and stop any pending auto-hide.
+        /// </summary>
+        private void ClearStatus()
+        {
+            _statusTimer.Stop();
+            if (StatusText.Visibility != Visibility.Collapsed)
+            {
+                StatusText.Visibility = Visibility.Collapsed;
+                StatusText.Text = string.Empty;
+            }
         }
 
         // ---------------- Title bar handlers (no visual changes) ----------------
