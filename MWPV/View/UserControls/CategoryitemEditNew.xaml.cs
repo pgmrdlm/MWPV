@@ -1,4 +1,5 @@
-﻿using System;
+﻿// File: MWPV/View/UserControls/CategoryitemEditNew.xaml.cs
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -118,6 +119,28 @@ namespace MWPV.View.UserControls
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>
+        /// Stub: Generate password (wire-up only; no actual generation yet).
+        /// </summary>
+        private void BtnGeneratePassword_Click(object sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-EDIT] GeneratePassword clicked (stub)");
+#endif
+            // TODO: implement generation and place result into pwdPassword
+        }
+
+        /// <summary>
+        /// Stub: Toggle password reveal (wire-up only; no actual reveal yet).
+        /// </summary>
+        private void BtnTogglePasswordReveal_Click(object sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-EDIT] TogglePasswordReveal clicked (stub)");
+#endif
+            // TODO: implement reveal/hide behavior (temporary plaintext view)
+        }
+
         /* ======================= Helpers ======================= */
 
         private void ClearForm()
@@ -136,7 +159,6 @@ namespace MWPV.View.UserControls
             txtAccountNumber.Text = string.Empty;
             txtPin.Text = string.Empty;
 
-            cboItemType.SelectedIndex = -1;
             cboCardType.SelectedIndex = -1;
             cboAccountName.SelectedIndex = -1;
         }
