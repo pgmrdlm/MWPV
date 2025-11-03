@@ -101,11 +101,16 @@
 
         <!-- Status line (bold + red per request) -->
         <TextBlock x:Name="StatusText"
-                   Grid.Row="3"
-                   Margin="8,2,8,4"
-                   TextWrapping="Wrap"
-                   FontSize="12"
-                   FontWeight="Bold"
-                   Foreground="#CC0000"/>
+           Grid.Row="3"
+           Grid.Column="0"
+           Grid.ColumnSpan="2"        
+           Margin="8,2,8,4"
+           TextWrapping="Wrap"
+           FontSize="12"
+           FontWeight="Bold"
+           Foreground="#CC0000"
+           HorizontalAlignment="Stretch"
+           TextAlignment="Center"
+           Visibility="Collapsed"/>
     </Grid>
 </Window>
