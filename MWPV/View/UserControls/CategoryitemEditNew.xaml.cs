@@ -1,5 +1,4 @@
-﻿// File: MWPV/View/UserControls/CategoryitemEditNew.xaml.cs
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
@@ -62,6 +61,7 @@ namespace MWPV.View.UserControls
             HideVerifyPassword();
             HideStrengthRow();
             HideVerifyRow();
+            HideVerifyError();
         }
 
         private void CategoryitemEditNew_Unloaded(object? sender, RoutedEventArgs e)
@@ -73,6 +73,7 @@ namespace MWPV.View.UserControls
             WipeSensitiveFields();
             HideStrengthRow();
             HideVerifyRow();
+            HideVerifyError();
         }
 
         /* ======================= Configuration ======================= */
@@ -116,7 +117,9 @@ namespace MWPV.View.UserControls
 
             if (!ValidatePasswordForSubmission(out var error))
             {
+#if DEBUG
                 Debug.WriteLine($"[ITEM-EDIT] Password validation failed: {error}");
+#endif
                 PasswordValidationFailed?.Invoke(this, error);
                 if (VerifyRow.Visibility == Visibility.Visible && !string.IsNullOrEmpty(pwdVerify.Password))
                     pwdVerify.Focus();
@@ -153,6 +156,7 @@ namespace MWPV.View.UserControls
             WipeSensitiveFields();
             HideStrengthRow();
             HideVerifyRow();
+            HideVerifyError();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
@@ -171,6 +175,7 @@ namespace MWPV.View.UserControls
                 // Generated passwords: keep both the meter and verify row hidden
                 HideStrengthRow();
                 HideVerifyRow();
+                HideVerifyError();
 
                 // Optionally: ShowMainPassword();
             }
@@ -199,7 +204,6 @@ namespace MWPV.View.UserControls
 
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
-            // If user pastes, we’ll get PasswordChanged right after this; just ensure we treat it as manual.
             if (_settingPwProgrammatically) return;
 
             bool pasteCombo =
@@ -219,18 +223,17 @@ namespace MWPV.View.UserControls
             if (_settingPwProgrammatically)
                 return;
 
-            // Manual typing or paste: show verify row as soon as we have any content
             if (!string.IsNullOrEmpty(pwdPassword.Password))
             {
                 EnsureVerifyRowVisibleForManual();
             }
             else
             {
-                // If user cleared the main password, reset verify row too
                 HideVerifyRow();
+                HideVerifyError();
             }
 
-            // Strength: only while failing policy
+            EvaluateAndDisplayVerifyMismatch();
             UpdateStrengthPanelForPolicy();
         }
 
@@ -247,6 +250,8 @@ namespace MWPV.View.UserControls
 
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
+
+            EvaluateAndDisplayVerifyMismatch();
         }
 
         private void ShowMainPassword()
@@ -294,8 +299,8 @@ namespace MWPV.View.UserControls
             pwdPassword.Password = value;
             if (_mainRevealed) txtPasswordPlain.Text = value;
 
-            // When programmatic, do NOT show verify row
             HideVerifyRow();
+            HideVerifyError();
         }
 
         /// <summary>
@@ -309,7 +314,10 @@ namespace MWPV.View.UserControls
 
             // Empty password allowed by this control; host can decide otherwise.
             if (string.IsNullOrEmpty(pw))
+            {
+                HideVerifyError();
                 return true;
+            }
 
             if (VerifyRow.Visibility == Visibility.Visible)
             {
@@ -317,16 +325,18 @@ namespace MWPV.View.UserControls
                 if (!string.Equals(pw, verify, StringComparison.Ordinal))
                 {
                     error = "Passwords do not match.";
+                    ShowVerifyError(error);
                     return false;
                 }
             }
 
             if (!SecurePassword.IsPasswordValid(pw, pw, out var pwError))
             {
-                error = pwError; // your shared validator’s message
-                return false;
+                HideVerifyError();
+                return false; // strength panel handles messaging
             }
 
+            HideVerifyError();
             return true;
         }
 
@@ -369,7 +379,7 @@ namespace MWPV.View.UserControls
 
             if (policyPass)
             {
-                HideStrengthRow(); // don’t show hints after it passes
+                HideStrengthRow();
                 return;
             }
 
@@ -410,7 +420,7 @@ namespace MWPV.View.UserControls
             PwTipsList.ItemsSource = tips;
         }
 
-        /* ======================= Verify Row helpers ======================= */
+        /* ======================= Verify Row & Error helpers ======================= */
 
         private void EnsureVerifyRowVisibleForManual()
         {
@@ -425,6 +435,7 @@ namespace MWPV.View.UserControls
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
             HideVerifyPassword();
+            HideVerifyError();
         }
 
         private void HideVerifyRow()
@@ -434,6 +445,42 @@ namespace MWPV.View.UserControls
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
             HideVerifyPassword();
+            HideVerifyError();
+        }
+
+        private void EvaluateAndDisplayVerifyMismatch()
+        {
+            if (VerifyRow.Visibility != Visibility.Visible)
+            {
+                HideVerifyError();
+                return;
+            }
+
+            var pw = pwdPassword.Password ?? string.Empty;
+            var verify = pwdVerify.Password ?? string.Empty;
+
+            if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
+            {
+                ShowVerifyError("Passwords do not match.");
+            }
+            else
+            {
+                HideVerifyError();
+            }
+        }
+
+        private void ShowVerifyError(string message)
+        {
+            VerifyErrorText.Text = message ?? string.Empty;
+            if (VerifyErrorPanel.Visibility != Visibility.Visible)
+                VerifyErrorPanel.Visibility = Visibility.Visible;
+        }
+
+        private void HideVerifyError()
+        {
+            VerifyErrorText.Text = string.Empty;
+            if (VerifyErrorPanel.Visibility != Visibility.Collapsed)
+                VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
 
         /* ======================= Field Helpers ======================= */
@@ -470,6 +517,7 @@ namespace MWPV.View.UserControls
 
             HideStrengthRow();
             HideVerifyRow();
+            HideVerifyError();
         }
 
         private void WipeSensitiveFields()
@@ -483,6 +531,7 @@ namespace MWPV.View.UserControls
                 txtCvv.Text = string.Empty;
                 txtPin.Text = string.Empty;
                 HideStrengthRow();
+                HideVerifyError();
             }
             catch
             {
