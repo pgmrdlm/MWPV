@@ -4,32 +4,34 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
-using Security.Utility.Storage; // SecurePassword (common generator/validator)
+using Security.Utility.Storage;
+using Security.Utility.Validation;
 
 namespace MWPV.View.UserControls
 {
     public partial class CategoryitemEditNew : UserControl
     {
-        // Events raised back to the Panel overlay host
         public event EventHandler? Submitted;
         public event EventHandler? Canceled;
-
-        // Raised when password validation fails; payload = human-readable error.
         public event EventHandler<string>? PasswordValidationFailed;
 
         private int _categoryKey;
         private string _categoryName = string.Empty;
         private bool _isEditMode;
 
-        // Reveal state
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private readonly DispatcherTimer _revealTimer;
 
-        // Flow flags
-        private bool _settingPwProgrammatically;   // suppresses verify/meter when we SetPassword(...)
-        private bool _verifyRowShown;              // tracks whether we've made the verify row visible due to user input
+        private bool _settingPwProgrammatically;
+        private bool _verifyRowShown;
+
+        // Email visuals
+        private Brush? _emailDefaultBorderBrush;
+        private Brush? _emailDefaultBackground;
+        private string _lastEmailChecked = string.Empty;
 
         public CategoryitemEditNew()
         {
@@ -38,8 +40,8 @@ namespace MWPV.View.UserControls
             Loaded += CategoryitemEditNew_Loaded;
             Unloaded += CategoryitemEditNew_Unloaded;
 
-            // Detect paste/typing on main password box (helps catch Ctrl+V etc.)
             pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
+            txtEmail.LostFocus += txtEmail_LostFocus;
 
             _revealTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
             _revealTimer.Tick += (_, __) =>
@@ -49,19 +51,21 @@ namespace MWPV.View.UserControls
             };
         }
 
-        /* ======================= Lifecycle ======================= */
-
         private void CategoryitemEditNew_Loaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-EDIT] Loaded");
 #endif
+            _emailDefaultBorderBrush = txtEmail.BorderBrush;
+            _emailDefaultBackground = txtEmail.Background;
+
             ClearForm();
             HideMainPassword();
             HideVerifyPassword();
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+            ClearEmailValidation();
         }
 
         private void CategoryitemEditNew_Unloaded(object? sender, RoutedEventArgs e)
@@ -74,16 +78,14 @@ namespace MWPV.View.UserControls
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+            ClearEmailValidation();
         }
-
-        /* ======================= Configuration ======================= */
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
         {
             _categoryKey = categoryKey;
             _categoryName = categoryName;
             _isEditMode = false;
-
 #if DEBUG
             Debug.WriteLine($"[ITEM-EDIT] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
 #endif
@@ -95,14 +97,11 @@ namespace MWPV.View.UserControls
             _categoryKey = categoryKey;
             _categoryName = categoryName;
             _isEditMode = true;
-
 #if DEBUG
             Debug.WriteLine($"[ITEM-EDIT] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
             // TODO: Map existingItem -> fields
         }
-
-        /* ======================= Buttons ======================= */
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
@@ -117,9 +116,6 @@ namespace MWPV.View.UserControls
 
             if (!ValidatePasswordForSubmission(out var error))
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-EDIT] Password validation failed: {error}");
-#endif
                 PasswordValidationFailed?.Invoke(this, error);
                 if (VerifyRow.Visibility == Visibility.Visible && !string.IsNullOrEmpty(pwdVerify.Password))
                     pwdVerify.Focus();
@@ -130,26 +126,16 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // TODO: persist (insert/update)
-#if DEBUG
-                Debug.WriteLine($"[ITEM-EDIT] Saving item for categoryKey={_categoryKey}");
-#endif
                 Submitted?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-EDIT][ERR] {ex}");
-#endif
                 MessageBox.Show("Error saving item.\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void btnCancel_Click(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-EDIT] Cancel clicked");
-#endif
             _revealTimer.Stop();
             HideMainPassword();
             HideVerifyPassword();
@@ -157,50 +143,108 @@ namespace MWPV.View.UserControls
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+            ClearEmailValidation();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-EDIT] GeneratePassword clicked");
-#endif
             try
             {
-                var generated = SecurePassword.GenerateAsString(12); // sensible default
+                var generated = SecurePassword.GenerateAsString(12);
                 _settingPwProgrammatically = true;
                 try { SetPassword(generated); }
                 finally { _settingPwProgrammatically = false; }
 
-                // Generated passwords: keep both the meter and verify row hidden
                 HideStrengthRow();
                 HideVerifyRow();
                 HideVerifyError();
-
-                // Optionally: ShowMainPassword();
             }
-            catch (Exception ex)
+            catch
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-EDIT][ERR][GeneratePassword] {ex}");
-#endif
                 PasswordValidationFailed?.Invoke(this, "Password generator failed.");
             }
         }
 
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
-        {
-            if (_mainRevealed) HideMainPassword();
-            else ShowMainPassword();
-        }
+            => (_mainRevealed ? (Action)HideMainPassword : ShowMainPassword)();
 
         private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
+            => (_verifyRevealed ? (Action)HideVerifyPassword : ShowVerifyPassword)();
+
+        /* ======================= Email LostFocus validation ======================= */
+
+        private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
-            if (_verifyRevealed) HideVerifyPassword();
-            else ShowVerifyPassword();
+            var s = (txtEmail.Text ?? string.Empty).Trim();
+
+            if (s.Length == 0)
+            {
+                ClearEmailValidation();
+                _lastEmailChecked = string.Empty;
+                return;
+            }
+
+            if (string.Equals(s, _lastEmailChecked, StringComparison.Ordinal))
+                return;
+
+            _lastEmailChecked = s;
+
+            var result = EmailValidator.IsLikelyEmail(s, out var message);
+            if (result == EmailCheck.Ok)
+                MarkEmailValid();
+            else
+                MarkEmailInvalid(message);
         }
 
-        /* ======================= Password Helpers ======================= */
+        private void MarkEmailValid()
+        {
+            try
+            {
+                EmailErrorText.Text = string.Empty;
+                EmailErrorPanel.Visibility = Visibility.Collapsed;
+
+                txtEmail.ToolTip = null;
+                if (_emailDefaultBackground != null) txtEmail.Background = _emailDefaultBackground;
+                if (_emailDefaultBorderBrush != null) txtEmail.BorderBrush = _emailDefaultBorderBrush;
+            }
+            catch { }
+        }
+
+        private void MarkEmailInvalid(string message)
+        {
+            try
+            {
+                EmailErrorText.Text = string.IsNullOrWhiteSpace(message) ? "Please enter a valid email address." : message;
+                if (EmailErrorPanel.Visibility != Visibility.Visible)
+                    EmailErrorPanel.Visibility = Visibility.Visible;
+
+                txtEmail.ToolTip = EmailErrorText.Text;
+
+                var fill = TryFindResource("FieldErrorFill") as Brush
+                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+                txtEmail.Background = fill;
+
+                // keep border as-is (easier on the eyes)
+            }
+            catch { }
+        }
+
+        private void ClearEmailValidation()
+        {
+            try
+            {
+                EmailErrorText.Text = string.Empty;
+                EmailErrorPanel.Visibility = Visibility.Collapsed;
+
+                txtEmail.ToolTip = null;
+                if (_emailDefaultBackground != null) txtEmail.Background = _emailDefaultBackground;
+                if (_emailDefaultBorderBrush != null) txtEmail.BorderBrush = _emailDefaultBorderBrush;
+            }
+            catch { }
+        }
+
+        /* ======================= Password Helpers (unchanged) ======================= */
 
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
@@ -210,7 +254,7 @@ namespace MWPV.View.UserControls
                 (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
                 (e.Key == Key.Insert && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
 
-            if (pasteCombo) _verifyRowShown = false; // force re-check on change
+            if (pasteCombo) _verifyRowShown = false;
         }
 
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
@@ -218,15 +262,12 @@ namespace MWPV.View.UserControls
             if (_revealTimer.IsEnabled) { _revealTimer.Stop(); _revealTimer.Start(); }
 
             if (_mainRevealed)
-                txtPasswordPlain.Text = pwdPassword.Password; // keep visible copy in sync
+                txtPasswordPlain.Text = pwdPassword.Password;
 
-            if (_settingPwProgrammatically)
-                return;
+            if (_settingPwProgrammatically) return;
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
-            {
                 EnsureVerifyRowVisibleForManual();
-            }
             else
             {
                 HideVerifyRow();
@@ -247,10 +288,7 @@ namespace MWPV.View.UserControls
         private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_revealTimer.IsEnabled) { _revealTimer.Stop(); _revealTimer.Start(); }
-
-            if (_verifyRevealed)
-                txtVerifyPlain.Text = pwdVerify.Password;
-
+            if (_verifyRevealed) txtVerifyPlain.Text = pwdVerify.Password;
             EvaluateAndDisplayVerifyMismatch();
         }
 
@@ -260,15 +298,12 @@ namespace MWPV.View.UserControls
             txtPasswordPlain.Visibility = Visibility.Visible;
             pwdPassword.Visibility = Visibility.Collapsed;
             _mainRevealed = true;
-
             _revealTimer.Stop(); _revealTimer.Start();
         }
 
         private void HideMainPassword()
         {
-            if (!string.IsNullOrEmpty(txtPasswordPlain.Text))
-                txtPasswordPlain.Text = string.Empty;
-
+            if (!string.IsNullOrEmpty(txtPasswordPlain.Text)) txtPasswordPlain.Text = string.Empty;
             txtPasswordPlain.Visibility = Visibility.Collapsed;
             pwdPassword.Visibility = Visibility.Visible;
             _mainRevealed = false;
@@ -280,15 +315,12 @@ namespace MWPV.View.UserControls
             txtVerifyPlain.Visibility = Visibility.Visible;
             pwdVerify.Visibility = Visibility.Collapsed;
             _verifyRevealed = true;
-
             _revealTimer.Stop(); _revealTimer.Start();
         }
 
         private void HideVerifyPassword()
         {
-            if (!string.IsNullOrEmpty(txtVerifyPlain.Text))
-                txtVerifyPlain.Text = string.Empty;
-
+            if (!string.IsNullOrEmpty(txtVerifyPlain.Text)) txtVerifyPlain.Text = string.Empty;
             txtVerifyPlain.Visibility = Visibility.Collapsed;
             pwdVerify.Visibility = Visibility.Visible;
             _verifyRevealed = false;
@@ -298,21 +330,15 @@ namespace MWPV.View.UserControls
         {
             pwdPassword.Password = value;
             if (_mainRevealed) txtPasswordPlain.Text = value;
-
             HideVerifyRow();
             HideVerifyError();
         }
 
-        /// <summary>
-        /// If password is present, validate it (>=8 chars and >=3 of 4 classes).
-        /// If verify row is visible, also require an exact match.
-        /// </summary>
         private bool ValidatePasswordForSubmission(out string error)
         {
             error = string.Empty;
             var pw = pwdPassword.Password ?? string.Empty;
 
-            // Empty password allowed by this control; host can decide otherwise.
             if (string.IsNullOrEmpty(pw))
             {
                 HideVerifyError();
@@ -330,17 +356,15 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            if (!SecurePassword.IsPasswordValid(pw, pw, out var pwError))
+            if (!Security.Utility.Storage.SecurePassword.IsPasswordValid(pw, pw, out var _))
             {
                 HideVerifyError();
-                return false; // strength panel handles messaging
+                return false;
             }
 
             HideVerifyError();
             return true;
         }
-
-        /* ======================= Strength Panel (only on failure) ======================= */
 
         private void ShowStrengthRow()
         {
@@ -352,7 +376,6 @@ namespace MWPV.View.UserControls
         {
             if (StrengthPanel.Visibility != Visibility.Collapsed)
                 StrengthPanel.Visibility = Visibility.Collapsed;
-
             PwStrengthBar.Value = 0;
             PwStrengthText.Text = string.Empty;
             PwTipsList.ItemsSource = null;
@@ -362,11 +385,7 @@ namespace MWPV.View.UserControls
         {
             var pw = pwdPassword.Password ?? string.Empty;
 
-            if (string.IsNullOrEmpty(pw))
-            {
-                HideStrengthRow();
-                return;
-            }
+            if (string.IsNullOrEmpty(pw)) { HideStrengthRow(); return; }
 
             int classes = 0;
             if (pw.Any(char.IsLower)) classes++;
@@ -377,11 +396,7 @@ namespace MWPV.View.UserControls
             bool lengthOk = pw.Length >= 8;
             bool policyPass = lengthOk && classes >= 3;
 
-            if (policyPass)
-            {
-                HideStrengthRow();
-                return;
-            }
+            if (policyPass) { HideStrengthRow(); return; }
 
             ShowStrengthRow();
 
@@ -408,7 +423,7 @@ namespace MWPV.View.UserControls
                 4 => "PwVeryStrong",
                 _ => "PwWeak"
             };
-            if (TryFindResource(brushKey) is System.Windows.Media.Brush b)
+            if (TryFindResource(brushKey) is Brush b)
                 PwStrengthBar.Foreground = b;
 
             var tips = new System.Collections.Generic.List<string>();
@@ -419,8 +434,6 @@ namespace MWPV.View.UserControls
             if (!pw.Any(ch => !char.IsLetterOrDigit(ch))) tips.Add("Add a special character.");
             PwTipsList.ItemsSource = tips;
         }
-
-        /* ======================= Verify Row & Error helpers ======================= */
 
         private void EnsureVerifyRowVisibleForManual()
         {
@@ -450,23 +463,15 @@ namespace MWPV.View.UserControls
 
         private void EvaluateAndDisplayVerifyMismatch()
         {
-            if (VerifyRow.Visibility != Visibility.Visible)
-            {
-                HideVerifyError();
-                return;
-            }
+            if (VerifyRow.Visibility != Visibility.Visible) { HideVerifyError(); return; }
 
             var pw = pwdPassword.Password ?? string.Empty;
             var verify = pwdVerify.Password ?? string.Empty;
 
             if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
-            {
                 ShowVerifyError("Passwords do not match.");
-            }
             else
-            {
                 HideVerifyError();
-            }
         }
 
         private void ShowVerifyError(string message)
@@ -482,8 +487,6 @@ namespace MWPV.View.UserControls
             if (VerifyErrorPanel.Visibility != Visibility.Collapsed)
                 VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
-
-        /* ======================= Field Helpers ======================= */
 
         private void ClearForm()
         {
@@ -518,6 +521,8 @@ namespace MWPV.View.UserControls
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+            ClearEmailValidation();
+            _lastEmailChecked = string.Empty;
         }
 
         private void WipeSensitiveFields()
@@ -533,10 +538,7 @@ namespace MWPV.View.UserControls
                 HideStrengthRow();
                 HideVerifyError();
             }
-            catch
-            {
-                // best-effort wipes; ignore failures
-            }
+            catch { }
         }
     }
 }

@@ -8,3 +8,4 @@ global using Security.Utility.Logging;
 global using SecureEncryptedDataStore = Security.Utility.Storage.SecureEncryptedDataStore;
 global using SensitiveDataCleaner = Security.Utility.Wiping.SensitiveDataCleaner;
 global using SecLogLevel = Security.Utility.Logging.LogSeverity;  // <-- this defines SecLogLevel
+global using Security.Utility.Validation;
