@@ -260,6 +260,7 @@
                              IsReadOnly="True"
                              Background="Transparent"
                              Foreground="Red"
+                             FontWeight="Bold"
                              BorderThickness="0"/>
 
                     <!-- Advisory banner (left as-is) -->
