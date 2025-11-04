@@ -11,7 +11,7 @@ using Security.Utility.Validation;
 
 namespace MWPV.View.UserControls
 {
-    public partial class CategoryitemEditNew : UserControl
+    public partial class CategoryItemNew : UserControl
     {
         public event EventHandler? Submitted;
         public event EventHandler? Canceled;
@@ -33,12 +33,12 @@ namespace MWPV.View.UserControls
         private Brush? _emailDefaultBackground;
         private string _lastEmailChecked = string.Empty;
 
-        public CategoryitemEditNew()
+        public CategoryItemNew()
         {
             InitializeComponent();
 
-            Loaded += CategoryitemEditNew_Loaded;
-            Unloaded += CategoryitemEditNew_Unloaded;
+            Loaded += CategoryItemNew_Loaded;
+            Unloaded += CategoryItemNew_Unloaded;
 
             pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
             txtEmail.LostFocus += txtEmail_LostFocus;
@@ -51,7 +51,7 @@ namespace MWPV.View.UserControls
             };
         }
 
-        private void CategoryitemEditNew_Loaded(object? sender, RoutedEventArgs e)
+        private void CategoryItemNew_Loaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-EDIT] Loaded");
@@ -68,7 +68,7 @@ namespace MWPV.View.UserControls
             ClearEmailValidation();
         }
 
-        private void CategoryitemEditNew_Unloaded(object? sender, RoutedEventArgs e)
+        private void CategoryItemNew_Unloaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-EDIT] Unloaded");

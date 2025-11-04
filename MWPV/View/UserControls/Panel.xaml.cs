@@ -8,7 +8,7 @@ namespace MWPV.View.UserControls
     public partial class Panel : UserControl
     {
         private AddCategoryInline? _addCategoryInline;
-        private CategoryitemEditNew? _categoryItemEdit;
+        private CategoryItemNew? _categoryItemEdit;
         private bool _isHandlingInlineEvent;
 
         private int _selectedCategoryKey;
@@ -186,7 +186,7 @@ namespace MWPV.View.UserControls
                 _categoryItemEdit.Canceled -= CategoryItemEdit_Canceled;
             }
 
-            _categoryItemEdit = new CategoryitemEditNew();
+            _categoryItemEdit = new CategoryItemNew();
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
