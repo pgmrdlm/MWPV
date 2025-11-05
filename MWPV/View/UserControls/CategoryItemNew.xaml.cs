@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
@@ -33,6 +35,13 @@ namespace MWPV.View.UserControls
         private Brush? _emailDefaultBackground;
         private string _lastEmailChecked = string.Empty;
 
+        // Security Q/A (UI-only)
+        private readonly ObservableCollection<QaRow> _qaRows = new();
+        private const string QA_BTN_VIEW = "View";
+        private const string QA_BTN_DELETE = "Delete";
+        private const string QA_BTN_UP = "Up";
+        private const string QA_BTN_DOWN = "Down";
+
         public CategoryItemNew()
         {
             InitializeComponent();
@@ -54,10 +63,12 @@ namespace MWPV.View.UserControls
         private void CategoryItemNew_Loaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
-            Debug.WriteLine("[ITEM-EDIT] Loaded");
+            Debug.WriteLine("[ITEM-NEW] Loaded");
 #endif
             _emailDefaultBorderBrush = txtEmail.BorderBrush;
             _emailDefaultBackground = txtEmail.Background;
+
+            InitSecurityQaUi();
 
             ClearForm();
             HideMainPassword();
@@ -71,7 +82,7 @@ namespace MWPV.View.UserControls
         private void CategoryItemNew_Unloaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
-            Debug.WriteLine("[ITEM-EDIT] Unloaded");
+            Debug.WriteLine("[ITEM-NEW] Unloaded");
 #endif
             _revealTimer.Stop();
             WipeSensitiveFields();
@@ -79,6 +90,10 @@ namespace MWPV.View.UserControls
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+
+            var list = FindName("qaList") as ItemsControl;
+            if (list is not null)
+                list.RemoveHandler(Button.ClickEvent, new RoutedEventHandler(QaList_ButtonClick));
         }
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
@@ -87,7 +102,7 @@ namespace MWPV.View.UserControls
             _categoryName = categoryName;
             _isEditMode = false;
 #if DEBUG
-            Debug.WriteLine($"[ITEM-EDIT] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
+            Debug.WriteLine($"[ITEM-NEW] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
 #endif
             ClearForm();
         }
@@ -98,15 +113,15 @@ namespace MWPV.View.UserControls
             _categoryName = categoryName;
             _isEditMode = true;
 #if DEBUG
-            Debug.WriteLine($"[ITEM-EDIT] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
+            Debug.WriteLine($"[ITEM-NEW] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
-            // TODO: Map existingItem -> fields
+            // TODO: Map existingItem -> fields (and Q/A) once persistence is wired
         }
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
-            Debug.WriteLine("[ITEM-EDIT] Submit clicked");
+            Debug.WriteLine("[ITEM-NEW] Submit clicked");
 #endif
             if (string.IsNullOrWhiteSpace(txtItemName.Text))
             {
@@ -144,6 +159,10 @@ namespace MWPV.View.UserControls
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+
+            _qaRows.Clear();
+            UpdateQaCountText();
+
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
@@ -224,8 +243,6 @@ namespace MWPV.View.UserControls
                 var fill = TryFindResource("FieldErrorFill") as Brush
                            ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
                 txtEmail.Background = fill;
-
-                // keep border as-is (easier on the eyes)
             }
             catch { }
         }
@@ -244,7 +261,7 @@ namespace MWPV.View.UserControls
             catch { }
         }
 
-        /* ======================= Password Helpers (unchanged) ======================= */
+        /* ======================= Password Helpers ======================= */
 
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
@@ -356,7 +373,7 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            if (!Security.Utility.Storage.SecurePassword.IsPasswordValid(pw, pw, out var _))
+            if (!SecurePassword.IsPasswordValid(pw, pw, out var _))
             {
                 HideVerifyError();
                 return false;
@@ -426,7 +443,7 @@ namespace MWPV.View.UserControls
             if (TryFindResource(brushKey) is Brush b)
                 PwStrengthBar.Foreground = b;
 
-            var tips = new System.Collections.Generic.List<string>();
+            var tips = new List<string>();
             if (!lengthOk) tips.Add("Use at least 8 characters.");
             if (!pw.Any(char.IsLower)) tips.Add("Add a lowercase letter.");
             if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
@@ -506,8 +523,6 @@ namespace MWPV.View.UserControls
             txtUsername.Text = string.Empty;
             txtEmail.Text = string.Empty;
             txtPhone.Text = string.Empty;
-            txtSecQuestion.Text = string.Empty;
-            txtSecAnswer.Text = string.Empty;
 
             txtDescription.Text = string.Empty;
             txtExpDate.Text = string.Empty;
@@ -523,6 +538,11 @@ namespace MWPV.View.UserControls
             HideVerifyError();
             ClearEmailValidation();
             _lastEmailChecked = string.Empty;
+
+            _qaRows.Clear();
+            var list = FindName("qaList") as ItemsControl;
+            if (list is not null) list.ItemsSource = _qaRows;
+            UpdateQaCountText();
         }
 
         private void WipeSensitiveFields()
@@ -539,6 +559,132 @@ namespace MWPV.View.UserControls
                 HideVerifyError();
             }
             catch { }
+        }
+
+        // ----------------- Security Q/A helpers (UI-only) -----------------
+
+        private void InitSecurityQaUi()
+        {
+            var list = FindName("qaList") as ItemsControl;
+            if (list is not null)
+            {
+                list.ItemsSource = _qaRows;
+                list.AddHandler(Button.ClickEvent, new RoutedEventHandler(QaList_ButtonClick), handledEventsToo: true);
+            }
+
+            var addBtn = FindName("qaAddButton") as Button;
+            if (addBtn is not null)
+                addBtn.Click += QaAddButton_Click;
+
+            UpdateQaCountText();
+        }
+
+        private void QaAddButton_Click(object? sender, RoutedEventArgs e)
+        {
+            var qBox = FindName("qaNewQuestion") as TextBox;
+            var aBox = FindName("qaNewAnswer") as PasswordBox;
+
+            string q = (qBox?.Text ?? string.Empty).Trim();
+            string a = (aBox?.Password ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                MessageBox.Show("Please enter a security question.", "Validation", MessageBoxButton.OK, MessageBoxImage.Information);
+                qBox?.Focus();
+                return;
+            }
+
+            int len = a?.Length ?? 0;
+
+            var row = new QaRow
+            {
+                Seq = _qaRows.Count,
+                QuestionDisplay = q,
+                AnswerLen = len,
+                AnswerDisplay = len > 0 ? $"•••• ({len})" : "(empty)"
+            };
+
+            _qaRows.Add(row);
+
+            if (qBox is not null) qBox.Text = string.Empty;
+            if (aBox is not null) aBox.Password = string.Empty;
+
+            UpdateQaCountText();
+        }
+
+        private void QaList_ButtonClick(object? sender, RoutedEventArgs e)
+        {
+            if (e.OriginalSource is not Button btn) return;
+            if (!TryGetDataContext<QaRow>(btn, out var row) || row is null) return;
+
+            string label = btn.Content?.ToString() ?? string.Empty;
+
+            if (label == QA_BTN_VIEW)
+            {
+                MessageBox.Show("Viewing answers will be enabled once encryption is wired.\n\n(We are not storing plaintext in memory at this stage.)",
+                                "Not Implemented", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else if (label == QA_BTN_DELETE)
+            {
+                _qaRows.Remove(row);
+                ResequenceQa();
+                UpdateQaCountText();
+            }
+            else if (label == QA_BTN_UP)
+            {
+                var idx = _qaRows.IndexOf(row);
+                if (idx > 0)
+                {
+                    _qaRows.Move(idx, idx - 1);
+                    ResequenceQa();
+                }
+            }
+            else if (label == QA_BTN_DOWN)
+            {
+                var idx = _qaRows.IndexOf(row);
+                if (idx >= 0 && idx < _qaRows.Count - 1)
+                {
+                    _qaRows.Move(idx, idx + 1);
+                    ResequenceQa();
+                }
+            }
+        }
+
+        private void UpdateQaCountText()
+        {
+            var t = FindName("QaCountText") as TextBlock;
+            if (t is null) return;
+            t.Text = $"— {_qaRows.Count}";
+        }
+
+        private void ResequenceQa()
+        {
+            for (int i = 0; i < _qaRows.Count; i++)
+                _qaRows[i].Seq = i;
+        }
+
+        private static bool TryGetDataContext<T>(DependencyObject start, out T? ctx) where T : class
+        {
+            ctx = null;
+            DependencyObject? current = start;
+            while (current is not null)
+            {
+                if (current is FrameworkElement fe && fe.DataContext is T match)
+                {
+                    ctx = match;
+                    return true;
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return false;
+        }
+
+        private sealed class QaRow
+        {
+            public int Seq { get; set; }
+            public string QuestionDisplay { get; set; } = string.Empty;
+            public int AnswerLen { get; set; }
+            public string AnswerDisplay { get; set; } = string.Empty;
         }
     }
 }
