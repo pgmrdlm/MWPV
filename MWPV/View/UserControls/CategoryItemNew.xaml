@@ -1,7 +1,11 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 ﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItemNew"
 =======
 ﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItemNew "
+>>>>>>> CategoryItemChanges
+=======
+﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItemNew"
 >>>>>>> CategoryItemChanges
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -91,9 +95,9 @@
                      1 : Strength (under Password)  +  VerifyError (under Verify)
                      2 : spacer
                      3 : User / Email / URL
-                     4 : EmailError (under Email)  
+                     4 : EmailError (under Email)
                      5 : spacer
-                     6 : Phone / SecQ / SecA
+                     6 : Phone only  (Security Q/A single-line REMOVED)
                      7 : spacer
                      8 : Notes (full width)
                      9 : spacer
@@ -102,6 +106,8 @@
                      12: CardType / Exp / CVV
                      13: spacer
                      14: AccountName / AccountNumber / PIN
+                     15: spacer
+                     16: Security Questions (optional) block
                 -->
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -109,12 +115,13 @@
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <!-- Email error row -->
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="160"/>
                     <RowDefinition Height="16"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="10"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="10"/>
                     <RowDefinition Height="Auto"/>
@@ -307,22 +314,11 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- ===== row 6: phone / sec q / sec a ===== -->
+                <!-- ===== row 6: phone only (legacy Security Q/A removed) ===== -->
                 <Label Grid.Row="6" Grid.Column="0" Content="Phone Number" FontWeight="Bold"/>
                 <TextBox x:Name="txtPhone"
                          Grid.Row="6" Grid.Column="0"
                          Margin="0,22,0,0" Height="28" MinWidth="180"
-                         HorizontalAlignment="Left"/>
-
-                <Label Grid.Row="6" Grid.Column="2" Content="Security Question" FontWeight="Bold"/>
-                <TextBox x:Name="txtSecQuestion"
-                         Grid.Row="6" Grid.Column="2"
-                         Margin="0,22,0,0" Height="28"/>
-
-                <Label Grid.Row="6" Grid.Column="4" Content="Security Answer" FontWeight="Bold"/>
-                <TextBox x:Name="txtSecAnswer"
-                         Grid.Row="6" Grid.Column="4"
-                         Margin="0,22,0,0" Height="28" Width="320" MinWidth="220"
                          HorizontalAlignment="Left"/>
 
                 <!-- ===== row 8: notes ===== -->
@@ -380,6 +376,98 @@
                 <TextBox x:Name="txtPin"
                          Grid.Row="14" Grid.Column="4"
                          Margin="0,22,0,0" Height="28"/>
+
+                <!-- spacer before Q/A -->
+                <Rectangle Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="5" Height="10" Fill="Transparent"/>
+
+                <!-- ===== row 16: Security Questions (optional) ===== -->
+                <Border Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="5"
+                        BorderBrush="#D8D8D8" BorderThickness="1" CornerRadius="6" Padding="10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Security Questions (optional)" FontWeight="SemiBold" />
+                            <TextBlock x:Name="QaCountText" Foreground="#666" Margin="8,0,0,0" Text="— 0"/>
+                        </StackPanel>
+
+                        <!-- Add row -->
+                        <Grid Margin="0,8,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*"/>
+                                <ColumnDefinition Width="3*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Question" FontSize="12" Foreground="#666"/>
+                                <TextBox x:Name="qaNewQuestion" Height="28"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="Answer" FontSize="12" Foreground="#666"/>
+                                <PasswordBox x:Name="qaNewAnswer" Height="28"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
+                                <Button x:Name="qaAddButton" Content="Add" Height="28" MinWidth="80"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Column headers -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*"/>
+                                <ColumnDefinition Width="3*"/>
+                                <ColumnDefinition Width="48"/>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Question" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="Answer" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="2" Text="View" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="3" Text="Delete" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="4" Text="Move" FontWeight="Bold" FontSize="12"/>
+                        </Grid>
+
+                        <!-- List -->
+                        <Border BorderBrush="#D8D8D8" BorderThickness="1" CornerRadius="4">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="160">
+                                <ItemsControl x:Name="qaList" Margin="0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2,0,2" Background="White">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="3*"/>
+                                                    <ColumnDefinition Width="48"/>
+                                                    <ColumnDefinition Width="60"/>
+                                                    <ColumnDefinition Width="90"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding QuestionDisplay}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding QuestionDisplay}"/>
+
+                                                <TextBlock Grid.Column="1"
+                                                           Foreground="#666"
+                                                           Text="{Binding AnswerDisplay}"/>
+
+                                                <Button Grid.Column="2" Content="View" Height="24" Margin="2"/>
+
+                                                <Button Grid.Column="3" Content="Delete" Height="24" Margin="2"/>
+
+                                                <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Left">
+                                                    <Button Content="Up" Height="24" Margin="2,2,6,2"/>
+                                                    <Button Content="Down" Height="24" Margin="0,2,2,2"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </Border>
             </Grid>
         </ScrollViewer>
 
