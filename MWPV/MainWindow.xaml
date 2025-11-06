@@ -1,5 +1,4 @@
 ﻿<Window x:Class="MWPV.MainWindow"
-        Icon="/Assets/Icons/MWPV.ico"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -10,8 +9,11 @@
         mc:Ignorable="d"
         Title="MWPV - My Windows Password Vault"
         WindowStyle="None"
-        Height="864" Width="1536"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        SizeToContent="Manual"
+        Width="1536" Height="864"           
+    MinWidth="1100" MinHeight="700"
+    Icon="/Assets/Icons/MWPV.ico">
 
     <!-- Borderless drag/resize -->
     <shell:WindowChrome.WindowChrome>
@@ -21,20 +23,20 @@
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
 
-    <!-- Background uses theme secondary -->
+    <!-- Root layout: Title (Auto) / Menu (Auto) / Content (*) / Status (Auto) -->
     <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
-            <!-- Title Bar -->
-            <RowDefinition Height="20"/>
-            <!-- Menu Bar -->
+            <!-- Title Bar (fixed) -->
             <RowDefinition Height="Auto"/>
-            <!-- Panel -->
-            <RowDefinition Height="20"/>
-            <!-- Status -->
+            <!-- Menu Bar -->
+            <RowDefinition Height="*"/>
+            <!-- CONTENT VIEWPORT -->
+            <RowDefinition Height="Auto"/>
+            <!-- Status Line -->
         </Grid.RowDefinitions>
 
-        <!-- TITLE BAR (uses theme primary) -->
+        <!-- TITLE BAR -->
         <Border Grid.Row="0" Background="{DynamicResource Brush.Primary}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -46,7 +48,7 @@
                     <!-- caption buttons -->
                 </Grid.ColumnDefinitions>
 
-                <!-- App icon (visible in custom chrome) -->
+                <!-- App icon -->
                 <Image Grid.Column="0"
                        Width="16" Height="16"
                        Margin="6,0,6,0"
@@ -95,22 +97,22 @@
             </Grid>
         </Border>
 
-        <!-- Menu & content -->
+        <!-- MENU (Auto) -->
         <userControls:MenuBar Grid.Row="1"/>
+
+        <!-- CONTENT VIEWPORT (row *) — Panel hosts its own outer ScrollViewer -->
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>
 
-        <!-- Status line (bold + red per request) -->
+        <!-- STATUS (Auto) -->
         <TextBlock x:Name="StatusText"
-           Grid.Row="3"
-           Grid.Column="0"
-           Grid.ColumnSpan="2"        
-           Margin="8,2,8,4"
-           TextWrapping="Wrap"
-           FontSize="12"
-           FontWeight="Bold"
-           Foreground="#CC0000"
-           HorizontalAlignment="Stretch"
-           TextAlignment="Center"
-           Visibility="Collapsed"/>
+                   Grid.Row="3"
+                   Margin="8,2,8,4"
+                   TextWrapping="Wrap"
+                   FontSize="12"
+                   FontWeight="Bold"
+                   Foreground="#CC0000"
+                   HorizontalAlignment="Stretch"
+                   TextAlignment="Center"
+                   Visibility="Collapsed"/>
     </Grid>
 </Window>
