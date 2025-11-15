@@ -522,13 +522,13 @@ namespace MWPV.View.UserControls
 
             txtUsername.Text = string.Empty;
             txtEmail.Text = string.Empty;
-            txtPhone.Text = string.Empty;
+            txtPhone.Password = string.Empty;
 
             txtDescription.Text = string.Empty;
             txtExpDate.Text = string.Empty;
-            txtCvv.Text = string.Empty;
+            txtCvv.Password = string.Empty;
             txtAccountNumber.Text = string.Empty;
-            txtPin.Text = string.Empty;
+            txtPin.Password = string.Empty;
 
             cboCardType.SelectedIndex = -1;
             cboAccountName.SelectedIndex = -1;
@@ -553,8 +553,9 @@ namespace MWPV.View.UserControls
                 HideVerifyPassword();
                 pwdPassword.Password = string.Empty;
                 pwdVerify.Password = string.Empty;
-                txtCvv.Text = string.Empty;
-                txtPin.Text = string.Empty;
+                txtPhone.Password = string.Empty;
+                txtCvv.Password = string.Empty;
+                txtPin.Password = string.Empty;
                 HideStrengthRow();
                 HideVerifyError();
             }
