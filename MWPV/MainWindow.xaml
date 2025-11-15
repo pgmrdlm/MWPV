@@ -12,8 +12,8 @@
         ResizeMode="CanResize"
         SizeToContent="Manual"
         Width="1536" Height="864"           
-    MinWidth="1100" MinHeight="700"
-    Icon="/Assets/Icons/MWPV.ico">
+        MinWidth="1100" MinHeight="700"
+        Icon="/Assets/Icons/MWPV.ico">
 
     <!-- Borderless drag/resize -->
     <shell:WindowChrome.WindowChrome>

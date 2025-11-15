@@ -79,6 +79,10 @@ namespace MWPV.View.UserControls
 
         private void ApplyTitleSuffix(bool isActive)
         {
+            // If we're not actually visible, don't touch the window title
+            if (!IsVisible && isActive)
+                return;
+
             var win = Window.GetWindow(this);
             if (win == null) return;
 
