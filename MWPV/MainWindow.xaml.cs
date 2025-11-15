@@ -14,6 +14,9 @@ namespace MWPV
         {
             InitializeComponent();
 
+            // Set the correct window title explicitly on load
+            this.Title = "MWPV - My Windows Password Vault";
+
             // Clear the status on any user input
             this.PreviewKeyDown += (_, __) => ClearStatus();
             this.PreviewMouseDown += (_, __) => ClearStatus();
@@ -26,7 +29,14 @@ namespace MWPV
         // Called by MenuBar (Tools -> View Logs)
         public void ShowLogsPanel()
         {
-            try { Panel?.ShowLogs(); } catch { /* no-op */ }
+            try
+            {
+                Panel?.ShowLogs();
+            }
+            catch
+            {
+                // no-op
+            }
         }
 
         // ---------------- Status line helpers ----------------
@@ -75,7 +85,14 @@ namespace MWPV
             }
             else
             {
-                try { DragMove(); } catch { /* ignore if drag starts during resize */ }
+                try
+                {
+                    DragMove();
+                }
+                catch
+                {
+                    // ignore if drag starts during resize
+                }
             }
         }
 

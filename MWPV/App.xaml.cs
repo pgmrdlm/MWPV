@@ -165,6 +165,7 @@ namespace MWPV
                 if (!Dispatcher.HasShutdownStarted)
                 {
                     var main = new MainWindow();
+                    main.Title = "MWPV - My Windows Password Vault";   // <-- ONLY CHANGE
                     MainWindow = main;
                     ShutdownMode = ShutdownMode.OnMainWindowClose;  // <-- set ONLY after MainWindow exists
                     main.Show();
