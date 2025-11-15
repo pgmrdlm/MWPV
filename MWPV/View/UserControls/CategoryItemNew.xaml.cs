@@ -25,6 +25,8 @@ namespace MWPV.View.UserControls
 
         private bool _mainRevealed;
         private bool _verifyRevealed;
+        private bool _phoneRevealed;
+
         private readonly DispatcherTimer _revealTimer;
 
         private bool _settingPwProgrammatically;
@@ -34,6 +36,10 @@ namespace MWPV.View.UserControls
         private Brush? _emailDefaultBorderBrush;
         private Brush? _emailDefaultBackground;
         private string _lastEmailChecked = string.Empty;
+
+        // Phone visuals
+        private Brush? _phoneDefaultBorderBrush;
+        private Brush? _phoneDefaultBackground;
 
         // Security Q/A (UI-only)
         private readonly ObservableCollection<QaRow> _qaRows = new();
@@ -49,15 +55,14 @@ namespace MWPV.View.UserControls
             Loaded += CategoryItemNew_Loaded;
             Unloaded += CategoryItemNew_Unloaded;
 
-            pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
+            // pwdPassword_PreviewKeyDown is wired via XAML now
             txtEmail.LostFocus += txtEmail_LostFocus;
 
-            _revealTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-            _revealTimer.Tick += (_, __) =>
+            _revealTimer = new DispatcherTimer
             {
-                HideMainPassword();
-                HideVerifyPassword();
+                Interval = TimeSpan.FromSeconds(20)
             };
+            _revealTimer.Tick += RevealTimer_Tick;
         }
 
         private void CategoryItemNew_Loaded(object? sender, RoutedEventArgs e)
@@ -68,15 +73,18 @@ namespace MWPV.View.UserControls
             _emailDefaultBorderBrush = txtEmail.BorderBrush;
             _emailDefaultBackground = txtEmail.Background;
 
+            _phoneDefaultBorderBrush = txtPhone.BorderBrush;
+            _phoneDefaultBackground = txtPhone.Background;
+
             InitSecurityQaUi();
 
             ClearForm();
-            HideMainPassword();
-            HideVerifyPassword();
+            HideAllRevealsAndStopTimer();
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+            ClearPhoneError();
         }
 
         private void CategoryItemNew_Unloaded(object? sender, RoutedEventArgs e)
@@ -84,12 +92,13 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-NEW] Unloaded");
 #endif
-            _revealTimer.Stop();
+            HideAllRevealsAndStopTimer();
             WipeSensitiveFields();
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+            ClearPhoneError();
 
             var list = FindName("qaList") as ItemsControl;
             if (list is not null)
@@ -118,6 +127,8 @@ namespace MWPV.View.UserControls
             // TODO: Map existingItem -> fields (and Q/A) once persistence is wired
         }
 
+        /* ======================= Submit / Cancel ======================= */
+
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
@@ -125,17 +136,27 @@ namespace MWPV.View.UserControls
 #endif
             if (string.IsNullOrWhiteSpace(txtItemName.Text))
             {
-                MessageBox.Show("Item name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Item name is required.",
+                                "Validation",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning);
                 return;
             }
 
             if (!ValidatePasswordForSubmission(out var error))
             {
                 PasswordValidationFailed?.Invoke(this, error);
-                if (VerifyRow.Visibility == Visibility.Visible && !string.IsNullOrEmpty(pwdVerify.Password))
+                if (VerifyRow.Visibility == Visibility.Visible &&
+                    !string.IsNullOrEmpty(pwdVerify.Password))
                     pwdVerify.Focus();
                 else
                     pwdPassword.Focus();
+                return;
+            }
+
+            if (!ValidatePhoneNumber(forSubmit: true))
+            {
+                txtPhone.Focus();
                 return;
             }
 
@@ -145,20 +166,22 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error saving item.\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Error saving item.\n\n" + ex.Message,
+                                "Error",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
             }
         }
 
         private void btnCancel_Click(object? sender, RoutedEventArgs e)
         {
-            _revealTimer.Stop();
-            HideMainPassword();
-            HideVerifyPassword();
+            HideAllRevealsAndStopTimer();
             WipeSensitiveFields();
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+            ClearPhoneError();
 
             _qaRows.Clear();
             UpdateQaCountText();
@@ -166,14 +189,58 @@ namespace MWPV.View.UserControls
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
+        /* ======================= Shared reveal timer ======================= */
+
+        private void RevealTimer_Tick(object? sender, EventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-NEW] Reveal timer elapsed – hiding all reveals");
+#endif
+            HideAllRevealsAndStopTimer();
+        }
+
+        /// <summary>
+        /// Central helper: hides all reveal overlays and stops the timer.
+        /// Used by timer, cancel, unload, etc.
+        /// </summary>
+        private void HideAllRevealsAndStopTimer()
+        {
+            _revealTimer.Stop();
+            HideMainPassword();
+            HideVerifyPassword();
+            HidePhone();
+        }
+
+        /// <summary>
+        /// Restart timer if anything is currently revealed.
+        /// Call this after toggling any reveal on.
+        /// </summary>
+        private void StartOrRestartRevealTimerIfNeeded()
+        {
+            _revealTimer.Stop();
+
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+            {
+                _revealTimer.Start();
+            }
+        }
+
+        /* ======================= Password / Verify ======================= */
+
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
                 var generated = SecurePassword.GenerateAsString(12);
                 _settingPwProgrammatically = true;
-                try { SetPassword(generated); }
-                finally { _settingPwProgrammatically = false; }
+                try
+                {
+                    SetPassword(generated);
+                }
+                finally
+                {
+                    _settingPwProgrammatically = false;
+                }
 
                 HideStrengthRow();
                 HideVerifyRow();
@@ -186,82 +253,24 @@ namespace MWPV.View.UserControls
         }
 
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
-            => (_mainRevealed ? (Action)HideMainPassword : ShowMainPassword)();
+        {
+            if (_mainRevealed)
+                HideMainPassword();
+            else
+                ShowMainPassword();
+
+            StartOrRestartRevealTimerIfNeeded();
+        }
 
         private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
-            => (_verifyRevealed ? (Action)HideVerifyPassword : ShowVerifyPassword)();
-
-        /* ======================= Email LostFocus validation ======================= */
-
-        private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
-            var s = (txtEmail.Text ?? string.Empty).Trim();
-
-            if (s.Length == 0)
-            {
-                ClearEmailValidation();
-                _lastEmailChecked = string.Empty;
-                return;
-            }
-
-            if (string.Equals(s, _lastEmailChecked, StringComparison.Ordinal))
-                return;
-
-            _lastEmailChecked = s;
-
-            var result = EmailValidator.IsLikelyEmail(s, out var message);
-            if (result == EmailCheck.Ok)
-                MarkEmailValid();
+            if (_verifyRevealed)
+                HideVerifyPassword();
             else
-                MarkEmailInvalid(message);
+                ShowVerifyPassword();
+
+            StartOrRestartRevealTimerIfNeeded();
         }
-
-        private void MarkEmailValid()
-        {
-            try
-            {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
-
-                txtEmail.ToolTip = null;
-                if (_emailDefaultBackground != null) txtEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null) txtEmail.BorderBrush = _emailDefaultBorderBrush;
-            }
-            catch { }
-        }
-
-        private void MarkEmailInvalid(string message)
-        {
-            try
-            {
-                EmailErrorText.Text = string.IsNullOrWhiteSpace(message) ? "Please enter a valid email address." : message;
-                if (EmailErrorPanel.Visibility != Visibility.Visible)
-                    EmailErrorPanel.Visibility = Visibility.Visible;
-
-                txtEmail.ToolTip = EmailErrorText.Text;
-
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                txtEmail.Background = fill;
-            }
-            catch { }
-        }
-
-        private void ClearEmailValidation()
-        {
-            try
-            {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
-
-                txtEmail.ToolTip = null;
-                if (_emailDefaultBackground != null) txtEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null) txtEmail.BorderBrush = _emailDefaultBorderBrush;
-            }
-            catch { }
-        }
-
-        /* ======================= Password Helpers ======================= */
 
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
@@ -271,15 +280,18 @@ namespace MWPV.View.UserControls
                 (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
                 (e.Key == Key.Insert && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
 
-            if (pasteCombo) _verifyRowShown = false;
+            if (pasteCombo)
+                _verifyRowShown = false;
         }
 
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
         {
-            if (_revealTimer.IsEnabled) { _revealTimer.Stop(); _revealTimer.Start(); }
-
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
+
+            // If anything is being revealed, keep the timer fresh while typing
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+                StartOrRestartRevealTimerIfNeeded();
 
             if (_settingPwProgrammatically) return;
 
@@ -304,8 +316,12 @@ namespace MWPV.View.UserControls
 
         private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
         {
-            if (_revealTimer.IsEnabled) { _revealTimer.Stop(); _revealTimer.Start(); }
-            if (_verifyRevealed) txtVerifyPlain.Text = pwdVerify.Password;
+            if (_verifyRevealed)
+                txtVerifyPlain.Text = pwdVerify.Password;
+
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+                StartOrRestartRevealTimerIfNeeded();
+
             EvaluateAndDisplayVerifyMismatch();
         }
 
@@ -315,12 +331,13 @@ namespace MWPV.View.UserControls
             txtPasswordPlain.Visibility = Visibility.Visible;
             pwdPassword.Visibility = Visibility.Collapsed;
             _mainRevealed = true;
-            _revealTimer.Stop(); _revealTimer.Start();
         }
 
         private void HideMainPassword()
         {
-            if (!string.IsNullOrEmpty(txtPasswordPlain.Text)) txtPasswordPlain.Text = string.Empty;
+            if (!string.IsNullOrEmpty(txtPasswordPlain.Text))
+                txtPasswordPlain.Text = string.Empty;
+
             txtPasswordPlain.Visibility = Visibility.Collapsed;
             pwdPassword.Visibility = Visibility.Visible;
             _mainRevealed = false;
@@ -332,12 +349,13 @@ namespace MWPV.View.UserControls
             txtVerifyPlain.Visibility = Visibility.Visible;
             pwdVerify.Visibility = Visibility.Collapsed;
             _verifyRevealed = true;
-            _revealTimer.Stop(); _revealTimer.Start();
         }
 
         private void HideVerifyPassword()
         {
-            if (!string.IsNullOrEmpty(txtVerifyPlain.Text)) txtVerifyPlain.Text = string.Empty;
+            if (!string.IsNullOrEmpty(txtVerifyPlain.Text))
+                txtVerifyPlain.Text = string.Empty;
+
             txtVerifyPlain.Visibility = Visibility.Collapsed;
             pwdVerify.Visibility = Visibility.Visible;
             _verifyRevealed = false;
@@ -346,7 +364,9 @@ namespace MWPV.View.UserControls
         private void SetPassword(string value)
         {
             pwdPassword.Password = value;
-            if (_mainRevealed) txtPasswordPlain.Text = value;
+            if (_mainRevealed)
+                txtPasswordPlain.Text = value;
+
             HideVerifyRow();
             HideVerifyError();
         }
@@ -373,7 +393,7 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            if (!SecurePassword.IsPasswordValid(pw, pw, out var _))
+            if (!SecurePassword.IsPasswordValid(pw, pw, out _))
             {
                 HideVerifyError();
                 return false;
@@ -393,6 +413,7 @@ namespace MWPV.View.UserControls
         {
             if (StrengthPanel.Visibility != Visibility.Collapsed)
                 StrengthPanel.Visibility = Visibility.Collapsed;
+
             PwStrengthBar.Value = 0;
             PwStrengthText.Text = string.Empty;
             PwTipsList.ItemsSource = null;
@@ -402,7 +423,11 @@ namespace MWPV.View.UserControls
         {
             var pw = pwdPassword.Password ?? string.Empty;
 
-            if (string.IsNullOrEmpty(pw)) { HideStrengthRow(); return; }
+            if (string.IsNullOrEmpty(pw))
+            {
+                HideStrengthRow();
+                return;
+            }
 
             int classes = 0;
             if (pw.Any(char.IsLower)) classes++;
@@ -413,7 +438,11 @@ namespace MWPV.View.UserControls
             bool lengthOk = pw.Length >= 8;
             bool policyPass = lengthOk && classes >= 3;
 
-            if (policyPass) { HideStrengthRow(); return; }
+            if (policyPass)
+            {
+                HideStrengthRow();
+                return;
+            }
 
             ShowStrengthRow();
 
@@ -480,15 +509,24 @@ namespace MWPV.View.UserControls
 
         private void EvaluateAndDisplayVerifyMismatch()
         {
-            if (VerifyRow.Visibility != Visibility.Visible) { HideVerifyError(); return; }
+            if (VerifyRow.Visibility != Visibility.Visible)
+            {
+                HideVerifyError();
+                return;
+            }
 
             var pw = pwdPassword.Password ?? string.Empty;
             var verify = pwdVerify.Password ?? string.Empty;
 
-            if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(verify) &&
+                !string.Equals(pw, verify, StringComparison.Ordinal))
+            {
                 ShowVerifyError("Passwords do not match.");
+            }
             else
+            {
                 HideVerifyError();
+            }
         }
 
         private void ShowVerifyError(string message)
@@ -504,6 +542,191 @@ namespace MWPV.View.UserControls
             if (VerifyErrorPanel.Visibility != Visibility.Collapsed)
                 VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
+
+        /* ======================= Email LostFocus validation ======================= */
+
+        private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            var s = (txtEmail.Text ?? string.Empty).Trim();
+
+            if (s.Length == 0)
+            {
+                ClearEmailValidation();
+                _lastEmailChecked = string.Empty;
+                return;
+            }
+
+            if (string.Equals(s, _lastEmailChecked, StringComparison.Ordinal))
+                return;
+
+            _lastEmailChecked = s;
+
+            var result = EmailValidator.IsLikelyEmail(s, out var message);
+            if (result == EmailCheck.Ok)
+                MarkEmailValid();
+            else
+                MarkEmailInvalid(message);
+        }
+
+        private void MarkEmailValid()
+        {
+            try
+            {
+                EmailErrorText.Text = string.Empty;
+                EmailErrorPanel.Visibility = Visibility.Collapsed;
+
+                txtEmail.ToolTip = null;
+                if (_emailDefaultBackground != null)
+                    txtEmail.Background = _emailDefaultBackground;
+                if (_emailDefaultBorderBrush != null)
+                    txtEmail.BorderBrush = _emailDefaultBorderBrush;
+            }
+            catch { }
+        }
+
+        private void MarkEmailInvalid(string message)
+        {
+            try
+            {
+                EmailErrorText.Text = string.IsNullOrWhiteSpace(message)
+                    ? "Please enter a valid email address."
+                    : message;
+
+                if (EmailErrorPanel.Visibility != Visibility.Visible)
+                    EmailErrorPanel.Visibility = Visibility.Visible;
+
+                txtEmail.ToolTip = EmailErrorText.Text;
+
+                var fill = TryFindResource("FieldErrorFill") as Brush
+                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+                txtEmail.Background = fill;
+            }
+            catch { }
+        }
+
+        private void ClearEmailValidation()
+        {
+            try
+            {
+                EmailErrorText.Text = string.Empty;
+                EmailErrorPanel.Visibility = Visibility.Collapsed;
+
+                txtEmail.ToolTip = null;
+                if (_emailDefaultBackground != null)
+                    txtEmail.Background = _emailDefaultBackground;
+                if (_emailDefaultBorderBrush != null)
+                    txtEmail.BorderBrush = _emailDefaultBorderBrush;
+            }
+            catch { }
+        }
+
+        /* ======================= Phone validation + reveal ======================= */
+
+        private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Validate when leaving the field; show inline error if too short.
+            ValidatePhoneNumber(forSubmit: false);
+        }
+
+        private void txtPhone_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_phoneRevealed)
+                txtPhonePlain.Text = txtPhone.Password;
+
+            // Keep timer alive if anything is revealed and user is typing
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+                StartOrRestartRevealTimerIfNeeded();
+
+            // If they cleared the field completely, clear any lingering error
+            if (string.IsNullOrEmpty(txtPhone.Password))
+                ClearPhoneError();
+        }
+
+        private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_phoneRevealed)
+                HidePhone();
+            else
+                ShowPhone();
+
+            StartOrRestartRevealTimerIfNeeded();
+        }
+
+        private void ShowPhone()
+        {
+            txtPhonePlain.Text = txtPhone.Password;
+            txtPhonePlain.Visibility = Visibility.Visible;
+            txtPhone.Visibility = Visibility.Collapsed;
+            _phoneRevealed = true;
+        }
+
+        private void HidePhone()
+        {
+            if (!string.IsNullOrEmpty(txtPhonePlain.Text))
+                txtPhonePlain.Text = string.Empty;
+
+            txtPhonePlain.Visibility = Visibility.Collapsed;
+            txtPhone.Visibility = Visibility.Visible;
+            _phoneRevealed = false;
+        }
+
+        private bool ValidatePhoneNumber(bool forSubmit)
+        {
+            var raw = txtPhone.Password ?? string.Empty;
+            var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
+            int len = digitsOnly.Length;
+
+            // Phone is optional: empty is OK and clears error.
+            if (len == 0)
+            {
+                ClearPhoneError();
+                return true;
+            }
+
+            if (len < 7)
+            {
+                var msg = "Phone number appears too short. Please enter at least 7 digits or clear the field.";
+                ShowPhoneError(msg);
+                return false;
+            }
+
+            ClearPhoneError();
+            return true;
+        }
+
+        private void ShowPhoneError(string message)
+        {
+            try
+            {
+                PhoneErrorText.Text = message ?? string.Empty;
+                PhoneErrorPanel.Visibility = Visibility.Visible;
+
+                txtPhone.ToolTip = PhoneErrorText.Text;
+
+                var fill = TryFindResource("FieldErrorFill") as Brush
+                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+                txtPhone.Background = fill;
+            }
+            catch { }
+        }
+
+        private void ClearPhoneError()
+        {
+            try
+            {
+                PhoneErrorText.Text = string.Empty;
+                PhoneErrorPanel.Visibility = Visibility.Collapsed;
+
+                txtPhone.ToolTip = null;
+                if (_phoneDefaultBackground != null)
+                    txtPhone.Background = _phoneDefaultBackground;
+                if (_phoneDefaultBorderBrush != null)
+                    txtPhone.BorderBrush = _phoneDefaultBorderBrush;
+            }
+            catch { }
+        }
+
+        /* ======================= Form reset / wipe ======================= */
 
         private void ClearForm()
         {
@@ -522,7 +745,11 @@ namespace MWPV.View.UserControls
 
             txtUsername.Text = string.Empty;
             txtEmail.Text = string.Empty;
+
             txtPhone.Password = string.Empty;
+            txtPhonePlain.Text = string.Empty;
+            txtPhonePlain.Visibility = Visibility.Collapsed;
+            _phoneRevealed = false;
 
             txtDescription.Text = string.Empty;
             txtExpDate.Text = string.Empty;
@@ -537,11 +764,13 @@ namespace MWPV.View.UserControls
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
+            ClearPhoneError();
             _lastEmailChecked = string.Empty;
 
             _qaRows.Clear();
             var list = FindName("qaList") as ItemsControl;
-            if (list is not null) list.ItemsSource = _qaRows;
+            if (list is not null)
+                list.ItemsSource = _qaRows;
             UpdateQaCountText();
         }
 
@@ -549,13 +778,14 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                HideMainPassword();
-                HideVerifyPassword();
+                HideAllRevealsAndStopTimer();
+
                 pwdPassword.Password = string.Empty;
                 pwdVerify.Password = string.Empty;
                 txtPhone.Password = string.Empty;
                 txtCvv.Password = string.Empty;
                 txtPin.Password = string.Empty;
+
                 HideStrengthRow();
                 HideVerifyError();
             }
@@ -570,7 +800,9 @@ namespace MWPV.View.UserControls
             if (list is not null)
             {
                 list.ItemsSource = _qaRows;
-                list.AddHandler(Button.ClickEvent, new RoutedEventHandler(QaList_ButtonClick), handledEventsToo: true);
+                list.AddHandler(Button.ClickEvent,
+                                new RoutedEventHandler(QaList_ButtonClick),
+                                handledEventsToo: true);
             }
 
             var addBtn = FindName("qaAddButton") as Button;
@@ -590,7 +822,10 @@ namespace MWPV.View.UserControls
 
             if (string.IsNullOrWhiteSpace(q))
             {
-                MessageBox.Show("Please enter a security question.", "Validation", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Please enter a security question.",
+                                "Validation",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Information);
                 qBox?.Focus();
                 return;
             }
@@ -622,8 +857,11 @@ namespace MWPV.View.UserControls
 
             if (label == QA_BTN_VIEW)
             {
-                MessageBox.Show("Viewing answers will be enabled once encryption is wired.\n\n(We are not storing plaintext in memory at this stage.)",
-                                "Not Implemented", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(
+                    "Viewing answers will be enabled once encryption is wired.\n\n(We are not storing plaintext in memory at this stage.)",
+                    "Not Implemented",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
             else if (label == QA_BTN_DELETE)
             {
@@ -664,19 +902,23 @@ namespace MWPV.View.UserControls
                 _qaRows[i].Seq = i;
         }
 
-        private static bool TryGetDataContext<T>(DependencyObject start, out T? ctx) where T : class
+        private static bool TryGetDataContext<T>(DependencyObject start, out T? ctx)
+            where T : class
         {
             ctx = null;
             DependencyObject? current = start;
             while (current is not null)
             {
-                if (current is FrameworkElement fe && fe.DataContext is T match)
+                if (current is FrameworkElement fe &&
+                    fe.DataContext is T match)
                 {
                     ctx = match;
                     return true;
                 }
+
                 current = VisualTreeHelper.GetParent(current);
             }
+
             return false;
         }
 
