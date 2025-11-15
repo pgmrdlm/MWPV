@@ -82,25 +82,7 @@
                       PanningMode="VerticalOnly"
                       Focusable="False">
             <Grid Margin="20">
-                <!-- Layout rows:
-                     0 : Name / Password / Verify
-                     1 : Strength (under Password)  +  VerifyError (under Verify)
-                     2 : spacer
-                     3 : User / Email / URL
-                     4 : EmailError (under Email)
-                     5 : spacer
-                     6 : Phone only
-                     7 : spacer
-                     8 : Notes (full width)
-                     9 : spacer
-                     10: Bank title
-                     11: spacer
-                     12: CardType / Exp / CVV
-                     13: spacer
-                     14: AccountName / AccountNumber / PIN
-                     15: spacer
-                     16: Security Questions (optional) block
-                -->
+                <!-- Layout rows -->
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -121,12 +103,16 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
+                <!-- Columns -->
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="3*"/>
+                    <!-- left -->
                     <ColumnDefinition Width="24"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="2*"/>
+                    <!-- middle -->
                     <ColumnDefinition Width="24"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="3*"/>
+                    <!-- right -->
                 </Grid.ColumnDefinitions>
 
                 <!-- ===== row 0: NAME ===== -->
@@ -197,26 +183,18 @@
                             Click="BtnTogglePasswordReveal_Click">
                         <Viewbox Stretch="Uniform">
                             <Grid Width="20" Height="20">
-                                <Path Stroke="Black"
-                                      Fill="Transparent"
-                                      StrokeThickness="1.6"
+                                <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
                                       Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
-                                <Ellipse Width="6" Height="6"
-                                         Stroke="Black"
-                                         StrokeThickness="1.2"
-                                         Fill="White"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center"/>
-                                <Ellipse Width="3" Height="3"
-                                         Fill="Black"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center"/>
+                                <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Ellipse Width="3" Height="3" Fill="Black"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
                         </Viewbox>
                     </Button>
                 </Grid>
 
-                <!-- ===== row 0: VERIFY (right of Password) ===== -->
+                <!-- ===== row 0: VERIFY ===== -->
                 <Grid x:Name="VerifyRow"
                       Grid.Row="0" Grid.Column="4"
                       Visibility="Collapsed"
@@ -250,6 +228,7 @@
                                      Foreground="Black"/>
                         </Grid>
 
+                        <!-- view button for verify -->
                         <Button x:Name="btnToggleVerifyReveal"
                                 Style="{StaticResource SmallSquarePrimaryButton}"
                                 ToolTip="Show/Hide verification"
@@ -257,30 +236,21 @@
                                 Click="BtnToggleVerifyReveal_Click">
                             <Viewbox Stretch="Uniform">
                                 <Grid Width="20" Height="20">
-                                    <Path Stroke="Black"
-                                          Fill="Transparent"
-                                          StrokeThickness="1.6"
+                                    <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
                                           Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
-                                    <Ellipse Width="6" Height="6"
-                                             Stroke="Black"
-                                             StrokeThickness="1.2"
-                                             Fill="White"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center"/>
-                                    <Ellipse Width="3" Height="3"
-                                             Fill="Black"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center"/>
+                                    <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Ellipse Width="3" Height="3" Fill="Black"
+                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Grid>
                             </Viewbox>
                         </Button>
                     </StackPanel>
                 </Grid>
 
-                <!-- ===== row 1: strength (under Password) ===== -->
+                <!-- ===== row 1: strength under password ===== -->
                 <StackPanel x:Name="StrengthPanel"
-                            Grid.Row="1"
-                            Grid.Column="2"
+                            Grid.Row="1" Grid.Column="2"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <ProgressBar x:Name="PwStrengthBar"
@@ -294,8 +264,7 @@
                                FontSize="12"
                                Foreground="Black"
                                Text=""/>
-                    <ItemsControl x:Name="PwTipsList"
-                                  Margin="0,2,0,0">
+                    <ItemsControl x:Name="PwTipsList" Margin="0,2,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -307,10 +276,9 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <!-- ===== row 1: VERIFY ERROR (under Verify) ===== -->
+                <!-- ===== row 1: verify error under verify ===== -->
                 <StackPanel x:Name="VerifyErrorPanel"
-                            Grid.Row="1"
-                            Grid.Column="4"
+                            Grid.Row="1" Grid.Column="4"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <TextBlock x:Name="VerifyErrorText"
@@ -321,9 +289,7 @@
                 </StackPanel>
 
                 <!-- ===== row 3: user / email / url ===== -->
-                <Label Grid.Row="3" Grid.Column="0"
-                       Content="User Name"
-                       FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="0" Content="User Name" FontWeight="Bold"/>
                 <TextBox x:Name="txtUsername"
                          Grid.Row="3" Grid.Column="0"
                          Margin="0,22,0,0"
@@ -331,9 +297,7 @@
                          MinWidth="240"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="3" Grid.Column="2"
-                       Content="Email"
-                       FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="2" Content="Email" FontWeight="Bold"/>
                 <TextBox x:Name="txtEmail"
                          Grid.Row="3" Grid.Column="2"
                          Margin="0,22,0,0"
@@ -342,19 +306,17 @@
                          HorizontalAlignment="Left"
                          LostFocus="txtEmail_LostFocus"/>
 
-                <Label Grid.Row="3" Grid.Column="4"
-                       Content="URL or Absolute Location"
-                       FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="4" Content="URL or Absolute Location" FontWeight="Bold"/>
                 <TextBox x:Name="txtUrl"
                          Grid.Row="3" Grid.Column="4"
                          Margin="0,22,0,0"
                          Height="28"
-                         MinWidth="220"/>
+                         MinWidth="220"
+                         HorizontalAlignment="Left"/>
 
-                <!-- ===== row 4: EMAIL ERROR (under Email) ===== -->
+                <!-- ===== row 4: email error ===== -->
                 <StackPanel x:Name="EmailErrorPanel"
-                            Grid.Row="4"
-                            Grid.Column="2"
+                            Grid.Row="4" Grid.Column="2"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <TextBlock x:Name="EmailErrorText"
@@ -365,47 +327,32 @@
                 </StackPanel>
 
                 <!-- ===== row 6: phone ===== -->
-                <Label Grid.Row="6"
-                       Grid.Column="0"
-                       Content="Phone Number"
-                       FontWeight="Bold"/>
+                <Label Grid.Row="6" Grid.Column="0" Content="Phone Number" FontWeight="Bold"/>
                 <PasswordBox x:Name="txtPhone"
-                             Grid.Row="6"
-                             Grid.Column="0"
+                             Grid.Row="6" Grid.Column="0"
                              Margin="0,22,0,0"
                              Height="28"
                              MinWidth="320"
                              HorizontalAlignment="Left"/>
 
                 <!-- ===== row 8: notes ===== -->
-                <Label Grid.Row="8"
-                       Grid.Column="0"
-                       Grid.ColumnSpan="5"
-                       Content="Freeform Notes"
-                       FontWeight="Bold"/>
+                <Label Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="5" Content="Freeform Notes" FontWeight="Bold"/>
                 <TextBox x:Name="txtDescription"
-                         Grid.Row="8"
-                         Grid.Column="0"
-                         Grid.ColumnSpan="5"
+                         Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="5"
                          Margin="0,22,0,0"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto"/>
 
                 <!-- ===== row 10: bank section ===== -->
-                <TextBlock Grid.Row="10"
-                           Grid.Column="0"
-                           Grid.ColumnSpan="5"
+                <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="5"
                            Text="Bank Cards / Accounts"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
                 <!-- row 12: card type / exp / cvv -->
-                <Label Grid.Row="12"
-                       Grid.Column="0"
-                       Content="Card Type"/>
-                <Border Grid.Row="12"
-                        Grid.Column="0"
+                <Label Grid.Row="12" Grid.Column="0" Content="Card Type"/>
+                <Border Grid.Row="12" Grid.Column="0"
                         Margin="0,22,0,0"
                         Height="28"
                         CornerRadius="4"
@@ -418,34 +365,27 @@
                               Style="{StaticResource FilterComboStyle}"/>
                 </Border>
 
-                <Label Grid.Row="12"
-                       Grid.Column="2"
-                       Content="Expiration Date"/>
+                <Label Grid.Row="12" Grid.Column="2" Content="Expiration Date"/>
                 <TextBox x:Name="txtExpDate"
-                         Grid.Row="12"
-                         Grid.Column="2"
+                         Grid.Row="12" Grid.Column="2"
                          Margin="0,22,0,0"
                          Height="28"
-                         Width="110"
-                         MaxLength="10"/>
+                         Width="140"
+                         MaxLength="10"
+                         HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="12"
-                       Grid.Column="4"
-                       Content="CVV Code"/>
+                <Label Grid.Row="12" Grid.Column="4" Content="CVV Code"/>
                 <PasswordBox x:Name="txtCvv"
-                             Grid.Row="12"
-                             Grid.Column="4"
+                             Grid.Row="12" Grid.Column="4"
                              Margin="0,22,0,0"
                              Height="28"
-                             Width="80"
-                             MaxLength="6"/>
+                             Width="90"
+                             MaxLength="6"
+                             HorizontalAlignment="Left"/>
 
                 <!-- row 14: account name / number / pin -->
-                <Label Grid.Row="14"
-                       Grid.Column="0"
-                       Content="Account Name"/>
-                <Border Grid.Row="14"
-                        Grid.Column="0"
+                <Label Grid.Row="14" Grid.Column="0" Content="Account Name"/>
+                <Border Grid.Row="14" Grid.Column="0"
                         Margin="0,22,0,0"
                         Height="28"
                         CornerRadius="4"
@@ -458,25 +398,23 @@
                               Style="{StaticResource FilterComboStyle}"/>
                 </Border>
 
-                <Label Grid.Row="14"
-                       Grid.Column="2"
-                       Content="Account Number"/>
+                <Label Grid.Row="14" Grid.Column="2" Content="Account Number"/>
                 <TextBox x:Name="txtAccountNumber"
-                         Grid.Row="14"
-                         Grid.Column="2"
+                         Grid.Row="14" Grid.Column="2"
                          Margin="0,22,0,0"
-                         Height="28"/>
+                         Height="28"
+                         Width="260"
+                         MaxLength="24"
+                         HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="14"
-                       Grid.Column="4"
-                       Content="PIN"/>
+                <Label Grid.Row="14" Grid.Column="4" Content="PIN"/>
                 <PasswordBox x:Name="txtPin"
-                             Grid.Row="14"
-                             Grid.Column="4"
+                             Grid.Row="14" Grid.Column="4"
                              Margin="0,22,0,0"
                              Height="28"
-                             Width="80"
-                             MaxLength="12"/>
+                             Width="120"
+                             MaxLength="12"
+                             HorizontalAlignment="Left"/>
 
                 <!-- spacer before Q/A -->
                 <Rectangle Grid.Row="15"
@@ -485,18 +423,15 @@
                            Height="10"
                            Fill="Transparent"/>
 
-                <!-- ===== row 16: Security Questions (optional) ===== -->
-                <Border Grid.Row="16"
-                        Grid.Column="0"
-                        Grid.ColumnSpan="5"
+                <!-- ===== row 16: Security Questions ===== -->
+                <Border Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="5"
                         BorderBrush="#D8D8D8"
                         BorderThickness="1"
                         CornerRadius="6"
                         Padding="10">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Security Questions (optional)"
-                                       FontWeight="SemiBold" />
+                            <TextBlock Text="Security Questions (optional)" FontWeight="SemiBold" />
                             <TextBlock x:Name="QaCountText"
                                        Foreground="#666"
                                        Margin="8,0,0,0"
@@ -511,26 +446,23 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0"
-                                        Margin="0,0,8,0">
-                                <TextBlock Text="Question"
-                                           FontSize="12"
-                                           Foreground="#666"/>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Question" FontSize="12" Foreground="#666"/>
                                 <TextBox x:Name="qaNewQuestion"
-                                         Height="28"/>
+                                         Height="28"
+                                         Width="260"
+                                         HorizontalAlignment="Left"/>
                             </StackPanel>
 
-                            <StackPanel Grid.Column="1"
-                                        Margin="0,0,8,0">
-                                <TextBlock Text="Answer"
-                                           FontSize="12"
-                                           Foreground="#666"/>
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="Answer" FontSize="12" Foreground="#666"/>
                                 <PasswordBox x:Name="qaNewAnswer"
-                                             Height="28"/>
+                                             Height="28"
+                                             Width="260"
+                                             HorizontalAlignment="Left"/>
                             </StackPanel>
 
-                            <StackPanel Grid.Column="2"
-                                        VerticalAlignment="Bottom">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
                                 <Button x:Name="qaAddButton"
                                         Content="Add"
                                         Height="28"
@@ -547,39 +479,22 @@
                                 <ColumnDefinition Width="60"/>
                                 <ColumnDefinition Width="90"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="Question"
-                                       FontWeight="Bold"
-                                       FontSize="12"/>
-                            <TextBlock Grid.Column="1"
-                                       Text="Answer"
-                                       FontWeight="Bold"
-                                       FontSize="12"/>
-                            <TextBlock Grid.Column="2"
-                                       Text="View"
-                                       FontWeight="Bold"
-                                       FontSize="12"/>
-                            <TextBlock Grid.Column="3"
-                                       Text="Delete"
-                                       FontWeight="Bold"
-                                       FontSize="12"/>
-                            <TextBlock Grid.Column="4"
-                                       Text="Move"
-                                       FontWeight="Bold"
-                                       FontSize="12"/>
+                            <TextBlock Grid.Column="0" Text="Question" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="Answer" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="2" Text="View" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="3" Text="Delete" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="4" Text="Move" FontWeight="Bold" FontSize="12"/>
                         </Grid>
 
                         <!-- List -->
                         <Border BorderBrush="#D8D8D8"
                                 BorderThickness="1"
                                 CornerRadius="4">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          Height="160">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="160">
                                 <ItemsControl x:Name="qaList" Margin="0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Margin="0,2,0,2"
-                                                  Background="White">
+                                            <Grid Margin="0,2,0,2" Background="White">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="3*"/>
                                                     <ColumnDefinition Width="3*"/>
@@ -597,25 +512,15 @@
                                                            Foreground="#666"
                                                            Text="{Binding AnswerDisplay}"/>
 
-                                                <Button Grid.Column="2"
-                                                        Content="View"
-                                                        Height="24"
-                                                        Margin="2"/>
+                                                <Button Grid.Column="2" Content="View" Height="24" Margin="2"/>
 
-                                                <Button Grid.Column="3"
-                                                        Content="Delete"
-                                                        Height="24"
-                                                        Margin="2"/>
+                                                <Button Grid.Column="3" Content="Delete" Height="24" Margin="2"/>
 
                                                 <StackPanel Grid.Column="4"
                                                             Orientation="Horizontal"
                                                             HorizontalAlignment="Left">
-                                                    <Button Content="Up"
-                                                            Height="24"
-                                                            Margin="2,2,6,2"/>
-                                                    <Button Content="Down"
-                                                            Height="24"
-                                                            Margin="0,2,2,2"/>
+                                                    <Button Content="Up" Height="24" Margin="2,2,6,2"/>
+                                                    <Button Content="Down" Height="24" Margin="0,2,2,2"/>
                                                 </StackPanel>
                                             </Grid>
                                         </DataTemplate>
@@ -636,8 +541,7 @@
                     Style="{StaticResource DialogPrimary}"
                     Margin="0,0,12,0"
                     Click="btnSubmit_Click">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                Text="&#xE8FB;"
                                Margin="0,0,8,0"/>
@@ -648,8 +552,7 @@
             <Button x:Name="btnCancel"
                     Style="{StaticResource DialogSecondary}"
                     Click="btnCancel_Click">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                Text="&#xE711;"
                                Margin="0,0,8,0"/>
