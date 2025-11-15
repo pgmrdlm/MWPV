@@ -15,7 +15,7 @@
         <SolidColorBrush x:Key="PwStrong"      Color="#388E3C"/>
         <SolidColorBrush x:Key="PwVeryStrong"  Color="#2E7D32"/>
 
-        <!-- Email error fill (very light red for visibility) -->
+        <!-- Email/phone error fill -->
         <SolidColorBrush x:Key="FieldErrorFill" Color="#FFFFEEEE"/>
 
         <!-- compact green square button (uses your gradient resources) -->
@@ -84,22 +84,41 @@
             <Grid Margin="20">
                 <!-- Layout rows -->
                 <Grid.RowDefinitions>
+                    <!-- 0: name/password/verify -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 1: strength + verify error -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 2: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 3: username/email/url -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 4: email error -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 5: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 6: phone -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 7: phone error -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- 8: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 9: notes -->
                     <RowDefinition Height="160"/>
+                    <!-- 10: spacer -->
                     <RowDefinition Height="16"/>
+                    <!-- 11: bank header -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 12: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 13: card type / exp / cvv -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 14: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 15: account name / number / pin -->
                     <RowDefinition Height="Auto"/>
+                    <!-- 16: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 17: security Q/A -->
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
@@ -149,7 +168,8 @@
                                      VerticalAlignment="Center"
                                      Height="28"
                                      PasswordChanged="pwdPassword_PasswordChanged"
-                                     GotFocus="pwdPassword_GotFocus"/>
+                                     GotFocus="pwdPassword_GotFocus"
+                                     PreviewKeyDown="PwdPassword_PreviewKeyDown"/>
                         <TextBox x:Name="txtPasswordPlain"
                                  VerticalAlignment="Center"
                                  Height="28"
@@ -328,31 +348,85 @@
 
                 <!-- ===== row 6: phone ===== -->
                 <Label Grid.Row="6" Grid.Column="0" Content="Phone Number" FontWeight="Bold"/>
-                <PasswordBox x:Name="txtPhone"
-                             Grid.Row="6" Grid.Column="0"
-                             Margin="0,22,0,0"
-                             Height="28"
-                             MinWidth="320"
-                             HorizontalAlignment="Left"/>
+                <Grid Grid.Row="6" Grid.Column="0"
+                      Margin="0,22,0,0"
+                      Height="28"
+                      MinWidth="320"
+                      HorizontalAlignment="Left">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- ===== row 8: notes ===== -->
-                <Label Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="5" Content="Freeform Notes" FontWeight="Bold"/>
+                    <!-- masked + plain overlay -->
+                    <Grid Grid.Column="0">
+                        <PasswordBox x:Name="txtPhone"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     PasswordChanged="txtPhone_PasswordChanged"
+                                     LostFocus="txtPhone_LostFocus"/>
+                        <TextBox x:Name="txtPhonePlain"
+                                 VerticalAlignment="Center"
+                                 Height="28"
+                                 IsReadOnly="True"
+                                 IsHitTestVisible="False"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Visibility="Collapsed"
+                                 Foreground="Black"/>
+                    </Grid>
+
+                    <!-- reveal -->
+                    <Button x:Name="btnTogglePhoneReveal"
+                            Grid.Column="1"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            ToolTip="Show/Hide phone number"
+                            Click="BtnTogglePhoneReveal_Click">
+                        <Viewbox Stretch="Uniform">
+                            <Grid Width="20" Height="20">
+                                <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                      Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                                <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Ellipse Width="3" Height="3" Fill="Black"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Viewbox>
+                    </Button>
+                </Grid>
+
+                <!-- ===== row 7: phone error ===== -->
+                <StackPanel x:Name="PhoneErrorPanel"
+                            Grid.Row="7" Grid.Column="0"
+                            Margin="0,6,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock x:Name="PhoneErrorText"
+                               Foreground="#D32F2F"
+                               FontWeight="Bold"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- ===== row 9: notes ===== -->
+                <Label Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="5"
+                       Content="Freeform Notes"
+                       FontWeight="Bold"/>
                 <TextBox x:Name="txtDescription"
-                         Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="5"
+                         Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="5"
                          Margin="0,22,0,0"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto"/>
 
-                <!-- ===== row 10: bank section ===== -->
-                <TextBlock Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="5"
+                <!-- ===== row 11: bank section ===== -->
+                <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
                            Text="Bank Cards / Accounts"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
-                <!-- row 12: card type / exp / cvv -->
-                <Label Grid.Row="12" Grid.Column="0" Content="Card Type"/>
-                <Border Grid.Row="12" Grid.Column="0"
+                <!-- row 13: card type / exp / cvv -->
+                <Label Grid.Row="13" Grid.Column="0" Content="Card Type"/>
+                <Border Grid.Row="13" Grid.Column="0"
                         Margin="0,22,0,0"
                         Height="28"
                         CornerRadius="4"
@@ -365,27 +439,27 @@
                               Style="{StaticResource FilterComboStyle}"/>
                 </Border>
 
-                <Label Grid.Row="12" Grid.Column="2" Content="Expiration Date"/>
+                <Label Grid.Row="13" Grid.Column="2" Content="Expiration Date"/>
                 <TextBox x:Name="txtExpDate"
-                         Grid.Row="12" Grid.Column="2"
+                         Grid.Row="13" Grid.Column="2"
                          Margin="0,22,0,0"
                          Height="28"
                          Width="140"
                          MaxLength="10"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="12" Grid.Column="4" Content="CVV Code"/>
+                <Label Grid.Row="13" Grid.Column="4" Content="CVV Code"/>
                 <PasswordBox x:Name="txtCvv"
-                             Grid.Row="12" Grid.Column="4"
+                             Grid.Row="13" Grid.Column="4"
                              Margin="0,22,0,0"
                              Height="28"
                              Width="90"
                              MaxLength="6"
                              HorizontalAlignment="Left"/>
 
-                <!-- row 14: account name / number / pin -->
-                <Label Grid.Row="14" Grid.Column="0" Content="Account Name"/>
-                <Border Grid.Row="14" Grid.Column="0"
+                <!-- row 15: account name / number / pin -->
+                <Label Grid.Row="15" Grid.Column="0" Content="Account Name"/>
+                <Border Grid.Row="15" Grid.Column="0"
                         Margin="0,22,0,0"
                         Height="28"
                         CornerRadius="4"
@@ -398,33 +472,26 @@
                               Style="{StaticResource FilterComboStyle}"/>
                 </Border>
 
-                <Label Grid.Row="14" Grid.Column="2" Content="Account Number"/>
+                <Label Grid.Row="15" Grid.Column="2" Content="Account Number"/>
                 <TextBox x:Name="txtAccountNumber"
-                         Grid.Row="14" Grid.Column="2"
+                         Grid.Row="15" Grid.Column="2"
                          Margin="0,22,0,0"
                          Height="28"
                          Width="260"
                          MaxLength="24"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="14" Grid.Column="4" Content="PIN"/>
+                <Label Grid.Row="15" Grid.Column="4" Content="PIN"/>
                 <PasswordBox x:Name="txtPin"
-                             Grid.Row="14" Grid.Column="4"
+                             Grid.Row="15" Grid.Column="4"
                              Margin="0,22,0,0"
                              Height="28"
                              Width="120"
                              MaxLength="12"
                              HorizontalAlignment="Left"/>
 
-                <!-- spacer before Q/A -->
-                <Rectangle Grid.Row="15"
-                           Grid.Column="0"
-                           Grid.ColumnSpan="5"
-                           Height="10"
-                           Fill="Transparent"/>
-
-                <!-- ===== row 16: Security Questions ===== -->
-                <Border Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="5"
+                <!-- ===== row 17: Security Questions ===== -->
+                <Border Grid.Row="17" Grid.Column="0" Grid.ColumnSpan="5"
                         BorderBrush="#D8D8D8"
                         BorderThickness="1"
                         CornerRadius="6"
