@@ -112,9 +112,9 @@ namespace MWPV.View.UserControls
                 // Always include "All"
                 _types.Add(new LogTypeItem { Code = "ALL", Description = "All" });
 
-                // Pull the rest from combo details (type=log_filters)
+                // Pull the rest from combo details (type=log_filters) via shared catalog service
                 var dbTypes = await Task.Run(() =>
-                    LogCatalogService.GetComboDetailsByType("log_filters")); // returns Code/Description
+                    ComboDetailService.GetByType("log_filters"));
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {
@@ -141,7 +141,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private async void Type_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void Type_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (cmbType.SelectedValue is string code)
             {
