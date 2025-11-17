@@ -103,7 +103,7 @@
                     <!-- 8: spacer -->
                     <RowDefinition Height="10"/>
                     <!-- 9: notes -->
-                    <RowDefinition Height="160"/>
+                    <RowDefinition Height="Auto"/>
                     <!-- 10: spacer -->
                     <RowDefinition Height="16"/>
                     <!-- 11: bank header -->
@@ -416,7 +416,8 @@
                          Margin="0,22,0,0"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto"/>
+                         VerticalScrollBarVisibility="Auto"
+                         Height="48"/>
 
                 <!-- ===== row 11: bank section ===== -->
                 <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
