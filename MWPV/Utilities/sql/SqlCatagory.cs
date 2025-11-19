@@ -38,7 +38,7 @@ namespace Utilities.Sql
             "s_Logs_SelectPage.sql",
 
             // Combos
-            "s_Combo_LogsDetailSelectByType.sql",
+           // "s_Combo_LogsDetailSelectByType.sql",
             "s_Combo_CategoryType.sql",
 
             // Category Items
@@ -46,6 +46,7 @@ namespace Utilities.Sql
             "s_CategoryItem_select_by_id.sql",
             "s_CategoryItem_insert.sql",
             "s_CategoryItem_update.sql",
+            "s_Combo_DetailByTypeId.sql",
 
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"

@@ -395,7 +395,7 @@ namespace MWPV.Services
 
         /// <summary>
         /// New: return full model rows for a given ComboType.Code (e.g., "log_filters").
-        /// SQL: s_Combo_LogsDetailSelectByType.sql
+        /// SQL: s_Combo_DetailByTypeId.sql
         /// </summary>
         public static IReadOnlyList<global::MWPV.Models.ComboDetail> GetComboDetailsByType(
             string comboTypeCode,
@@ -409,9 +409,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Combo_LogsDetailSelectByType.sql");
+                var sql = SqlCagegory.GetSql("s_Combo_DetailByTypeId.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: s_Combo_LogsDetailSelectByType.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Combo_DetailByTypeId.sql");
                 cmd.CommandText = sql;
 
                 cmd.Parameters.AddWithValue("@type_code", comboTypeCode);

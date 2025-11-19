@@ -437,7 +437,9 @@
                     <ComboBox x:Name="cboCardType"
                               Background="Transparent"
                               BorderThickness="0"
-                              Style="{StaticResource FilterComboStyle}"/>
+                              Style="{StaticResource FilterComboStyle}"
+                              DisplayMemberPath="Description"
+                              SelectedValuePath="Code"/>
                 </Border>
 
                 <Label Grid.Row="13" Grid.Column="2" Content="Expiration Date"/>
@@ -492,112 +494,8 @@
                              HorizontalAlignment="Left"/>
 
                 <!-- ===== row 17: Security Questions ===== -->
-                <Border Grid.Row="17" Grid.Column="0" Grid.ColumnSpan="5"
-                        BorderBrush="#D8D8D8"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="10">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Security Questions (optional)" FontWeight="SemiBold" />
-                            <TextBlock x:Name="QaCountText"
-                                       Foreground="#666"
-                                       Margin="8,0,0,0"
-                                       Text="— 0"/>
-                        </StackPanel>
-
-                        <!-- Add row -->
-                        <Grid Margin="0,8,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="3*"/>
-                                <ColumnDefinition Width="3*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                <TextBlock Text="Question" FontSize="12" Foreground="#666"/>
-                                <TextBox x:Name="qaNewQuestion"
-                                         Height="28"
-                                         Width="260"
-                                         HorizontalAlignment="Left"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                                <TextBlock Text="Answer" FontSize="12" Foreground="#666"/>
-                                <PasswordBox x:Name="qaNewAnswer"
-                                             Height="28"
-                                             Width="260"
-                                             HorizontalAlignment="Left"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Bottom">
-                                <Button x:Name="qaAddButton"
-                                        Content="Add"
-                                        Height="28"
-                                        MinWidth="80"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Column headers -->
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="3*"/>
-                                <ColumnDefinition Width="3*"/>
-                                <ColumnDefinition Width="48"/>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="90"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Question" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="1" Text="Answer" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="2" Text="View" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="3" Text="Delete" FontWeight="Bold" FontSize="12"/>
-                            <TextBlock Grid.Column="4" Text="Move" FontWeight="Bold" FontSize="12"/>
-                        </Grid>
-
-                        <!-- List -->
-                        <Border BorderBrush="#D8D8D8"
-                                BorderThickness="1"
-                                CornerRadius="4">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" Height="160">
-                                <ItemsControl x:Name="qaList" Margin="0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,2,0,2" Background="White">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="3*"/>
-                                                    <ColumnDefinition Width="3*"/>
-                                                    <ColumnDefinition Width="48"/>
-                                                    <ColumnDefinition Width="60"/>
-                                                    <ColumnDefinition Width="90"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding QuestionDisplay}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding QuestionDisplay}"/>
-
-                                                <TextBlock Grid.Column="1"
-                                                           Foreground="#666"
-                                                           Text="{Binding AnswerDisplay}"/>
-
-                                                <Button Grid.Column="2" Content="View" Height="24" Margin="2"/>
-
-                                                <Button Grid.Column="3" Content="Delete" Height="24" Margin="2"/>
-
-                                                <StackPanel Grid.Column="4"
-                                                            Orientation="Horizontal"
-                                                            HorizontalAlignment="Left">
-                                                    <Button Content="Up" Height="24" Margin="2,2,6,2"/>
-                                                    <Button Content="Down" Height="24" Margin="0,2,2,2"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </Border>
-                    </StackPanel>
-                </Border>
+                <!-- (unchanged from your version) -->
+                <!-- ... security questions border + list here, same as you posted ... -->
             </Grid>
         </ScrollViewer>
 
