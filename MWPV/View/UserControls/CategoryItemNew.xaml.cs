@@ -802,67 +802,78 @@ namespace MWPV.View.UserControls
 
         private void ClearForm()
         {
-            txtItemName.Text = string.Empty;
-            txtUrl.Text = string.Empty;
+            try
+            {
+                // Central wipe for all sensitive stuff (passwords, reveals, timers, etc.)
+                WipeSensitiveFields();
 
-            pwdPassword.Password = string.Empty;
-            txtPasswordPlain.Text = string.Empty;
-            txtPasswordPlain.Visibility = Visibility.Collapsed;
-            _mainRevealed = false;
+                // Basic text fields
+                txtItemName.Text = string.Empty;
+                txtUsername.Text = string.Empty;
+                txtEmail.Text = string.Empty;
+                txtUrl.Text = string.Empty;
+                txtDescription.Text = string.Empty;
 
-            pwdVerify.Password = string.Empty;
-            txtVerifyPlain.Text = string.Empty;
-            txtVerifyPlain.Visibility = Visibility.Collapsed;
-            _verifyRevealed = false;
+                // Bank card / account text fields
+                txtExpDate.Text = string.Empty;
+                txtAccountNumber.Text = string.Empty;
 
-            txtUsername.Text = string.Empty;
-            txtEmail.Text = string.Empty;
+                // (Sensitive parts of the card/account are already cleared by WipeSensitiveFields:
+                //   txtCvv, txtCardPin, txtAccountPin, phone, main pwd, verify pwd, etc.)
 
-            txtPhone.Password = string.Empty;
-            txtPhonePlain.Text = string.Empty;
-            txtPhonePlain.Visibility = Visibility.Collapsed;
-            _phoneRevealed = false;
+                // Drop-downs
+                cboCardType.SelectedIndex = -1;
+                cboAccountName.SelectedIndex = -1;
 
-            txtDescription.Text = string.Empty;
-            txtExpDate.Text = string.Empty;
-            txtCvv.Password = string.Empty;
-            txtAccountNumber.Text = string.Empty;
-            txtPin.Password = string.Empty;
+                // Validation / error UI
+                EmailErrorText.Text = string.Empty;
+                EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-            cboCardType.SelectedIndex = -1;
-            cboAccountName.SelectedIndex = -1;
+                PhoneErrorText.Text = string.Empty;
+                PhoneErrorPanel.Visibility = Visibility.Collapsed;
 
-            HideStrengthRow();
-            HideVerifyRow();
-            HideVerifyError();
-            ClearEmailValidation();
-            ClearPhoneError();
-            _lastEmailChecked = string.Empty;
-
-            _qaRows.Clear();
-            var list = FindName("qaList") as ItemsControl;
-            if (list is not null)
-                list.ItemsSource = _qaRows;
-            UpdateQaCountText();
+                // Strength + verify rows
+                HideStrengthRow();
+                HideVerifyRow();
+            }
+            catch
+            {
+                // Keep same pattern as other helpers: swallow any UI-clear exceptions.
+            }
         }
+
 
         private void WipeSensitiveFields()
         {
             try
             {
+                // Stop any timers and hide reveal overlays first
                 HideAllRevealsAndStopTimer();
 
+                // Main password + verify
                 pwdPassword.Password = string.Empty;
                 pwdVerify.Password = string.Empty;
-                txtPhone.Password = string.Empty;
-                txtCvv.Password = string.Empty;
-                txtPin.Password = string.Empty;
 
+                // Phone (stored in a PasswordBox)
+                txtPhone.Password = string.Empty;
+
+                // Card-related secrets
+                txtCvv.Password = string.Empty;   // CVV on card line
+                txtCardPin.Password = string.Empty;   // Card PIN on card line
+
+                // Account-level PIN (optional)
+                txtAccountPin.Password = string.Empty;
+
+                // Strength + verify error UI cleanup
                 HideStrengthRow();
                 HideVerifyError();
             }
-            catch { }
+            catch
+            {
+                // Swallow for now – same behavior as before
+            }
         }
+
 
         // ----------------- Security Q/A helpers (UI-only) -----------------
 
