@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using MWPV.Services;
 using Security.Utility.Storage;
 using Security.Utility.Validation;
 
@@ -48,6 +49,20 @@ namespace MWPV.View.UserControls
         private const string QA_BTN_UP = "Up";
         private const string QA_BTN_DOWN = "Down";
 
+        // --- bank card combos ------------------------------------------------
+
+        // ComboTypeId for bank cards; mapped to ComboDetail.ComboTyp = 2
+        private const int BankCardComboTypeId = 2;
+
+        private bool _bankCombosLoaded;
+        private readonly List<CardTypeItem> _cardTypeItems = new();
+
+        private sealed class CardTypeItem
+        {
+            public string Code { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+        }
+
         public CategoryItemNew()
         {
             InitializeComponent();
@@ -78,6 +93,12 @@ namespace MWPV.View.UserControls
 
             InitSecurityQaUi();
 
+            if (!_bankCombosLoaded)
+            {
+                LoadBankCardCombos();
+                _bankCombosLoaded = true;
+            }
+
             ClearForm();
             HideAllRevealsAndStopTimer();
             HideStrengthRow();
@@ -103,6 +124,57 @@ namespace MWPV.View.UserControls
             var list = FindName("qaList") as ItemsControl;
             if (list is not null)
                 list.RemoveHandler(Button.ClickEvent, new RoutedEventHandler(QaList_ButtonClick));
+        }
+
+        // Load card-type combo details from ComboDetail via shared service
+        private void LoadBankCardCombos()
+        {
+            try
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-NEW][BANK-CARD] Loading card types for ComboTypeId='{BankCardComboTypeId}'");
+#endif
+                _cardTypeItems.Clear();
+
+                // NEW: use shared numeric ComboTypeId + s_Combo_DetailByTypeId.sql
+                var dbTypes = ComboDetailService.GetByTypeId(BankCardComboTypeId);
+
+                foreach (var t in dbTypes.OrderBy(t => t.Seq))
+                {
+                    // Defensive: skip any junk rows
+                    if (string.IsNullOrWhiteSpace(t.Code))
+                        continue;
+
+                    _cardTypeItems.Add(new CardTypeItem
+                    {
+                        Code = t.Code,
+                        Description = string.IsNullOrWhiteSpace(t.Description)
+                            ? t.Code
+                            : t.Description
+                    });
+                }
+
+                cboCardType.ItemsSource = _cardTypeItems;
+
+                // Make sure these match the properties on CardTypeItem
+                cboCardType.DisplayMemberPath = nameof(CardTypeItem.Description);
+                cboCardType.SelectedValuePath = nameof(CardTypeItem.Code);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-NEW][BANK-CARD] Loaded {_cardTypeItems.Count} card types.");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-NEW][BANK-CARD][FAIL] {ex}");
+#endif
+                MessageBox.Show(
+                    "Unable to load bank card types. You can still type card details manually.\n\n" + ex.Message,
+                    "Bank Cards",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
