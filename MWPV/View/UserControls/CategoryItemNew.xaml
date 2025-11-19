@@ -37,18 +37,26 @@
                                 Background="{DynamicResource PrimaryNormalBrush}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryHoverBrush}"/>
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryPressedBrush}"/>
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource DisabledBrush}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}"/>
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBrush}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledForeground}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -66,7 +74,9 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Background="{DynamicResource Brush.Primary}" Padding="12,0,6,0">
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Primary}"
+                Padding="12,0,6,0">
             <TextBlock VerticalAlignment="Center"
                        Foreground="White"
                        FontWeight="SemiBold"
@@ -84,42 +94,42 @@
             <Grid Margin="20">
                 <!-- Layout rows -->
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <!-- 0: name/password/verify -->
                     <RowDefinition Height="Auto"/>
                     <!-- 1: strength + verify error -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- 2: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 2 spacer -->
+                    <RowDefinition Height="Auto"/>
                     <!-- 3: username/email/url -->
                     <RowDefinition Height="Auto"/>
                     <!-- 4: email error -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- 5: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 5 spacer -->
+                    <RowDefinition Height="Auto"/>
                     <!-- 6: phone -->
                     <RowDefinition Height="Auto"/>
                     <!-- 7: phone error -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- 8: spacer -->
                     <RowDefinition Height="10"/>
+                    <!-- 8 spacer -->
+                    <RowDefinition Height="Auto"/>
                     <!-- 9: notes -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- 10: spacer -->
                     <RowDefinition Height="16"/>
+                    <!-- 10 spacer -->
+                    <RowDefinition Height="Auto"/>
                     <!-- 11: bank header -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- 12: spacer -->
                     <RowDefinition Height="10"/>
-                    <!-- 13: card type / exp / cvv -->
+                    <!-- 12 spacer -->
                     <RowDefinition Height="Auto"/>
-                    <!-- 14: spacer -->
+                    <!-- 13: card line -->
                     <RowDefinition Height="10"/>
-                    <!-- 15: account name / number / pin -->
+                    <!-- 14 spacer -->
                     <RowDefinition Height="Auto"/>
-                    <!-- 16: spacer -->
+                    <!-- 15: account line -->
                     <RowDefinition Height="10"/>
+                    <!-- 16 spacer -->
+                    <RowDefinition Height="Auto"/>
                     <!-- 17: security Q/A -->
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Columns -->
@@ -284,12 +294,14 @@
                                FontSize="12"
                                Foreground="Black"
                                Text=""/>
-                    <ItemsControl x:Name="PwTipsList" Margin="0,2,0,0">
+                    <ItemsControl x:Name="PwTipsList"
+                                  Margin="0,2,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="• "/>
-                                    <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding}"
+                                               TextWrapping="Wrap"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -309,7 +321,9 @@
                 </StackPanel>
 
                 <!-- ===== row 3: user / email / url ===== -->
-                <Label Grid.Row="3" Grid.Column="0" Content="User Name" FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="0"
+                       Content="User Name"
+                       FontWeight="Bold"/>
                 <TextBox x:Name="txtUsername"
                          Grid.Row="3" Grid.Column="0"
                          Margin="0,22,0,0"
@@ -317,7 +331,9 @@
                          MinWidth="240"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="3" Grid.Column="2" Content="Email" FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="2"
+                       Content="Email"
+                       FontWeight="Bold"/>
                 <TextBox x:Name="txtEmail"
                          Grid.Row="3" Grid.Column="2"
                          Margin="0,22,0,0"
@@ -326,7 +342,9 @@
                          HorizontalAlignment="Left"
                          LostFocus="txtEmail_LostFocus"/>
 
-                <Label Grid.Row="3" Grid.Column="4" Content="URL or Absolute Location" FontWeight="Bold"/>
+                <Label Grid.Row="3" Grid.Column="4"
+                       Content="URL or Absolute Location"
+                       FontWeight="Bold"/>
                 <TextBox x:Name="txtUrl"
                          Grid.Row="3" Grid.Column="4"
                          Margin="0,22,0,0"
@@ -347,7 +365,9 @@
                 </StackPanel>
 
                 <!-- ===== row 6: phone ===== -->
-                <Label Grid.Row="6" Grid.Column="0" Content="Phone Number" FontWeight="Bold"/>
+                <Label Grid.Row="6" Grid.Column="0"
+                       Content="Phone Number"
+                       FontWeight="Bold"/>
                 <Grid Grid.Row="6" Grid.Column="0"
                       Margin="0,22,0,0"
                       Height="28"
@@ -419,30 +439,32 @@
                          VerticalScrollBarVisibility="Auto"
                          Height="48"/>
 
-                <!-- ===== row 11: bank section ===== -->
-                <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
+                <!-- ===== row 11: bank section header ===== -->
+                <TextBlock Grid.Row="11"
+                           Grid.Column="0"
+                           Grid.ColumnSpan="5"
                            Text="Bank Cards / Accounts"
                            FontWeight="SemiBold"
                            Margin="0,0,0,8"/>
 
-                <!-- row 13: card type / exp / cvv -->
-                <Label Grid.Row="13" Grid.Column="0" Content="Card Type"/>
-                <Border Grid.Row="13" Grid.Column="0"
-                        Margin="0,22,0,0"
-                        Height="28"
-                        CornerRadius="4"
-                        Background="Transparent"
-                        BorderBrush="#8A8A8A"
-                        BorderThickness="1">
-                    <ComboBox x:Name="cboCardType"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              Style="{StaticResource FilterComboStyle}"
-                              DisplayMemberPath="Description"
-                              SelectedValuePath="Code"/>
-                </Border>
+                <!-- ===== row 13: Bank CARD line ===== -->
+                <!-- Card Type / Exp -->
+                <Label Grid.Row="13" Grid.Column="0"
+                       Content="Card Type"/>
+                <Label Grid.Row="13" Grid.Column="2"
+                       Content="Expiration Date"/>
 
-                <Label Grid.Row="13" Grid.Column="2" Content="Expiration Date"/>
+                <ComboBox x:Name="cboCardType"
+                          Grid.Row="13" Grid.Column="0"
+                          Margin="0,22,0,0"
+                          Height="28"
+                          MinWidth="150"
+                          MaxWidth="220"
+                          HorizontalAlignment="Left"
+                          Style="{StaticResource FilterComboStyle}"
+                          DisplayMemberPath="Description"
+                          SelectedValuePath="Code"/>
+
                 <TextBox x:Name="txtExpDate"
                          Grid.Row="13" Grid.Column="2"
                          Margin="0,22,0,0"
@@ -451,31 +473,98 @@
                          MaxLength="10"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="13" Grid.Column="4" Content="CVV Code"/>
-                <PasswordBox x:Name="txtCvv"
-                             Grid.Row="13" Grid.Column="4"
-                             Margin="0,22,0,0"
-                             Height="28"
-                             Width="90"
-                             MaxLength="6"
-                             HorizontalAlignment="Left"/>
+                <!-- CVV + Card PIN + Add/Clear, with labels over correct fields -->
+                <Grid Grid.Row="13"
+                      Grid.Column="4"
+                      Margin="0,0,0,0"
+                      HorizontalAlignment="Left">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- labels -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- fields -->
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130"/>
+                        <!-- CVV -->
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="130"/>
+                        <!-- Card PIN -->
+                        <ColumnDefinition Width="Auto"/>
+                        <!-- Add -->
+                        <ColumnDefinition Width="Auto"/>
+                        <!-- Clear -->
+                    </Grid.ColumnDefinitions>
 
-                <!-- row 15: account name / number / pin -->
-                <Label Grid.Row="15" Grid.Column="0" Content="Account Name"/>
-                <Border Grid.Row="15" Grid.Column="0"
-                        Margin="0,22,0,0"
-                        Height="28"
-                        CornerRadius="4"
-                        Background="Transparent"
-                        BorderBrush="#8A8A8A"
-                        BorderThickness="1">
-                    <ComboBox x:Name="cboAccountName"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              Style="{StaticResource FilterComboStyle}"/>
-                </Border>
+                    <!-- labels row -->
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="CVV"
+                               Margin="0,0,0,4"
+                               FontWeight="Bold"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2"
+                               Text="Card PIN"
+                               Margin="0,0,0,4"
+                               FontWeight="Bold"/>
 
-                <Label Grid.Row="15" Grid.Column="2" Content="Account Number"/>
+                    <!-- fields row -->
+                    <!-- CVV -->
+                    <PasswordBox x:Name="txtCvv"
+                                 Grid.Row="1" Grid.Column="0"
+                                 Height="28"
+                                 Width="120"
+                                 MaxLength="6"
+                                 HorizontalAlignment="Left"/>
+
+                    <!-- Card PIN -->
+                    <PasswordBox x:Name="txtCardPin"
+                                 Grid.Row="1" Grid.Column="2"
+                                 Height="28"
+                                 Width="120"
+                                 MaxLength="12"
+                                 HorizontalAlignment="Left"/>
+
+                    <!-- Add (+) bank card (no Click yet) -->
+                    <Button x:Name="btnBankCardAdd"
+                            Grid.Row="1" Grid.Column="3"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            ToolTip="Add this card to the in-memory list">
+                        <TextBlock Text="+"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                    </Button>
+
+                    <!-- Clear current bank card fields (no Click yet) -->
+                    <Button x:Name="btnBankCardClear"
+                            Grid.Row="1" Grid.Column="4"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            ToolTip="Clear the bank card fields">
+                        <TextBlock Text="X"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                    </Button>
+                </Grid>
+
+                <!-- ===== row 15: ACCOUNT line ===== -->
+                <Label Grid.Row="15" Grid.Column="0"
+                       Content="Account Name"/>
+                <Label Grid.Row="15" Grid.Column="2"
+                       Content="Account Number"/>
+                <Label Grid.Row="15" Grid.Column="4"
+                       Content="Account PIN (optional)"/>
+
+                <ComboBox x:Name="cboAccountName"
+                          Grid.Row="15" Grid.Column="0"
+                          Margin="0,22,0,0"
+                          Height="28"
+                          MinWidth="150"
+                          MaxWidth="220"
+                          HorizontalAlignment="Left"
+                          Style="{StaticResource FilterComboStyle}"/>
+
                 <TextBox x:Name="txtAccountNumber"
                          Grid.Row="15" Grid.Column="2"
                          Margin="0,22,0,0"
@@ -484,8 +573,7 @@
                          MaxLength="24"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="15" Grid.Column="4" Content="PIN"/>
-                <PasswordBox x:Name="txtPin"
+                <PasswordBox x:Name="txtAccountPin"
                              Grid.Row="15" Grid.Column="4"
                              Margin="0,22,0,0"
                              Height="28"
@@ -493,9 +581,8 @@
                              MaxLength="12"
                              HorizontalAlignment="Left"/>
 
-                <!-- ===== row 17: Security Questions ===== -->
-                <!-- (unchanged from your version) -->
-                <!-- ... security questions border + list here, same as you posted ... -->
+                <!-- ===== row 17: Security Questions / Answers ===== -->
+                <!-- (keep or reinsert your existing Security Q/A block here) -->
             </Grid>
         </ScrollViewer>
 
@@ -507,7 +594,8 @@
                     Style="{StaticResource DialogPrimary}"
                     Margin="0,0,12,0"
                     Click="btnSubmit_Click">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                Text="&#xE8FB;"
                                Margin="0,0,8,0"/>
@@ -518,7 +606,8 @@
             <Button x:Name="btnCancel"
                     Style="{StaticResource DialogSecondary}"
                     Click="btnCancel_Click">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                Text="&#xE711;"
                                Margin="0,0,8,0"/>

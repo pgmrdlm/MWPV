@@ -103,43 +103,44 @@ namespace MWPV.View.UserControls
 
         // --- type filter -----------------------------------------------------
 
+        // --- type filter -----------------------------------------------------
+
         private async Task LoadTypesAsync()
         {
+            _types.Clear();
+
+            // Always include "All" at the top
+            _types.Add(new LogTypeItem { Code = "ALL", Description = "All" });
+
             try
             {
-                _types.Clear();
-
-                // Always include "All"
-                _types.Add(new LogTypeItem { Code = "ALL", Description = "All" });
-
-                // Pull the rest from combo details (type=log_filters) via shared catalog service
+                // 4 is the fixed ComboTypeId for log filters
                 var dbTypes = await Task.Run(() =>
-                    ComboDetailService.GetByType("log_filters"));
+                    ComboDetailService.GetByTypeId(4));
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {
-                    // skip duplicates of ALL if present
+                    // Don't duplicate ALL if someone added it in the table
                     if (!string.Equals(t.Code, "ALL", StringComparison.OrdinalIgnoreCase))
-                        _types.Add(new LogTypeItem { Code = t.Code, Description = t.Description });
+                    {
+                        _types.Add(new LogTypeItem
+                        {
+                            Code = t.Code,
+                            Description = t.Description
+                        });
+                    }
                 }
-
-                cmbType.ItemsSource = _types;
-                cmbType.SelectedValue = "ALL";
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[LOGS][Types][FAIL] {ex}");
-                MessageBox.Show("Failed to load log types.", "Logs",
-                                MessageBoxButton.OK, MessageBoxImage.Error);
-                // fall back to just ALL
-                if (!_types.Any())
-                {
-                    _types.Add(new LogTypeItem { Code = "ALL", Description = "All" });
-                    cmbType.ItemsSource = _types;
-                    cmbType.SelectedValue = "ALL";
-                }
+                // Worst case: we still have just "All" in the list, which is fine.
             }
+
+            cmbType.ItemsSource = _types;
+            cmbType.SelectedValue = "ALL";
         }
+
 
         private async void Type_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
