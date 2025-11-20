@@ -24,9 +24,12 @@ namespace MWPV.View.UserControls
         private string _categoryName = string.Empty;
         private bool _isEditMode;
 
+        // Reveal state flags
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private bool _phoneRevealed;
+        private bool _cvvRevealed;
+        private bool _cardPinRevealed;
 
         private readonly DispatcherTimer _revealTimer;
 
@@ -70,7 +73,6 @@ namespace MWPV.View.UserControls
             Loaded += CategoryItemNew_Loaded;
             Unloaded += CategoryItemNew_Unloaded;
 
-            // pwdPassword_PreviewKeyDown is wired via XAML now
             txtEmail.LostFocus += txtEmail_LostFocus;
 
             _revealTimer = new DispatcherTimer
@@ -136,12 +138,10 @@ namespace MWPV.View.UserControls
 #endif
                 _cardTypeItems.Clear();
 
-                // NEW: use shared numeric ComboTypeId + s_Combo_DetailByTypeId.sql
                 var dbTypes = ComboDetailService.GetByTypeId(BankCardComboTypeId);
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {
-                    // Defensive: skip any junk rows
                     if (string.IsNullOrWhiteSpace(t.Code))
                         continue;
 
@@ -155,8 +155,6 @@ namespace MWPV.View.UserControls
                 }
 
                 cboCardType.ItemsSource = _cardTypeItems;
-
-                // Make sure these match the properties on CardTypeItem
                 cboCardType.DisplayMemberPath = nameof(CardTypeItem.Description);
                 cboCardType.SelectedValuePath = nameof(CardTypeItem.Code);
 
@@ -271,27 +269,25 @@ namespace MWPV.View.UserControls
             HideAllRevealsAndStopTimer();
         }
 
-        /// <summary>
-        /// Central helper: hides all reveal overlays and stops the timer.
-        /// Used by timer, cancel, unload, etc.
-        /// </summary>
         private void HideAllRevealsAndStopTimer()
         {
             _revealTimer.Stop();
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
+            HideCvv();
+            HideCardPin();
         }
 
-        /// <summary>
-        /// Restart timer if anything is currently revealed.
-        /// Call this after toggling any reveal on.
-        /// </summary>
         private void StartOrRestartRevealTimerIfNeeded()
         {
             _revealTimer.Stop();
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+            if (_mainRevealed ||
+                _verifyRevealed ||
+                _phoneRevealed ||
+                _cvvRevealed ||
+                _cardPinRevealed)
             {
                 _revealTimer.Start();
             }
@@ -361,8 +357,7 @@ namespace MWPV.View.UserControls
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
 
-            // If anything is being revealed, keep the timer fresh while typing
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
             if (_settingPwProgrammatically) return;
@@ -391,7 +386,7 @@ namespace MWPV.View.UserControls
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
             EvaluateAndDisplayVerifyMismatch();
@@ -696,7 +691,6 @@ namespace MWPV.View.UserControls
 
         private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
         {
-            // Validate when leaving the field; show inline error if too short.
             ValidatePhoneNumber(forSubmit: false);
         }
 
@@ -705,11 +699,9 @@ namespace MWPV.View.UserControls
             if (_phoneRevealed)
                 txtPhonePlain.Text = txtPhone.Password;
 
-            // Keep timer alive if anything is revealed and user is typing
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
-            // If they cleared the field completely, clear any lingering error
             if (string.IsNullOrEmpty(txtPhone.Password))
                 ClearPhoneError();
         }
@@ -748,7 +740,6 @@ namespace MWPV.View.UserControls
             var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
             int len = digitsOnly.Length;
 
-            // Phone is optional: empty is OK and clears error.
             if (len == 0)
             {
                 ClearPhoneError();
@@ -798,82 +789,146 @@ namespace MWPV.View.UserControls
             catch { }
         }
 
+        /* ======================= CVV / Card PIN reveal ======================= */
+
+        private void txtCvv_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_cvvRevealed)
+                txtCvvPlain.Text = txtCvv.Password;
+
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
+                StartOrRestartRevealTimerIfNeeded();
+        }
+
+        private void txtCardPin_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_cardPinRevealed)
+                txtCardPinPlain.Text = txtCardPin.Password;
+
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
+                StartOrRestartRevealTimerIfNeeded();
+        }
+
+        private void BtnToggleCvvReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_cvvRevealed)
+                HideCvv();
+            else
+                ShowCvv();
+
+            StartOrRestartRevealTimerIfNeeded();
+        }
+
+        private void BtnToggleCardPinReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_cardPinRevealed)
+                HideCardPin();
+            else
+                ShowCardPin();
+
+            StartOrRestartRevealTimerIfNeeded();
+        }
+
+        private void ShowCvv()
+        {
+            txtCvvPlain.Text = txtCvv.Password;
+            txtCvvPlain.Visibility = Visibility.Visible;
+            txtCvv.Visibility = Visibility.Collapsed;
+            _cvvRevealed = true;
+        }
+
+        private void HideCvv()
+        {
+            if (!string.IsNullOrEmpty(txtCvvPlain.Text))
+                txtCvvPlain.Text = string.Empty;
+
+            txtCvvPlain.Visibility = Visibility.Collapsed;
+            txtCvv.Visibility = Visibility.Visible;
+            _cvvRevealed = false;
+        }
+
+        private void ShowCardPin()
+        {
+            txtCardPinPlain.Text = txtCardPin.Password;
+            txtCardPinPlain.Visibility = Visibility.Visible;
+            txtCardPin.Visibility = Visibility.Collapsed;
+            _cardPinRevealed = true;
+        }
+
+        private void HideCardPin()
+        {
+            if (!string.IsNullOrEmpty(txtCardPinPlain.Text))
+                txtCardPinPlain.Text = string.Empty;
+
+            txtCardPinPlain.Visibility = Visibility.Collapsed;
+            txtCardPin.Visibility = Visibility.Visible;
+            _cardPinRevealed = false;
+        }
+
         /* ======================= Form reset / wipe ======================= */
 
         private void ClearForm()
         {
             try
             {
-                // Central wipe for all sensitive stuff (passwords, reveals, timers, etc.)
                 WipeSensitiveFields();
 
-                // Basic text fields
                 txtItemName.Text = string.Empty;
                 txtUsername.Text = string.Empty;
                 txtEmail.Text = string.Empty;
                 txtUrl.Text = string.Empty;
                 txtDescription.Text = string.Empty;
 
-                // Bank card / account text fields
+                txtCardNumber.Text = string.Empty;
                 txtExpDate.Text = string.Empty;
                 txtAccountNumber.Text = string.Empty;
 
-                // (Sensitive parts of the card/account are already cleared by WipeSensitiveFields:
-                //   txtCvv, txtCardPin, txtAccountPin, phone, main pwd, verify pwd, etc.)
-
-                // Drop-downs
                 cboCardType.SelectedIndex = -1;
                 cboAccountName.SelectedIndex = -1;
 
-                // Validation / error UI
                 EmailErrorText.Text = string.Empty;
                 EmailErrorPanel.Visibility = Visibility.Collapsed;
 
                 PhoneErrorText.Text = string.Empty;
                 PhoneErrorPanel.Visibility = Visibility.Collapsed;
 
-                // Strength + verify rows
                 HideStrengthRow();
                 HideVerifyRow();
             }
             catch
             {
-                // Keep same pattern as other helpers: swallow any UI-clear exceptions.
             }
         }
-
 
         private void WipeSensitiveFields()
         {
             try
             {
-                // Stop any timers and hide reveal overlays first
                 HideAllRevealsAndStopTimer();
 
-                // Main password + verify
                 pwdPassword.Password = string.Empty;
                 pwdVerify.Password = string.Empty;
 
-                // Phone (stored in a PasswordBox)
                 txtPhone.Password = string.Empty;
 
-                // Card-related secrets
-                txtCvv.Password = string.Empty;   // CVV on card line
-                txtCardPin.Password = string.Empty;   // Card PIN on card line
+                txtCvv.Password = string.Empty;
+                txtCardPin.Password = string.Empty;
 
-                // Account-level PIN (optional)
                 txtAccountPin.Password = string.Empty;
 
-                // Strength + verify error UI cleanup
+                txtPasswordPlain.Text = string.Empty;
+                txtVerifyPlain.Text = string.Empty;
+                txtPhonePlain.Text = string.Empty;
+                txtCvvPlain.Text = string.Empty;
+                txtCardPinPlain.Text = string.Empty;
+
                 HideStrengthRow();
                 HideVerifyError();
             }
             catch
             {
-                // Swallow for now – same behavior as before
             }
         }
-
 
         // ----------------- Security Q/A helpers (UI-only) -----------------
 
