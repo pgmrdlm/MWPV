@@ -865,6 +865,40 @@ namespace MWPV.View.UserControls
             _cardPinRevealed = false;
         }
 
+        /* ======================= Bank card line buttons (stubs) ======================= */
+
+        private void btnBankCardAdd_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Add clicked (stub)");
+#endif
+            // TODO: implement in-memory add to icBankCards and hide txtNoBankCardsPlaceholder
+        }
+
+        private void btnBankCardClear_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Clear clicked (stub)");
+#endif
+            // TODO: clear the entry line fields (card type, number, exp, cvv, pin, active)
+        }
+
+        private void btnBankCardRowEdit_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Row Edit clicked (stub)");
+#endif
+            // TODO: load selected row back into the entry line for editing
+        }
+
+        private void btnBankCardRowDelete_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Row Delete clicked (stub)");
+#endif
+            // TODO: remove selected row from in-memory list and update icBankCards / placeholder
+        }
+
         /* ======================= Form reset / wipe ======================= */
 
         private void ClearForm()
