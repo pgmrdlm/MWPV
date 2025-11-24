@@ -18,13 +18,6 @@ namespace MWPV.Services
         private const int MaxCategoryNameLength = 64; // was 17
         private const int MaxDescriptionLength = 512;
 
-        // DTO for combo binding
-        public sealed class CategoryTypeOption
-        {
-            public string Code { get; init; } = "";
-            public string Description { get; init; } = "";
-        }
-
         // --------------------------- Helpers ---------------------------------
 
         private static string LoadSqlRequired(string assetName)
@@ -126,47 +119,6 @@ namespace MWPV.Services
             return rows;
         }
 
-        /// <summary>
-        /// Load list of category types for combo binding (expects columns: Code, Description).
-        /// </summary>
-        public static ObservableCollection<CategoryTypeOption> LoadCategoryTypes()
-        {
-            var rows = new ObservableCollection<CategoryTypeOption>();
-            try
-            {
-                var sql = TryLoadSql("s_Combo_CategoryType.sql")
-                          ?? TryLoadSql("Select_Combo_CategoryTypes.sql")
-                          ?? LoadSqlRequired("s_Combo_CategoryType.sql");
-
-                using var conn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = sql;
-
-                using var r = cmd.ExecuteReader();
-                int iCode = SafeGetOrdinal(r, "Code");
-                int iDesc = SafeGetOrdinal(r, "Description");
-
-                while (r.Read())
-                {
-                    rows.Add(new CategoryTypeOption
-                    {
-                        Code = ReadNullableString(r, iCode) ?? "",
-                        Description = ReadNullableString(r, iDesc) ?? "",
-                    });
-                }
-
-#if DEBUG
-                try { Debug.WriteLine($"[CAT_TYPES][LOAD] rows={rows.Count}"); } catch { }
-#endif
-            }
-            catch (Exception ex)
-            {
-                ErrorHandler.Abend(ex, "Error loading category types");
-            }
-
-            return rows;
-        }
-
         // ---------------------------- Exists ---------------------------------
 
         public static bool DoesCategoryExist(string categoryName)
@@ -187,20 +139,25 @@ namespace MWPV.Services
 
         // ---------------------------- Insert ---------------------------------
 
+        /// <summary>
+        /// Primary insert used by the inline Add Category UI.
+        /// Category_Type is now a dumb column defaulted to 0 in the DB, so no type is required.
+        /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription)
-            => InsertCategoryCore(newCategory, newDescription, typeDescriptionFromUi: null);
+            => InsertCategoryCore(newCategory, newDescription);
 
         /// <summary>
-        /// Insert using the combo's selected Code (SelectedValuePath="Code").
+        /// Legacy overload that used to accept a category type description.
+        /// Kept for compatibility; the type argument is now ignored.
         /// </summary>
         public static void InsertCategory(string newCategory, string? newDescription, string? categoryTypeDescription)
-            => InsertCategoryCore(newCategory, newDescription, categoryTypeDescription);
+            => InsertCategoryCore(newCategory, newDescription);
 
-        private static void InsertCategoryCore(string newCategory, string? newDescription, string? typeDescriptionFromUi)
+        private static void InsertCategoryCore(string newCategory, string? newDescription)
         {
             if (newCategory is null) throw new ArgumentNullException(nameof(newCategory));
 
-            // >>> Only change here: maxLen now uses constant (64)
+            // Validate name with central limits (min 4, max 64)
             var check = InputGuards.ValidateCategoryName(
                 newCategory,
                 minLen: MinCategoryNameLength,
@@ -213,13 +170,12 @@ namespace MWPV.Services
                     nameof(newCategory));
 
             string cleanName = check.CleanName;
+
+            // Normalize description and fall back to the cleaned name if blank
             string? desc = InputGuards.NormalizeFreeText(newDescription, maxLen: MaxDescriptionLength);
             if (string.IsNullOrWhiteSpace(desc)) desc = cleanName;
 
-            string? typeDescription = string.IsNullOrWhiteSpace(typeDescriptionFromUi) ? null : typeDescriptionFromUi.Trim();
-            if (string.IsNullOrWhiteSpace(typeDescription))
-                throw new ArgumentException("Category type is required.", nameof(typeDescriptionFromUi));
-
+            // Duplicate check
             if (DoesCategoryExist(cleanName))
             {
                 try
@@ -253,14 +209,13 @@ namespace MWPV.Services
 
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
-                cmd.Parameters.AddWithValue("@TypeCode", typeDescription); // CHANGED: was @TypeDescription
 
 #if DEBUG
-                try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}' typeDesc='{typeDescription}'"); } catch { }
+                try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}'"); } catch { }
 #endif
                 int affected = cmd.ExecuteNonQuery();
                 if (affected == 0)
-                    throw new InvalidOperationException("Insert failed (no rows affected). Check @TypeCode mapping to ComboDetail."); // CHANGED: mentions @TypeCode
+                    throw new InvalidOperationException("Insert failed (no rows affected).");
             }
 
             using (var last = conn.CreateCommand())
@@ -283,8 +238,7 @@ namespace MWPV.Services
                         message = $"Category '{cleanName}' inserted",
                         occurredUtc = DateTime.UtcNow,
                         categoryId = newId,
-                        categoryName = cleanName,
-                        typeDescription = typeDescription
+                        categoryName = cleanName
                     });
             }
             catch { }
