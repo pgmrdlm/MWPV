@@ -133,9 +133,11 @@ CREATE TABLE BankCards (
     BC_Pin           BLOB,                  -- encrypted (if applicable)
     BC_BillingZip    BLOB,                  -- encrypted (if applicable)
     BC_IsPrimary     INTEGER NOT NULL DEFAULT 0 CHECK (BC_IsPrimary IN (0,1)),
+    BC_IsActive      INTEGER NOT NULL DEFAULT 1 CHECK (BC_IsActive IN (0,1)),
     BC_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     BC_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
+
 
 /* =========================
    CategoryItemAccounts

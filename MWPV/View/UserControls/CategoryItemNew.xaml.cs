@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
@@ -8,7 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using MWPV.Services;
 using Security.Utility.Storage;
 using Security.Utility.Validation;
 
@@ -28,8 +26,6 @@ namespace MWPV.View.UserControls
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private bool _phoneRevealed;
-        private bool _cvvRevealed;
-        private bool _cardPinRevealed;
 
         private readonly DispatcherTimer _revealTimer;
 
@@ -44,27 +40,6 @@ namespace MWPV.View.UserControls
         // Phone visuals
         private Brush? _phoneDefaultBorderBrush;
         private Brush? _phoneDefaultBackground;
-
-        // Security Q/A (UI-only)
-        private readonly ObservableCollection<QaRow> _qaRows = new();
-        private const string QA_BTN_VIEW = "View";
-        private const string QA_BTN_DELETE = "Delete";
-        private const string QA_BTN_UP = "Up";
-        private const string QA_BTN_DOWN = "Down";
-
-        // --- bank card combos ------------------------------------------------
-
-        // ComboTypeId for bank cards; mapped to ComboDetail.ComboTyp = 2
-        private const int BankCardComboTypeId = 2;
-
-        private bool _bankCombosLoaded;
-        private readonly List<CardTypeItem> _cardTypeItems = new();
-
-        private sealed class CardTypeItem
-        {
-            public string Code { get; set; } = string.Empty;
-            public string Description { get; set; } = string.Empty;
-        }
 
         public CategoryItemNew()
         {
@@ -93,14 +68,6 @@ namespace MWPV.View.UserControls
             _phoneDefaultBorderBrush = txtPhone.BorderBrush;
             _phoneDefaultBackground = txtPhone.Background;
 
-            InitSecurityQaUi();
-
-            if (!_bankCombosLoaded)
-            {
-                LoadBankCardCombos();
-                _bankCombosLoaded = true;
-            }
-
             ClearForm();
             HideAllRevealsAndStopTimer();
             HideStrengthRow();
@@ -122,57 +89,6 @@ namespace MWPV.View.UserControls
             HideVerifyError();
             ClearEmailValidation();
             ClearPhoneError();
-
-            var list = FindName("qaList") as ItemsControl;
-            if (list is not null)
-                list.RemoveHandler(Button.ClickEvent, new RoutedEventHandler(QaList_ButtonClick));
-        }
-
-        // Load card-type combo details from ComboDetail via shared service
-        private void LoadBankCardCombos()
-        {
-            try
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-NEW][BANK-CARD] Loading card types for ComboTypeId='{BankCardComboTypeId}'");
-#endif
-                _cardTypeItems.Clear();
-
-                var dbTypes = ComboDetailService.GetByTypeId(BankCardComboTypeId);
-
-                foreach (var t in dbTypes.OrderBy(t => t.Seq))
-                {
-                    if (string.IsNullOrWhiteSpace(t.Code))
-                        continue;
-
-                    _cardTypeItems.Add(new CardTypeItem
-                    {
-                        Code = t.Code,
-                        Description = string.IsNullOrWhiteSpace(t.Description)
-                            ? t.Code
-                            : t.Description
-                    });
-                }
-
-                cboCardType.ItemsSource = _cardTypeItems;
-                cboCardType.DisplayMemberPath = nameof(CardTypeItem.Description);
-                cboCardType.SelectedValuePath = nameof(CardTypeItem.Code);
-
-#if DEBUG
-                Debug.WriteLine($"[ITEM-NEW][BANK-CARD] Loaded {_cardTypeItems.Count} card types.");
-#endif
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-NEW][BANK-CARD][FAIL] {ex}");
-#endif
-                MessageBox.Show(
-                    "Unable to load bank card types. You can still type card details manually.\n\n" + ex.Message,
-                    "Bank Cards",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
         }
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
@@ -194,7 +110,7 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine($"[ITEM-NEW] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
-            // TODO: Map existingItem -> fields (and Q/A) once persistence is wired
+            // TODO: Map existingItem -> fields (and into BankAndSecurityPanel) once persistence is wired
         }
 
         /* ======================= Submit / Cancel ======================= */
@@ -253,9 +169,6 @@ namespace MWPV.View.UserControls
             ClearEmailValidation();
             ClearPhoneError();
 
-            _qaRows.Clear();
-            UpdateQaCountText();
-
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
@@ -275,8 +188,6 @@ namespace MWPV.View.UserControls
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
-            HideCvv();
-            HideCardPin();
         }
 
         private void StartOrRestartRevealTimerIfNeeded()
@@ -285,9 +196,7 @@ namespace MWPV.View.UserControls
 
             if (_mainRevealed ||
                 _verifyRevealed ||
-                _phoneRevealed ||
-                _cvvRevealed ||
-                _cardPinRevealed)
+                _phoneRevealed)
             {
                 _revealTimer.Start();
             }
@@ -357,7 +266,7 @@ namespace MWPV.View.UserControls
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
             if (_settingPwProgrammatically) return;
@@ -386,7 +295,7 @@ namespace MWPV.View.UserControls
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
             EvaluateAndDisplayVerifyMismatch();
@@ -699,7 +608,7 @@ namespace MWPV.View.UserControls
             if (_phoneRevealed)
                 txtPhonePlain.Text = txtPhone.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
             if (string.IsNullOrEmpty(txtPhone.Password))
@@ -789,116 +698,6 @@ namespace MWPV.View.UserControls
             catch { }
         }
 
-        /* ======================= CVV / Card PIN reveal ======================= */
-
-        private void txtCvv_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (_cvvRevealed)
-                txtCvvPlain.Text = txtCvv.Password;
-
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
-                StartOrRestartRevealTimerIfNeeded();
-        }
-
-        private void txtCardPin_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (_cardPinRevealed)
-                txtCardPinPlain.Text = txtCardPin.Password;
-
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed || _cvvRevealed || _cardPinRevealed)
-                StartOrRestartRevealTimerIfNeeded();
-        }
-
-        private void BtnToggleCvvReveal_Click(object? sender, RoutedEventArgs e)
-        {
-            if (_cvvRevealed)
-                HideCvv();
-            else
-                ShowCvv();
-
-            StartOrRestartRevealTimerIfNeeded();
-        }
-
-        private void BtnToggleCardPinReveal_Click(object? sender, RoutedEventArgs e)
-        {
-            if (_cardPinRevealed)
-                HideCardPin();
-            else
-                ShowCardPin();
-
-            StartOrRestartRevealTimerIfNeeded();
-        }
-
-        private void ShowCvv()
-        {
-            txtCvvPlain.Text = txtCvv.Password;
-            txtCvvPlain.Visibility = Visibility.Visible;
-            txtCvv.Visibility = Visibility.Collapsed;
-            _cvvRevealed = true;
-        }
-
-        private void HideCvv()
-        {
-            if (!string.IsNullOrEmpty(txtCvvPlain.Text))
-                txtCvvPlain.Text = string.Empty;
-
-            txtCvvPlain.Visibility = Visibility.Collapsed;
-            txtCvv.Visibility = Visibility.Visible;
-            _cvvRevealed = false;
-        }
-
-        private void ShowCardPin()
-        {
-            txtCardPinPlain.Text = txtCardPin.Password;
-            txtCardPinPlain.Visibility = Visibility.Visible;
-            txtCardPin.Visibility = Visibility.Collapsed;
-            _cardPinRevealed = true;
-        }
-
-        private void HideCardPin()
-        {
-            if (!string.IsNullOrEmpty(txtCardPinPlain.Text))
-                txtCardPinPlain.Text = string.Empty;
-
-            txtCardPinPlain.Visibility = Visibility.Collapsed;
-            txtCardPin.Visibility = Visibility.Visible;
-            _cardPinRevealed = false;
-        }
-
-        /* ======================= Bank card line buttons (stubs) ======================= */
-
-        private void btnBankCardAdd_Click(object? sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Add clicked (stub)");
-#endif
-            // TODO: implement in-memory add to icBankCards and hide txtNoBankCardsPlaceholder
-        }
-
-        private void btnBankCardClear_Click(object? sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Clear clicked (stub)");
-#endif
-            // TODO: clear the entry line fields (card type, number, exp, cvv, pin, active)
-        }
-
-        private void btnBankCardRowEdit_Click(object? sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Row Edit clicked (stub)");
-#endif
-            // TODO: load selected row back into the entry line for editing
-        }
-
-        private void btnBankCardRowDelete_Click(object? sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEM-NEW][BANK-CARD] Row Delete clicked (stub)");
-#endif
-            // TODO: remove selected row from in-memory list and update icBankCards / placeholder
-        }
-
         /* ======================= Form reset / wipe ======================= */
 
         private void ClearForm()
@@ -912,13 +711,6 @@ namespace MWPV.View.UserControls
                 txtEmail.Text = string.Empty;
                 txtUrl.Text = string.Empty;
                 txtDescription.Text = string.Empty;
-
-                txtCardNumber.Text = string.Empty;
-                txtExpDate.Text = string.Empty;
-                txtAccountNumber.Text = string.Empty;
-
-                cboCardType.SelectedIndex = -1;
-                cboAccountName.SelectedIndex = -1;
 
                 EmailErrorText.Text = string.Empty;
                 EmailErrorPanel.Visibility = Visibility.Collapsed;
@@ -945,16 +737,9 @@ namespace MWPV.View.UserControls
 
                 txtPhone.Password = string.Empty;
 
-                txtCvv.Password = string.Empty;
-                txtCardPin.Password = string.Empty;
-
-                txtAccountPin.Password = string.Empty;
-
                 txtPasswordPlain.Text = string.Empty;
                 txtVerifyPlain.Text = string.Empty;
                 txtPhonePlain.Text = string.Empty;
-                txtCvvPlain.Text = string.Empty;
-                txtCardPinPlain.Text = string.Empty;
 
                 HideStrengthRow();
                 HideVerifyError();
@@ -962,144 +747,6 @@ namespace MWPV.View.UserControls
             catch
             {
             }
-        }
-
-        // ----------------- Security Q/A helpers (UI-only) -----------------
-
-        private void InitSecurityQaUi()
-        {
-            var list = FindName("qaList") as ItemsControl;
-            if (list is not null)
-            {
-                list.ItemsSource = _qaRows;
-                list.AddHandler(Button.ClickEvent,
-                                new RoutedEventHandler(QaList_ButtonClick),
-                                handledEventsToo: true);
-            }
-
-            var addBtn = FindName("qaAddButton") as Button;
-            if (addBtn is not null)
-                addBtn.Click += QaAddButton_Click;
-
-            UpdateQaCountText();
-        }
-
-        private void QaAddButton_Click(object? sender, RoutedEventArgs e)
-        {
-            var qBox = FindName("qaNewQuestion") as TextBox;
-            var aBox = FindName("qaNewAnswer") as PasswordBox;
-
-            string q = (qBox?.Text ?? string.Empty).Trim();
-            string a = (aBox?.Password ?? string.Empty);
-
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                MessageBox.Show("Please enter a security question.",
-                                "Validation",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
-                qBox?.Focus();
-                return;
-            }
-
-            int len = a?.Length ?? 0;
-
-            var row = new QaRow
-            {
-                Seq = _qaRows.Count,
-                QuestionDisplay = q,
-                AnswerLen = len,
-                AnswerDisplay = len > 0 ? $"•••• ({len})" : "(empty)"
-            };
-
-            _qaRows.Add(row);
-
-            if (qBox is not null) qBox.Text = string.Empty;
-            if (aBox is not null) aBox.Password = string.Empty;
-
-            UpdateQaCountText();
-        }
-
-        private void QaList_ButtonClick(object? sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource is not Button btn) return;
-            if (!TryGetDataContext<QaRow>(btn, out var row) || row is null) return;
-
-            string label = btn.Content?.ToString() ?? string.Empty;
-
-            if (label == QA_BTN_VIEW)
-            {
-                MessageBox.Show(
-                    "Viewing answers will be enabled once encryption is wired.\n\n(We are not storing plaintext in memory at this stage.)",
-                    "Not Implemented",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            else if (label == QA_BTN_DELETE)
-            {
-                _qaRows.Remove(row);
-                ResequenceQa();
-                UpdateQaCountText();
-            }
-            else if (label == QA_BTN_UP)
-            {
-                var idx = _qaRows.IndexOf(row);
-                if (idx > 0)
-                {
-                    _qaRows.Move(idx, idx - 1);
-                    ResequenceQa();
-                }
-            }
-            else if (label == QA_BTN_DOWN)
-            {
-                var idx = _qaRows.IndexOf(row);
-                if (idx >= 0 && idx < _qaRows.Count - 1)
-                {
-                    _qaRows.Move(idx, idx + 1);
-                    ResequenceQa();
-                }
-            }
-        }
-
-        private void UpdateQaCountText()
-        {
-            var t = FindName("QaCountText") as TextBlock;
-            if (t is null) return;
-            t.Text = $"— {_qaRows.Count}";
-        }
-
-        private void ResequenceQa()
-        {
-            for (int i = 0; i < _qaRows.Count; i++)
-                _qaRows[i].Seq = i;
-        }
-
-        private static bool TryGetDataContext<T>(DependencyObject start, out T? ctx)
-            where T : class
-        {
-            ctx = null;
-            DependencyObject? current = start;
-            while (current is not null)
-            {
-                if (current is FrameworkElement fe &&
-                    fe.DataContext is T match)
-                {
-                    ctx = match;
-                    return true;
-                }
-
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            return false;
-        }
-
-        private sealed class QaRow
-        {
-            public int Seq { get; set; }
-            public string QuestionDisplay { get; set; } = string.Empty;
-            public int AnswerLen { get; set; }
-            public string AnswerDisplay { get; set; } = string.Empty;
         }
     }
 }
