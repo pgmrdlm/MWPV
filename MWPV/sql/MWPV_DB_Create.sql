@@ -3,6 +3,9 @@
    Fix: seed inserts now use UNION ALL SELECT blocks (no VALUES(...) alias).
    Change in this revision: add back ComboType 'log_filters' + ComboDetail rows.
    This edition: REMOVED CREATE TABLE for CategoryItemSecurityQuestions, BankCards, CategoryItemAccounts.
+   2025-11-24 edit: Category_Type no longer FK to ComboDetail; defaults to 0.
+                    Removed category_types ComboType/ComboDetail seeding and
+                    rewrote starter categories to use Category_Type = 0.
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -59,7 +62,7 @@ CREATE TABLE Category (
     Category_Key         INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Name        TEXT    NOT NULL UNIQUE,
     Category_Description TEXT,
-    Category_Type        INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId),
+    Category_Type        INTEGER NOT NULL DEFAULT 0,
     CreatedUtc           TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
@@ -157,8 +160,6 @@ CREATE TABLE CategoryItemAccounts (
     CIA_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
-
-
 -- Integrity / versions / logs
 CREATE TABLE KeyArchiveIntegrity (
     Kai_Id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -206,6 +207,7 @@ COMMIT;
 -- SEEDS (idempotent)
 -- =========================
 BEGIN TRANSACTION;
+
 /* =========================================================
    Combo: account_types  (bucket for common account kinds)
    Used by CategoryItemAccounts.CIA_AccountType (optional)
@@ -267,35 +269,9 @@ WHERE NOT EXISTS (
   WHERE cd.ComboTypeId = ct.Id AND cd.Code = v.Code
 );
 
--- Ensure ComboType: category_types
-INSERT INTO ComboType (Code, Description, Active)
-SELECT 'category_types', 'Category Types', 1
-WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'category_types');
+/* NOTE: category_types removed – Category_Type now default 0 with no FK */
 
--- Ensure ComboDetail for category_types (UNION ALL pattern)
-WITH ct AS (SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'category_types'),
-vals AS (
-  SELECT 10  AS Seq, 'UTILITIES'     AS Code, 'Utilities'                 AS Description UNION ALL
-  SELECT 20,         'GOVERNMENT',            'Government'                           UNION ALL
-  SELECT 30,         'BANKS',                 'Banks / Credit Unions'                UNION ALL
-  SELECT 40,         'SHOPPING',              'Shopping & Retail'                    UNION ALL
-  SELECT 50,         'ENTERTAINMENT',         'Entertainment / Streaming'            UNION ALL
-  SELECT 60,         'HEALTHCARE',            'Healthcare & Medical'                 UNION ALL
-  SELECT 70,         'INSURANCE',             'Insurance'                            UNION ALL
-  SELECT 80,         'SOCIAL/CLOUD',          'Social / Messaging / CLOUD'           UNION ALL
-  SELECT 90,         'EMAIL',                 'Email & Identity'                     UNION ALL
-  SELECT 100,        'APP/FILE/FOLDER',       'Application / Encrypted File or Folder'       UNION ALL
-  SELECT 900,        'MISC',                  'Misc / Other'
-)
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT ct.Id, v.Seq, v.Code, v.Description, 1
-FROM ct CROSS JOIN vals v
-WHERE NOT EXISTS (
-  SELECT 1 FROM ComboDetail d
-  WHERE d.ComboTypeId = ct.Id AND d.Code = v.Code
-);
-
--- *** NEW in this revision: Ensure ComboType/ComboDetail for LOG FILTERS ***
+/* *** log_filters for Logs UI *** */
 
 -- Ensure ComboType: log_filters
 INSERT INTO ComboType (Code, Description, Active)
@@ -320,89 +296,61 @@ WHERE NOT EXISTS (
   WHERE d.ComboTypeId = ct.Id AND d.Code = v.Code
 );
 
--- Starter Categories (unchanged)
+-- Starter Categories (now independent of ComboDetail / category_types)
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Utilities', 'Bills and essential services', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'UTILITIES'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Utilities');
+SELECT 'Utilities', 'Bills and essential services', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Utilities');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Government', 'Government portals & services', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'GOVERNMENT'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Government');
+SELECT 'Government', 'Government portals & services', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Government');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Banks', 'Banks & credit unions', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'BANKS'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Banks');
+SELECT 'Banks', 'Banks & credit unions', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Banks');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Shopping', 'Retail & e-commerce', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'SHOPPING'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Shopping');
+SELECT 'Shopping', 'Retail & e-commerce', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Shopping');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Entertainment', 'Streaming & media', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'ENTERTAINMENT'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Entertainment');
+SELECT 'Entertainment', 'Streaming & media', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Entertainment');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Healthcare', 'Health & medical portals', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'HEALTHCARE'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Healthcare');
+SELECT 'Healthcare', 'Health & medical portals', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Healthcare');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Insurance', 'Insurance accounts', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'INSURANCE'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Insurance');
+SELECT 'Insurance', 'Insurance accounts', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Insurance');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Social', 'Social networks & messaging', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'SOCIAL'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Social');
+SELECT 'Social', 'Social networks & messaging', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Social');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Email', 'Email providers & identity', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'EMAIL'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Email');
+SELECT 'Email', 'Email providers & identity', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Email');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Cloud', 'Cloud & hosting', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'CLOUD'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Cloud');
+SELECT 'Cloud', 'Cloud & hosting', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Cloud');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Development', 'Dev tools & repos', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'DEVELOPMENT'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Development');
+SELECT 'Development', 'Dev tools & repos', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Development');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Education', 'Schools, courses, LMS', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'EDUCATION'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Education');
+SELECT 'Education', 'Schools, courses, LMS', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Education');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Travel', 'Airlines, hotels, transport', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'TRAVEL'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Travel');
+SELECT 'Travel', 'Airlines, hotels, transport', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Travel');
 
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
-SELECT 'Misc', 'Everything else', d.ComboDetailId, 1
-FROM ComboDetail d JOIN ComboType t ON t.ComboTypeId = d.ComboTypeId
-WHERE t.Code = 'category_types' AND d.Code = 'MISC'
-  AND NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Misc');
+SELECT 'Misc', 'Everything else', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Misc');
 
 COMMIT;
