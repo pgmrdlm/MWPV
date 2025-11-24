@@ -4,619 +4,307 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DesignHeight="360"
-             d:DesignWidth="900"
-             IsTabStop="False">
-
+             d:DesignHeight="300"
+             d:DesignWidth="900">
     <UserControl.Resources>
-        <!-- Local copy so the child is self-contained -->
-        <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
-            <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="4,0,0,0"/>
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="UseLayoutRounding" Value="True"/>
-            <Setter Property="Background" Value="{DynamicResource PrimaryNormalBrush}"/>
+
+        <!-- Pill buttons for Add/Update + Clear -->
+        <Style x:Key="BankCardPillButtonStyle" TargetType="Button">
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Padding" Value="14,4" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#CC008000" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd"
-                                CornerRadius="4"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
+                        <Border Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="14">
                             <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
+                                              VerticalAlignment="Center" />
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource PrimaryHoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource PrimaryPressedBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource DisabledBrush}"/>
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource DisabledForeground}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="BankCardPillButtonSecondaryStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource BankCardPillButtonStyle}">
+            <Setter Property="Background" Value="#FFE0E0E0" />
+            <Setter Property="Foreground" Value="Black" />
+        </Style>
+
+        <!-- Small green icon buttons for Edit/Delete -->
+        <Style x:Key="BankCardIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Margin" Value="2,0,0,0" />
+            <Setter Property="Foreground" Value="Black" />
+            <Setter Property="Background" Value="#FF90EE90" />
+            <Setter Property="BorderBrush" Value="#FF006400" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </UserControl.Resources>
 
-    <!-- We assume FilterComboStyle, Brush.Primary, ShadowStroke live in app-level resources -->
-    <Grid Margin="0"
-          Grid.IsSharedSizeScope="True">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <!-- bank header -->
-            <RowDefinition Height="Auto"/>
-            <!-- bank entry line -->
-            <RowDefinition Height="Auto"/>
-            <!-- bank list -->
-            <RowDefinition Height="16"/>
-            <!-- spacer -->
-            <RowDefinition Height="Auto"/>
-            <!-- account line -->
-            <RowDefinition Height="16"/>
-            <!-- spacer -->
-            <RowDefinition Height="Auto"/>
-            <!-- QA header -->
-            <RowDefinition Height="Auto"/>
-            <!-- QA add line -->
-            <RowDefinition Height="*"/>
-            <!-- QA list -->
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Bank section header -->
-        <TextBlock Grid.Row="0"
-                   Grid.Column="0"
-                   Grid.ColumnSpan="5"
-                   Text="Bank Cards / Accounts"
-                   FontWeight="Bold"
-                   Margin="0,0,0,8"/>
-
-        <!-- Bank card entry line (mostly copied from existing layout) -->
-        <Grid Grid.Row="1"
-              Grid.Column="0"
-              Grid.ColumnSpan="5">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol0"/>
-                <!-- type -->
-                <ColumnDefinition Width="2.4*" SharedSizeGroup="CardCol1"/>
-                <!-- number -->
-                <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol2"/>
-                <!-- exp -->
-                <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol3"/>
-                <!-- cvv -->
-                <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol4"/>
-                <!-- pin -->
-                <ColumnDefinition Width="Auto" SharedSizeGroup="CardCol5"/>
-                <!-- active -->
-                <ColumnDefinition Width="Auto"/>
-                <!-- actions -->
-            </Grid.ColumnDefinitions>
-
-            <TextBlock Grid.Row="0" Grid.Column="0"
-                       Text="Card Type"
-                       FontWeight="Bold"
-                       Margin="0,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="1"
-                       Text="Card Number"
-                       FontWeight="Bold"
-                       Margin="10,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="2"
-                       Text="Expiration Date"
-                       FontWeight="Bold"
-                       Margin="10,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="3"
-                       Text="CVV"
-                       FontWeight="Bold"
-                       Margin="10,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="4"
-                       Text="Card PIN"
-                       FontWeight="Bold"
-                       Margin="10,0,0,4"/>
-            <TextBlock Grid.Row="0" Grid.Column="5"
-                       Text="Active"
-                       FontWeight="Bold"
-                       Margin="10,0,0,4"/>
-
-            <ComboBox x:Name="cboCardType"
-                      Grid.Row="1" Grid.Column="0"
-                      Height="28"
-                      MinWidth="150"
-                      HorizontalAlignment="Left"
-                      Style="{StaticResource FilterComboStyle}"
-                      DisplayMemberPath="Description"
-                      SelectedValuePath="Code"/>
-
-            <TextBox x:Name="txtCardNumber"
-                     Grid.Row="1" Grid.Column="1"
-                     Margin="10,0,0,0"
-                     Height="28"
-                     MinWidth="150"
-                     HorizontalAlignment="Left"/>
-
-            <TextBox x:Name="txtExpDate"
-                     Grid.Row="1" Grid.Column="2"
-                     Margin="10,0,0,0"
-                     Height="28"
-                     Width="140"
-                     MaxLength="10"
-                     HorizontalAlignment="Left"/>
-
-            <Grid Grid.Row="1" Grid.Column="3"
-                  Margin="10,0,0,0"
-                  Height="28"
-                  HorizontalAlignment="Left">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0">
-                    <PasswordBox x:Name="txtCvv"
-                                 VerticalAlignment="Center"
-                                 Height="28"
-                                 Width="120"
-                                 MaxLength="6"
-                                 PasswordChanged="txtCvv_PasswordChanged"/>
-                    <TextBox x:Name="txtCvvPlain"
-                             VerticalAlignment="Center"
-                             Height="28"
-                             Width="120"
-                             IsReadOnly="True"
-                             IsHitTestVisible="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Visibility="Collapsed"
-                             Foreground="Black"/>
-                </Grid>
-
-                <Button x:Name="btnToggleCvvReveal"
-                        Grid.Column="1"
-                        Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show/Hide CVV"
-                        Click="BtnToggleCvvReveal_Click">
-                    <Viewbox Stretch="Uniform">
-                        <Grid Width="20" Height="20">
-                            <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
-                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
-                            <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Ellipse Width="3" Height="3" Fill="Black"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Viewbox>
-                </Button>
-            </Grid>
-
-            <Grid Grid.Row="1" Grid.Column="4"
-                  Margin="10,0,0,0"
-                  Height="28"
-                  HorizontalAlignment="Left">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0">
-                    <PasswordBox x:Name="txtCardPin"
-                                 VerticalAlignment="Center"
-                                 Height="28"
-                                 Width="120"
-                                 MaxLength="12"
-                                 PasswordChanged="txtCardPin_PasswordChanged"/>
-                    <TextBox x:Name="txtCardPinPlain"
-                             VerticalAlignment="Center"
-                             Height="28"
-                             Width="120"
-                             IsReadOnly="True"
-                             IsHitTestVisible="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Visibility="Collapsed"
-                             Foreground="Black"/>
-                </Grid>
-
-                <Button x:Name="btnToggleCardPinReveal"
-                        Grid.Column="1"
-                        Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show/Hide card PIN"
-                        Click="BtnToggleCardPinReveal_Click">
-                    <Viewbox Stretch="Uniform">
-                        <Grid Width="20" Height="20">
-                            <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
-                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
-                            <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Ellipse Width="3" Height="3" Fill="Black"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Viewbox>
-                </Button>
-            </Grid>
-
-            <!-- Active checkbox -->
-            <CheckBox x:Name="chkCardActive"
-                      Grid.Row="1" Grid.Column="5"
-                      Margin="10,0,0,0"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center"/>
-
-            <!-- Add / Clear -->
-            <Border Grid.Row="1" Grid.Column="6"
-                    Margin="8,0,0,0"
-                    Padding="8,2"
-                    CornerRadius="8"
-                    Background="{DynamicResource Brush.Primary}"
-                    VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="btnBankCardAdd"
-                            Style="{StaticResource SmallSquarePrimaryButton}"
-                            ToolTip="Add this card to the in-memory list"
-                            Click="btnBankCardAdd_Click">
-                        <TextBlock Text="+"
-                                   FontSize="16"
-                                   FontWeight="Bold"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"/>
-                    </Button>
-
-                    <Button x:Name="btnBankCardClear"
-                            Style="{StaticResource SmallSquarePrimaryButton}"
-                            Margin="8,0,0,0"
-                            ToolTip="Reset this card line"
-                            Click="btnBankCardClear_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   Text="&#xE895;"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   HorizontalAlignment="Center"/>
-                    </Button>
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <!-- Bank card display grid -->
-        <Border Grid.Row="2"
-                Grid.Column="0"
-                Grid.ColumnSpan="5"
-                Margin="0,6,0,0"
-                Padding="0"
-                BorderBrush="{DynamicResource ShadowStroke}"
-                BorderThickness="1"
-                CornerRadius="4"
-                Background="#FFFDF5E6"
-                MaxWidth="780"
-                HorizontalAlignment="Left">
-            <Grid>
+        <!-- ========== BANK CARDS / ACCOUNTS PANEL ========== -->
+        <GroupBox Grid.Row="0"
+                  Header="Bank Cards / Accounts"
+                  Margin="0,0,0,6">
+            <Grid Margin="6">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="1"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Header row shares same column groups -->
+                <!-- Entry row -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol0"/>
-                        <ColumnDefinition Width="2.4*" SharedSizeGroup="CardCol1"/>
-                        <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol2"/>
-                        <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol3"/>
-                        <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol4"/>
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="CardCol5"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="170" />
+                        <!-- Card type -->
+                        <ColumnDefinition Width="170" />
+                        <!-- Card number -->
+                        <ColumnDefinition Width="140" />
+                        <!-- Expiration -->
+                        <ColumnDefinition Width="110" />
+                        <!-- CVV -->
+                        <ColumnDefinition Width="140" />
+                        <!-- PIN -->
+                        <ColumnDefinition Width="70" />
+                        <!-- Active -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Update -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Clear -->
                     </Grid.ColumnDefinitions>
 
+                    <!-- Labels -->
                     <TextBlock Grid.Column="0"
                                Text="Card Type"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2"/>
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
                     <TextBlock Grid.Column="1"
                                Text="Card Number"
-                               FontWeight="Bold"
-                               Margin="10,0,0,2"/>
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
                     <TextBlock Grid.Column="2"
-                               Text="Expiration"
-                               FontWeight="Bold"
-                               Margin="10,0,0,2"/>
+                               Text="Expiration Date"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
                     <TextBlock Grid.Column="3"
                                Text="CVV"
-                               FontWeight="Bold"
-                               Margin="10,0,0,2"/>
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
                     <TextBlock Grid.Column="4"
-                               Text="PIN"
-                               FontWeight="Bold"
-                               Margin="10,0,0,2"/>
+                               Text="Card PIN"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
                     <TextBlock Grid.Column="5"
                                Text="Active"
-                               FontWeight="Bold"
-                               Margin="10,0,0,2"/>
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+
+                    <!-- Fields -->
+                    <ComboBox x:Name="CardTypeCombo"
+                              Grid.Column="0"
+                              Margin="0,20,6,0"
+                              ItemsSource="{Binding CardTypeItems,
+                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="DisplayText"
+                              SelectedValuePath="ComboDetailId"
+                              SelectedIndex="0" />
+
+                    <TextBox x:Name="CardNumberTextBox"
+                             Grid.Column="1"
+                             Margin="0,20,6,0" />
+
+                    <TextBox x:Name="ExpirationTextBox"
+                             Grid.Column="2"
+                             Margin="0,20,6,0"
+                             ToolTip="MM/YYYY or MM/YY" />
+
+                    <!-- CVV + PIN kept simple for now (PasswordBox + eye buttons can be wired later) -->
+                    <PasswordBox x:Name="CvvBox"
+                                 Grid.Column="3"
+                                 Margin="0,20,6,0" />
+
+                    <PasswordBox x:Name="PinBox"
+                                 Grid.Column="4"
+                                 Margin="0,20,6,0" />
+
+                    <CheckBox x:Name="ChkCardActive"
+                              Grid.Column="5"
+                              Margin="0,24,0,0"
+                              IsChecked="True"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Top" />
+
+                    <Button x:Name="BtnBankCardAddOrUpdate"
+                            Grid.Column="6"
+                            Margin="8,18,0,0"
+                            Content="Add"
+                            Style="{StaticResource BankCardPillButtonStyle}"
+                            Click="OnBankCardAddOrUpdateClick" />
+
+                    <Button x:Name="BtnBankCardClear"
+                            Grid.Column="7"
+                            Margin="6,18,0,0"
+                            Content="Clear"
+                            Style="{StaticResource BankCardPillButtonSecondaryStyle}"
+                            Click="OnBankCardClearClick" />
                 </Grid>
 
-                <Border Grid.Row="1"
-                        Margin="0,2,0,2"
-                        Background="{DynamicResource ShadowStroke}"
-                        Height="1"/>
+                <!-- Grid of cards -->
+                <DataGrid x:Name="BankCardGrid"
+                          Grid.Row="1"
+                          Margin="0,10,0,0"
+                          AutoGenerateColumns="False"
+                          HeadersVisibility="Column"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          ItemsSource="{Binding BankCardRows,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#FF800000" />
+                            <!-- maroon -->
+                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="FontWeight" Value="Bold" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
 
-                <Grid Grid.Row="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock x:Name="txtNoBankCardsPlaceholder"
-                               Grid.Row="0"
-                               Text="No bank cards added yet."
-                               FontStyle="Italic"
-                               Foreground="Gray"
-                               Margin="4,4,0,4"/>
-
-                    <ScrollViewer Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Height="96">
-                        <ItemsControl x:Name="icBankCards">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Vertical"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-
-                            <ItemsControl.ItemTemplate>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Card Type"
+                                            Binding="{Binding CardTypeDisplay}"
+                                            Width="*" />
+                        <DataGridTextColumn Header="Card Number"
+                                            Binding="{Binding CardNumberMasked}"
+                                            Width="150" />
+                        <DataGridTextColumn Header="Expiration"
+                                            Binding="{Binding Expiration}"
+                                            Width="120" />
+                        <DataGridTextColumn Header="CVV"
+                                            Binding="{Binding CvvMasked}"
+                                            Width="80" />
+                        <DataGridTextColumn Header="PIN"
+                                            Binding="{Binding PinMasked}"
+                                            Width="80" />
+                        <DataGridTemplateColumn Header="Active" Width="70">
+                            <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,2,0,2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol0"/>
-                                            <ColumnDefinition Width="2.4*" SharedSizeGroup="CardCol1"/>
-                                            <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol2"/>
-                                            <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol3"/>
-                                            <ColumnDefinition Width="2*"   SharedSizeGroup="CardCol4"/>
-                                            <ColumnDefinition Width="Auto" SharedSizeGroup="CardCol5"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding CardTypeDisplay}"/>
-                                        <TextBlock Grid.Column="1"
-                                                   Margin="10,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding CardNumberMasked}"/>
-                                        <TextBlock Grid.Column="2"
-                                                   Margin="10,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding ExpirationDisplay}"/>
-                                        <TextBlock Grid.Column="3"
-                                                   Margin="10,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding CvvMasked}"/>
-                                        <TextBlock Grid.Column="4"
-                                                   Margin="10,0,0,0"
-                                                   VerticalAlignment="Center"
-                                                   Text="{Binding PinMasked}"/>
-
-                                        <CheckBox Grid.Column="5"
-                                                  Margin="10,0,0,0"
-                                                  HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center"
-                                                  IsChecked="{Binding IsActive}"
-                                                  IsEnabled="False"/>
-
-                                        <StackPanel Grid.Column="6"
-                                                    Orientation="Horizontal"
-                                                    Margin="6,0,0,0"
-                                                    VerticalAlignment="Center">
-                                            <Button Style="{StaticResource SmallSquarePrimaryButton}"
-                                                    ToolTip="Edit this card"
-                                                    Click="btnBankCardRowEdit_Click">
-                                                <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                           Text="&#xE70F;"
-                                                           FontSize="14"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                            </Button>
-
-                                            <Button Style="{StaticResource SmallSquarePrimaryButton}"
-                                                    Margin="8,0,0,0"
-                                                    Background="#C62828"
-                                                    ToolTip="Remove this card"
-                                                    Click="btnBankCardRowDelete_Click">
-                                                <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                           Text="&#xE711;"
-                                                           FontSize="14"
-                                                           Foreground="White"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Center"/>
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
+                                    <CheckBox IsChecked="{Binding IsActive}"
+                                              IsHitTestVisible="False"
+                                              HorizontalAlignment="Center" />
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </Grid>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Edit / Delete -->
+                        <DataGridTemplateColumn Header="Edit" Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                            Tag="{Binding}"
+                                            Click="OnBankCardEditClick">
+                                        <TextBlock Text="✎" FontSize="12" />
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Header="Del" Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                            Tag="{Binding}"
+                                            Click="OnBankCardDeleteClick">
+                                        <TextBlock Text="✖" FontSize="12" />
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
             </Grid>
-        </Border>
+        </GroupBox>
 
-        <!-- Account line -->
-        <Grid Grid.Row="4"
-              Grid.Column="0"
-              Grid.ColumnSpan="5"
-              Margin="0,8,0,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+        <!-- ========== SIMPLE PLACEHOLDER FOR ACCOUNTS ========== -->
+        <Grid Grid.Row="1" Margin="0,4,0,4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Label Grid.Row="0" Grid.Column="0"
-                   Content="Account Name"
-                   FontWeight="Bold"/>
-            <Label Grid.Row="0" Grid.Column="1"
-                   Content="Account Number"
-                   FontWeight="Bold"/>
-            <Label Grid.Row="0" Grid.Column="2"
-                   Content="Account PIN (optional)"
-                   FontWeight="Bold"/>
+            <TextBlock Grid.Column="0"
+                       Text="Account Name"
+                       FontWeight="Bold" />
+            <TextBlock Grid.Column="1"
+                       Text="Account Number"
+                       FontWeight="Bold" />
+            <TextBlock Grid.Column="2"
+                       Text="Account PIN (optional)"
+                       FontWeight="Bold" />
 
-            <ComboBox x:Name="cboAccountName"
-                      Grid.Row="1" Grid.Column="0"
-                      Margin="0,4,0,0"
-                      Height="28"
-                      MinWidth="150"
-                      MaxWidth="220"
-                      HorizontalAlignment="Left"
-                      Style="{StaticResource FilterComboStyle}"/>
+            <ComboBox x:Name="AccountNameCombo"
+                      Grid.Column="0"
+                      Margin="0,20,6,0" />
 
-            <TextBox x:Name="txtAccountNumber"
-                     Grid.Row="1" Grid.Column="1"
-                     Margin="0,4,0,0"
-                     Height="28"
-                     Width="260"
-                     MaxLength="24"
-                     HorizontalAlignment="Left"/>
+            <TextBox x:Name="AccountNumberTextBox"
+                     Grid.Column="1"
+                     Margin="0,20,6,0" />
 
-            <PasswordBox x:Name="txtAccountPin"
-                         Grid.Row="1" Grid.Column="2"
-                         Margin="0,4,0,0"
-                         Height="28"
-                         Width="120"
-                         MaxLength="12"
-                         HorizontalAlignment="Left"/>
+            <TextBox x:Name="AccountPinTextBox"
+                     Grid.Column="2"
+                     Margin="0,20,0,0" />
         </Grid>
 
-        <!-- Security Q/A header -->
-        <StackPanel Grid.Row="6"
-                    Orientation="Horizontal"
-                    Margin="0,8,0,4">
-            <TextBlock Text="Security Questions / Answers"
-                       FontWeight="Bold"/>
-            <TextBlock x:Name="QaCountText"
-                       Margin="8,0,0,0"
-                       VerticalAlignment="Center"/>
-        </StackPanel>
-
-        <!-- Security Q/A add line -->
-        <Grid Grid.Row="7"
-              Margin="0,0,0,4">
+        <!-- ========== SIMPLE PLACEHOLDER FOR SECURITY Q/A ========== -->
+        <Grid Grid.Row="2" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="4*"/>
-                <ColumnDefinition Width="3*"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="100" />
             </Grid.ColumnDefinitions>
 
-            <TextBox x:Name="qaNewQuestion"
+            <TextBox x:Name="SecurityQuestionAnswerTextBox"
                      Grid.Column="0"
-                     Height="24"
-                     Margin="0,0,4,0"
-                     VerticalAlignment="Center"
-                     ToolTip="Security question"/>
+                     Margin="0,0,6,0"
+                     Height="26"
+                     VerticalContentAlignment="Center"
+                     Text="Security question / answer area to be wired later" />
 
-            <PasswordBox x:Name="qaNewAnswer"
-                         Grid.Column="1"
-                         Height="24"
-                         Margin="0,0,4,0"
-                         VerticalAlignment="Center"
-                         ToolTip="Answer (optional)"/>
-
-            <Button x:Name="qaAddButton"
-                    Grid.Column="2"
-                    Style="{StaticResource SmallSquarePrimaryButton}"
-                    Padding="4,0"
-                    Width="60"
-                    Height="24"
-                    VerticalAlignment="Center">
-                <TextBlock Text="Add"/>
-            </Button>
+            <Button Grid.Column="1"
+                    Content="Add"
+                    Style="{StaticResource BankCardPillButtonStyle}"
+                    HorizontalAlignment="Right" />
         </Grid>
-
-        <!-- Security Q/A list -->
-        <Border Grid.Row="8"
-                BorderBrush="{DynamicResource ShadowStroke}"
-                BorderThickness="1"
-                CornerRadius="4"
-                Padding="4">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="qaList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,2,0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="4*"/>
-                                    <ColumnDefinition Width="2*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding QuestionDisplay}"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Center"/>
-
-                                <TextBlock Grid.Column="1"
-                                           Margin="8,0,0,0"
-                                           Text="{Binding AnswerDisplay}"
-                                           VerticalAlignment="Center"/>
-
-                                <Button Grid.Column="2"
-                                        Margin="8,0,0,0"
-                                        Padding="4,0"
-                                        Style="{StaticResource SmallSquarePrimaryButton}">
-                                    <TextBlock Text="View"/>
-                                </Button>
-
-                                <Button Grid.Column="3"
-                                        Margin="4,0,0,0"
-                                        Padding="4,0"
-                                        Style="{StaticResource SmallSquarePrimaryButton}">
-                                    <TextBlock Text="Up"/>
-                                </Button>
-
-                                <Button Grid.Column="4"
-                                        Margin="4,0,0,0"
-                                        Padding="4,0"
-                                        Style="{StaticResource SmallSquarePrimaryButton}">
-                                    <TextBlock Text="Down"/>
-                                </Button>
-
-                                <Button Grid.Column="5"
-                                        Margin="4,0,0,0"
-                                        Padding="4,0"
-                                        Style="{StaticResource SmallSquarePrimaryButton}">
-                                    <TextBlock Text="Delete"/>
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Border>
     </Grid>
 </UserControl>
