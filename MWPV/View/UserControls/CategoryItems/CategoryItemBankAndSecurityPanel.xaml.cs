@@ -2,33 +2,31 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using MWPV.Models;
 using MWPV.Services;
 
 namespace MWPV.View.UserControls.CategoryItems
 {
     public partial class CategoryItemBankAndSecurityPanel : UserControl
     {
-        // In-memory collection of card rows for this item.
+        // Cards
         private readonly ObservableCollection<BankCardRow> _bankCardRows = new();
         private readonly ObservableCollection<CardTypeItem> _cardTypeItems = new();
-
-        // Currently edited row (null means "Add" mode).
         private BankCardRow? _editingRow;
 
-        // Mode flag: parent should set this to false when editing an existing Category Item.
-        public bool IsNewCategoryItem { get; set; } = true;
-
-        // Default background cache for restoring after validation.
-        private readonly Brush _defaultInputBackground = SystemColors.WindowBrush;
+        // Accounts
+        private readonly ObservableCollection<AccountRow> _accountRows = new();
+        private readonly ObservableCollection<AccountTypeItem> _accountTypeItems = new();
+        private AccountRow? _editingAccountRow;
 
         public ObservableCollection<BankCardRow> BankCardRows => _bankCardRows;
         public ObservableCollection<CardTypeItem> CardTypeItems => _cardTypeItems;
+
+        public ObservableCollection<AccountRow> AccountRows => _accountRows;
+        public ObservableCollection<AccountTypeItem> AccountTypeItems => _accountTypeItems;
 
         public CategoryItemBankAndSecurityPanel()
         {
@@ -38,6 +36,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             Debug.WriteLine("[BANK-PANEL] Loaded");
             LoadBankCardTypes();
+            LoadAccountTypes();
         }
 
         private void LoadBankCardTypes()
@@ -79,183 +78,98 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
-        // ======== Button handlers ========
+        private void LoadAccountTypes()
+        {
+            try
+            {
+                const int comboTypeId = 1; // account_types
+                Debug.WriteLine($"[BANK-PANEL][ACCOUNTS] Loading account types for ComboTypeId='{comboTypeId}'");
+
+                _accountTypeItems.Clear();
+
+                var dbTypes = ComboDetailService.GetByTypeId(comboTypeId);
+
+                foreach (var t in dbTypes.OrderBy(t => t.Seq))
+                {
+                    if (string.IsNullOrWhiteSpace(t.Code))
+                        continue;
+
+                    _accountTypeItems.Add(new AccountTypeItem
+                    {
+                        ComboDetailId = t.ComboDet,
+                        Code = t.Code,
+                        Description = string.IsNullOrWhiteSpace(t.Description)
+                            ? t.Code
+                            : t.Description
+                    });
+                }
+
+                Debug.WriteLine($"[BANK-PANEL][ACCOUNTS] Loaded {_accountTypeItems.Count} account types.");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[BANK-PANEL][ACCOUNTS][ERROR] {ex}");
+                MessageBox.Show(
+                    "Unable to load account types. Account entry will be disabled for this session.",
+                    "Accounts",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        // ====================================================================
+        // CARDS - Button handlers
+        // ====================================================================
 
         private void OnBankCardAddOrUpdateClick(object sender, RoutedEventArgs e)
         {
-            ClearValidationHighlights();
+            ClearBankCardError();
+
+            // Full validation pass
+            if (!ValidateBankCardFields(showErrors: true))
+            {
+                return;
+            }
 
             var selection = CardTypeCombo.SelectedItem as CardTypeItem;
-            string cardNumberRaw = (CardNumberTextBox.Text ?? string.Empty).Trim();
-            string expirationRaw = (ExpirationTextBox.Text ?? string.Empty).Trim();
-            string cvvRaw = CvvBox.Password ?? string.Empty;
-            string pinRaw = PinBox.Password ?? string.Empty;
-            bool isActive = ChkCardActive.IsChecked == true;
-
-            bool hasError = false;
-            Control? firstInvalid = null;
-            string errorMessage = string.Empty;
-
-            // Helper to mark a control invalid and capture first one.
-            void MarkInvalid(Control control, string message)
-            {
-                if (!hasError)
-                {
-                    hasError = true;
-                    errorMessage = message;
-                }
-
-                control.Background = Brushes.LightCoral;
-
-                if (firstInvalid == null)
-                    firstInvalid = control;
-            }
-
-            // 1) Card type required
             if (selection == null)
             {
-                MarkInvalid(CardTypeCombo, "Please choose a card type.");
-            }
-
-            // 2) Card number: digits + spaces only, 12–19 digits, required
-            string normalizedCardDigits = NormalizeDigits(cardNumberRaw);
-            bool cardHasInvalidChars = cardNumberRaw.Any(c => !char.IsDigit(c) && !char.IsWhiteSpace(c));
-
-            if (string.IsNullOrWhiteSpace(cardNumberRaw))
-            {
-                MarkInvalid(CardNumberTextBox, "Card number is required.");
-            }
-            else if (cardHasInvalidChars)
-            {
-                MarkInvalid(CardNumberTextBox, "Card number must contain digits and spaces only.");
-            }
-            else if (normalizedCardDigits.Length < 12 || normalizedCardDigits.Length > 19)
-            {
-                MarkInvalid(CardNumberTextBox, "Card number must be 12–19 digits.");
-            }
-
-            // 3) Expiration: required, MM/YY or MM/YYYY, not in the past
-            string expirationCanonical = string.Empty;
-            if (string.IsNullOrWhiteSpace(expirationRaw))
-            {
-                MarkInvalid(ExpirationTextBox, "Expiration date is required.");
-            }
-            else
-            {
-                if (!TryParseExpiration(expirationRaw, out int expYear, out int expMonth, out expirationCanonical, out string expError))
-                {
-                    MarkInvalid(ExpirationTextBox, expError);
-                }
-                else
-                {
-                    var now = DateTime.UtcNow;
-                    var currentMonth = new DateTime(now.Year, now.Month, 1);
-                    var expMonthDate = new DateTime(expYear, expMonth, 1);
-
-                    if (expMonthDate < currentMonth)
-                    {
-                        MarkInvalid(ExpirationTextBox, "Expiration date must be this month or later.");
-                    }
-                }
-            }
-
-            // 4) CVV: optional, if provided 3–4 digits
-            if (!string.IsNullOrWhiteSpace(cvvRaw))
-            {
-                if (!cvvRaw.All(char.IsDigit))
-                {
-                    MarkInvalid(CvvBox, "CVV must be numeric.");
-                }
-                else if (cvvRaw.Length < 3 || cvvRaw.Length > 4)
-                {
-                    MarkInvalid(CvvBox, "CVV must be 3–4 digits.");
-                }
-            }
-
-            // 5) PIN: optional, if provided 4–8 digits
-            if (!string.IsNullOrWhiteSpace(pinRaw))
-            {
-                if (!pinRaw.All(char.IsDigit))
-                {
-                    MarkInvalid(PinBox, "PIN must be numeric.");
-                }
-                else if (pinRaw.Length < 4 || pinRaw.Length > 8)
-                {
-                    MarkInvalid(PinBox, "PIN must be 4–8 digits.");
-                }
-            }
-
-            // If any basic field errors, stop here.
-            if (hasError)
-            {
-                BankCardErrorTextBlock.Text = errorMessage;
-                firstInvalid?.Focus();
+                ShowBankCardError("Please choose a card type.", CardTypeCombo);
                 return;
             }
 
-            // At this point, selection and parsing are safe to use.
-            int cardTypeId = selection!.ComboDetailId;
+            string cardNumber = (CardNumberTextBox.Text ?? "").Trim();
+            string expirationInput = (ExpirationTextBox.Text ?? "").Trim();
+            string cvv = CvvBox.Password ?? string.Empty;
+            string pin = PinBox.Password ?? string.Empty;
+            bool isActive = ChkCardActive.IsChecked == true;
 
-            // 6) Duplicate rules
-            var candidates = _bankCardRows.Where(r => !ReferenceEquals(r, _editingRow)).ToList();
-
-            // 6a) Exact duplicate of (CardType, CardNumber, Expiration)
-            bool duplicateExact = candidates.Any(r =>
-                r.CardTypeId == cardTypeId &&
-                string.Equals(NormalizeDigits(r.CardNumberRaw), normalizedCardDigits, StringComparison.Ordinal) &&
-                string.Equals(CanonicalizeExpiration(r.Expiration), expirationCanonical, StringComparison.Ordinal));
-
-            if (duplicateExact)
+            // We already validated, so this should succeed. We re-run to get the normalized value.
+            if (!TryValidateExpiration(expirationInput, out string expNormalized, out _))
             {
-                MarkInvalid(CardTypeCombo, "This card is already listed for this item.");
-                MarkInvalid(CardNumberTextBox, "This card is already listed for this item.");
-                MarkInvalid(ExpirationTextBox, "This card is already listed for this item.");
-            }
-
-            // 6b) CardType duplication rules
-            if (IsNewCategoryItem)
-            {
-                // New Category Item: no duplicate CardType at all.
-                bool duplicateType = candidates.Any(r => r.CardTypeId == cardTypeId);
-                if (duplicateType)
-                {
-                    MarkInvalid(CardTypeCombo, "Only one card of each type is allowed when creating a new item.");
-                }
-            }
-            else
-            {
-                // Editing existing: at most one active row per CardType.
-                if (isActive)
-                {
-                    bool otherActive = candidates.Any(r => r.CardTypeId == cardTypeId && r.IsActive);
-                    if (otherActive)
-                    {
-                        MarkInvalid(CardTypeCombo, "Only one active card of this type is allowed; mark the old card inactive first.");
-                    }
-                }
-            }
-
-            if (hasError)
-            {
-                BankCardErrorTextBlock.Text = errorMessage;
-                firstInvalid?.Focus();
+                ShowBankCardError("Expiration date is invalid.", ExpirationTextBox);
                 return;
             }
-
-            // ======== No validation errors: proceed with Add/Update ========
 
             if (_editingRow == null)
             {
-                // Add mode
+                // When creating a new item: only one card per type
+                bool duplicateType = _bankCardRows.Any(r => r.CardTypeId == selection.ComboDetailId);
+                if (duplicateType)
+                {
+                    ShowBankCardError("Only one card of each type is allowed when creating a new item.", CardTypeCombo);
+                    return;
+                }
+
                 var row = new BankCardRow
                 {
                     Id = 0,
-                    CardTypeId = cardTypeId,
+                    CardTypeId = selection.ComboDetailId,
                     CardTypeDisplay = selection.DisplayText,
-                    CardNumberRaw = cardNumberRaw,
-                    Expiration = expirationRaw,
-                    CvvRaw = cvvRaw,
-                    PinRaw = pinRaw,
+                    CardNumberRaw = cardNumber,
+                    Expiration = expNormalized,
+                    CvvRaw = cvv,
+                    PinRaw = pin,
                     IsActive = isActive
                 };
 
@@ -263,25 +177,28 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             else
             {
-                // Update existing row
-                _editingRow.CardTypeId = cardTypeId;
+                _editingRow.CardTypeId = selection.ComboDetailId;
                 _editingRow.CardTypeDisplay = selection.DisplayText;
-                _editingRow.CardNumberRaw = cardNumberRaw;
-                _editingRow.Expiration = expirationRaw;
-                _editingRow.CvvRaw = cvvRaw;
-                _editingRow.PinRaw = pinRaw;
+                _editingRow.CardNumberRaw = cardNumber;
+                _editingRow.Expiration = expNormalized;
+                _editingRow.CvvRaw = cvv;
+                _editingRow.PinRaw = pin;
                 _editingRow.IsActive = isActive;
             }
 
-            BankCardErrorTextBlock.Text = string.Empty;
             ClearEntryFields();
         }
 
         private void OnBankCardClearClick(object sender, RoutedEventArgs e)
         {
+            ClearBankCardError();
             ClearEntryFields();
-            ClearValidationHighlights();
-            BankCardErrorTextBlock.Text = string.Empty;
+        }
+
+        private void OnBankCardFieldLostFocus(object sender, RoutedEventArgs e)
+        {
+            // Re-run validation on field exit so errors move/clear as the user fixes things.
+            ValidateBankCardFields(showErrors: true);
         }
 
         private void ClearEntryFields()
@@ -298,15 +215,15 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 BtnBankCardAddOrUpdate.Content = "Add";
             }
+
+            ClearBankCardError();
+            ResetBankCardFieldBackgrounds();
         }
 
         private void OnBankCardEditClick(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not BankCardRow row)
                 return;
-
-            ClearValidationHighlights();
-            BankCardErrorTextBlock.Text = string.Empty;
 
             _editingRow = row;
 
@@ -324,6 +241,9 @@ namespace MWPV.View.UserControls.CategoryItems
             ChkCardActive.IsChecked = row.IsActive;
 
             BtnBankCardAddOrUpdate.Content = "Update";
+
+            ClearBankCardError();
+            ResetBankCardFieldBackgrounds();
         }
 
         private void OnBankCardDeleteClick(object sender, RoutedEventArgs e)
@@ -343,97 +263,367 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_editingRow == row)
             {
                 ClearEntryFields();
-                ClearValidationHighlights();
-                BankCardErrorTextBlock.Text = string.Empty;
             }
 
             _bankCardRows.Remove(row);
         }
 
-        // ======== Validation helpers ========
+        // ====================================================================
+        // CARDS - Validation helpers
+        // ====================================================================
 
-        private void ClearValidationHighlights()
+        private bool ValidateBankCardFields(bool showErrors)
         {
-            CardTypeCombo.Background = _defaultInputBackground;
-            CardNumberTextBox.Background = _defaultInputBackground;
-            ExpirationTextBox.Background = _defaultInputBackground;
-            CvvBox.Background = _defaultInputBackground;
-            PinBox.Background = _defaultInputBackground;
+            if (showErrors)
+            {
+                ResetBankCardFieldBackgrounds();
+            }
+
+            var selection = CardTypeCombo.SelectedItem as CardTypeItem;
+            string cardNumber = (CardNumberTextBox.Text ?? "").Trim();
+            string expiration = (ExpirationTextBox.Text ?? "").Trim();
+            string cvv = CvvBox.Password ?? string.Empty;
+            string pin = PinBox.Password ?? string.Empty;
+
+            if (selection == null)
+            {
+                if (showErrors)
+                    ShowBankCardError("Please choose a card type.", CardTypeCombo);
+                return false;
+            }
+
+            if (!TryValidateCardNumber(cardNumber, out string cardError))
+            {
+                if (showErrors)
+                    ShowBankCardError(cardError, CardNumberTextBox);
+                return false;
+            }
+
+            if (!TryValidateExpiration(expiration, out _, out string expError))
+            {
+                if (showErrors)
+                    ShowBankCardError(expError, ExpirationTextBox);
+                return false;
+            }
+
+            if (!TryValidateCvv(cvv, out string cvvError))
+            {
+                if (showErrors)
+                    ShowBankCardError(cvvError, CvvBox);
+                return false;
+            }
+
+            if (!TryValidateCardPin(pin, out string pinError))
+            {
+                if (showErrors)
+                    ShowBankCardError(pinError, PinBox);
+                return false;
+            }
+
+            if (showErrors)
+            {
+                ClearBankCardError();
+            }
+
+            return true;
         }
 
-        private static string NormalizeDigits(string value)
+        private static bool TryValidateCardNumber(string cardNumber, out string errorMessage)
         {
-            if (string.IsNullOrEmpty(value))
-                return string.Empty;
+            if (string.IsNullOrWhiteSpace(cardNumber))
+            {
+                errorMessage = "Card number is required.";
+                return false;
+            }
 
-            return new string(value.Where(char.IsDigit).ToArray());
+            var digitsAndSpaces = new string(cardNumber.Where(c => char.IsDigit(c) || c == ' ').ToArray());
+            if (!string.Equals(cardNumber, digitsAndSpaces, StringComparison.Ordinal))
+            {
+                errorMessage = "Card number must contain digits and spaces only.";
+                return false;
+            }
+
+            var onlyDigits = new string(cardNumber.Where(char.IsDigit).ToArray());
+            if (onlyDigits.Length < 12 || onlyDigits.Length > 19)
+            {
+                errorMessage = "Card number must be between 12 and 19 digits.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
         }
 
-        private static bool TryParseExpiration(
-            string input,
-            out int year,
-            out int month,
-            out string canonical,
-            out string errorMessage)
+        private static bool TryValidateCvv(string cvv, out string errorMessage)
         {
-            year = 0;
-            month = 0;
-            canonical = string.Empty;
+            if (string.IsNullOrWhiteSpace(cvv))
+            {
+                // optional
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            if (!cvv.All(char.IsDigit) || cvv.Length < 3 || cvv.Length > 4)
+            {
+                errorMessage = "CVV must be 3–4 digits.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidateCardPin(string pin, out string errorMessage)
+        {
+            if (string.IsNullOrWhiteSpace(pin))
+            {
+                // optional
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 12)
+            {
+                errorMessage = "PIN must be 4–12 digits.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidateExpiration(string input, out string normalized, out string errorMessage)
+        {
+            normalized = string.Empty;
             errorMessage = string.Empty;
 
-            if (string.IsNullOrWhiteSpace(input))
+            input = input.Trim();
+            if (string.IsNullOrEmpty(input))
             {
                 errorMessage = "Expiration date is required.";
                 return false;
             }
 
-            string trimmed = input.Trim();
-            string[] parts = trimmed.Split('/');
-
+            string[] parts = input.Split('/', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != 2)
             {
                 errorMessage = "Expiration must be in MM/YY or MM/YYYY format.";
                 return false;
             }
 
-            if (!int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out month) ||
-                month < 1 || month > 12)
+            if (!int.TryParse(parts[0], out int month) || month < 1 || month > 12)
             {
-                errorMessage = "Month must be between 01 and 12.";
+                errorMessage = "Expiration month must be between 01 and 12.";
                 return false;
             }
 
-            if (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out year))
+            if (!int.TryParse(parts[1], out int year))
             {
-                errorMessage = "Year is invalid.";
+                errorMessage = "Expiration year is invalid.";
                 return false;
             }
 
-            // Convert 2-digit year to 2000–2099 range.
             if (year < 100)
             {
                 year += 2000;
             }
 
-            if (year < 2000 || year > 2099)
+            var lastDayOfMonth = DateTime.DaysInMonth(year, month);
+            var expirationDate = new DateTime(year, month, lastDayOfMonth);
+
+            if (expirationDate < DateTime.Today)
             {
-                errorMessage = "Year is out of valid range.";
+                errorMessage = "Expiration date must be this month or later.";
                 return false;
             }
 
-            canonical = $"{year:D4}-{month:D2}";
+            normalized = $"{month:00}/{year}";
             return true;
         }
 
-        private static string CanonicalizeExpiration(string input)
+        private void ShowBankCardError(string message, Control? field = null)
         {
-            if (TryParseExpiration(input, out int y, out int m, out var canonical, out _))
-                return canonical;
+            BankCardErrorTextBlock.Text = message;
 
-            return string.Empty;
+            if (field != null)
+            {
+                field.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x99)); // light red
+            }
         }
 
-        // ======== Helper DTOs ========
+        private void ClearBankCardError()
+        {
+            BankCardErrorTextBlock.Text = string.Empty;
+            ResetBankCardFieldBackgrounds();
+        }
+
+        private void ResetBankCardFieldBackgrounds()
+        {
+            CardNumberTextBox.ClearValue(BackgroundProperty);
+            ExpirationTextBox.ClearValue(BackgroundProperty);
+            CvvBox.ClearValue(BackgroundProperty);
+            PinBox.ClearValue(BackgroundProperty);
+            CardTypeCombo.ClearValue(BackgroundProperty);
+        }
+
+        // ====================================================================
+        // ACCOUNTS - handlers & helpers (unchanged from last version)
+        // ====================================================================
+
+        private void OnAccountAddOrUpdateClick(object sender, RoutedEventArgs e)
+        {
+            ClearAccountError();
+
+            var selection = AccountNameCombo.SelectedItem as AccountTypeItem;
+            if (selection == null)
+            {
+                ShowAccountError("Please choose an account name.", AccountNameCombo);
+                return;
+            }
+
+            string accountNumber = (AccountNumberTextBox.Text ?? "").Trim();
+            string pin = AccountPinBox.Password ?? string.Empty;
+            bool isActive = ChkAccountActive.IsChecked == true;
+
+            if (string.IsNullOrWhiteSpace(accountNumber))
+            {
+                ShowAccountError("Account number is required.", AccountNumberTextBox);
+                return;
+            }
+
+            var validChars = new string(accountNumber.Where(c => char.IsDigit(c) || c == ' ').ToArray());
+            if (!string.Equals(validChars, accountNumber, StringComparison.Ordinal))
+            {
+                ShowAccountError("Account number must contain digits and spaces only.", AccountNumberTextBox);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(pin))
+            {
+                if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 12)
+                {
+                    ShowAccountError("Account PIN must be 4–12 digits.", AccountPinBox);
+                    return;
+                }
+            }
+
+            if (_editingAccountRow == null)
+            {
+                var row = new AccountRow
+                {
+                    Id = 0,
+                    AccountTypeId = selection.ComboDetailId,
+                    AccountTypeDisplay = selection.DisplayText,
+                    AccountNumberRaw = accountNumber,
+                    PinRaw = pin,
+                    IsActive = isActive
+                };
+
+                _accountRows.Add(row);
+            }
+            else
+            {
+                _editingAccountRow.AccountTypeId = selection.ComboDetailId;
+                _editingAccountRow.AccountTypeDisplay = selection.DisplayText;
+                _editingAccountRow.AccountNumberRaw = accountNumber;
+                _editingAccountRow.PinRaw = pin;
+                _editingAccountRow.IsActive = isActive;
+            }
+
+            ClearAccountEntryFields();
+        }
+
+        private void OnAccountClearClick(object sender, RoutedEventArgs e)
+        {
+            ClearAccountError();
+            ClearAccountEntryFields();
+        }
+
+        private void OnAccountEditClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not AccountRow row)
+                return;
+
+            _editingAccountRow = row;
+
+            var acctType = _accountTypeItems.FirstOrDefault(a => a.ComboDetailId == row.AccountTypeId);
+            if (acctType != null)
+            {
+                AccountNameCombo.SelectedItem = acctType;
+            }
+
+            AccountNumberTextBox.Text = row.AccountNumberRaw;
+            AccountPinBox.Password = row.PinRaw;
+            ChkAccountActive.IsChecked = row.IsActive;
+
+            BtnAccountAddOrUpdate.Content = "Update";
+
+            ClearAccountError();
+            ResetAccountFieldBackgrounds();
+        }
+
+        private void OnAccountDeleteClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not AccountRow row)
+                return;
+
+            if (MessageBox.Show("Remove this account from the list?",
+                                "Accounts",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Question,
+                                MessageBoxResult.No) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            if (_editingAccountRow == row)
+            {
+                ClearAccountEntryFields();
+            }
+
+            _accountRows.Remove(row);
+        }
+
+        private void ClearAccountEntryFields()
+        {
+            AccountNameCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
+            AccountNumberTextBox.Text = string.Empty;
+            AccountPinBox.Password = string.Empty;
+            ChkAccountActive.IsChecked = true;
+
+            _editingAccountRow = null;
+            BtnAccountAddOrUpdate.Content = "Add";
+
+            ClearAccountError();
+            ResetAccountFieldBackgrounds();
+        }
+
+        private void ShowAccountError(string message, Control? field = null)
+        {
+            AccountErrorTextBlock.Text = message;
+
+            if (field != null)
+            {
+                field.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x99));
+            }
+        }
+
+        private void ClearAccountError()
+        {
+            AccountErrorTextBlock.Text = string.Empty;
+            ResetAccountFieldBackgrounds();
+        }
+
+        private void ResetAccountFieldBackgrounds()
+        {
+            AccountNameCombo.ClearValue(BackgroundProperty);
+            AccountNumberTextBox.ClearValue(BackgroundProperty);
+            AccountPinBox.ClearValue(BackgroundProperty);
+        }
+
+        // ====================================================================
+        // DTOs
+        // ====================================================================
 
         public sealed class CardTypeItem
         {
@@ -445,14 +635,19 @@ namespace MWPV.View.UserControls.CategoryItems
                 string.IsNullOrWhiteSpace(Description) ? Code : Description;
         }
 
-        /// <summary>
-        /// Lightweight in-memory representation of a bank card row for the grid.
-        /// We keep raw values so we can later convert these into the encrypted
-        /// BankCard model when the parent window saves.
-        /// </summary>
+        public sealed class AccountTypeItem
+        {
+            public int ComboDetailId { get; set; }
+            public string Code { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+
+            public string DisplayText =>
+                string.IsNullOrWhiteSpace(Description) ? Code : Description;
+        }
+
         public sealed class BankCardRow : INotifyPropertyChanged
         {
-            public int Id { get; set; }  // 0 = new, not yet persisted
+            public int Id { get; set; }
 
             private int _cardTypeId;
             public int CardTypeId
@@ -472,15 +667,7 @@ namespace MWPV.View.UserControls.CategoryItems
             public string CardNumberRaw
             {
                 get => _cardNumberRaw;
-                set
-                {
-                    if (_cardNumberRaw != value)
-                    {
-                        _cardNumberRaw = value ?? string.Empty;
-                        OnPropertyChanged(nameof(CardNumberRaw));
-                        OnPropertyChanged(nameof(CardNumberMasked));
-                    }
-                }
+                set { if (_cardNumberRaw != value) { _cardNumberRaw = value ?? string.Empty; OnPropertyChanged(nameof(CardNumberRaw)); OnPropertyChanged(nameof(CardNumberMasked)); } }
             }
 
             public string CardNumberMasked
@@ -502,29 +689,14 @@ namespace MWPV.View.UserControls.CategoryItems
             public string Expiration
             {
                 get => _expiration;
-                set
-                {
-                    if (_expiration != value)
-                    {
-                        _expiration = value ?? string.Empty;
-                        OnPropertyChanged(nameof(Expiration));
-                    }
-                }
+                set { if (_expiration != value) { _expiration = value ?? string.Empty; OnPropertyChanged(nameof(Expiration)); } }
             }
 
             private string _cvvRaw = string.Empty;
             public string CvvRaw
             {
                 get => _cvvRaw;
-                set
-                {
-                    if (_cvvRaw != value)
-                    {
-                        _cvvRaw = value ?? string.Empty;
-                        OnPropertyChanged(nameof(CvvRaw));
-                        OnPropertyChanged(nameof(CvvMasked));
-                    }
-                }
+                set { if (_cvvRaw != value) { _cvvRaw = value ?? string.Empty; OnPropertyChanged(nameof(CvvRaw)); OnPropertyChanged(nameof(CvvMasked)); } }
             }
 
             public string CvvMasked => string.IsNullOrEmpty(_cvvRaw) ? string.Empty : "•••";
@@ -533,15 +705,7 @@ namespace MWPV.View.UserControls.CategoryItems
             public string PinRaw
             {
                 get => _pinRaw;
-                set
-                {
-                    if (_pinRaw != value)
-                    {
-                        _pinRaw = value ?? string.Empty;
-                        OnPropertyChanged(nameof(PinRaw));
-                        OnPropertyChanged(nameof(PinMasked));
-                    }
-                }
+                set { if (_pinRaw != value) { _pinRaw = value ?? string.Empty; OnPropertyChanged(nameof(PinRaw)); OnPropertyChanged(nameof(PinMasked)); } }
             }
 
             public string PinMasked => string.IsNullOrEmpty(_pinRaw) ? string.Empty : "•••";
@@ -550,14 +714,68 @@ namespace MWPV.View.UserControls.CategoryItems
             public bool IsActive
             {
                 get => _isActive;
-                set
+                set { if (_isActive != value) { _isActive = value; OnPropertyChanged(nameof(IsActive)); } }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            private void OnPropertyChanged(string propertyName) =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public sealed class AccountRow : INotifyPropertyChanged
+        {
+            public int Id { get; set; }
+
+            private int _accountTypeId;
+            public int AccountTypeId
+            {
+                get => _accountTypeId;
+                set { if (_accountTypeId != value) { _accountTypeId = value; OnPropertyChanged(nameof(AccountTypeId)); } }
+            }
+
+            private string _accountTypeDisplay = string.Empty;
+            public string AccountTypeDisplay
+            {
+                get => _accountTypeDisplay;
+                set { if (_accountTypeDisplay != value) { _accountTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(AccountTypeDisplay)); } }
+            }
+
+            private string _accountNumberRaw = string.Empty;
+            public string AccountNumberRaw
+            {
+                get => _accountNumberRaw;
+                set { if (_accountNumberRaw != value) { _accountNumberRaw = value ?? string.Empty; OnPropertyChanged(nameof(AccountNumberRaw)); OnPropertyChanged(nameof(AccountNumberMasked)); } }
+            }
+
+            public string AccountNumberMasked
+            {
+                get
                 {
-                    if (_isActive != value)
-                    {
-                        _isActive = value;
-                        OnPropertyChanged(nameof(IsActive));
-                    }
+                    if (string.IsNullOrWhiteSpace(_accountNumberRaw))
+                        return string.Empty;
+
+                    var digits = new string(_accountNumberRaw.Where(char.IsDigit).ToArray());
+                    if (digits.Length <= 4)
+                        return "•••• " + digits;
+
+                    return "•••• " + digits[^4..];
                 }
+            }
+
+            private string _pinRaw = string.Empty;
+            public string PinRaw
+            {
+                get => _pinRaw;
+                set { if (_pinRaw != value) { _pinRaw = value ?? string.Empty; OnPropertyChanged(nameof(PinRaw)); OnPropertyChanged(nameof(PinMasked)); } }
+            }
+
+            public string PinMasked => string.IsNullOrEmpty(_pinRaw) ? string.Empty : "•••";
+
+            private bool _isActive = true;
+            public bool IsActive
+            {
+                get => _isActive;
+                set { if (_isActive != value) { _isActive = value; OnPropertyChanged(nameof(IsActive)); } }
             }
 
             public event PropertyChangedEventHandler? PropertyChanged;
