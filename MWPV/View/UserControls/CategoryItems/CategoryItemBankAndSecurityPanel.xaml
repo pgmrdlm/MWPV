@@ -121,22 +121,26 @@
                     <TextBox x:Name="CardNumberTextBox"
                              Grid.Column="1"
                              Margin="0,20,6,0"
+                             MaxLength="23"                             
                              LostFocus="OnBankCardFieldLostFocus" />
 
                     <TextBox x:Name="ExpirationTextBox"
                              Grid.Column="2"
                              Margin="0,20,6,0"
-                             ToolTip="MM/YYYY or MM/YY"
+                            ToolTip="MM/YYYY"
+                            MaxLength="7"
                              LostFocus="OnBankCardFieldLostFocus" />
 
                     <PasswordBox x:Name="CvvBox"
                                  Grid.Column="3"
                                  Margin="0,20,6,0"
+                                  MaxLength="4"
                                  LostFocus="OnBankCardFieldLostFocus" />
 
                     <PasswordBox x:Name="PinBox"
                                  Grid.Column="4"
                                  Margin="0,20,6,0"
+                                 MaxLength="6"
                                  LostFocus="OnBankCardFieldLostFocus" />
 
                     <CheckBox x:Name="ChkCardActive"
