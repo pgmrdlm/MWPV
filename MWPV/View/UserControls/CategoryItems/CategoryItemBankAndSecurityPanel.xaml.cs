@@ -380,12 +380,14 @@ namespace MWPV.View.UserControls.CategoryItems
             if (sender is not Button btn || btn.Tag is not BankCardRow row)
                 return;
 
-            if (MessageBox.Show("Remove this card from the list?",
-                                "Bank Cards",
-                                MessageBoxButton.YesNo,
-                                MessageBoxImage.Question,
-                                MessageBoxResult.No) != MessageBoxResult.Yes)
+            ClearBankCardError();
+
+            // Only allow delete for NEW rows (Id == 0). Existing DB rows: no delete here.
+            if (row.Id != 0)
             {
+                // Optional: inline message instead of popup
+                ShowBankCardError(
+                    "Existing cards can't be deleted here. Edit the card or mark it inactive instead.");
                 return;
             }
 
@@ -396,6 +398,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _bankCardRows.Remove(row);
         }
+
 
         // ====================================================================
         // CARDS - Validation helpers
