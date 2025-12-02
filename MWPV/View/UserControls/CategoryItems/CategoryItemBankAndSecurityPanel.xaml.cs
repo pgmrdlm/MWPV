@@ -17,6 +17,10 @@ namespace MWPV.View.UserControls.CategoryItems
         private readonly ObservableCollection<CardTypeItem> _cardTypeItems = new();
         private BankCardRow? _editingRow;
 
+        // Reveal state for CVV/PIN on the entry line
+        private bool _isCvvRevealed;
+        private bool _isPinRevealed;
+
         // Accounts
         private readonly ObservableCollection<AccountRow> _accountRows = new();
         private readonly ObservableCollection<AccountTypeItem> _accountTypeItems = new();
@@ -37,7 +41,110 @@ namespace MWPV.View.UserControls.CategoryItems
             Debug.WriteLine("[BANK-PANEL] Loaded");
             LoadBankCardTypes();
             LoadAccountTypes();
+
+            // Ensure reveal state starts in masked mode
+            _isCvvRevealed = false;
+            _isPinRevealed = false;
+            UpdateCvvRevealState();
+            UpdatePinRevealState();
         }
+
+        // ====================================================================
+        // CVV / PIN reveal handlers (entry line only)
+        // ====================================================================
+
+        private void CvvBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            // Keep the plain-text overlay in sync so we can flip instantly.
+            if (!_isCvvRevealed)
+            {
+                CvvPlainTextBox.Text = CvvBox.Password;
+            }
+        }
+
+        private void BtnToggleCvvReveal_Click(object sender, RoutedEventArgs e)
+        {
+            _isCvvRevealed = !_isCvvRevealed;
+            UpdateCvvRevealState();
+        }
+
+        private void PinBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (!_isPinRevealed)
+            {
+                PinPlainTextBox.Text = PinBox.Password;
+            }
+        }
+
+        private void BtnTogglePinReveal_Click(object sender, RoutedEventArgs e)
+        {
+            _isPinRevealed = !_isPinRevealed;
+            UpdatePinRevealState();
+        }
+
+        private void UpdateCvvRevealState()
+        {
+            if (CvvBox == null || CvvPlainTextBox == null || BtnToggleCvvReveal == null)
+                return;
+
+            if (_isCvvRevealed)
+            {
+                // Show plain text, hide PasswordBox
+                CvvPlainTextBox.Text = CvvBox.Password;
+                CvvPlainTextBox.Visibility = Visibility.Visible;
+                CvvPlainTextBox.IsHitTestVisible = true;   // allow select/copy
+
+                CvvBox.Visibility = Visibility.Collapsed;
+                CvvBox.IsEnabled = false;
+
+                BtnToggleCvvReveal.ToolTip = "Hide CVV";
+            }
+            else
+            {
+                // Go back to masked input
+                CvvBox.Password = CvvPlainTextBox.Text;
+                CvvBox.Visibility = Visibility.Visible;
+                CvvBox.IsEnabled = true;
+
+                CvvPlainTextBox.Visibility = Visibility.Collapsed;
+                CvvPlainTextBox.IsHitTestVisible = false;
+
+                BtnToggleCvvReveal.ToolTip = "Show CVV";
+            }
+        }
+
+        private void UpdatePinRevealState()
+        {
+            if (PinBox == null || PinPlainTextBox == null || BtnTogglePinReveal == null)
+                return;
+
+            if (_isPinRevealed)
+            {
+                PinPlainTextBox.Text = PinBox.Password;
+                PinPlainTextBox.Visibility = Visibility.Visible;
+                PinPlainTextBox.IsHitTestVisible = true;
+
+                PinBox.Visibility = Visibility.Collapsed;
+                PinBox.IsEnabled = false;
+
+                BtnTogglePinReveal.ToolTip = "Hide card PIN";
+            }
+            else
+            {
+                PinBox.Password = PinPlainTextBox.Text;
+                PinBox.Visibility = Visibility.Visible;
+                PinBox.IsEnabled = true;
+
+                PinPlainTextBox.Visibility = Visibility.Collapsed;
+                PinPlainTextBox.IsHitTestVisible = false;
+
+                BtnTogglePinReveal.ToolTip = "Show card PIN";
+            }
+        }
+
+        // ====================================================================
+        // Load combos
+        // ====================================================================
 
         private void LoadBankCardTypes()
         {
@@ -140,8 +247,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
             string cardNumber = (CardNumberTextBox.Text ?? "").Trim();
             string expirationInput = (ExpirationTextBox.Text ?? "").Trim();
-            string cvv = CvvBox.Password ?? string.Empty;
-            string pin = PinBox.Password ?? string.Empty;
+
+            // Use whatever is currently the source of truth for CVV/PIN
+            string cvv = _isCvvRevealed ? (CvvPlainTextBox.Text ?? string.Empty) : (CvvBox.Password ?? string.Empty);
+            string pin = _isPinRevealed ? (PinPlainTextBox.Text ?? string.Empty) : (PinBox.Password ?? string.Empty);
+
             bool isActive = ChkCardActive.IsChecked == true;
 
             // We already validated, so this should succeed. We re-run to get the normalized value.
@@ -206,8 +316,18 @@ namespace MWPV.View.UserControls.CategoryItems
             CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
             CardNumberTextBox.Text = string.Empty;
             ExpirationTextBox.Text = string.Empty;
+
+            // Clear both masked and plain fields and reset reveal state
             CvvBox.Password = string.Empty;
+            CvvPlainTextBox.Text = string.Empty;
+            _isCvvRevealed = false;
+            UpdateCvvRevealState();
+
             PinBox.Password = string.Empty;
+            PinPlainTextBox.Text = string.Empty;
+            _isPinRevealed = false;
+            UpdatePinRevealState();
+
             ChkCardActive.IsChecked = true;
 
             _editingRow = null;
@@ -236,8 +356,17 @@ namespace MWPV.View.UserControls.CategoryItems
 
             CardNumberTextBox.Text = row.CardNumberRaw;
             ExpirationTextBox.Text = row.Expiration;
+
             CvvBox.Password = row.CvvRaw;
+            CvvPlainTextBox.Text = row.CvvRaw;
+            _isCvvRevealed = false;
+            UpdateCvvRevealState();
+
             PinBox.Password = row.PinRaw;
+            PinPlainTextBox.Text = row.PinRaw;
+            _isPinRevealed = false;
+            UpdatePinRevealState();
+
             ChkCardActive.IsChecked = row.IsActive;
 
             BtnBankCardAddOrUpdate.Content = "Update";
@@ -282,6 +411,8 @@ namespace MWPV.View.UserControls.CategoryItems
             var selection = CardTypeCombo.SelectedItem as CardTypeItem;
             string cardNumber = (CardNumberTextBox.Text ?? "").Trim();
             string expiration = (ExpirationTextBox.Text ?? "").Trim();
+
+            // Work from the masked fields as the canonical inputs
             string cvv = CvvBox.Password ?? string.Empty;
             string pin = PinBox.Password ?? string.Empty;
 
@@ -429,7 +560,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 year += 2000;
             }
 
-            // --- NEW: cap at 5 years from the current year (no finer than that) ---
+            // Cap at 5 years from the current year
             int currentYear = DateTime.Today.Year;
             int maxYear = currentYear + 5;
             if (year > maxYear)
@@ -437,7 +568,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 errorMessage = $"Expiration year cannot be more than 5 years from now ({currentYear}–{maxYear}).";
                 return false;
             }
-            // ----------------------------------------------------------------------
 
             var lastDayOfMonth = DateTime.DaysInMonth(year, month);
             var expirationDate = new DateTime(year, month, lastDayOfMonth);
@@ -451,8 +581,6 @@ namespace MWPV.View.UserControls.CategoryItems
             normalized = $"{month:00}/{year}";
             return true;
         }
-
-
 
         private void ShowBankCardError(string message, Control? field = null)
         {
@@ -480,7 +608,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // ACCOUNTS - handlers & helpers (unchanged from last version)
+        // ACCOUNTS - handlers & helpers (unchanged)
         // ====================================================================
 
         private void OnAccountAddOrUpdateClick(object sender, RoutedEventArgs e)
