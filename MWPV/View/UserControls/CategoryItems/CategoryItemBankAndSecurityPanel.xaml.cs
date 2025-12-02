@@ -382,9 +382,9 @@ namespace MWPV.View.UserControls.CategoryItems
                 return true;
             }
 
-            if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 12)
+            if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 6)
             {
-                errorMessage = "PIN must be 4–12 digits.";
+                errorMessage = "PIN must be 4–6 digits.";
                 return false;
             }
 
@@ -423,10 +423,21 @@ namespace MWPV.View.UserControls.CategoryItems
                 return false;
             }
 
+            // 2-digit → 2000-based 4-digit
             if (year < 100)
             {
                 year += 2000;
             }
+
+            // --- NEW: cap at 5 years from the current year (no finer than that) ---
+            int currentYear = DateTime.Today.Year;
+            int maxYear = currentYear + 5;
+            if (year > maxYear)
+            {
+                errorMessage = $"Expiration year cannot be more than 5 years from now ({currentYear}–{maxYear}).";
+                return false;
+            }
+            // ----------------------------------------------------------------------
 
             var lastDayOfMonth = DateTime.DaysInMonth(year, month);
             var expirationDate = new DateTime(year, month, lastDayOfMonth);
@@ -440,6 +451,8 @@ namespace MWPV.View.UserControls.CategoryItems
             normalized = $"{month:00}/{year}";
             return true;
         }
+
+
 
         private void ShowBankCardError(string message, Control? field = null)
         {
