@@ -9,33 +9,7 @@
 
     <UserControl.Resources>
 
-        <!-- Green icon buttons (Edit / Del) – original pill style -->
-        <Style x:Key="BankCardIconButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="24" />
-            <Setter Property="Height" Value="24" />
-            <Setter Property="Margin" Value="2,0,0,0" />
-            <Setter Property="Foreground" Value="Black" />
-            <Setter Property="Background" Value="#FF90EE90" />
-            <Setter Property="BorderBrush" Value="#FF006400" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Small square primary button – matches CategoryItemNew -->
+        <!-- Small square primary button (same as CategoryItemNew) -->
         <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
@@ -117,7 +91,7 @@
                         <!-- Card number -->
                         <ColumnDefinition Width="140" />
                         <!-- Expiration -->
-                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="110" />
                         <!-- CVV -->
                         <ColumnDefinition Width="140" />
                         <!-- PIN -->
@@ -369,7 +343,8 @@
                         <DataGridTemplateColumn Header="Edit" Width="50">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
                                             Tag="{Binding}"
                                             Click="OnBankCardEditClick">
                                         <TextBlock Text="✎" FontSize="12" />
@@ -381,7 +356,8 @@
                         <DataGridTemplateColumn Header="Del" Width="50">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
                                             Tag="{Binding}"
                                             Click="OnBankCardDeleteClick">
                                         <TextBlock Text="✖" FontSize="12" />
@@ -536,7 +512,8 @@
                         <DataGridTemplateColumn Header="Edit" Width="50">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
                                             Tag="{Binding}"
                                             Click="OnAccountEditClick">
                                         <TextBlock Text="✎" FontSize="12" />
@@ -548,7 +525,8 @@
                         <DataGridTemplateColumn Header="Del" Width="50">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Button Style="{StaticResource BankCardIconButtonStyle}"
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
                                             Tag="{Binding}"
                                             Click="OnAccountDeleteClick">
                                         <TextBlock Text="✖" FontSize="12" />
