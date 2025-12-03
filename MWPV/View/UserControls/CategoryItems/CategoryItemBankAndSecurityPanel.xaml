@@ -427,16 +427,20 @@
                                                     RelativeSource={RelativeSource AncestorType=UserControl}}"
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
-                              SelectedIndex="0" />
+                              SelectedIndex="0"
+                              LostFocus="OnAccountFieldLostFocus" />
 
                     <TextBox x:Name="AccountNumberTextBox"
                              Grid.Column="1"
-                             Margin="0,20,6,0" />
+                             Margin="0,20,6,0"
+                             MaxLength="24"
+                             LostFocus="OnAccountFieldLostFocus" />
 
                     <PasswordBox x:Name="AccountPinBox"
                                  Grid.Column="2"
                                  Margin="0,20,6,0"
-                                 MaxLength="6" />
+                                 MaxLength="6"
+                                 LostFocus="OnAccountFieldLostFocus" />
 
                     <CheckBox x:Name="ChkAccountActive"
                               Grid.Column="3"

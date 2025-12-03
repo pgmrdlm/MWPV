@@ -399,7 +399,6 @@ namespace MWPV.View.UserControls.CategoryItems
             _bankCardRows.Remove(row);
         }
 
-
         // ====================================================================
         // CARDS - Validation helpers
         // ====================================================================
@@ -611,7 +610,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // ACCOUNTS - handlers & helpers (unchanged)
+        // ACCOUNTS - handlers & helpers
         // ====================================================================
 
         private void OnAccountAddOrUpdateClick(object sender, RoutedEventArgs e)
@@ -639,6 +638,13 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.Equals(validChars, accountNumber, StringComparison.Ordinal))
             {
                 ShowAccountError("Account number must contain digits and spaces only.", AccountNumberTextBox);
+                return;
+            }
+
+            var digitsOnly = new string(accountNumber.Where(char.IsDigit).ToArray());
+            if (digitsOnly.Length < 4)
+            {
+                ShowAccountError("Account number must be at least 4 digits.", AccountNumberTextBox);
                 return;
             }
 
@@ -756,6 +762,46 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             AccountErrorTextBlock.Text = string.Empty;
             ResetAccountFieldBackgrounds();
+        }
+        private void OnAccountFieldLostFocus(object sender, RoutedEventArgs e)
+        {
+            // Same rules as the Add/Update button, but run on blur
+            ClearAccountError();
+
+            var selection = AccountNameCombo.SelectedItem as AccountTypeItem;
+            string accountNumber = (AccountNumberTextBox.Text ?? "").Trim();
+            string pin = AccountPinBox.Password ?? string.Empty;
+
+            if (selection == null)
+            {
+                ShowAccountError("Please choose an account name.", AccountNameCombo);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(accountNumber))
+            {
+                ShowAccountError("Account number is required.", AccountNumberTextBox);
+                return;
+            }
+
+            var validChars = new string(accountNumber.Where(c => char.IsDigit(c) || c == ' ').ToArray());
+            if (!string.Equals(validChars, accountNumber, StringComparison.Ordinal))
+            {
+                ShowAccountError("Account number must contain digits and spaces only.", AccountNumberTextBox);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(pin))
+            {
+                if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 12)
+                {
+                    ShowAccountError("Account PIN must be 4–12 digits.", AccountPinBox);
+                    return;
+                }
+            }
+
+            // All good – clear any previous message
+            ClearAccountError();
         }
 
         private void ResetAccountFieldBackgrounds()
