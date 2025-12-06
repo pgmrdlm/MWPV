@@ -220,85 +220,116 @@ INSERT INTO ComboType (Code, Description, Active)
 SELECT 'account_types', 'Common financial account types', 1
 WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'account_types');
 
-/* Ensure ComboDetail for account_types */
-WITH ct AS (
-  SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'account_types'
-),
-vals AS (
-  SELECT 0 AS Seq, 'CHECKING'   AS Code, 'Checking'            AS Description UNION ALL
-  SELECT 1,        'SAVINGS',               'Savings'                                 UNION ALL
-  SELECT 2,        'CHRISTMAS',             'Christmas Club'                          UNION ALL
-  SELECT 3,        'MONEY_MARKET',          'Money Market'                            UNION ALL
-  SELECT 4,        'IRA',                   'IRA'                                      UNION ALL
-  SELECT 5,        'RETIREMENT',            'Retirement'                              UNION ALL
-  SELECT 6,        '401K',                  '401(k)'                                  UNION ALL
-  SELECT 7,        'OTHER',                 'Other (freeform)'
-)
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT ct.Id, v.Seq, v.Code, v.Description, 1
-FROM vals v
-CROSS JOIN ct
+/* Ensure ComboType: account_types */
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'account_types', 'Common financial account types', 1
 WHERE NOT EXISTS (
-  SELECT 1
-  FROM ComboDetail cd
-  WHERE cd.ComboTypeId = ct.Id
-    AND cd.Code = v.Code
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'account_types'
 );
+/* Ensure ComboDetail rows for account_types (includes Primary account) */
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT
+    ct.ComboTypeId,
+    v.Seq,
+    v.Code,
+    v.Description,
+    1
+FROM ComboType ct
+JOIN (
+    SELECT 0 AS Seq, 'PRIMARY'       AS Code, 'Primary account'        AS Description
+    UNION ALL SELECT 1, 'CHECKING',      'Checking'
+    UNION ALL SELECT 2, 'SAVINGS',       'Savings'
+    UNION ALL SELECT 3, 'CHRISTMAS',     'Christmas Club'
+    UNION ALL SELECT 4, 'MONEY_MARKET',  'Money Market'
+    UNION ALL SELECT 5, 'IRA',           'IRA'
+    UNION ALL SELECT 6, 'RETIREMENT',    'Retirement'
+    UNION ALL SELECT 7, '401K',          '401(k)'
+    UNION ALL SELECT 8, 'OTHER',         'Other (freeform)'
+) AS v
+WHERE ct.Code = 'account_types'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ComboDetail cd
+      WHERE cd.ComboTypeId = ct.ComboTypeId
+        AND cd.Code        = v.Code
+  );
 
 /* ComboType: credit_cards (mixed: types + brands) */
 INSERT INTO ComboType (Code, Description, Active)
 SELECT 'credit_cards', 'Credit/Bank card options (mixed)', 1
-WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'credit_cards');
-
-WITH ct AS (
-  SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'credit_cards'
-),
-vals AS (
-  SELECT 0 AS Seq, 'DEBIT_CARD'      AS Code, 'Debit card'               AS Description UNION ALL
-  SELECT 1,        'MASTERCARD',                'Mastercard'                                  UNION ALL
-  SELECT 2,        'VISA',                      'Visa'                                        UNION ALL
-  SELECT 3,        'AMERICAN_EXPRESS',          'American Express'                             UNION ALL
-  SELECT 4,        'DISCOVER',                  'Discover'                                     UNION ALL
-  SELECT 5,        'STORE_CARD',                'Store card (private label)'                   UNION ALL
-  SELECT 6,        'VIRTUAL_CARD',              'Virtual card'
-)
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT ct.Id, v.Seq, v.Code, v.Description, 1
-FROM vals v
-CROSS JOIN ct
 WHERE NOT EXISTS (
-  SELECT 1 FROM ComboDetail cd
-  WHERE cd.ComboTypeId = ct.Id AND cd.Code = v.Code
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'credit_cards'
 );
+
+/* Ensure ComboDetail rows for credit_cards */
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT
+    ct.ComboTypeId,
+    v.Seq,
+    v.Code,
+    v.Description,
+    1
+FROM ComboType ct
+JOIN (
+    SELECT 0 AS Seq, 'DEBIT_CARD'     AS Code, 'Debit card'                    AS Description
+    UNION ALL SELECT 1, 'MASTERCARD',      'Mastercard'
+    UNION ALL SELECT 2, 'VISA',            'Visa'
+    UNION ALL SELECT 3, 'AMERICAN_EXPRESS','American Express'
+    UNION ALL SELECT 4, 'DISCOVER',        'Discover'
+    UNION ALL SELECT 5, 'STORE_CARD',      'Store card (private label)'
+    UNION ALL SELECT 6, 'VIRTUAL_CARD',    'Virtual card'
+) AS v
+WHERE ct.Code = 'credit_cards'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ComboDetail cd
+      WHERE cd.ComboTypeId = ct.ComboTypeId
+        AND cd.Code        = v.Code
+  );
 
 /* NOTE: category_types removed – Category_Type now default 0 with no FK */
 
 /* *** log_filters for Logs UI *** */
 
--- Ensure ComboType: log_filters
+/* Ensure ComboType: log_filters */
 INSERT INTO ComboType (Code, Description, Active)
 SELECT 'log_filters', 'Filters for the Logs UI', 1
-WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'log_filters');
-
--- Ensure ComboDetail for log_filters (mirrors original list)
-WITH ct AS (SELECT ComboTypeId AS Id FROM ComboType WHERE Code = 'log_filters'),
-vals AS (
-  SELECT 0 AS Seq, 'CATEGORY_DUPLICATE' AS Code, 'Duplicate category detected'      AS Description UNION ALL
-  SELECT 1,        'CATEGORY_INSERTED',           'Category successfully inserted'                    UNION ALL
-  SELECT 2,        'LOGIN',                       'Login events'                                     UNION ALL
-  SELECT 3,        'EARLY_FAIL',                  'Early-fail events'                                UNION ALL
-  SELECT 4,        'SESSION_START',               'Session started (post-login)'                      UNION ALL
-  SELECT 5,        'SESSION_END',                 'Session ended'
-)
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT ct.Id, v.Seq, v.Code, v.Description, 1
-FROM ct CROSS JOIN vals v
 WHERE NOT EXISTS (
-  SELECT 1 FROM ComboDetail d
-  WHERE d.ComboTypeId = ct.Id AND d.Code = v.Code
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'log_filters'
 );
 
--- Starter Categories (now independent of ComboDetail / category_types)
+/* Ensure ComboDetail rows for log_filters */
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT
+    ct.ComboTypeId,
+    v.Seq,
+    v.Code,
+    v.Description,
+    1
+FROM ComboType ct
+JOIN (
+    SELECT 0 AS Seq, 'CATEGORY_DUPLICATE' AS Code, 'Duplicate category detected'      AS Description
+    UNION ALL SELECT 1, 'CATEGORY_INSERTED',       'Category successfully inserted'
+    UNION ALL SELECT 2, 'LOGIN',                   'Login events'
+    UNION ALL SELECT 3, 'EARLY_FAIL',              'Early-fail events'
+    UNION ALL SELECT 4, 'SESSION_START',           'Session started (post-login)'
+    UNION ALL SELECT 5, 'SESSION_END',             'Session ended'
+) AS v
+WHERE ct.Code = 'log_filters'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ComboDetail d
+      WHERE d.ComboTypeId = ct.ComboTypeId
+        AND d.Code        = v.Code
+  );
+
+/* Starter Categories (now independent of ComboDetail / category_types) */
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
 SELECT 'Utilities', 'Bills and essential services', 0, 1
 WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Utilities');
