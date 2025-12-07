@@ -544,23 +544,195 @@
         </GroupBox>
 
         <!-- ================== SECURITY QUESTIONS / ANSWERS ================== -->
-        <Grid Grid.Row="2" Margin="0,6,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="100" />
-            </Grid.ColumnDefinitions>
+        <GroupBox Grid.Row="2"
+                  Header="Security Questions / Answers"
+                  Margin="0,6,0,0">
+            <Grid Margin="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <!-- entry row -->
+                    <RowDefinition Height="Auto" />
+                    <!-- error -->
+                    <RowDefinition Height="Auto" />
+                    <!-- grid -->
+                </Grid.RowDefinitions>
 
-            <TextBox x:Name="SecurityQuestionAnswerTextBox"
-                     Grid.Column="0"
-                     Margin="0,0,6,0"
-                     Height="26"
-                     VerticalContentAlignment="Center"
-                     Text="Security question / answer area to be wired later" />
+                <!-- Entry row -->
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <!-- Question -->
+                        <ColumnDefinition Width="*" />
+                        <!-- Answer -->
+                        <ColumnDefinition Width="70" />
+                        <!-- Active -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Add -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Clear -->
+                    </Grid.ColumnDefinitions>
 
-            <Button Grid.Column="1"
-                    Content="Add"
-                    Style="{StaticResource DialogPrimary}"
-                    HorizontalAlignment="Right" />
-        </Grid>
+                    <!-- Labels -->
+                    <TextBlock Grid.Column="0"
+                               Text="Security Question"
+                               FontWeight="Bold"
+                               Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="1"
+                               Text="Answer"
+                               FontWeight="Bold"
+                               Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="2"
+                               Text="Active"
+                               FontWeight="Bold"
+                               Margin="0,0,0,2" />
+
+                    <!-- Question text -->
+                    <TextBox x:Name="SecurityQuestionTextBox"
+                             Grid.Column="0"
+                             Margin="0,20,6,0" />
+
+                    <!-- Answer with show/hide button -->
+                    <Grid Grid.Column="1"
+                          Margin="0,20,6,0"
+                          Height="28">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0">
+                            <PasswordBox x:Name="SecurityAnswerBox"
+                                         VerticalAlignment="Center"
+                                         Height="28" />
+                            <TextBox x:Name="SecurityAnswerPlainText"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     IsReadOnly="True"
+                                     IsHitTestVisible="False"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed" />
+                        </Grid>
+
+                        <Button x:Name="BtnToggleSecurityAnswer"
+                                Grid.Column="1"
+                                Style="{StaticResource SmallSquarePrimaryButton}"
+                                ToolTip="Show/Hide answer">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="20" Height="20">
+                                    <Path Stroke="Black"
+                                          Fill="Transparent"
+                                          StrokeThickness="1.6"
+                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Stroke="Black"
+                                             StrokeThickness="1.2"
+                                             Fill="White"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                    <Ellipse Width="3"
+                                             Height="3"
+                                             Fill="Black"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+
+                    <CheckBox x:Name="ChkSecurityActive"
+                              Grid.Column="2"
+                              Margin="0,24,0,0"
+                              IsChecked="True"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Top" />
+
+                    <Button x:Name="BtnSecurityAddOrUpdate"
+                            Grid.Column="3"
+                            Margin="8,18,0,0"
+                            Content="Add"
+                            Style="{StaticResource DialogPrimary}" />
+
+                    <Button x:Name="BtnSecurityClear"
+                            Grid.Column="4"
+                            Margin="6,18,0,0"
+                            Content="Clear"
+                            Style="{StaticResource DialogSecondary}" />
+                </Grid>
+
+                <!-- Error text -->
+                <TextBlock x:Name="SecurityErrorTextBlock"
+                           Grid.Row="1"
+                           Margin="0,4,0,4"
+                           Foreground="Red"
+                           FontWeight="Bold"
+                           TextWrapping="Wrap" />
+
+                <!-- Grid -->
+                <DataGrid x:Name="SecurityGrid"
+                          Grid.Row="2"
+                          Margin="0,10,0,0"
+                          AutoGenerateColumns="False"
+                          HeadersVisibility="Column"
+                          CanUserAddRows="False"
+                          CanUserDeleteRows="False"
+                          IsReadOnly="True"
+                          ItemsSource="{Binding SecurityQuestionRows,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#FF800000" />
+                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="FontWeight" Value="Bold" />
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Question"
+                                            Binding="{Binding Question}"
+                                            Width="*" />
+                        <DataGridTextColumn Header="Answer"
+                                            Binding="{Binding AnswerMasked}"
+                                            Width="220" />
+                        <DataGridTemplateColumn Header="Active" Width="70">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsActive}"
+                                              IsHitTestVisible="False"
+                                              HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <!-- Edit / Delete -->
+                        <DataGridTemplateColumn Header="Edit" Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
+                                            Tag="{Binding}">
+                                        <TextBlock Text="✎" FontSize="12" />
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Header="Del" Width="50">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource SmallSquarePrimaryButton}"
+                                            HorizontalAlignment="Center"
+                                            Tag="{Binding}">
+                                        <TextBlock Text="✖" FontSize="12" />
+                                    </Button>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </GroupBox>
     </Grid>
 </UserControl>

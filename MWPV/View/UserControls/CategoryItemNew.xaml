@@ -140,32 +140,40 @@
                          MinWidth="320"
                          HorizontalAlignment="Left"/>
 
-                <!-- Password -->
+                <!-- Password label -->
                 <Label Grid.Row="0" Grid.Column="2"
                        Content="* Password"
                        FontWeight="Bold"
                        ToolTip="Required field"/>
+
+                <!-- Password row: password + buttons + bookmark-only checkbox all in one line -->
                 <Grid Grid.Row="0" Grid.Column="2"
                       Margin="0,22,0,0"
                       Height="28"
-                      MinWidth="280"
+                      MinWidth="125"
                       HorizontalAlignment="Left">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
+                    <!-- Password / plain overlay -->
                     <Grid Grid.Column="0">
                         <PasswordBox x:Name="pwdPassword"
                                      VerticalAlignment="Center"
                                      Height="28"
+                                     MinWidth="220"
+                                     HorizontalAlignment="Stretch"
                                      PasswordChanged="pwdPassword_PasswordChanged"
                                      GotFocus="pwdPassword_GotFocus"
                                      PreviewKeyDown="PwdPassword_PreviewKeyDown"/>
                         <TextBox x:Name="txtPasswordPlain"
                                  VerticalAlignment="Center"
                                  Height="28"
+                                 MinWidth="220"
+                                 HorizontalAlignment="Stretch"
                                  IsReadOnly="True"
                                  IsHitTestVisible="False"
                                  Background="Transparent"
@@ -174,6 +182,7 @@
                                  Foreground="Black"/>
                     </Grid>
 
+                    <!-- Generate -->
                     <Button x:Name="btnGeneratePassword"
                             Grid.Column="1"
                             Style="{StaticResource SmallSquarePrimaryButton}"
@@ -187,6 +196,7 @@
                         </Viewbox>
                     </Button>
 
+                    <!-- Reveal -->
                     <Button x:Name="btnTogglePasswordReveal"
                             Grid.Column="2"
                             Style="{StaticResource SmallSquarePrimaryButton}"
@@ -203,6 +213,14 @@
                             </Grid>
                         </Viewbox>
                     </Button>
+
+                    <!-- Bookmark-only toggle -->
+                    <CheckBox x:Name="chkBookmarkOnly"
+                              Grid.Column="3"
+                              VerticalAlignment="Center"
+                              Margin="8,0,0,0"
+                              Content="Bookmark only"
+                              ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
                 </Grid>
 
                 <!-- Verify password -->
@@ -223,14 +241,19 @@
                     <StackPanel Grid.Row="1"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Left">
-                        <Grid Width="280" Height="28">
+                        <!-- Width bound to main password box -->
+                        <!--  Width="{Binding ElementName=pwdPassword, Path=ActualWidth}"> -->
+                        <Grid Height="28"
+                             Width="125">
                             <PasswordBox x:Name="pwdVerify"
                                          VerticalAlignment="Center"
                                          Height="28"
+                                         HorizontalAlignment="Stretch"
                                          PasswordChanged="pwdVerify_PasswordChanged"/>
                             <TextBox x:Name="txtVerifyPlain"
                                      VerticalAlignment="Center"
                                      Height="28"
+                                     HorizontalAlignment="Stretch"
                                      IsReadOnly="True"
                                      IsHitTestVisible="False"
                                      Background="Transparent"
@@ -239,6 +262,7 @@
                                      Foreground="Black"/>
                         </Grid>
 
+                        <!-- Reveal verify -->
                         <Button x:Name="btnToggleVerifyReveal"
                                 Style="{StaticResource SmallSquarePrimaryButton}"
                                 ToolTip="Show/Hide verification"
@@ -254,6 +278,15 @@
                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Grid>
                             </Viewbox>
+                        </Button>
+
+                        <!-- Spacer button: not used, hidden but keeps layout width -->
+                        <Button x:Name="btnVerifyNotUsed"
+                                Style="{StaticResource SmallSquarePrimaryButton}"
+                                Margin="4,0,0,0"
+                                Visibility="Hidden"
+                                IsHitTestVisible="False"
+                                ToolTip="(not used – spacer only)">
                         </Button>
                     </StackPanel>
                 </Grid>
