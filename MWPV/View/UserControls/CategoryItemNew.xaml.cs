@@ -48,6 +48,7 @@ namespace MWPV.View.UserControls
             Loaded += CategoryItemNew_Loaded;
             Unloaded += CategoryItemNew_Unloaded;
 
+            // Redundant but harmless; keeps behavior explicit.
             txtEmail.LostFocus += txtEmail_LostFocus;
 
             _revealTimer = new DispatcherTimer
@@ -134,9 +135,13 @@ namespace MWPV.View.UserControls
                 PasswordValidationFailed?.Invoke(this, error);
                 if (VerifyRow.Visibility == Visibility.Visible &&
                     !string.IsNullOrEmpty(pwdVerify.Password))
+                {
                     pwdVerify.Focus();
+                }
                 else
+                {
                     pwdPassword.Focus();
+                }
                 return;
             }
 
@@ -241,6 +246,10 @@ namespace MWPV.View.UserControls
 
         private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
         {
+            // Guard: if the verify field is empty, do nothing.
+            if (string.IsNullOrEmpty(pwdVerify.Password))
+                return;
+
             if (_verifyRevealed)
                 HideVerifyPassword();
             else
@@ -272,7 +281,9 @@ namespace MWPV.View.UserControls
             if (_settingPwProgrammatically) return;
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
+            {
                 EnsureVerifyRowVisibleForManual();
+            }
             else
             {
                 HideVerifyRow();
@@ -297,6 +308,17 @@ namespace MWPV.View.UserControls
 
             if (_mainRevealed || _verifyRevealed || _phoneRevealed)
                 StartOrRestartRevealTimerIfNeeded();
+
+            // New behavior: eye visible only when there is content.
+            if (string.IsNullOrEmpty(pwdVerify.Password))
+            {
+                btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
+                HideVerifyPassword();
+            }
+            else
+            {
+                btnToggleVerifyReveal.Visibility = Visibility.Visible;
+            }
 
             EvaluateAndDisplayVerifyMismatch();
         }
@@ -352,6 +374,7 @@ namespace MWPV.View.UserControls
             error = string.Empty;
             var pw = pwdPassword.Password ?? string.Empty;
 
+            // Empty password is allowed for "bookmark only" type entries.
             if (string.IsNullOrEmpty(pw))
             {
                 HideVerifyError();
@@ -467,20 +490,30 @@ namespace MWPV.View.UserControls
         {
             VerifyRow.Visibility = Visibility.Visible;
             _verifyRowShown = true;
+
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
+
             HideVerifyPassword();
             HideVerifyError();
+
+            // Start with the eye hidden until user types something.
+            btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
         private void HideVerifyRow()
         {
             VerifyRow.Visibility = Visibility.Collapsed;
             _verifyRowShown = false;
+
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
+
             HideVerifyPassword();
             HideVerifyError();
+
+            // Reset the eye visibility.
+            btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
         private void EvaluateAndDisplayVerifyMismatch()
@@ -557,7 +590,9 @@ namespace MWPV.View.UserControls
                 if (_emailDefaultBorderBrush != null)
                     txtEmail.BorderBrush = _emailDefaultBorderBrush;
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         private void MarkEmailInvalid(string message)
@@ -577,7 +612,9 @@ namespace MWPV.View.UserControls
                            ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
                 txtEmail.Background = fill;
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         private void ClearEmailValidation()
@@ -593,7 +630,9 @@ namespace MWPV.View.UserControls
                 if (_emailDefaultBorderBrush != null)
                     txtEmail.BorderBrush = _emailDefaultBorderBrush;
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         /* ======================= Phone validation + reveal ======================= */
@@ -679,7 +718,9 @@ namespace MWPV.View.UserControls
                            ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
                 txtPhone.Background = fill;
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         private void ClearPhoneError()
@@ -695,7 +736,9 @@ namespace MWPV.View.UserControls
                 if (_phoneDefaultBorderBrush != null)
                     txtPhone.BorderBrush = _phoneDefaultBorderBrush;
             }
-            catch { }
+            catch
+            {
+            }
         }
 
         /* ======================= Form reset / wipe ======================= */
@@ -734,7 +777,6 @@ namespace MWPV.View.UserControls
 
                 pwdPassword.Password = string.Empty;
                 pwdVerify.Password = string.Empty;
-
                 txtPhone.Password = string.Empty;
 
                 txtPasswordPlain.Text = string.Empty;

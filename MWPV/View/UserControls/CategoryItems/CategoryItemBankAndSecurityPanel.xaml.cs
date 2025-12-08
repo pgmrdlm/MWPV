@@ -26,11 +26,18 @@ namespace MWPV.View.UserControls.CategoryItems
         private readonly ObservableCollection<AccountTypeItem> _accountTypeItems = new();
         private AccountRow? _editingAccountRow;
 
+        // Security questions
+        private readonly ObservableCollection<SecurityRow> _securityRows = new();
+        private SecurityRow? _editingSecurityRow;
+        private bool _isSecurityAnswerRevealed;
+
         public ObservableCollection<BankCardRow> BankCardRows => _bankCardRows;
         public ObservableCollection<CardTypeItem> CardTypeItems => _cardTypeItems;
 
         public ObservableCollection<AccountRow> AccountRows => _accountRows;
         public ObservableCollection<AccountTypeItem> AccountTypeItems => _accountTypeItems;
+
+        public ObservableCollection<SecurityRow> SecurityQuestionRows => _securityRows;
 
         public CategoryItemBankAndSecurityPanel()
         {
@@ -47,6 +54,9 @@ namespace MWPV.View.UserControls.CategoryItems
             _isPinRevealed = false;
             UpdateCvvRevealState();
             UpdatePinRevealState();
+
+            _isSecurityAnswerRevealed = false;
+            UpdateSecurityAnswerRevealState();
         }
 
         // ====================================================================
@@ -140,6 +150,66 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 BtnTogglePinReveal.ToolTip = "Show card PIN";
             }
+        }
+
+        // ====================================================================
+        // SECURITY ANSWER reveal handlers (entry line)
+        // ====================================================================
+
+        private void SecurityAnswerBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (!_isSecurityAnswerRevealed)
+            {
+                SecurityAnswerPlainText.Text = SecurityAnswerBox.Password;
+            }
+        }
+
+        private void BtnToggleSecurityAnswer_Click(object sender, RoutedEventArgs e)
+        {
+            _isSecurityAnswerRevealed = !_isSecurityAnswerRevealed;
+            UpdateSecurityAnswerRevealState();
+        }
+
+        private void UpdateSecurityAnswerRevealState()
+        {
+            if (SecurityAnswerBox == null ||
+                SecurityAnswerPlainText == null ||
+                BtnToggleSecurityAnswer == null)
+                return;
+
+            if (_isSecurityAnswerRevealed)
+            {
+                SecurityAnswerPlainText.Text = SecurityAnswerBox.Password;
+                SecurityAnswerPlainText.Visibility = Visibility.Visible;
+                SecurityAnswerPlainText.IsHitTestVisible = true;
+
+                SecurityAnswerBox.Visibility = Visibility.Collapsed;
+                SecurityAnswerBox.IsEnabled = false;
+
+                BtnToggleSecurityAnswer.ToolTip = "Hide answer";
+            }
+            else
+            {
+                SecurityAnswerBox.Password = SecurityAnswerPlainText.Text;
+                SecurityAnswerBox.Visibility = Visibility.Visible;
+                SecurityAnswerBox.IsEnabled = true;
+
+                SecurityAnswerPlainText.Visibility = Visibility.Collapsed;
+                SecurityAnswerPlainText.IsHitTestVisible = false;
+
+                BtnToggleSecurityAnswer.ToolTip = "Show answer";
+            }
+        }
+
+        /// <summary>
+        /// Helper: which answer control should be highlighted for errors,
+        /// depending on whether we're in masked or revealed mode.
+        /// </summary>
+        private Control? GetSecurityAnswerHighlightControl()
+        {
+            if (_isSecurityAnswerRevealed)
+                return SecurityAnswerPlainText;
+            return SecurityAnswerBox;
         }
 
         // ====================================================================
@@ -602,11 +672,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ResetBankCardFieldBackgrounds()
         {
+            CardTypeCombo.ClearValue(BackgroundProperty);
             CardNumberTextBox.ClearValue(BackgroundProperty);
             ExpirationTextBox.ClearValue(BackgroundProperty);
             CvvBox.ClearValue(BackgroundProperty);
             PinBox.ClearValue(BackgroundProperty);
-            CardTypeCombo.ClearValue(BackgroundProperty);
         }
 
         // ====================================================================
@@ -763,6 +833,7 @@ namespace MWPV.View.UserControls.CategoryItems
             AccountErrorTextBlock.Text = string.Empty;
             ResetAccountFieldBackgrounds();
         }
+
         private void OnAccountFieldLostFocus(object sender, RoutedEventArgs e)
         {
             // Same rules as the Add/Update button, but run on blur
@@ -809,6 +880,185 @@ namespace MWPV.View.UserControls.CategoryItems
             AccountNameCombo.ClearValue(BackgroundProperty);
             AccountNumberTextBox.ClearValue(BackgroundProperty);
             AccountPinBox.ClearValue(BackgroundProperty);
+        }
+
+        // ====================================================================
+        // SECURITY QUESTIONS - handlers & helpers
+        // ====================================================================
+
+        private void OnSecurityAddOrUpdateClick(object sender, RoutedEventArgs e)
+        {
+            ClearSecurityError();
+
+            string question = (SecurityQuestionTextBox.Text ?? string.Empty).Trim();
+            string answer = _isSecurityAnswerRevealed
+                ? (SecurityAnswerPlainText.Text ?? string.Empty)
+                : (SecurityAnswerBox.Password ?? string.Empty);
+            bool isActive = ChkSecurityActive.IsChecked == true;
+
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                ShowSecurityError("Security question is required.", SecurityQuestionTextBox);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(answer))
+            {
+                ShowSecurityError("Answer is required.", GetSecurityAnswerHighlightControl());
+                return;
+            }
+
+            if (_editingSecurityRow == null)
+            {
+                var row = new SecurityRow
+                {
+                    Id = 0,
+                    Question = question,
+                    AnswerRaw = answer,
+                    IsActive = isActive
+                };
+
+                _securityRows.Add(row);
+            }
+            else
+            {
+                _editingSecurityRow.Question = question;
+                _editingSecurityRow.AnswerRaw = answer;
+                _editingSecurityRow.IsActive = isActive;
+            }
+
+            ClearSecurityEntryFields();
+        }
+
+        private void OnSecurityClearClick(object sender, RoutedEventArgs e)
+        {
+            ClearSecurityError();
+            ClearSecurityEntryFields();
+        }
+
+        private void OnSecurityEditClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not SecurityRow row)
+                return;
+
+            _editingSecurityRow = row;
+
+            SecurityQuestionTextBox.Text = row.Question;
+            SecurityAnswerBox.Password = row.AnswerRaw;
+            SecurityAnswerPlainText.Text = row.AnswerRaw;
+            _isSecurityAnswerRevealed = false;
+            UpdateSecurityAnswerRevealState();
+
+            ChkSecurityActive.IsChecked = row.IsActive;
+
+            BtnSecurityAddOrUpdate.Content = "Update";
+
+            ClearSecurityError();
+            ResetSecurityFieldBackgrounds();
+        }
+
+        private void OnSecurityDeleteClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not SecurityRow row)
+                return;
+
+            if (MessageBox.Show("Remove this security question from the list?",
+                                "Security Questions",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Question,
+                                MessageBoxResult.No) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            if (_editingSecurityRow == row)
+            {
+                ClearSecurityEntryFields();
+            }
+
+            _securityRows.Remove(row);
+        }
+
+        /// <summary>
+        /// Validation on blur for the Security Q/A entry line.
+        /// NOTE: wired ONLY to the Answer side (PasswordBox and plain-text box).
+        /// </summary>
+        private void OnSecurityFieldLostFocus(object sender, RoutedEventArgs e)
+        {
+            ClearSecurityError();
+
+            string question = (SecurityQuestionTextBox.Text ?? string.Empty).Trim();
+            string answer = _isSecurityAnswerRevealed
+                ? (SecurityAnswerPlainText.Text ?? string.Empty)
+                : (SecurityAnswerBox.Password ?? string.Empty);
+
+            // If both blank, that's fine (no partial row yet)
+            if (string.IsNullOrWhiteSpace(question) && string.IsNullOrWhiteSpace(answer))
+            {
+                ClearSecurityError();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(question))
+            {
+                // User typed an answer but no question
+                ShowSecurityError(
+                    "Security question is required if an answer is entered.",
+                    SecurityQuestionTextBox);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(answer))
+            {
+                // User typed a question but no answer
+                ShowSecurityError(
+                    "Answer is required if a question is entered.",
+                    GetSecurityAnswerHighlightControl());
+                return;
+            }
+
+            ClearSecurityError();
+        }
+
+        private void ClearSecurityEntryFields()
+        {
+            SecurityQuestionTextBox.Text = string.Empty;
+            SecurityAnswerBox.Password = string.Empty;
+            SecurityAnswerPlainText.Text = string.Empty;
+
+            _isSecurityAnswerRevealed = false;
+            UpdateSecurityAnswerRevealState();
+
+            ChkSecurityActive.IsChecked = true;
+
+            _editingSecurityRow = null;
+            BtnSecurityAddOrUpdate.Content = "Add";
+
+            ClearSecurityError();
+            ResetSecurityFieldBackgrounds();
+        }
+
+        private void ShowSecurityError(string message, Control? field = null)
+        {
+            SecurityErrorTextBlock.Text = message;
+
+            if (field != null)
+            {
+                field.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x99));
+            }
+        }
+
+        private void ClearSecurityError()
+        {
+            SecurityErrorTextBlock.Text = string.Empty;
+            ResetSecurityFieldBackgrounds();
+        }
+
+        private void ResetSecurityFieldBackgrounds()
+        {
+            SecurityQuestionTextBox.ClearValue(BackgroundProperty);
+            SecurityAnswerBox.ClearValue(BackgroundProperty);
+            SecurityAnswerPlainText.ClearValue(BackgroundProperty);
         }
 
         // ====================================================================
@@ -966,6 +1216,70 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 get => _isActive;
                 set { if (_isActive != value) { _isActive = value; OnPropertyChanged(nameof(IsActive)); } }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            private void OnPropertyChanged(string propertyName) =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public sealed class SecurityRow : INotifyPropertyChanged
+        {
+            public int Id { get; set; }
+
+            private string _question = string.Empty;
+            public string Question
+            {
+                get => _question;
+                set
+                {
+                    if (_question != value)
+                    {
+                        _question = value ?? string.Empty;
+                        OnPropertyChanged(nameof(Question));
+                    }
+                }
+            }
+
+            private string _answerRaw = string.Empty;
+            public string AnswerRaw
+            {
+                get => _answerRaw;
+                set
+                {
+                    if (_answerRaw != value)
+                    {
+                        _answerRaw = value ?? string.Empty;
+                        OnPropertyChanged(nameof(AnswerRaw));
+                        OnPropertyChanged(nameof(AnswerMasked));
+                    }
+                }
+            }
+
+            public string AnswerMasked
+            {
+                get
+                {
+                    if (string.IsNullOrEmpty(_answerRaw))
+                        return string.Empty;
+
+                    // Simple mask – same length, all bullets
+                    return new string('•', Math.Min(_answerRaw.Length, 12));
+                }
+            }
+
+            private bool _isActive = true;
+            public bool IsActive
+            {
+                get => _isActive;
+                set
+                {
+                    if (_isActive != value)
+                    {
+                        _isActive = value;
+                        OnPropertyChanged(nameof(IsActive));
+                    }
+                }
             }
 
             public event PropertyChangedEventHandler? PropertyChanged;
