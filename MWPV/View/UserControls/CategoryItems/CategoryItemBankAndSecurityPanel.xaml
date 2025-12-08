@@ -9,7 +9,7 @@
 
     <UserControl.Resources>
 
-        <!-- Small square primary button (same as CategoryItemNew) -->
+        <!-- Small square primary button (matches CategoryItemNew) -->
         <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
@@ -66,6 +66,8 @@
             <!-- Accounts -->
             <RowDefinition Height="Auto" />
             <!-- Security Q/A -->
+            <RowDefinition Height="Auto" />
+            <!-- Save / Close buttons -->
         </Grid.RowDefinitions>
 
         <!-- ================= BANK CARDS / ACCOUNTS (CARDS) ================= -->
@@ -104,37 +106,18 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Labels -->
-                    <TextBlock Grid.Column="0"
-                               Text="Card Type"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="1"
-                               Text="Card Number"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="2"
-                               Text="Expiration Date"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="3"
-                               Text="CVV"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="4"
-                               Text="Card PIN"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
-                    <TextBlock Grid.Column="5"
-                               Text="Active"
-                               Margin="0,0,0,2"
-                               FontWeight="Bold" />
+                    <TextBlock Grid.Column="0" Text="Card Type"         Margin="0,0,0,2" FontWeight="Bold" />
+                    <TextBlock Grid.Column="1" Text="Card Number"       Margin="0,0,0,2" FontWeight="Bold" />
+                    <TextBlock Grid.Column="2" Text="Expiration Date"   Margin="0,0,0,2" FontWeight="Bold" />
+                    <TextBlock Grid.Column="3" Text="CVV"               Margin="0,0,0,2" FontWeight="Bold" />
+                    <TextBlock Grid.Column="4" Text="Card PIN"          Margin="0,0,0,2" FontWeight="Bold" />
+                    <TextBlock Grid.Column="5" Text="Active"            Margin="0,0,0,2" FontWeight="Bold" />
 
                     <!-- Fields -->
                     <ComboBox x:Name="CardTypeCombo"
                               Grid.Column="0"
                               Margin="0,20,6,0"
-                              ItemsSource="{Binding CardTypeItems,
-                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              ItemsSource="{Binding CardTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
                               SelectedIndex="0"
@@ -302,8 +285,7 @@
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"
                           IsReadOnly="True"
-                          ItemsSource="{Binding BankCardRows,
-                                                RelativeSource={RelativeSource AncestorType=UserControl}}">
+                          ItemsSource="{Binding BankCardRows, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <DataGrid.ColumnHeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
                             <Setter Property="Background" Value="#FF800000" />
@@ -402,29 +384,16 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Labels -->
-                    <TextBlock Grid.Column="0"
-                               Text="Account Name"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="1"
-                               Text="Account Number"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="2"
-                               Text="Account PIN (optional)"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="3"
-                               Text="Active"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="0" Text="Account Name"          FontWeight="Bold" Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="1" Text="Account Number"        FontWeight="Bold" Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="2" Text="Account PIN (optional)" FontWeight="Bold" Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="3" Text="Active"                FontWeight="Bold" Margin="0,0,0,2" />
 
                     <!-- Fields -->
                     <ComboBox x:Name="AccountNameCombo"
                               Grid.Column="0"
                               Margin="0,20,6,0"
-                              ItemsSource="{Binding AccountTypeItems,
-                                                    RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              ItemsSource="{Binding AccountTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
                               SelectedIndex="0"
@@ -481,8 +450,7 @@
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"
                           IsReadOnly="True"
-                          ItemsSource="{Binding AccountRows,
-                                                RelativeSource={RelativeSource AncestorType=UserControl}}">
+                          ItemsSource="{Binding AccountRows, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <DataGrid.ColumnHeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
                             <Setter Property="Background" Value="#FF800000" />
@@ -573,20 +541,11 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Labels -->
-                    <TextBlock Grid.Column="0"
-                               Text="Security Question"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="1"
-                               Text="Answer"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="2"
-                               Text="Active"
-                               FontWeight="Bold"
-                               Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="0" Text="Security Question" FontWeight="Bold" Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="1" Text="Answer"            FontWeight="Bold" Margin="0,0,0,2" />
+                    <TextBlock Grid.Column="2" Text="Active"            FontWeight="Bold" Margin="0,0,0,2" />
 
-                    <!-- Question text (no LostFocus here now) -->
+                    <!-- Question text -->
                     <TextBox x:Name="SecurityQuestionTextBox"
                              Grid.Column="0"
                              Margin="0,20,6,0" />
@@ -684,8 +643,7 @@
                           CanUserAddRows="False"
                           CanUserDeleteRows="False"
                           IsReadOnly="True"
-                          ItemsSource="{Binding SecurityQuestionRows,
-                                                RelativeSource={RelativeSource AncestorType=UserControl}}">
+                          ItemsSource="{Binding SecurityQuestionRows, RelativeSource={RelativeSource AncestorType=UserControl}}">
                     <DataGrid.ColumnHeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
                             <Setter Property="Background" Value="#FF800000" />
@@ -742,5 +700,23 @@
                 </DataGrid>
             </Grid>
         </GroupBox>
+
+        <!-- ================== SAVE / CLOSE ROW ================== -->
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0">
+            <Button x:Name="BtnSaveItem"
+                    Width="90"
+                    Margin="0,0,8,0"
+                    Content="Save"
+                    Style="{StaticResource DialogPrimary}"
+                    Click="BtnSaveItem_Click" />
+            <Button x:Name="BtnCloseItem"
+                    Width="90"
+                    Content="Close"
+                    Style="{StaticResource DialogSecondary}"
+                    Click="BtnCloseItem_Click" />
+        </StackPanel>
     </Grid>
 </UserControl>
