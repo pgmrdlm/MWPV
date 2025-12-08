@@ -116,7 +116,7 @@ namespace MWPV.View.UserControls
             {
                 // 4 is the fixed ComboTypeId for log filters
                 var dbTypes = await Task.Run(() =>
-                    ComboDetailService.GetByTypeId(4));
+                    ComboDetailService.GetByTypeId(3));
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {
