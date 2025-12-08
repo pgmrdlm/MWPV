@@ -12,7 +12,26 @@ namespace MWPV.View.UserControls.CategoryItems
 {
     public partial class CategoryItemBankAndSecurityPanel : UserControl
     {
-        // Cards
+        // ====================================================================
+        // Events for outer container (Save / Close)
+        // ====================================================================
+
+        /// <summary>
+        /// Raised when the user clicks the Save button at the bottom of the panel.
+        /// The parent control/window should handle actually saving the item.
+        /// </summary>
+        public event RoutedEventHandler? SaveItemRequested;
+
+        /// <summary>
+        /// Raised when the user clicks the Close button at the bottom of the panel.
+        /// The parent control/window should handle dismissing the item editor.
+        /// </summary>
+        public event RoutedEventHandler? CloseItemRequested;
+
+        // ====================================================================
+        // Fields: Cards
+        // ====================================================================
+
         private readonly ObservableCollection<BankCardRow> _bankCardRows = new();
         private readonly ObservableCollection<CardTypeItem> _cardTypeItems = new();
         private BankCardRow? _editingRow;
@@ -21,15 +40,25 @@ namespace MWPV.View.UserControls.CategoryItems
         private bool _isCvvRevealed;
         private bool _isPinRevealed;
 
-        // Accounts
+        // ====================================================================
+        // Fields: Accounts
+        // ====================================================================
+
         private readonly ObservableCollection<AccountRow> _accountRows = new();
         private readonly ObservableCollection<AccountTypeItem> _accountTypeItems = new();
         private AccountRow? _editingAccountRow;
 
-        // Security questions
+        // ====================================================================
+        // Fields: Security questions
+        // ====================================================================
+
         private readonly ObservableCollection<SecurityRow> _securityRows = new();
         private SecurityRow? _editingSecurityRow;
         private bool _isSecurityAnswerRevealed;
+
+        // ====================================================================
+        // Exposed collections (for binding / parent access)
+        // ====================================================================
 
         public ObservableCollection<BankCardRow> BankCardRows => _bankCardRows;
         public ObservableCollection<CardTypeItem> CardTypeItems => _cardTypeItems;
@@ -39,6 +68,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public ObservableCollection<SecurityRow> SecurityQuestionRows => _securityRows;
 
+        // ====================================================================
+        // Ctor
+        // ====================================================================
+
         public CategoryItemBankAndSecurityPanel()
         {
             InitializeComponent();
@@ -46,10 +79,11 @@ namespace MWPV.View.UserControls.CategoryItems
             DataContext = this;
 
             Debug.WriteLine("[BANK-PANEL] Loaded");
+
             LoadBankCardTypes();
             LoadAccountTypes();
 
-            // Ensure reveal state starts in masked mode
+            // Ensure reveal states start masked
             _isCvvRevealed = false;
             _isPinRevealed = false;
             UpdateCvvRevealState();
@@ -57,6 +91,22 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _isSecurityAnswerRevealed = false;
             UpdateSecurityAnswerRevealState();
+        }
+
+        // ====================================================================
+        // Save / Close button handlers
+        // ====================================================================
+
+        private void BtnSaveItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Let the parent decide what "Save" means.
+            SaveItemRequested?.Invoke(this, e);
+        }
+
+        private void BtnCloseItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Let the parent decide how to close/dismiss.
+            CloseItemRequested?.Invoke(this, e);
         }
 
         // ====================================================================
@@ -319,8 +369,12 @@ namespace MWPV.View.UserControls.CategoryItems
             string expirationInput = (ExpirationTextBox.Text ?? "").Trim();
 
             // Use whatever is currently the source of truth for CVV/PIN
-            string cvv = _isCvvRevealed ? (CvvPlainTextBox.Text ?? string.Empty) : (CvvBox.Password ?? string.Empty);
-            string pin = _isPinRevealed ? (PinPlainTextBox.Text ?? string.Empty) : (PinBox.Password ?? string.Empty);
+            string cvv = _isCvvRevealed
+                ? (CvvPlainTextBox.Text ?? string.Empty)
+                : (CvvBox.Password ?? string.Empty);
+            string pin = _isPinRevealed
+                ? (PinPlainTextBox.Text ?? string.Empty)
+                : (PinBox.Password ?? string.Empty);
 
             bool isActive = ChkCardActive.IsChecked == true;
 
@@ -455,7 +509,6 @@ namespace MWPV.View.UserControls.CategoryItems
             // Only allow delete for NEW rows (Id == 0). Existing DB rows: no delete here.
             if (row.Id != 0)
             {
-                // Optional: inline message instead of popup
                 ShowBankCardError(
                     "Existing cards can't be deleted here. Edit the card or mark it inactive instead.");
                 return;
@@ -1263,7 +1316,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     if (string.IsNullOrEmpty(_answerRaw))
                         return string.Empty;
 
-                    // Simple mask – same length, all bullets
+                    // Simple mask – same length, all bullets (capped)
                     return new string('•', Math.Min(_answerRaw.Length, 12));
                 }
             }

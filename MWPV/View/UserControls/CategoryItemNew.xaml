@@ -67,9 +67,9 @@
     <Grid Background="Bisque">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
+            <!-- header -->
             <RowDefinition Height="*"/>
-            <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
+            <!-- scrollable body -->
         </Grid.RowDefinitions>
 
         <!-- Header bar -->
@@ -117,7 +117,9 @@
                     <RowDefinition Height="16"/>
                     <!-- 10: spacer -->
                     <RowDefinition Height="Auto"/>
-                    <!-- 11: bank/account/security sub-panel -->
+                    <!-- 11: bank/account/security panel -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- 12: Save/Cancel buttons -->
                 </Grid.RowDefinitions>
 
                 <Grid.ColumnDefinitions>
@@ -241,10 +243,8 @@
                     <StackPanel Grid.Row="1"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Left">
-                        <!-- Width bound to main password box -->
-                        <!--  Width="{Binding ElementName=pwdPassword, Path=ActualWidth}"> -->
                         <Grid Height="28"
-                             Width="125">
+                              Width="125">
                             <PasswordBox x:Name="pwdVerify"
                                          VerticalAlignment="Center"
                                          Height="28"
@@ -286,8 +286,7 @@
                                 Margin="4,0,0,0"
                                 Visibility="Hidden"
                                 IsHitTestVisible="False"
-                                ToolTip="(not used – spacer only)">
-                        </Button>
+                                ToolTip="(not used – spacer only)"/>
                     </StackPanel>
                 </Grid>
 
@@ -455,37 +454,41 @@
                     Grid.Column="0"
                     Grid.ColumnSpan="5"
                     Margin="0,0,0,0" />
+
+                <!-- Save / Cancel buttons inside scrollable content -->
+                <StackPanel Grid.Row="12"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="5"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,16,0,10">
+                    <Button x:Name="btnSubmit"
+                            Style="{StaticResource DialogPrimary}"
+                            Margin="0,0,12,0"
+                            Click="btnSubmit_Click">
+                        <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE8FB;"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Save"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="btnCancel"
+                            Style="{StaticResource DialogSecondary}"
+                            Click="btnCancel_Click">
+                        <StackPanel Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE711;"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Cancel"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
             </Grid>
         </ScrollViewer>
-
-        <!-- Bottom buttons -->
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center">
-            <Button x:Name="btnSubmit"
-                    Style="{StaticResource DialogPrimary}"
-                    Margin="0,0,12,0"
-                    Click="btnSubmit_Click">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                               Text="&#xE8FB;"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Text="Submit"/>
-                </StackPanel>
-            </Button>
-
-            <Button x:Name="btnCancel"
-                    Style="{StaticResource DialogSecondary}"
-                    Click="btnCancel_Click">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                               Text="&#xE711;"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Text="Cancel"/>
-                </StackPanel>
-            </Button>
-        </StackPanel>
     </Grid>
 </UserControl>
