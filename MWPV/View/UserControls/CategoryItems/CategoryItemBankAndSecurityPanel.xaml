@@ -95,7 +95,7 @@
                         <!-- CVV -->
                         <ColumnDefinition Width="140" />
                         <!-- PIN -->
-                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70"  />
                         <!-- Active -->
                         <ColumnDefinition Width="Auto" />
                         <!-- Add -->
@@ -393,7 +393,7 @@
                         <!-- Account number -->
                         <ColumnDefinition Width="140" />
                         <!-- Account PIN -->
-                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70"  />
                         <!-- Active -->
                         <ColumnDefinition Width="Auto" />
                         <!-- Add -->
@@ -560,15 +560,15 @@
                 <!-- Entry row -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*"   />
                         <!-- Question -->
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*"   />
                         <!-- Answer -->
-                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70"  />
                         <!-- Active -->
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto"/>
                         <!-- Add -->
-                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto"/>
                         <!-- Clear -->
                     </Grid.ColumnDefinitions>
 
@@ -586,7 +586,7 @@
                                FontWeight="Bold"
                                Margin="0,0,0,2" />
 
-                    <!-- Question text -->
+                    <!-- Question text (no LostFocus here now) -->
                     <TextBox x:Name="SecurityQuestionTextBox"
                              Grid.Column="0"
                              Margin="0,20,6,0" />
@@ -603,21 +603,25 @@
                         <Grid Grid.Column="0">
                             <PasswordBox x:Name="SecurityAnswerBox"
                                          VerticalAlignment="Center"
-                                         Height="28" />
+                                         Height="28"
+                                         LostFocus="OnSecurityFieldLostFocus"
+                                         PasswordChanged="SecurityAnswerBox_PasswordChanged" />
                             <TextBox x:Name="SecurityAnswerPlainText"
                                      VerticalAlignment="Center"
                                      Height="28"
-                                     IsReadOnly="True"
+                                     IsReadOnly="False"
                                      IsHitTestVisible="False"
                                      Background="Transparent"
                                      BorderThickness="0"
-                                     Visibility="Collapsed" />
+                                     Visibility="Collapsed"
+                                     LostFocus="OnSecurityFieldLostFocus" />
                         </Grid>
 
                         <Button x:Name="BtnToggleSecurityAnswer"
                                 Grid.Column="1"
                                 Style="{StaticResource SmallSquarePrimaryButton}"
-                                ToolTip="Show/Hide answer">
+                                ToolTip="Show/Hide answer"
+                                Click="BtnToggleSecurityAnswer_Click">
                             <Viewbox Stretch="Uniform">
                                 <Grid Width="20" Height="20">
                                     <Path Stroke="Black"
@@ -652,13 +656,15 @@
                             Grid.Column="3"
                             Margin="8,18,0,0"
                             Content="Add"
-                            Style="{StaticResource DialogPrimary}" />
+                            Style="{StaticResource DialogPrimary}"
+                            Click="OnSecurityAddOrUpdateClick" />
 
                     <Button x:Name="BtnSecurityClear"
                             Grid.Column="4"
                             Margin="6,18,0,0"
                             Content="Clear"
-                            Style="{StaticResource DialogSecondary}" />
+                            Style="{StaticResource DialogSecondary}"
+                            Click="OnSecurityClearClick" />
                 </Grid>
 
                 <!-- Error text -->
@@ -712,7 +718,8 @@
                                 <DataTemplate>
                                     <Button Style="{StaticResource SmallSquarePrimaryButton}"
                                             HorizontalAlignment="Center"
-                                            Tag="{Binding}">
+                                            Tag="{Binding}"
+                                            Click="OnSecurityEditClick">
                                         <TextBlock Text="✎" FontSize="12" />
                                     </Button>
                                 </DataTemplate>
@@ -724,7 +731,8 @@
                                 <DataTemplate>
                                     <Button Style="{StaticResource SmallSquarePrimaryButton}"
                                             HorizontalAlignment="Center"
-                                            Tag="{Binding}">
+                                            Tag="{Binding}"
+                                            Click="OnSecurityDeleteClick">
                                         <TextBlock Text="✖" FontSize="12" />
                                     </Button>
                                 </DataTemplate>
