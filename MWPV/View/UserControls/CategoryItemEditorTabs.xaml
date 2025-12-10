@@ -89,32 +89,53 @@
                       CanContentScroll="True"
                       PanningMode="VerticalOnly"
                       Focusable="False">
+
             <!-- Shared-size scope so columns line up -->
             <Grid Margin="20"
                   Grid.IsSharedSizeScope="True">
+
+                <!-- ROWS:
+                     0: Category name
+                     1: Password
+                     2: Verify password
+                     3: Strength + verify error
+                     4: spacer
+                     5: User / Email / Url
+                     6: Email error
+                     7: spacer
+                     8: Phone
+                     9: Phone error
+                    10: spacer
+                    11: Notes
+                    12: Save/Cancel
+                -->
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <!-- 0: name / password -->
+                    <!--0-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 1: strength + verify err -->
+                    <!--1-->
+                    <RowDefinition Height="Auto"/>
+                    <!--2-->
+                    <RowDefinition Height="Auto"/>
+                    <!--3-->
                     <RowDefinition Height="10"/>
-                    <!-- 2: spacer -->
+                    <!--4 spacer-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 3: user/email/url row -->
+                    <!--5-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 4: email error -->
+                    <!--6-->
                     <RowDefinition Height="10"/>
-                    <!-- 5: spacer -->
+                    <!--7 spacer-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 6: phone -->
+                    <!--8-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 7: phone error -->
+                    <!--9-->
                     <RowDefinition Height="10"/>
-                    <!-- 8: spacer -->
+                    <!--10 spacer-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 9: notes -->
+                    <!--11-->
                     <RowDefinition Height="Auto"/>
-                    <!-- 10: Save/Cancel buttons -->
+                    <!--12-->
                 </Grid.RowDefinitions>
 
                 <Grid.ColumnDefinitions>
@@ -125,7 +146,7 @@
                     <ColumnDefinition Width="3*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Name -->
+                <!-- ========== ROW 0: CATEGORY ITEM NAME ========== -->
                 <Label Grid.Row="0" Grid.Column="0"
                        Content="* Category Item Name"
                        FontWeight="Bold"
@@ -137,17 +158,21 @@
                          MinWidth="320"
                          HorizontalAlignment="Left"/>
 
+                <!-- ========== ROW 1: PASSWORD ========== -->
+
                 <!-- Password label -->
-                <Label Grid.Row="0" Grid.Column="2"
+                <Label Grid.Row="1" Grid.Column="0"
                        Content="* Password"
                        FontWeight="Bold"
                        ToolTip="Required field"/>
 
-                <!-- Password row: password + buttons + bookmark-only checkbox all in one line -->
-                <Grid Grid.Row="0" Grid.Column="2"
+                <!-- Password row: password + buttons + bookmark-only checkbox -->
+                <Grid Grid.Row="1"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="3"
                       Margin="0,22,0,0"
                       Height="28"
-                      MinWidth="125"
+                      MinWidth="320"
                       HorizontalAlignment="Left">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -161,7 +186,7 @@
                         <PasswordBox x:Name="pwdPassword"
                                      VerticalAlignment="Center"
                                      Height="28"
-                                     MinWidth="220"
+                                     MinWidth="260"
                                      HorizontalAlignment="Stretch"
                                      PasswordChanged="pwdPassword_PasswordChanged"
                                      GotFocus="pwdPassword_GotFocus"
@@ -169,7 +194,7 @@
                         <TextBox x:Name="txtPasswordPlain"
                                  VerticalAlignment="Center"
                                  Height="28"
-                                 MinWidth="220"
+                                 MinWidth="260"
                                  HorizontalAlignment="Stretch"
                                  IsReadOnly="True"
                                  IsHitTestVisible="False"
@@ -220,74 +245,87 @@
                               ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
                 </Grid>
 
-                <!-- Verify password -->
+                <!-- ========== ROW 2: VERIFY PASSWORD (ALIGNED WITH PASSWORD) ========== -->
+
+                <Label Grid.Row="2" Grid.Column="0"
+                       Content="Verify Password"
+                       FontWeight="Bold"/>
+
                 <Grid x:Name="VerifyRow"
-                      Grid.Row="0" Grid.Column="4"
-                      Visibility="Collapsed"
-                      HorizontalAlignment="Left">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                      Grid.Row="2"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="3"
+                      Margin="0,22,0,0"
+                      Height="28"
+                      MinWidth="320"
+                      HorizontalAlignment="Left"
+                      Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <Label Content="Verify Password"
-                           FontWeight="Bold"
-                           Grid.Row="0"
-                           Margin="0,0,0,4"/>
-
-                    <StackPanel Grid.Row="1"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Left">
-                        <Grid Height="28"
-                              Width="125">
-                            <PasswordBox x:Name="pwdVerify"
-                                         VerticalAlignment="Center"
-                                         Height="28"
-                                         HorizontalAlignment="Stretch"
-                                         PasswordChanged="pwdVerify_PasswordChanged"/>
-                            <TextBox x:Name="txtVerifyPlain"
+                    <!-- Verify / plain overlay -->
+                    <Grid Grid.Column="0">
+                        <PasswordBox x:Name="pwdVerify"
                                      VerticalAlignment="Center"
                                      Height="28"
                                      HorizontalAlignment="Stretch"
-                                     IsReadOnly="True"
-                                     IsHitTestVisible="False"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     Visibility="Collapsed"
-                                     Foreground="Black"/>
-                        </Grid>
+                                     PasswordChanged="pwdVerify_PasswordChanged"/>
+                        <TextBox x:Name="txtVerifyPlain"
+                                 VerticalAlignment="Center"
+                                 Height="28"
+                                 HorizontalAlignment="Stretch"
+                                 IsReadOnly="True"
+                                 IsHitTestVisible="False"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Visibility="Collapsed"
+                                 Foreground="Black"/>
+                    </Grid>
 
-                        <!-- Reveal verify -->
-                        <Button x:Name="btnToggleVerifyReveal"
-                                Style="{StaticResource SmallSquarePrimaryButton}"
-                                ToolTip="Show/Hide verification"
-                                Margin="4,0,0,0"
-                                Click="BtnToggleVerifyReveal_Click">
-                            <Viewbox Stretch="Uniform">
-                                <Grid Width="20" Height="20">
-                                    <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
-                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
-                                    <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    <Ellipse Width="3" Height="3" Fill="Black"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Viewbox>
-                        </Button>
+                    <!-- Dummy to keep columns aligned with Generate button above -->
+                    <Button x:Name="btnVerifyDummyGenerate"
+                            Grid.Column="1"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            Visibility="Hidden"
+                            IsHitTestVisible="False"/>
 
-                        <!-- Spacer button: not used, hidden but keeps layout width -->
-                        <Button x:Name="btnVerifyNotUsed"
-                                Style="{StaticResource SmallSquarePrimaryButton}"
-                                Margin="4,0,0,0"
-                                Visibility="Hidden"
-                                IsHitTestVisible="False"
-                                ToolTip="(not used – spacer only)"/>
-                    </StackPanel>
+                    <!-- Reveal verify (aligned with main eye) -->
+                    <Button x:Name="btnToggleVerifyReveal"
+                            Grid.Column="2"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            ToolTip="Show/Hide verification"
+                            Margin="4,0,0,0"
+                            Visibility="Collapsed"
+                            Click="BtnToggleVerifyReveal_Click">
+                        <Viewbox Stretch="Uniform">
+                            <Grid Width="20" Height="20">
+                                <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                      Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                                <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Ellipse Width="3" Height="3" Fill="Black"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Spacer to mirror bookmark-only space -->
+                    <Button x:Name="btnVerifyNotUsed"
+                            Grid.Column="3"
+                            Style="{StaticResource SmallSquarePrimaryButton}"
+                            Margin="4,0,0,0"
+                            Visibility="Hidden"
+                            IsHitTestVisible="False"
+                            ToolTip="(not used – spacer only)"/>
                 </Grid>
 
-                <!-- Strength -->
+                <!-- ========== ROW 3: STRENGTH + VERIFY ERROR ========== -->
                 <StackPanel x:Name="StrengthPanel"
-                            Grid.Row="1" Grid.Column="2"
+                            Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <ProgressBar x:Name="PwStrengthBar"
@@ -315,9 +353,8 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <!-- Verify error -->
                 <StackPanel x:Name="VerifyErrorPanel"
-                            Grid.Row="1" Grid.Column="4"
+                            Grid.Row="3" Grid.Column="4"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <TextBlock x:Name="VerifyErrorText"
@@ -327,40 +364,44 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- User/email/url -->
-                <Label Grid.Row="3" Grid.Column="0"
+                <!-- ========== ROW 4: SPACER ========== -->
+                <!-- empty -->
+
+                <!-- ========== ROW 5: USER / EMAIL / URL ========== -->
+                <Label Grid.Row="5" Grid.Column="0"
                        Content="User Name"
                        FontWeight="Bold"/>
                 <TextBox x:Name="txtUsername"
-                         Grid.Row="3" Grid.Column="0"
+                         Grid.Row="5" Grid.Column="0"
                          Margin="0,22,0,0"
                          Height="28"
                          MinWidth="240"
                          HorizontalAlignment="Left"/>
 
-                <Label Grid.Row="3" Grid.Column="2"
+                <Label Grid.Row="5" Grid.Column="2"
                        Content="Email"
                        FontWeight="Bold"/>
                 <TextBox x:Name="txtEmail"
-                         Grid.Row="3" Grid.Column="2"
+                         Grid.Row="5" Grid.Column="2"
                          Margin="0,22,0,0"
                          Height="28"
                          MinWidth="240"
                          HorizontalAlignment="Left"
                          LostFocus="txtEmail_LostFocus"/>
 
-                <Label Grid.Row="3" Grid.Column="4"
+                <Label Grid.Row="5" Grid.Column="4"
                        Content="URL or Absolute Location"
                        FontWeight="Bold"/>
                 <TextBox x:Name="txtUrl"
-                         Grid.Row="3" Grid.Column="4"
+                         Grid.Row="5" Grid.Column="4"
                          Margin="0,22,0,0"
                          Height="28"
                          MinWidth="220"
                          HorizontalAlignment="Left"/>
 
+                <!-- ========== ROW 6: EMAIL ERROR ========== -->
                 <StackPanel x:Name="EmailErrorPanel"
-                            Grid.Row="4" Grid.Column="2"
+                            Grid.Row="6" Grid.Column="2"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <TextBlock x:Name="EmailErrorText"
@@ -370,11 +411,14 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- Phone -->
-                <Label Grid.Row="6" Grid.Column="0"
+                <!-- ========== ROW 7: SPACER ========== -->
+                <!-- empty -->
+
+                <!-- ========== ROW 8–9: PHONE ========== -->
+                <Label Grid.Row="8" Grid.Column="0"
                        Content="Phone Number"
                        FontWeight="Bold"/>
-                <Grid Grid.Row="6" Grid.Column="0"
+                <Grid Grid.Row="8" Grid.Column="0"
                       Margin="0,22,0,0"
                       Height="28"
                       MinWidth="320"
@@ -413,14 +457,14 @@
                                 <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Ellipse Width="3" Height="3" Fill="Black"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                         HorizontalAlignment="Center"/>
                             </Grid>
                         </Viewbox>
                     </Button>
                 </Grid>
 
                 <StackPanel x:Name="PhoneErrorPanel"
-                            Grid.Row="7" Grid.Column="0"
+                            Grid.Row="9" Grid.Column="0"
                             Margin="0,6,0,0"
                             Visibility="Collapsed">
                     <TextBlock x:Name="PhoneErrorText"
@@ -430,20 +474,23 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- Notes -->
-                <Label Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="5"
+                <!-- ========== ROW 10: SPACER ========== -->
+                <!-- empty -->
+
+                <!-- ========== ROW 11: NOTES ========== -->
+                <Label Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
                        Content="Freeform Notes"
                        FontWeight="Bold"/>
                 <TextBox x:Name="txtDescription"
-                         Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="5"
+                         Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
                          Margin="0,22,0,0"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto"
                          Height="48"/>
 
-                <!-- Save / Cancel buttons inside scrollable content -->
-                <StackPanel Grid.Row="10"
+                <!-- ========== ROW 12: SAVE / CANCEL ========== -->
+                <StackPanel Grid.Row="12"
                             Grid.Column="0"
                             Grid.ColumnSpan="5"
                             Orientation="Horizontal"

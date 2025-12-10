@@ -13,12 +13,16 @@
         <!-- ====================== MAIN SPLIT ====================== -->
         <Grid x:Name="SplitRoot">
             <Grid.ColumnDefinitions>
+                <!-- Left: Categories -->
                 <ColumnDefinition Width="*" MinWidth="260"/>
+                <!-- Right: Category Items & editor overlay -->
                 <ColumnDefinition Width="*" MinWidth="420"/>
             </Grid.ColumnDefinitions>
 
             <!-- ================= LEFT: Categories ================== -->
-            <DockPanel Grid.Column="0" LastChildFill="True" Margin="8">
+            <DockPanel Grid.Column="0"
+                       LastChildFill="True"
+                       Margin="8">
 
                 <!-- Header -->
                 <TextBlock DockPanel.Dock="Top"
@@ -37,10 +41,10 @@
                             Style="{StaticResource DialogPrimary}"/>
                 </StackPanel>
 
-                <!-- Category Grid -->
+                <!-- Category grid (default view) -->
                 <uc:CategoryGrid x:Name="CategoryGrid"/>
 
-                <!-- Inline Add Category Host -->
+                <!-- Inline Add Category host (shown when adding) -->
                 <Border x:Name="AddCategoryHost"
                         Visibility="Collapsed"
                         Background="Transparent"
@@ -51,44 +55,50 @@
                 </Border>
             </DockPanel>
 
-            <!-- ============== RIGHT: Category Items ================ -->
-            <DockPanel Grid.Column="1" LastChildFill="True" Margin="8">
+            <!-- ============== RIGHT: Items + EDIT OVERLAY =========== -->
+            <Grid Grid.Column="1"
+                  x:Name="RightPane"
+                  Margin="8">
+                <!-- Base right-hand content -->
+                <DockPanel x:Name="RightContent"
+                           LastChildFill="True">
 
-                <!-- Header -->
-                <TextBlock DockPanel.Dock="Top"
-                           x:Name="txtCategoryItemsTitle"
-                           Text="Category Items"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
+                    <!-- Header -->
+                    <TextBlock DockPanel.Dock="Top"
+                               x:Name="txtCategoryItemsTitle"
+                               Text="Category Items"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8"/>
 
-                <!-- Add Item button -->
-                <StackPanel DockPanel.Dock="Top"
-                            Orientation="Horizontal"
-                            Margin="0,0,0,8">
-                    <Button x:Name="btnAddCategoryItem"
-                            Content="Add Item"
-                            Visibility="Collapsed"
-                            Click="btnAddCategoryItem_Click"
-                            Style="{StaticResource DialogPrimary}"/>
-                </StackPanel>
+                    <!-- Add Item button -->
+                    <StackPanel DockPanel.Dock="Top"
+                                Orientation="Horizontal"
+                                Margin="0,0,0,8">
+                        <Button x:Name="btnAddCategoryItem"
+                                Content="Add Item"
+                                Visibility="Collapsed"
+                                Click="btnAddCategoryItem_Click"
+                                Style="{StaticResource DialogPrimary}"/>
+                    </StackPanel>
 
-                <!-- Category Item Grid -->
-                <uc:CategoryItemGrid x:Name="CategoryItemGrid"
-                                     Margin="0,4,0,0"/>
-            </DockPanel>
+                    <!-- Category Item grid -->
+                    <uc:CategoryItemGrid x:Name="CategoryItemGrid"
+                                         Margin="0,4,0,0"/>
+                </DockPanel>
+
+                <!-- Add/Edit Category Item overlay
+                     (only covers the RIGHT side now) -->
+                <ContentControl x:Name="AddEditItemOverlayHost"
+                                Visibility="Collapsed"
+                                Panel.ZIndex="200"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"/>
+            </Grid>
         </Grid>
 
-        <!-- =================== ITEM EDIT OVERLAY =================== -->
-        <!-- CHANGED from Border -> ContentControl so code-behind can set .Content -->
-        <ContentControl x:Name="AddEditItemOverlayHost"
-                        Visibility="Collapsed"
-                        Panel.ZIndex="500"
-                        Background="{DynamicResource Brush.PrimaryBackground}"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"/>
-
         <!-- ====================== LOGS OVERLAY ===================== -->
+        <!-- This still covers the whole panel (both columns). -->
         <Border x:Name="OverlayHost"
                 Visibility="Collapsed"
                 Panel.ZIndex="1000"
