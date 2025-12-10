@@ -8,7 +8,7 @@ namespace MWPV.View.UserControls
     public partial class Panel : UserControl
     {
         private AddCategoryInline? _addCategoryInline;
-        private CategoryItemNew? _categoryItemEdit;
+        private CategoryItemEditorTabs? _categoryItemEdit;
         private bool _isHandlingInlineEvent;
 
         private int _selectedCategoryKey;
@@ -155,7 +155,10 @@ namespace MWPV.View.UserControls
                 SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
-            finally { _isHandlingInlineEvent = false; }
+            finally
+            {
+                _isHandlingInlineEvent = false;
+            }
         }
 
         private void AddCategoryInline_Canceled(object? sender, EventArgs e)
@@ -168,7 +171,10 @@ namespace MWPV.View.UserControls
                 SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
-            finally { _isHandlingInlineEvent = false; }
+            finally
+            {
+                _isHandlingInlineEvent = false;
+            }
         }
 
         /* =================== Add/Edit Category Item =================== */
@@ -180,13 +186,21 @@ namespace MWPV.View.UserControls
 
         private void ShowAddEditCategoryItem()
         {
+            if (_selectedCategoryKey == 0)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][ITEM-EDIT] Add requested with no selected category. Ignoring.");
+#endif
+                return;
+            }
+
             if (_categoryItemEdit != null)
             {
                 _categoryItemEdit.Submitted -= CategoryItemEdit_Submitted;
                 _categoryItemEdit.Canceled -= CategoryItemEdit_Canceled;
             }
 
-            _categoryItemEdit = new CategoryItemNew();
+            _categoryItemEdit = new CategoryItemEditorTabs();
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
@@ -250,8 +264,14 @@ namespace MWPV.View.UserControls
 
         private void SafeRefreshCategories()
         {
-            try { CategoryGrid?.Refresh(); }
-            catch (Exception ex) { Debug.WriteLine($"[PANEL][REFRESH][ERR] {ex}"); }
+            try
+            {
+                CategoryGrid?.Refresh();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PANEL][REFRESH][ERR] {ex}");
+            }
         }
     }
 }
