@@ -30,7 +30,6 @@ namespace MWPV.View.UserControls
         private readonly DispatcherTimer _revealTimer;
 
         private bool _settingPwProgrammatically;
-        private bool _verifyRowShown;
 
         // Email visuals
         private Brush? _emailDefaultBorderBrush;
@@ -48,7 +47,7 @@ namespace MWPV.View.UserControls
             Loaded += CategoryItemNew_Loaded;
             Unloaded += CategoryItemNew_Unloaded;
 
-            // Redundant but harmless; keeps behavior explicit.
+            // Redundant but harmless; keeps behavior explicit
             txtEmail.LostFocus += txtEmail_LostFocus;
 
             _revealTimer = new DispatcherTimer
@@ -133,6 +132,7 @@ namespace MWPV.View.UserControls
             if (!ValidatePasswordForSubmission(out var error))
             {
                 PasswordValidationFailed?.Invoke(this, error);
+
                 if (VerifyRow.Visibility == Visibility.Visible &&
                     !string.IsNullOrEmpty(pwdVerify.Password))
                 {
@@ -142,6 +142,7 @@ namespace MWPV.View.UserControls
                 {
                     pwdPassword.Focus();
                 }
+
                 return;
             }
 
@@ -199,9 +200,7 @@ namespace MWPV.View.UserControls
         {
             _revealTimer.Stop();
 
-            if (_mainRevealed ||
-                _verifyRevealed ||
-                _phoneRevealed)
+            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
             {
                 _revealTimer.Start();
             }
@@ -214,6 +213,7 @@ namespace MWPV.View.UserControls
             try
             {
                 var generated = SecurePassword.GenerateAsString(12);
+
                 _settingPwProgrammatically = true;
                 try
                 {
@@ -267,7 +267,11 @@ namespace MWPV.View.UserControls
                 (e.Key == Key.Insert && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
 
             if (pasteCombo)
-                _verifyRowShown = false;
+            {
+                // On paste, reset verify state so the user re-confirms.
+                HideVerifyRow();
+                HideVerifyError();
+            }
         }
 
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
@@ -309,7 +313,7 @@ namespace MWPV.View.UserControls
             if (_mainRevealed || _verifyRevealed || _phoneRevealed)
                 StartOrRestartRevealTimerIfNeeded();
 
-            // New behavior: eye visible only when there is content.
+            // Eye visible only when there is content.
             if (string.IsNullOrEmpty(pwdVerify.Password))
             {
                 btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
@@ -362,6 +366,7 @@ namespace MWPV.View.UserControls
         private void SetPassword(string value)
         {
             pwdPassword.Password = value;
+
             if (_mainRevealed)
                 txtPasswordPlain.Text = value;
 
@@ -477,19 +482,21 @@ namespace MWPV.View.UserControls
             if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
             if (!pw.Any(char.IsDigit)) tips.Add("Add a digit.");
             if (!pw.Any(ch => !char.IsLetterOrDigit(ch))) tips.Add("Add a special character.");
+
             PwTipsList.ItemsSource = tips;
         }
 
         private void EnsureVerifyRowVisibleForManual()
         {
-            if (_verifyRowShown) return;
+            if (VerifyRow.Visibility == Visibility.Visible)
+                return;
+
             ShowVerifyRow();
         }
 
         private void ShowVerifyRow()
         {
             VerifyRow.Visibility = Visibility.Visible;
-            _verifyRowShown = true;
 
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
@@ -504,7 +511,6 @@ namespace MWPV.View.UserControls
         private void HideVerifyRow()
         {
             VerifyRow.Visibility = Visibility.Collapsed;
-            _verifyRowShown = false;
 
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
@@ -541,6 +547,7 @@ namespace MWPV.View.UserControls
         private void ShowVerifyError(string message)
         {
             VerifyErrorText.Text = message ?? string.Empty;
+
             if (VerifyErrorPanel.Visibility != Visibility.Visible)
                 VerifyErrorPanel.Visibility = Visibility.Visible;
         }
@@ -548,6 +555,7 @@ namespace MWPV.View.UserControls
         private void HideVerifyError()
         {
             VerifyErrorText.Text = string.Empty;
+
             if (VerifyErrorPanel.Visibility != Visibility.Collapsed)
                 VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
