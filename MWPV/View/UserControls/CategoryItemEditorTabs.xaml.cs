@@ -497,6 +497,7 @@ namespace MWPV.View.UserControls
         private void ShowVerifyRow()
         {
             VerifyRow.Visibility = Visibility.Visible;
+            lblVerifyPassword.Visibility = Visibility.Visible;
 
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
@@ -511,6 +512,7 @@ namespace MWPV.View.UserControls
         private void HideVerifyRow()
         {
             VerifyRow.Visibility = Visibility.Collapsed;
+            lblVerifyPassword.Visibility = Visibility.Collapsed;
 
             pwdVerify.Password = string.Empty;
             txtVerifyPlain.Text = string.Empty;
