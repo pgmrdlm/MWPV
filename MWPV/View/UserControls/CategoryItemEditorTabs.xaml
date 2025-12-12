@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:categoryItems="clr-namespace:MWPV.View.UserControls.CategoryItems"
              mc:Ignorable="d"
              d:DesignHeight="560"
              d:DesignWidth="940"
@@ -63,7 +64,7 @@
             </Setter>
         </Style>
 
-        <!-- Just tint the default tabs, no fancy template -->
+        <!-- Simple tab styling -->
         <Style TargetType="TabControl">
             <Setter Property="Background" Value="Bisque"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -538,14 +539,41 @@
                     </Grid>
                 </TabItem>
 
-                <!-- ========== EXTRA TAB (placeholder for now) ========== -->
-                <TabItem Header="Extra">
+                <!-- ========== BANK CARDS TAB ========== -->
+                <TabItem Header="Bank Cards">
                     <Grid Margin="20"
                           Background="Bisque">
-                        <!-- We’ll replace this with your Bank Card / Accounts / Security Questions panels -->
-                        <TextBlock Text="Extra details (accounts, bank cards, security questions) will go here."
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,0,8"/>
+                        <categoryItems:CategoryItemBankCardsPanel />
+                    </Grid>
+                </TabItem>
+
+                <!-- ========== ACCOUNTS TAB ========== -->
+                <TabItem Header="Accounts">
+                    <Grid Margin="20"
+                          Background="Bisque">
+                        <StackPanel>
+                            <TextBlock Text="Account details will go here."
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,8"/>
+                            <TextBlock Text="(Then we’ll carve the Accounts section out of CategoryItemBankAndSecurityPanel into a separate control and drop it in this tab.)"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+
+                <!-- ========== SECURITY QUESTIONS TAB ========== -->
+                <TabItem Header="Security Q/A">
+                    <Grid Margin="20"
+                          Background="Bisque">
+                        <StackPanel>
+                            <TextBlock Text="Security questions and answers will go here."
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,8"/>
+                            <TextBlock Text="(Finally we’ll move just the Security Questions piece into its own control and host it here.)"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"/>
+                        </StackPanel>
                     </Grid>
                 </TabItem>
 
