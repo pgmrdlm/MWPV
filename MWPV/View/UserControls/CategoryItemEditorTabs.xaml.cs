@@ -27,7 +27,7 @@ namespace MWPV.View.UserControls
         private bool _verifyRevealed;
         private bool _phoneRevealed;
 
-        // New helper replaces DispatcherTimer usage
+        // Centralized helper replaces DispatcherTimer usage
         private readonly AutoHideTimer _revealAutoHide;
 
         private bool _settingPwProgrammatically;
@@ -41,15 +41,15 @@ namespace MWPV.View.UserControls
         private Brush? _phoneDefaultBorderBrush;
         private Brush? _phoneDefaultBackground;
 
+        // Prevent event stacking if control is reloaded into the visual tree
+        private bool _uiEventsHooked;
+
         public CategoryItemEditorTabs()
         {
             InitializeComponent();
 
-            Loaded += CategoryItemNew_Loaded;
-            Unloaded += CategoryItemNew_Unloaded;
-
-            // Redundant but harmless; keeps behavior explicit
-            txtEmail.LostFocus += txtEmail_LostFocus;
+            Loaded += CategoryItemEditorTabs_Loaded;
+            Unloaded += CategoryItemEditorTabs_Unloaded;
 
             // Helper-driven: on timeout, hide all reveals (same behavior as before)
             _revealAutoHide = new AutoHideTimer(
@@ -58,16 +58,13 @@ namespace MWPV.View.UserControls
             );
         }
 
-        private void CategoryItemNew_Loaded(object? sender, RoutedEventArgs e)
+        private void CategoryItemEditorTabs_Loaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Loaded");
 #endif
-            _emailDefaultBorderBrush = txtEmail.BorderBrush;
-            _emailDefaultBackground = txtEmail.Background;
-
-            _phoneDefaultBorderBrush = txtPhone.BorderBrush;
-            _phoneDefaultBackground = txtPhone.Background;
+            CacheDefaultFieldVisualsIfNeeded();
+            HookUiEventsOnce();
 
             ClearForm();
             HideAllRevealsAndStopTimer();
@@ -78,11 +75,16 @@ namespace MWPV.View.UserControls
             ClearPhoneError();
         }
 
-        private void CategoryItemNew_Unloaded(object? sender, RoutedEventArgs e)
+        private void CategoryItemEditorTabs_Unloaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Unloaded");
 #endif
+            // Make absolutely sure the helper isn't still running after we leave.
+            _revealAutoHide.Stop();
+
+            UnhookUiEvents();
+
             HideAllRevealsAndStopTimer();
             WipeSensitiveFields();
             HideStrengthRow();
@@ -97,6 +99,7 @@ namespace MWPV.View.UserControls
             _categoryKey = categoryKey;
             _categoryName = categoryName;
             _isEditMode = false;
+
 #if DEBUG
             Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
 #endif
@@ -108,6 +111,7 @@ namespace MWPV.View.UserControls
             _categoryKey = categoryKey;
             _categoryName = categoryName;
             _isEditMode = true;
+
 #if DEBUG
             Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
@@ -183,10 +187,14 @@ namespace MWPV.View.UserControls
 
         private void OnRevealTimeout()
         {
+            // Safe even if AutoHideTimer uses a non-UI timer internally.
+            RunOnUiThread(() =>
+            {
 #if DEBUG
-            Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
+                Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
 #endif
-            HideAllRevealsAndStopTimer();
+                HideAllRevealsAndStopTimer();
+            });
         }
 
         private void HideAllRevealsAndStopTimer()
@@ -276,8 +284,7 @@ namespace MWPV.View.UserControls
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                TouchRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
 
             if (_settingPwProgrammatically) return;
 
@@ -307,8 +314,7 @@ namespace MWPV.View.UserControls
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                TouchRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
 
             // Eye visible only when there is content.
             if (string.IsNullOrEmpty(pwdVerify.Password))
@@ -334,9 +340,7 @@ namespace MWPV.View.UserControls
 
         private void HideMainPassword()
         {
-            if (!string.IsNullOrEmpty(txtPasswordPlain.Text))
-                txtPasswordPlain.Text = string.Empty;
-
+            txtPasswordPlain.Text = string.Empty;
             txtPasswordPlain.Visibility = Visibility.Collapsed;
             pwdPassword.Visibility = Visibility.Visible;
             _mainRevealed = false;
@@ -352,9 +356,7 @@ namespace MWPV.View.UserControls
 
         private void HideVerifyPassword()
         {
-            if (!string.IsNullOrEmpty(txtVerifyPlain.Text))
-                txtVerifyPlain.Text = string.Empty;
-
+            txtVerifyPlain.Text = string.Empty;
             txtVerifyPlain.Visibility = Visibility.Collapsed;
             pwdVerify.Visibility = Visibility.Visible;
             _verifyRevealed = false;
@@ -517,7 +519,6 @@ namespace MWPV.View.UserControls
             HideVerifyPassword();
             HideVerifyError();
 
-            // Reset the eye visibility.
             btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
@@ -586,54 +587,42 @@ namespace MWPV.View.UserControls
 
         private void MarkEmailValid()
         {
-            try
-            {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
+            EmailErrorText.Text = string.Empty;
+            EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-                txtEmail.ToolTip = null;
-                if (_emailDefaultBackground != null)
-                    txtEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null)
-                    txtEmail.BorderBrush = _emailDefaultBorderBrush;
-            }
-            catch { }
+            txtEmail.ToolTip = null;
+            if (_emailDefaultBackground != null)
+                txtEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null)
+                txtEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
         private void MarkEmailInvalid(string message)
         {
-            try
-            {
-                EmailErrorText.Text = string.IsNullOrWhiteSpace(message)
-                    ? "Please enter a valid email address."
-                    : message;
+            EmailErrorText.Text = string.IsNullOrWhiteSpace(message)
+                ? "Please enter a valid email address."
+                : message;
 
-                if (EmailErrorPanel.Visibility != Visibility.Visible)
-                    EmailErrorPanel.Visibility = Visibility.Visible;
+            if (EmailErrorPanel.Visibility != Visibility.Visible)
+                EmailErrorPanel.Visibility = Visibility.Visible;
 
-                txtEmail.ToolTip = EmailErrorText.Text;
+            txtEmail.ToolTip = EmailErrorText.Text;
 
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                txtEmail.Background = fill;
-            }
-            catch { }
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            txtEmail.Background = fill;
         }
 
         private void ClearEmailValidation()
         {
-            try
-            {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
+            EmailErrorText.Text = string.Empty;
+            EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-                txtEmail.ToolTip = null;
-                if (_emailDefaultBackground != null)
-                    txtEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null)
-                    txtEmail.BorderBrush = _emailDefaultBorderBrush;
-            }
-            catch { }
+            txtEmail.ToolTip = null;
+            if (_emailDefaultBackground != null)
+                txtEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null)
+                txtEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
         /* ======================= Phone validation + reveal ======================= */
@@ -648,8 +637,7 @@ namespace MWPV.View.UserControls
             if (_phoneRevealed)
                 txtPhonePlain.Text = txtPhone.Password;
 
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                TouchRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
 
             if (string.IsNullOrEmpty(txtPhone.Password))
                 ClearPhoneError();
@@ -675,9 +663,7 @@ namespace MWPV.View.UserControls
 
         private void HidePhone()
         {
-            if (!string.IsNullOrEmpty(txtPhonePlain.Text))
-                txtPhonePlain.Text = string.Empty;
-
+            txtPhonePlain.Text = string.Empty;
             txtPhonePlain.Visibility = Visibility.Collapsed;
             txtPhone.Visibility = Visibility.Visible;
             _phoneRevealed = false;
@@ -697,8 +683,7 @@ namespace MWPV.View.UserControls
 
             if (len < 7)
             {
-                var msg = "Phone number appears too short. Please enter at least 7 digits or clear the field.";
-                ShowPhoneError(msg);
+                ShowPhoneError("Phone number appears too short. Please enter at least 7 digits or clear the field.");
                 return false;
             }
 
@@ -708,80 +693,106 @@ namespace MWPV.View.UserControls
 
         private void ShowPhoneError(string message)
         {
-            try
-            {
-                PhoneErrorText.Text = message ?? string.Empty;
-                PhoneErrorPanel.Visibility = Visibility.Visible;
+            PhoneErrorText.Text = message ?? string.Empty;
+            PhoneErrorPanel.Visibility = Visibility.Visible;
 
-                txtPhone.ToolTip = PhoneErrorText.Text;
+            txtPhone.ToolTip = PhoneErrorText.Text;
 
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                txtPhone.Background = fill;
-            }
-            catch { }
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            txtPhone.Background = fill;
         }
 
         private void ClearPhoneError()
         {
-            try
-            {
-                PhoneErrorText.Text = string.Empty;
-                PhoneErrorPanel.Visibility = Visibility.Collapsed;
+            PhoneErrorText.Text = string.Empty;
+            PhoneErrorPanel.Visibility = Visibility.Collapsed;
 
-                txtPhone.ToolTip = null;
-                if (_phoneDefaultBackground != null)
-                    txtPhone.Background = _phoneDefaultBackground;
-                if (_phoneDefaultBorderBrush != null)
-                    txtPhone.BorderBrush = _phoneDefaultBorderBrush;
-            }
-            catch { }
+            txtPhone.ToolTip = null;
+            if (_phoneDefaultBackground != null)
+                txtPhone.Background = _phoneDefaultBackground;
+            if (_phoneDefaultBorderBrush != null)
+                txtPhone.BorderBrush = _phoneDefaultBorderBrush;
         }
 
         /* ======================= Form reset / wipe ======================= */
 
         private void ClearForm()
         {
-            try
-            {
-                WipeSensitiveFields();
+            WipeSensitiveFields();
 
-                txtItemName.Text = string.Empty;
-                txtUsername.Text = string.Empty;
-                txtEmail.Text = string.Empty;
-                txtUrl.Text = string.Empty;
-                txtDescription.Text = string.Empty;
+            txtItemName.Text = string.Empty;
+            txtUsername.Text = string.Empty;
+            txtEmail.Text = string.Empty;
+            txtUrl.Text = string.Empty;
+            txtDescription.Text = string.Empty;
 
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
+            _lastEmailChecked = string.Empty;
 
-                PhoneErrorText.Text = string.Empty;
-                PhoneErrorPanel.Visibility = Visibility.Collapsed;
-
-                HideStrengthRow();
-                HideVerifyRow();
-            }
-            catch { }
+            HideStrengthRow();
+            HideVerifyRow();
+            HideVerifyError();
+            ClearEmailValidation();
+            ClearPhoneError();
         }
 
         private void WipeSensitiveFields()
         {
-            try
+            HideAllRevealsAndStopTimer();
+
+            pwdPassword.Password = string.Empty;
+            pwdVerify.Password = string.Empty;
+            txtPhone.Password = string.Empty;
+
+            txtPasswordPlain.Text = string.Empty;
+            txtVerifyPlain.Text = string.Empty;
+            txtPhonePlain.Text = string.Empty;
+
+            HideStrengthRow();
+            HideVerifyError();
+        }
+
+        /* ======================= Load/Unload helpers ======================= */
+
+        private void CacheDefaultFieldVisualsIfNeeded()
+        {
+            _emailDefaultBorderBrush ??= txtEmail.BorderBrush;
+            _emailDefaultBackground ??= txtEmail.Background;
+
+            _phoneDefaultBorderBrush ??= txtPhone.BorderBrush;
+            _phoneDefaultBackground ??= txtPhone.Background;
+        }
+
+        private void HookUiEventsOnce()
+        {
+            if (_uiEventsHooked)
+                return;
+
+            // Ensure no duplicates even if designer/XAML also wires (safe to detach then attach)
+            txtEmail.LostFocus -= txtEmail_LostFocus;
+            txtEmail.LostFocus += txtEmail_LostFocus;
+
+            _uiEventsHooked = true;
+        }
+
+        private void UnhookUiEvents()
+        {
+            if (!_uiEventsHooked)
+                return;
+
+            txtEmail.LostFocus -= txtEmail_LostFocus;
+            _uiEventsHooked = false;
+        }
+
+        private void RunOnUiThread(Action action)
+        {
+            if (Dispatcher.CheckAccess())
             {
-                HideAllRevealsAndStopTimer();
-
-                pwdPassword.Password = string.Empty;
-                pwdVerify.Password = string.Empty;
-                txtPhone.Password = string.Empty;
-
-                txtPasswordPlain.Text = string.Empty;
-                txtVerifyPlain.Text = string.Empty;
-                txtPhonePlain.Text = string.Empty;
-
-                HideStrengthRow();
-                HideVerifyError();
+                action();
+                return;
             }
-            catch { }
+
+            Dispatcher.Invoke(action);
         }
     }
 }
