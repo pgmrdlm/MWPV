@@ -6,9 +6,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Security.Utility.Storage;
 using Security.Utility.Validation;
+using MWPV.Utilities.Helpers;
 
 namespace MWPV.View.UserControls
 {
@@ -27,7 +27,8 @@ namespace MWPV.View.UserControls
         private bool _verifyRevealed;
         private bool _phoneRevealed;
 
-        private readonly DispatcherTimer _revealTimer;
+        // New helper replaces DispatcherTimer usage
+        private readonly AutoHideTimer _revealAutoHide;
 
         private bool _settingPwProgrammatically;
 
@@ -50,11 +51,11 @@ namespace MWPV.View.UserControls
             // Redundant but harmless; keeps behavior explicit
             txtEmail.LostFocus += txtEmail_LostFocus;
 
-            _revealTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(20)
-            };
-            _revealTimer.Tick += RevealTimer_Tick;
+            // Helper-driven: on timeout, hide all reveals (same behavior as before)
+            _revealAutoHide = new AutoHideTimer(
+                interval: TimeSpan.FromSeconds(20),
+                onTimeout: OnRevealTimeout
+            );
         }
 
         private void CategoryItemNew_Loaded(object? sender, RoutedEventArgs e)
@@ -178,9 +179,9 @@ namespace MWPV.View.UserControls
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
-        /* ======================= Shared reveal timer ======================= */
+        /* ======================= Shared reveal auto-hide ======================= */
 
-        private void RevealTimer_Tick(object? sender, EventArgs e)
+        private void OnRevealTimeout()
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
@@ -190,20 +191,16 @@ namespace MWPV.View.UserControls
 
         private void HideAllRevealsAndStopTimer()
         {
-            _revealTimer.Stop();
+            _revealAutoHide.Stop();
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
         }
 
-        private void StartOrRestartRevealTimerIfNeeded()
+        private void TouchRevealTimerIfNeeded()
         {
-            _revealTimer.Stop();
-
-            if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-            {
-                _revealTimer.Start();
-            }
+            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed;
+            _revealAutoHide.Touch(anyRevealed);
         }
 
         /* ======================= Password / Verify ======================= */
@@ -241,7 +238,7 @@ namespace MWPV.View.UserControls
             else
                 ShowMainPassword();
 
-            StartOrRestartRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
         }
 
         private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
@@ -255,7 +252,7 @@ namespace MWPV.View.UserControls
             else
                 ShowVerifyPassword();
 
-            StartOrRestartRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
         }
 
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
@@ -280,7 +277,7 @@ namespace MWPV.View.UserControls
                 txtPasswordPlain.Text = pwdPassword.Password;
 
             if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                StartOrRestartRevealTimerIfNeeded();
+                TouchRevealTimerIfNeeded();
 
             if (_settingPwProgrammatically) return;
 
@@ -311,7 +308,7 @@ namespace MWPV.View.UserControls
                 txtVerifyPlain.Text = pwdVerify.Password;
 
             if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                StartOrRestartRevealTimerIfNeeded();
+                TouchRevealTimerIfNeeded();
 
             // Eye visible only when there is content.
             if (string.IsNullOrEmpty(pwdVerify.Password))
@@ -600,9 +597,7 @@ namespace MWPV.View.UserControls
                 if (_emailDefaultBorderBrush != null)
                     txtEmail.BorderBrush = _emailDefaultBorderBrush;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void MarkEmailInvalid(string message)
@@ -622,9 +617,7 @@ namespace MWPV.View.UserControls
                            ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
                 txtEmail.Background = fill;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void ClearEmailValidation()
@@ -640,9 +633,7 @@ namespace MWPV.View.UserControls
                 if (_emailDefaultBorderBrush != null)
                     txtEmail.BorderBrush = _emailDefaultBorderBrush;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         /* ======================= Phone validation + reveal ======================= */
@@ -658,7 +649,7 @@ namespace MWPV.View.UserControls
                 txtPhonePlain.Text = txtPhone.Password;
 
             if (_mainRevealed || _verifyRevealed || _phoneRevealed)
-                StartOrRestartRevealTimerIfNeeded();
+                TouchRevealTimerIfNeeded();
 
             if (string.IsNullOrEmpty(txtPhone.Password))
                 ClearPhoneError();
@@ -671,7 +662,7 @@ namespace MWPV.View.UserControls
             else
                 ShowPhone();
 
-            StartOrRestartRevealTimerIfNeeded();
+            TouchRevealTimerIfNeeded();
         }
 
         private void ShowPhone()
@@ -728,9 +719,7 @@ namespace MWPV.View.UserControls
                            ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
                 txtPhone.Background = fill;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void ClearPhoneError()
@@ -746,9 +735,7 @@ namespace MWPV.View.UserControls
                 if (_phoneDefaultBorderBrush != null)
                     txtPhone.BorderBrush = _phoneDefaultBorderBrush;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         /* ======================= Form reset / wipe ======================= */
@@ -774,9 +761,7 @@ namespace MWPV.View.UserControls
                 HideStrengthRow();
                 HideVerifyRow();
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void WipeSensitiveFields()
@@ -796,9 +781,7 @@ namespace MWPV.View.UserControls
                 HideStrengthRow();
                 HideVerifyError();
             }
-            catch
-            {
-            }
+            catch { }
         }
     }
 }
