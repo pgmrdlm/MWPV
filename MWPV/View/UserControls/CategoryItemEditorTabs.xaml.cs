@@ -6,9 +6,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Security.Utility.Storage;
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
+using MWPV.Utilities.UI; // <-- UICleaner
 
 namespace MWPV.View.UserControls
 {
@@ -51,7 +51,6 @@ namespace MWPV.View.UserControls
             Loaded += CategoryItemEditorTabs_Loaded;
             Unloaded += CategoryItemEditorTabs_Unloaded;
 
-            // Helper-driven: on timeout, hide all reveals (same behavior as before)
             _revealAutoHide = new AutoHideTimer(
                 interval: TimeSpan.FromSeconds(20),
                 onTimeout: OnRevealTimeout
@@ -67,12 +66,7 @@ namespace MWPV.View.UserControls
             HookUiEventsOnce();
 
             ClearForm();
-            HideAllRevealsAndStopTimer();
-            HideStrengthRow();
-            HideVerifyRow();
-            HideVerifyError();
-            ClearEmailValidation();
-            ClearPhoneError();
+            ResetUiState();
         }
 
         private void CategoryItemEditorTabs_Unloaded(object? sender, RoutedEventArgs e)
@@ -85,13 +79,9 @@ namespace MWPV.View.UserControls
 
             UnhookUiEvents();
 
-            HideAllRevealsAndStopTimer();
+            // Full exit cleanup: wipe everything sensitive.
+            ResetUiState();
             WipeSensitiveFields();
-            HideStrengthRow();
-            HideVerifyRow();
-            HideVerifyError();
-            ClearEmailValidation();
-            ClearPhoneError();
         }
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
@@ -104,6 +94,7 @@ namespace MWPV.View.UserControls
             Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
 #endif
             ClearForm();
+            ResetUiState();
         }
 
         public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
@@ -116,6 +107,7 @@ namespace MWPV.View.UserControls
             Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
             // TODO: Map existingItem -> fields once persistence is wired
+            ResetUiState();
         }
 
         /* ======================= Submit / Cancel ======================= */
@@ -127,10 +119,8 @@ namespace MWPV.View.UserControls
 #endif
             if (string.IsNullOrWhiteSpace(txtItemName.Text))
             {
-                MessageBox.Show("Item name is required.",
-                                "Validation",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Warning);
+                // TODO: Replace MessageBox with app-standard dialog / ErrorHandler.
+                MessageBox.Show("Item name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -138,15 +128,10 @@ namespace MWPV.View.UserControls
             {
                 PasswordValidationFailed?.Invoke(this, error);
 
-                if (VerifyRow.Visibility == Visibility.Visible &&
-                    !string.IsNullOrEmpty(pwdVerify.Password))
-                {
+                if (VerifyRow.Visibility == Visibility.Visible && !string.IsNullOrEmpty(pwdVerify.Password))
                     pwdVerify.Focus();
-                }
                 else
-                {
                     pwdPassword.Focus();
-                }
 
                 return;
             }
@@ -163,22 +148,15 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error saving item.\n\n" + ex.Message,
-                                "Error",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Error);
+                // TODO: Replace MessageBox with app-standard dialog / ErrorHandler.
+                MessageBox.Show("Error saving item.\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void btnCancel_Click(object? sender, RoutedEventArgs e)
         {
-            HideAllRevealsAndStopTimer();
+            ResetUiState();
             WipeSensitiveFields();
-            HideStrengthRow();
-            HideVerifyRow();
-            HideVerifyError();
-            ClearEmailValidation();
-            ClearPhoneError();
 
             Canceled?.Invoke(this, EventArgs.Empty);
         }
@@ -187,19 +165,18 @@ namespace MWPV.View.UserControls
 
         private void OnRevealTimeout()
         {
-            // Safe even if AutoHideTimer uses a non-UI timer internally.
-            RunOnUiThread(() =>
-            {
 #if DEBUG
-                Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
+            Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
 #endif
-                HideAllRevealsAndStopTimer();
-            });
+            // Timer behavior: remask + wipe ONLY the plain overlays (don’t destroy user-entered PB values).
+            HideAllRevealsAndStopTimer();
+            ClearPlainRevealOverlays();
         }
 
         private void HideAllRevealsAndStopTimer()
         {
             _revealAutoHide.Stop();
+
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
@@ -251,7 +228,6 @@ namespace MWPV.View.UserControls
 
         private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
         {
-            // Guard: if the verify field is empty, do nothing.
             if (string.IsNullOrEmpty(pwdVerify.Password))
                 return;
 
@@ -273,7 +249,6 @@ namespace MWPV.View.UserControls
 
             if (pasteCombo)
             {
-                // On paste, reset verify state so the user re-confirms.
                 HideVerifyRow();
                 HideVerifyError();
             }
@@ -289,9 +264,7 @@ namespace MWPV.View.UserControls
             if (_settingPwProgrammatically) return;
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
-            {
                 EnsureVerifyRowVisibleForManual();
-            }
             else
             {
                 HideVerifyRow();
@@ -316,7 +289,6 @@ namespace MWPV.View.UserControls
 
             TouchRevealTimerIfNeeded();
 
-            // Eye visible only when there is content.
             if (string.IsNullOrEmpty(pwdVerify.Password))
             {
                 btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
@@ -340,7 +312,7 @@ namespace MWPV.View.UserControls
 
         private void HideMainPassword()
         {
-            txtPasswordPlain.Text = string.Empty;
+            UICleaner.Clear(txtPasswordPlain); // plain overlay wipe
             txtPasswordPlain.Visibility = Visibility.Collapsed;
             pwdPassword.Visibility = Visibility.Visible;
             _mainRevealed = false;
@@ -356,7 +328,7 @@ namespace MWPV.View.UserControls
 
         private void HideVerifyPassword()
         {
-            txtVerifyPlain.Text = string.Empty;
+            UICleaner.Clear(txtVerifyPlain); // plain overlay wipe
             txtVerifyPlain.Visibility = Visibility.Collapsed;
             pwdVerify.Visibility = Visibility.Visible;
             _verifyRevealed = false;
@@ -378,7 +350,6 @@ namespace MWPV.View.UserControls
             error = string.Empty;
             var pw = pwdPassword.Password ?? string.Empty;
 
-            // Empty password is allowed for "bookmark only" type entries.
             if (string.IsNullOrEmpty(pw))
             {
                 HideVerifyError();
@@ -498,13 +469,12 @@ namespace MWPV.View.UserControls
             VerifyRow.Visibility = Visibility.Visible;
             lblVerifyPassword.Visibility = Visibility.Visible;
 
-            pwdVerify.Password = string.Empty;
-            txtVerifyPlain.Text = string.Empty;
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtVerifyPlain);
 
             HideVerifyPassword();
             HideVerifyError();
 
-            // Start with the eye hidden until user types something.
             btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
@@ -513,8 +483,8 @@ namespace MWPV.View.UserControls
             VerifyRow.Visibility = Visibility.Collapsed;
             lblVerifyPassword.Visibility = Visibility.Collapsed;
 
-            pwdVerify.Password = string.Empty;
-            txtVerifyPlain.Text = string.Empty;
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtVerifyPlain);
 
             HideVerifyPassword();
             HideVerifyError();
@@ -533,15 +503,10 @@ namespace MWPV.View.UserControls
             var pw = pwdPassword.Password ?? string.Empty;
             var verify = pwdVerify.Password ?? string.Empty;
 
-            if (!string.IsNullOrEmpty(verify) &&
-                !string.Equals(pw, verify, StringComparison.Ordinal))
-            {
+            if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
                 ShowVerifyError("Passwords do not match.");
-            }
             else
-            {
                 HideVerifyError();
-            }
         }
 
         private void ShowVerifyError(string message)
@@ -663,7 +628,7 @@ namespace MWPV.View.UserControls
 
         private void HidePhone()
         {
-            txtPhonePlain.Text = string.Empty;
+            UICleaner.Clear(txtPhonePlain); // plain overlay wipe
             txtPhonePlain.Visibility = Visibility.Collapsed;
             txtPhone.Visibility = Visibility.Visible;
             _phoneRevealed = false;
@@ -728,28 +693,45 @@ namespace MWPV.View.UserControls
             txtDescription.Text = string.Empty;
 
             _lastEmailChecked = string.Empty;
+        }
 
+        /// <summary>
+        /// Full wipe (exit/cancel/unload): clears PasswordBoxes + plain overlays using UICleaner.
+        /// </summary>
+        private void WipeSensitiveFields()
+        {
+            HideAllRevealsAndStopTimer();
+
+            // PasswordBoxes
+            UICleaner.Clear(pwdPassword);
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtPhone);
+
+            // Plain overlays
+            ClearPlainRevealOverlays();
+
+            HideStrengthRow();
+            HideVerifyError();
+        }
+
+        /// <summary>
+        /// Timer / hide wipe: clears ONLY the plain overlays (best for “remask” behavior).
+        /// </summary>
+        private void ClearPlainRevealOverlays()
+        {
+            UICleaner.Clear(txtPasswordPlain);
+            UICleaner.Clear(txtVerifyPlain);
+            UICleaner.Clear(txtPhonePlain);
+        }
+
+        private void ResetUiState()
+        {
+            HideAllRevealsAndStopTimer();
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
             ClearEmailValidation();
             ClearPhoneError();
-        }
-
-        private void WipeSensitiveFields()
-        {
-            HideAllRevealsAndStopTimer();
-
-            pwdPassword.Password = string.Empty;
-            pwdVerify.Password = string.Empty;
-            txtPhone.Password = string.Empty;
-
-            txtPasswordPlain.Text = string.Empty;
-            txtVerifyPlain.Text = string.Empty;
-            txtPhonePlain.Text = string.Empty;
-
-            HideStrengthRow();
-            HideVerifyError();
         }
 
         /* ======================= Load/Unload helpers ======================= */
@@ -768,7 +750,7 @@ namespace MWPV.View.UserControls
             if (_uiEventsHooked)
                 return;
 
-            // Ensure no duplicates even if designer/XAML also wires (safe to detach then attach)
+            // Ensure no duplicates even if designer/XAML also wires
             txtEmail.LostFocus -= txtEmail_LostFocus;
             txtEmail.LostFocus += txtEmail_LostFocus;
 
@@ -782,17 +764,6 @@ namespace MWPV.View.UserControls
 
             txtEmail.LostFocus -= txtEmail_LostFocus;
             _uiEventsHooked = false;
-        }
-
-        private void RunOnUiThread(Action action)
-        {
-            if (Dispatcher.CheckAccess())
-            {
-                action();
-                return;
-            }
-
-            Dispatcher.Invoke(action);
         }
     }
 }
