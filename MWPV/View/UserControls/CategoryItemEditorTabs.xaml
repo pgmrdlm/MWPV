@@ -10,10 +10,10 @@
              Focusable="True">
 
     <UserControl.Resources>
-        <SolidColorBrush x:Key="PwWeak"        Color="#D32F2F"/>
-        <SolidColorBrush x:Key="PwFair"        Color="#FBC02D"/>
-        <SolidColorBrush x:Key="PwStrong"      Color="#388E3C"/>
-        <SolidColorBrush x:Key="PwVeryStrong"  Color="#2E7D32"/>
+        <SolidColorBrush x:Key="PwWeak"       Color="#D32F2F"/>
+        <SolidColorBrush x:Key="PwFair"       Color="#FBC02D"/>
+        <SolidColorBrush x:Key="PwStrong"     Color="#388E3C"/>
+        <SolidColorBrush x:Key="PwVeryStrong" Color="#2E7D32"/>
 
         <SolidColorBrush x:Key="FieldErrorFill" Color="#FFFFEEEE"/>
 
@@ -42,21 +42,14 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource PrimaryHoverBrush}"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource PrimaryPressedBrush}"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PrimaryPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="bd"
-                                        Property="Background"
-                                        Value="{DynamicResource DisabledBrush}"/>
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource DisabledForeground}"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource DisabledBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource DisabledForeground}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -74,7 +67,6 @@
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Background" Value="Bisque"/>
         </Style>
-
     </UserControl.Resources>
 
     <!-- Outer panel background stays Bisque so it matches old layout -->
@@ -84,6 +76,8 @@
             <!-- header -->
             <RowDefinition Height="*"/>
             <!-- scrollable body -->
+            <RowDefinition Height="Auto"/>
+            <!-- STATUS LINE (always visible) -->
         </Grid.RowDefinitions>
 
         <!-- Header bar -->
@@ -120,33 +114,52 @@
 
                         <!-- ROWS:
                              0: Category name
-                             1: Password
-                             2: Verify password
-                             3: Strength + verify error
-                             4: spacer
-                             5: User / Email / Url
-                             6: Email error
-                             7: spacer
-                             8: Phone
-                             9: Phone error
-                            10: spacer
-                            11: Notes
-                            12: Save/Cancel
+                             1: Category name error
+                             2: Password
+                             3: Verify password
+                             4: Password/Verify error (red line)   
+                             5: Strength panel (tips/progress)      
+                             6: spacer
+                             7: User / Email / Url
+                             8: Email error
+                             9: spacer
+                            10: Phone
+                            11: Phone error
+                            12: spacer
+                            13: Notes
+                            14: Save/Cancel
                         -->
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <!-- 0 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 1 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 2 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 3 -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 4 (NEW: error row under pw/verify) -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 5 (Strength panel) -->
                             <RowDefinition Height="10"/>
+                            <!-- 6 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 7 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 8 -->
                             <RowDefinition Height="10"/>
+                            <!-- 9 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 10 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 11 -->
                             <RowDefinition Height="10"/>
+                            <!-- 12 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 13 -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 14 -->
                         </Grid.RowDefinitions>
 
                         <Grid.ColumnDefinitions>
@@ -169,16 +182,25 @@
                                  MinWidth="320"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ========== ROW 1: PASSWORD ========== -->
+                        <!-- ========== ROW 1: CATEGORY ITEM NAME ERROR ========== -->
+                        <StackPanel x:Name="ItemNameErrorPanel"
+                                    Grid.Row="1" Grid.Column="0"
+                                    Margin="0,6,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="ItemNameErrorText"
+                                       Foreground="#D32F2F"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
 
-                        <!-- Password label -->
-                        <Label Grid.Row="1" Grid.Column="0"
+                        <!-- ========== ROW 2: PASSWORD ========== -->
+                        <Label Grid.Row="2" Grid.Column="0"
                                Content="* Password"
                                FontWeight="Bold"
                                ToolTip="Required field"/>
 
-                        <!-- Password row: password + buttons + bookmark-only checkbox -->
-                        <Grid Grid.Row="1"
+                        <Grid Grid.Row="2"
                               Grid.Column="0"
                               Grid.ColumnSpan="3"
                               Margin="0,22,0,0"
@@ -192,7 +214,6 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Password / plain overlay -->
                             <Grid Grid.Column="0">
                                 <PasswordBox x:Name="pwdPassword"
                                              VerticalAlignment="Center"
@@ -215,7 +236,6 @@
                                          Foreground="Black"/>
                             </Grid>
 
-                            <!-- Generate -->
                             <Button x:Name="btnGeneratePassword"
                                     Grid.Column="1"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -229,7 +249,6 @@
                                 </Viewbox>
                             </Button>
 
-                            <!-- Reveal -->
                             <Button x:Name="btnTogglePasswordReveal"
                                     Grid.Column="2"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -247,7 +266,6 @@
                                 </Viewbox>
                             </Button>
 
-                            <!-- Bookmark-only toggle -->
                             <CheckBox x:Name="chkBookmarkOnly"
                                       Grid.Column="3"
                                       VerticalAlignment="Center"
@@ -256,17 +274,15 @@
                                       ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
                         </Grid>
 
-                        <!-- ========== ROW 2: VERIFY PASSWORD (ALIGNED WITH PASSWORD) ========== -->
-
-                        <!-- now named & initially collapsed -->
+                        <!-- ========== ROW 3: VERIFY PASSWORD ========== -->
                         <Label x:Name="lblVerifyPassword"
-                               Grid.Row="2" Grid.Column="0"
+                               Grid.Row="3" Grid.Column="0"
                                Content="Verify Password"
                                FontWeight="Bold"
                                Visibility="Collapsed"/>
 
                         <Grid x:Name="VerifyRow"
-                              Grid.Row="2"
+                              Grid.Row="3"
                               Grid.Column="0"
                               Grid.ColumnSpan="3"
                               Margin="0,22,0,0"
@@ -281,7 +297,6 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Verify / plain overlay -->
                             <Grid Grid.Column="0">
                                 <PasswordBox x:Name="pwdVerify"
                                              VerticalAlignment="Center"
@@ -300,14 +315,12 @@
                                          Foreground="Black"/>
                             </Grid>
 
-                            <!-- Dummy to keep columns aligned with Generate button above -->
                             <Button x:Name="btnVerifyDummyGenerate"
                                     Grid.Column="1"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
                                     Visibility="Hidden"
                                     IsHitTestVisible="False"/>
 
-                            <!-- Reveal verify (aligned with main eye) -->
                             <Button x:Name="btnToggleVerifyReveal"
                                     Grid.Column="2"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -327,7 +340,6 @@
                                 </Viewbox>
                             </Button>
 
-                            <!-- Spacer to mirror bookmark-only space -->
                             <Button x:Name="btnVerifyNotUsed"
                                     Grid.Column="3"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -337,9 +349,22 @@
                                     ToolTip="(not used – spacer only)"/>
                         </Grid>
 
-                        <!-- ========== ROW 3: STRENGTH + VERIFY ERROR ========== -->
+                        <!-- ========== ROW 4: PASSWORD / VERIFY ERROR (RED, UNDER THE INPUT AREA) ========== -->
+                        <StackPanel x:Name="VerifyErrorPanel"
+                                    Grid.Row="4" Grid.Column="0"
+                                    Grid.ColumnSpan="3"
+                                    Margin="0,6,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="VerifyErrorText"
+                                       Foreground="#D32F2F"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <!-- ========== ROW 5: STRENGTH PANEL (UNDER ERROR) ========== -->
                         <StackPanel x:Name="StrengthPanel"
-                                    Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                    Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <ProgressBar x:Name="PwStrengthBar"
@@ -367,55 +392,44 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <StackPanel x:Name="VerifyErrorPanel"
-                                    Grid.Row="3" Grid.Column="4"
-                                    Margin="0,6,0,0"
-                                    Visibility="Collapsed">
-                            <TextBlock x:Name="VerifyErrorText"
-                                       Foreground="#D32F2F"
-                                       FontWeight="Bold"
-                                       FontSize="12"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-
-                        <!-- ========== ROW 4: SPACER ========== -->
+                        <!-- ========== ROW 6: SPACER ========== -->
                         <!-- empty -->
 
-                        <!-- ========== ROW 5: USER / EMAIL / URL ========== -->
-                        <Label Grid.Row="5" Grid.Column="0"
+                        <!-- ========== ROW 7: USER / EMAIL / URL ========== -->
+                        <Label Grid.Row="7" Grid.Column="0"
                                Content="User Name"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtUsername"
-                                 Grid.Row="5" Grid.Column="0"
+                                 Grid.Row="7" Grid.Column="0"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="240"
                                  HorizontalAlignment="Left"/>
 
-                        <Label Grid.Row="5" Grid.Column="2"
+                        <Label Grid.Row="7" Grid.Column="2"
                                Content="Email"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtEmail"
-                                 Grid.Row="5" Grid.Column="2"
+                                 Grid.Row="7" Grid.Column="2"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="240"
                                  HorizontalAlignment="Left"
                                  LostFocus="txtEmail_LostFocus"/>
 
-                        <Label Grid.Row="5" Grid.Column="4"
+                        <Label Grid.Row="7" Grid.Column="4"
                                Content="URL or Absolute Location"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtUrl"
-                                 Grid.Row="5" Grid.Column="4"
+                                 Grid.Row="7" Grid.Column="4"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="200"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ========== ROW 6: EMAIL ERROR ========== -->
+                        <!-- ========== ROW 8: EMAIL ERROR ========== -->
                         <StackPanel x:Name="EmailErrorPanel"
-                                    Grid.Row="6" Grid.Column="2"
+                                    Grid.Row="8" Grid.Column="2"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="EmailErrorText"
@@ -425,14 +439,14 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 7: SPACER ========== -->
+                        <!-- ========== ROW 9: SPACER ========== -->
                         <!-- empty -->
 
-                        <!-- ========== ROW 8–9: PHONE ========== -->
-                        <Label Grid.Row="8" Grid.Column="0"
+                        <!-- ========== ROW 10–11: PHONE ========== -->
+                        <Label Grid.Row="10" Grid.Column="0"
                                Content="Phone Number"
                                FontWeight="Bold"/>
-                        <Grid Grid.Row="8" Grid.Column="0"
+                        <Grid Grid.Row="10" Grid.Column="0"
                               Margin="0,22,0,0"
                               Height="28"
                               MinWidth="320"
@@ -478,7 +492,7 @@
                         </Grid>
 
                         <StackPanel x:Name="PhoneErrorPanel"
-                                    Grid.Row="9" Grid.Column="0"
+                                    Grid.Row="11" Grid.Column="0"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="PhoneErrorText"
@@ -488,23 +502,23 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 10: SPACER ========== -->
+                        <!-- ========== ROW 12: SPACER ========== -->
                         <!-- empty -->
 
-                        <!-- ========== ROW 11: NOTES ========== -->
-                        <Label Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
+                        <!-- ========== ROW 13: NOTES ========== -->
+                        <Label Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
                                Content="Freeform Notes"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtDescription"
-                                 Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="5"
+                                 Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
                                  Margin="0,22,0,0"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
                                  VerticalScrollBarVisibility="Auto"
                                  Height="48"/>
 
-                        <!-- ========== ROW 12: SAVE / CANCEL ========== -->
-                        <StackPanel Grid.Row="12"
+                        <!-- ========== ROW 14: SAVE / CANCEL ========== -->
+                        <StackPanel Grid.Row="14"
                                     Grid.Column="0"
                                     Grid.ColumnSpan="5"
                                     Orientation="Horizontal"
@@ -514,8 +528,7 @@
                                     Style="{StaticResource DialogPrimary}"
                                     Margin="0,0,12,0"
                                     Click="btnSubmit_Click">
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                                Text="&#xE8FB;"
                                                Margin="0,0,8,0"/>
@@ -526,8 +539,7 @@
                             <Button x:Name="btnCancel"
                                     Style="{StaticResource DialogSecondary}"
                                     Click="btnCancel_Click">
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets"
                                                Text="&#xE711;"
                                                Margin="0,0,8,0"/>
@@ -541,16 +553,14 @@
 
                 <!-- ========== BANK CARDS TAB ========== -->
                 <TabItem Header="Bank Cards">
-                    <Grid Margin="20"
-                          Background="Bisque">
+                    <Grid Margin="20" Background="Bisque">
                         <categoryItems:CategoryItemBankCardsPanel />
                     </Grid>
                 </TabItem>
 
                 <!-- ========== ACCOUNTS TAB ========== -->
                 <TabItem Header="Accounts">
-                    <Grid Margin="20"
-                          Background="Bisque">
+                    <Grid Margin="20" Background="Bisque">
                         <StackPanel>
                             <TextBlock Text="Account details will go here."
                                        FontWeight="SemiBold"
@@ -564,8 +574,7 @@
 
                 <!-- ========== SECURITY QUESTIONS TAB ========== -->
                 <TabItem Header="Security Q/A">
-                    <Grid Margin="20"
-                          Background="Bisque">
+                    <Grid Margin="20" Background="Bisque">
                         <StackPanel>
                             <TextBlock Text="Security questions and answers will go here."
                                        FontWeight="SemiBold"
@@ -579,5 +588,19 @@
 
             </TabControl>
         </ScrollViewer>
+
+        <!-- ====================== STATUS LINE (always visible; not tied to any tab) ====================== -->
+        <Border Grid.Row="2"
+                Background="Transparent"
+                Padding="10,6"
+                Margin="8,0,8,8">
+            <TextBlock x:Name="txtStatusLine"
+                       Text=""
+                       FontWeight="Bold"
+                       FontSize="13"
+                       Foreground="DarkGreen"
+                       TextWrapping="Wrap"/>
+        </Border>
+
     </Grid>
 </UserControl>
