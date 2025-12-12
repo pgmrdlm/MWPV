@@ -8,7 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
-using MWPV.Utilities.UI; // <-- UICleaner
+using MWPV.Utilities.UI; // UICleaner
 
 namespace MWPV.View.UserControls
 {
@@ -40,6 +40,10 @@ namespace MWPV.View.UserControls
         // Phone visuals
         private Brush? _phoneDefaultBorderBrush;
         private Brush? _phoneDefaultBackground;
+
+        // Item name visuals
+        private Brush? _itemNameDefaultBorderBrush;
+        private Brush? _itemNameDefaultBackground;
 
         // Prevent event stacking if control is reloaded into the visual tree
         private bool _uiEventsHooked;
@@ -74,12 +78,10 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Unloaded");
 #endif
-            // Make absolutely sure the helper isn't still running after we leave.
             _revealAutoHide.Stop();
 
             UnhookUiEvents();
 
-            // Full exit cleanup: wipe everything sensitive.
             ResetUiState();
             WipeSensitiveFields();
         }
@@ -117,28 +119,26 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Submit clicked");
 #endif
-            if (string.IsNullOrWhiteSpace(txtItemName.Text))
+            // SAVE RULE: show ALL blocking errors (required + invalid formats) in one pass.
+            // Focus goes to the FIRST field with an error in our agreed order.
+
+            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            bool okName = ValidateItemName(forSubmit: true);
+
+            // Password rules:
+            // - Required unless Bookmark-only
+            // - If bookmark-only: we skip all password validation and hide password-related panels
+            bool okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
+
+            // Email / Phone are only errors if user entered a value
+            bool okEmail = ValidateEmailForSubmit();
+            bool okPhone = ValidatePhoneNumber(forSubmit: true);
+
+            bool anyError = !(okName && okPassword && okEmail && okPhone);
+            if (anyError)
             {
-                // TODO: Replace MessageBox with app-standard dialog / ErrorHandler.
-                MessageBox.Show("Item name is required.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (!ValidatePasswordForSubmission(out var error))
-            {
-                PasswordValidationFailed?.Invoke(this, error);
-
-                if (VerifyRow.Visibility == Visibility.Visible && !string.IsNullOrEmpty(pwdVerify.Password))
-                    pwdVerify.Focus();
-                else
-                    pwdPassword.Focus();
-
-                return;
-            }
-
-            if (!ValidatePhoneNumber(forSubmit: true))
-            {
-                txtPhone.Focus();
+                FocusFirstError(okName, okPassword, okEmail, okPhone, isBookmarkOnly);
                 return;
             }
 
@@ -148,8 +148,47 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-                // TODO: Replace MessageBox with app-standard dialog / ErrorHandler.
+                // TODO: Replace with app-standard dialog / ErrorHandler when we wire it in.
                 MessageBox.Show("Error saving item.\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void FocusFirstError(bool okName, bool okPassword, bool okEmail, bool okPhone, bool isBookmarkOnly)
+        {
+            if (!okName)
+            {
+                txtItemName.Focus();
+                return;
+            }
+
+            if (!okPassword)
+            {
+                // If verify is visible and non-empty mismatch exists, it’s nicer to land there.
+                if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
+                {
+                    var verify = pwdVerify.Password ?? string.Empty;
+                    if (!string.IsNullOrEmpty(verify))
+                        pwdVerify.Focus();
+                    else
+                        pwdPassword.Focus();
+                }
+                else
+                {
+                    pwdPassword.Focus();
+                }
+                return;
+            }
+
+            if (!okEmail)
+            {
+                txtEmail.Focus();
+                return;
+            }
+
+            if (!okPhone)
+            {
+                txtPhone.Focus();
+                return;
             }
         }
 
@@ -168,7 +207,6 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Reveal timer elapsed – hiding all reveals");
 #endif
-            // Timer behavior: remask + wipe ONLY the plain overlays (don’t destroy user-entered PB values).
             HideAllRevealsAndStopTimer();
             ClearPlainRevealOverlays();
         }
@@ -186,6 +224,55 @@ namespace MWPV.View.UserControls
         {
             bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed;
             _revealAutoHide.Touch(anyRevealed);
+        }
+
+        /* ======================= Item name validation (new error row) ======================= */
+        // NOTE: XAML must contain:
+        //   StackPanel x:Name="ItemNameErrorPanel" Visibility="Collapsed"
+        //   TextBlock  x:Name="ItemNameErrorText"
+        // matching the pattern we use for EmailErrorPanel/PhoneErrorPanel.
+
+        private bool ValidateItemName(bool forSubmit)
+        {
+            var name = (txtItemName.Text ?? string.Empty).Trim();
+            if (name.Length == 0)
+            {
+                ShowItemNameError("Item name is required.");
+                return false;
+            }
+
+            ClearItemNameError();
+            return true;
+        }
+
+        private void ShowItemNameError(string message)
+        {
+            if (ItemNameErrorText != null)
+                ItemNameErrorText.Text = message ?? string.Empty;
+
+            if (ItemNameErrorPanel != null && ItemNameErrorPanel.Visibility != Visibility.Visible)
+                ItemNameErrorPanel.Visibility = Visibility.Visible;
+
+            txtItemName.ToolTip = message;
+
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            txtItemName.Background = fill;
+        }
+
+        private void ClearItemNameError()
+        {
+            if (ItemNameErrorText != null)
+                ItemNameErrorText.Text = string.Empty;
+
+            if (ItemNameErrorPanel != null && ItemNameErrorPanel.Visibility != Visibility.Collapsed)
+                ItemNameErrorPanel.Visibility = Visibility.Collapsed;
+
+            txtItemName.ToolTip = null;
+            if (_itemNameDefaultBackground != null)
+                txtItemName.Background = _itemNameDefaultBackground;
+            if (_itemNameDefaultBorderBrush != null)
+                txtItemName.BorderBrush = _itemNameDefaultBorderBrush;
         }
 
         /* ======================= Password / Verify ======================= */
@@ -261,6 +348,15 @@ namespace MWPV.View.UserControls
 
             TouchRevealTimerIfNeeded();
 
+            // If bookmark-only, we treat password as "ignored" and keep the UI clean.
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                HideStrengthRow();
+                HideVerifyRow();
+                HideVerifyError();
+                return;
+            }
+
             if (_settingPwProgrammatically) return;
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
@@ -278,6 +374,8 @@ namespace MWPV.View.UserControls
         private void pwdPassword_GotFocus(object? sender, RoutedEventArgs e)
         {
             if (_settingPwProgrammatically) return;
+            if (chkBookmarkOnly.IsChecked == true) return;
+
             if (!string.IsNullOrEmpty(pwdPassword.Password))
                 UpdateStrengthPanelForPolicy();
         }
@@ -312,7 +410,7 @@ namespace MWPV.View.UserControls
 
         private void HideMainPassword()
         {
-            UICleaner.Clear(txtPasswordPlain); // plain overlay wipe
+            UICleaner.Clear(txtPasswordPlain);
             txtPasswordPlain.Visibility = Visibility.Collapsed;
             pwdPassword.Visibility = Visibility.Visible;
             _mainRevealed = false;
@@ -328,7 +426,7 @@ namespace MWPV.View.UserControls
 
         private void HideVerifyPassword()
         {
-            UICleaner.Clear(txtVerifyPlain); // plain overlay wipe
+            UICleaner.Clear(txtVerifyPlain);
             txtVerifyPlain.Visibility = Visibility.Collapsed;
             pwdVerify.Visibility = Visibility.Visible;
             _verifyRevealed = false;
@@ -345,17 +443,29 @@ namespace MWPV.View.UserControls
             HideVerifyError();
         }
 
-        private bool ValidatePasswordForSubmission(out string error)
+        private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
         {
             error = string.Empty;
-            var pw = pwdPassword.Password ?? string.Empty;
 
-            if (string.IsNullOrEmpty(pw))
+            if (isBookmarkOnly)
             {
+                HideStrengthRow();
+                HideVerifyRow();
                 HideVerifyError();
                 return true;
             }
 
+            var pw = pwdPassword.Password ?? string.Empty;
+
+            // Required on Save unless bookmark-only
+            if (string.IsNullOrEmpty(pw))
+            {
+                HideStrengthRow();
+                ShowVerifyError("Password is required.");
+                return false;
+            }
+
+            // Verify mismatch (only enforced when verify row is visible)
             if (VerifyRow.Visibility == Visibility.Visible)
             {
                 var verify = pwdVerify.Password ?? string.Empty;
@@ -367,13 +477,17 @@ namespace MWPV.View.UserControls
                 }
             }
 
+            // Policy check (use existing strength panel for tips + also show a red error line)
+            UpdateStrengthPanelForPolicy();
             if (!SecurePassword.IsPasswordValid(pw, pw, out _))
             {
-                HideVerifyError();
+                error = "Password does not meet policy requirements.";
+                ShowVerifyError(error);
                 return false;
             }
 
             HideVerifyError();
+            HideStrengthRow();
             return true;
         }
 
@@ -494,6 +608,12 @@ namespace MWPV.View.UserControls
 
         private void EvaluateAndDisplayVerifyMismatch()
         {
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                HideVerifyError();
+                return;
+            }
+
             if (VerifyRow.Visibility != Visibility.Visible)
             {
                 HideVerifyError();
@@ -525,7 +645,7 @@ namespace MWPV.View.UserControls
                 VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
 
-        /* ======================= Email LostFocus validation ======================= */
+        /* ======================= Email validation ======================= */
 
         private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
@@ -548,6 +668,31 @@ namespace MWPV.View.UserControls
                 MarkEmailValid();
             else
                 MarkEmailInvalid(message);
+        }
+
+        private bool ValidateEmailForSubmit()
+        {
+            var s = (txtEmail.Text ?? string.Empty).Trim();
+
+            // Only error if user entered something
+            if (s.Length == 0)
+            {
+                ClearEmailValidation();
+                _lastEmailChecked = string.Empty;
+                return true;
+            }
+
+            var result = EmailValidator.IsLikelyEmail(s, out var message);
+            if (result == EmailCheck.Ok)
+            {
+                MarkEmailValid();
+                _lastEmailChecked = s;
+                return true;
+            }
+
+            MarkEmailInvalid(message);
+            _lastEmailChecked = s;
+            return false;
         }
 
         private void MarkEmailValid()
@@ -628,7 +773,7 @@ namespace MWPV.View.UserControls
 
         private void HidePhone()
         {
-            UICleaner.Clear(txtPhonePlain); // plain overlay wipe
+            UICleaner.Clear(txtPhonePlain);
             txtPhonePlain.Visibility = Visibility.Collapsed;
             txtPhone.Visibility = Visibility.Visible;
             _phoneRevealed = false;
@@ -640,6 +785,7 @@ namespace MWPV.View.UserControls
             var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
             int len = digitsOnly.Length;
 
+            // Only error if user entered something
             if (len == 0)
             {
                 ClearPhoneError();
@@ -693,30 +839,26 @@ namespace MWPV.View.UserControls
             txtDescription.Text = string.Empty;
 
             _lastEmailChecked = string.Empty;
+
+            ClearItemNameError();
+            ClearEmailValidation();
+            ClearPhoneError();
         }
 
-        /// <summary>
-        /// Full wipe (exit/cancel/unload): clears PasswordBoxes + plain overlays using UICleaner.
-        /// </summary>
         private void WipeSensitiveFields()
         {
             HideAllRevealsAndStopTimer();
 
-            // PasswordBoxes
             UICleaner.Clear(pwdPassword);
             UICleaner.Clear(pwdVerify);
             UICleaner.Clear(txtPhone);
 
-            // Plain overlays
             ClearPlainRevealOverlays();
 
             HideStrengthRow();
             HideVerifyError();
         }
 
-        /// <summary>
-        /// Timer / hide wipe: clears ONLY the plain overlays (best for “remask” behavior).
-        /// </summary>
         private void ClearPlainRevealOverlays()
         {
             UICleaner.Clear(txtPasswordPlain);
@@ -730,6 +872,8 @@ namespace MWPV.View.UserControls
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+
+            ClearItemNameError();
             ClearEmailValidation();
             ClearPhoneError();
         }
@@ -738,6 +882,9 @@ namespace MWPV.View.UserControls
 
         private void CacheDefaultFieldVisualsIfNeeded()
         {
+            _itemNameDefaultBorderBrush ??= txtItemName.BorderBrush;
+            _itemNameDefaultBackground ??= txtItemName.Background;
+
             _emailDefaultBorderBrush ??= txtEmail.BorderBrush;
             _emailDefaultBackground ??= txtEmail.Background;
 
@@ -754,6 +901,14 @@ namespace MWPV.View.UserControls
             txtEmail.LostFocus -= txtEmail_LostFocus;
             txtEmail.LostFocus += txtEmail_LostFocus;
 
+            txtItemName.TextChanged -= txtItemName_TextChanged;
+            txtItemName.TextChanged += txtItemName_TextChanged;
+
+            chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked += chkBookmarkOnly_Changed;
+
             _uiEventsHooked = true;
         }
 
@@ -763,7 +918,29 @@ namespace MWPV.View.UserControls
                 return;
 
             txtEmail.LostFocus -= txtEmail_LostFocus;
+            txtItemName.TextChanged -= txtItemName_TextChanged;
+
+            chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+
             _uiEventsHooked = false;
+        }
+
+        private void txtItemName_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(txtItemName.Text))
+                ClearItemNameError();
+        }
+
+        private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                // Bookmark-only: keep UI clean and skip password validation signals.
+                HideStrengthRow();
+                HideVerifyRow();
+                HideVerifyError();
+            }
         }
     }
 }
