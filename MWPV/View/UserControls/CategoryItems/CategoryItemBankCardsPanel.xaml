@@ -71,286 +71,303 @@
         </Grid.RowDefinitions>
 
         <!-- ================= ENTRY AREA ================= -->
-        <Grid Grid.Row="0"
-              Margin="0,0,0,4">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <!-- labels: line 1 -->
-                <RowDefinition Height="Auto" />
-                <!-- controls: line 1 -->
-                <RowDefinition Height="Auto" />
-                <!-- labels: line 2 -->
-                <RowDefinition Height="Auto" />
-                <!-- controls: line 2 -->
-                <RowDefinition Height="Auto" />
-                <!-- action buttons -->
-            </Grid.RowDefinitions>
+        <!-- Centered wrapper so the edit block feels less crowded and more "anchored" -->
+        <Border Grid.Row="0"
+                Margin="0,0,0,6"
+                Padding="14,10"
+                Background="Transparent"
+                HorizontalAlignment="Center"
+                MaxWidth="760">
 
-            <!-- Simple, fixed columns; second line reuses first 3 -->
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="170" />
-                <!-- Card Type / CVV -->
-                <ColumnDefinition Width="170" />
-                <!-- Card Number / PIN -->
-                <ColumnDefinition Width="140" />
-                <!-- Expiration / Active -->
-            </Grid.ColumnDefinitions>
+            <!-- 3 rows x 3 columns -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <!-- line 1 -->
+                    <RowDefinition Height="Auto" />
+                    <!-- line 2 -->
+                    <RowDefinition Height="Auto" />
+                    <!-- line 3 (buttons) -->
+                </Grid.RowDefinitions>
 
-            <!-- ===== Row 0: LABELS FOR FIRST LINE ===== -->
-            <TextBlock Grid.Row="0" Grid.Column="0"
-                       Text="Card Type"
-                       Margin="0,0,4,2"
-                       FontWeight="Bold" />
-
-            <TextBlock Grid.Row="0" Grid.Column="1"
-                       Text="Card Number"
-                       Margin="0,0,4,2"
-                       FontWeight="Bold" />
-
-            <TextBlock Grid.Row="0" Grid.Column="2"
-                       Text="Expiration Date"
-                       Margin="0,0,4,2"
-                       FontWeight="Bold" />
-
-            <!-- ===== Row 1: FIRST LINE (Type / Number / Expiry) ===== -->
-
-            <!-- Card type -->
-            <ComboBox x:Name="CardTypeCombo"
-                      Grid.Row="1"
-                      Grid.Column="0"
-                      Margin="0,0,6,2"
-                      Height="28"
-                      ItemsSource="{Binding CardTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                      DisplayMemberPath="DisplayText"
-                      SelectedValuePath="ComboDetailId"
-                      SelectedIndex="0"
-                      LostFocus="OnBankCardFieldLostFocus" />
-
-            <!-- Card number (PasswordBox + plain text) + view/reveal button -->
-            <Grid Grid.Row="1"
-                  Grid.Column="1"
-                  Margin="0,0,6,2"
-                  Height="28">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MinWidth="190" />
+                    <ColumnDefinition Width="*" MinWidth="280" />
+                    <ColumnDefinition Width="*" MinWidth="170" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0">
-                    <PasswordBox x:Name="CardNumberBox"
-                                 VerticalAlignment="Center"
-                                 Height="28"
-                                 MaxLength="23"
-                                 LostFocus="OnBankCardFieldLostFocus"
-                                 PasswordChanged="CardNumberBox_PasswordChanged" />
-                    <TextBox x:Name="CardNumberPlainTextBox"
-                             VerticalAlignment="Center"
+                <!-- ================= ROW 0 ================= -->
+                <!-- Card Type -->
+                <StackPanel Grid.Row="0"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,16,8">
+                    <TextBlock Text="Card Type"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <ComboBox x:Name="CardTypeCombo"
+                              Height="28"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding CardTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              DisplayMemberPath="DisplayText"
+                              SelectedValuePath="ComboDetailId"
+                              SelectedIndex="0"
+                              LostFocus="OnBankCardFieldLostFocus" />
+                </StackPanel>
+
+                <!-- Card Number -->
+                <StackPanel Grid.Row="0"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,16,8">
+                    <TextBlock Text="Card Number"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <Grid Height="28"
+                          HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Stretch">
+                            <PasswordBox x:Name="CardNumberBox"
+                                         VerticalAlignment="Center"
+                                         Height="28"
+                                         MinWidth="240"
+                                         HorizontalAlignment="Stretch"
+                                         MaxLength="23"
+                                         LostFocus="OnBankCardFieldLostFocus"
+                                         PasswordChanged="CardNumberBox_PasswordChanged" />
+                            <TextBox x:Name="CardNumberPlainTextBox"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     MinWidth="240"
+                                     HorizontalAlignment="Stretch"
+                                     IsReadOnly="True"
+                                     IsHitTestVisible="False"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed"
+                                     Foreground="Black"
+                                     LostFocus="OnBankCardFieldLostFocus" />
+                        </Grid>
+
+                        <Button x:Name="BtnViewCardNumber"
+                                Grid.Column="1"
+                                Style="{StaticResource SmallSquarePrimaryButton}"
+                                ToolTip="Show card number"
+                                Click="BtnViewCardNumber_Click">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="20" Height="20">
+                                    <Path Stroke="Black"
+                                          Fill="Transparent"
+                                          StrokeThickness="1.6"
+                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Stroke="Black"
+                                             StrokeThickness="1.2"
+                                             Fill="White"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                    <Ellipse Width="3"
+                                             Height="3"
+                                             Fill="Black"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Expiration -->
+                <StackPanel Grid.Row="0"
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="Expiration Date"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <TextBox x:Name="ExpirationTextBox"
                              Height="28"
-                             IsReadOnly="True"
-                             IsHitTestVisible="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Visibility="Collapsed"
-                             Foreground="Black"
+                             HorizontalAlignment="Stretch"
+                             VerticalContentAlignment="Center"
+                             ToolTip="MM/YYYY or MM/YY"
+                             MaxLength="7"
                              LostFocus="OnBankCardFieldLostFocus" />
-                </Grid>
+                </StackPanel>
 
-                <!-- View / show-hide button -->
-                <Button x:Name="BtnViewCardNumber"
-                        Grid.Column="1"
-                        Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show card number"
-                        Click="BtnViewCardNumber_Click">
-                    <Viewbox Stretch="Uniform">
-                        <Grid Width="20" Height="20">
-                            <Path Stroke="Black"
-                                  Fill="Transparent"
-                                  StrokeThickness="1.6"
-                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                            <Ellipse Width="6"
-                                     Height="6"
-                                     Stroke="Black"
-                                     StrokeThickness="1.2"
-                                     Fill="White"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
-                            <Ellipse Width="3"
-                                     Height="3"
-                                     Fill="Black"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
+                <!-- ================= ROW 1 ================= -->
+                <!-- CVV -->
+                <StackPanel Grid.Row="1"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,16,8">
+                    <TextBlock Text="CVV"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <Grid Height="28"
+                          HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Stretch">
+                            <PasswordBox x:Name="CvvBox"
+                                         VerticalAlignment="Center"
+                                         Height="28"
+                                         MinWidth="110"
+                                         HorizontalAlignment="Stretch"
+                                         MaxLength="4"
+                                         LostFocus="OnBankCardFieldLostFocus"
+                                         PasswordChanged="CvvBox_PasswordChanged" />
+                            <TextBox x:Name="CvvPlainTextBox"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     MinWidth="110"
+                                     HorizontalAlignment="Stretch"
+                                     IsReadOnly="True"
+                                     IsHitTestVisible="False"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed"
+                                     Foreground="Black" />
                         </Grid>
-                    </Viewbox>
-                </Button>
-            </Grid>
 
-            <!-- Expiration -->
-            <TextBox x:Name="ExpirationTextBox"
-                     Grid.Row="1"
-                     Grid.Column="2"
-                     Margin="0,0,6,2"
-                     Height="28"
-                     VerticalContentAlignment="Center"
-                     ToolTip="MM/YYYY or MM/YY"
-                     MaxLength="7"
-                     LostFocus="OnBankCardFieldLostFocus" />
+                        <Button x:Name="BtnToggleCvvReveal"
+                                Grid.Column="1"
+                                Style="{StaticResource SmallSquarePrimaryButton}"
+                                ToolTip="Show CVV"
+                                Click="BtnToggleCvvReveal_Click">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="20" Height="20">
+                                    <Path Stroke="Black"
+                                          Fill="Transparent"
+                                          StrokeThickness="1.6"
+                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Stroke="Black"
+                                             StrokeThickness="1.2"
+                                             Fill="White"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                    <Ellipse Width="3"
+                                             Height="3"
+                                             Fill="Black"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+                </StackPanel>
 
-            <!-- ===== Row 2: LABELS FOR SECOND LINE ===== -->
-            <TextBlock Grid.Row="2" Grid.Column="0"
-                       Text="CVV"
-                       Margin="0,4,0,2"
-                       FontWeight="Bold" />
+                <!-- Card PIN -->
+                <StackPanel Grid.Row="1"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,16,8">
+                    <TextBlock Text="Card PIN"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <Grid Height="28"
+                          HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Row="2" Grid.Column="1"
-                       Text="Card PIN"
-                       Margin="0,4,0,2"
-                       FontWeight="Bold" />
-
-            <TextBlock Grid.Row="2" Grid.Column="2"
-                       Text="Active"
-                       Margin="0,4,0,2"
-                       FontWeight="Bold" />
-
-            <!-- ===== Row 3: SECOND LINE (CVV / PIN / Active) ===== -->
-
-            <!-- CVV with show/hide button -->
-            <Grid Grid.Row="3"
-                  Grid.Column="0"
-                  Margin="0,0,6,0"
-                  Height="28">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0">
-                    <PasswordBox x:Name="CvvBox"
-                                 VerticalAlignment="Center"
-                                 Height="28"
-                                 MaxLength="4"
-                                 LostFocus="OnBankCardFieldLostFocus"
-                                 PasswordChanged="CvvBox_PasswordChanged" />
-                    <TextBox x:Name="CvvPlainTextBox"
-                             VerticalAlignment="Center"
-                             Height="28"
-                             IsReadOnly="True"
-                             IsHitTestVisible="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Visibility="Collapsed"
-                             Foreground="Black" />
-                </Grid>
-
-                <Button x:Name="BtnToggleCvvReveal"
-                        Grid.Column="1"
-                        Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show CVV"
-                        Click="BtnToggleCvvReveal_Click">
-                    <Viewbox Stretch="Uniform">
-                        <Grid Width="20" Height="20">
-                            <Path Stroke="Black"
-                                  Fill="Transparent"
-                                  StrokeThickness="1.6"
-                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                            <Ellipse Width="6"
-                                     Height="6"
-                                     Stroke="Black"
-                                     StrokeThickness="1.2"
-                                     Fill="White"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
-                            <Ellipse Width="3"
-                                     Height="3"
-                                     Fill="Black"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Stretch">
+                            <PasswordBox x:Name="PinBox"
+                                         VerticalAlignment="Center"
+                                         Height="28"
+                                         MinWidth="160"
+                                         HorizontalAlignment="Stretch"
+                                         MaxLength="6"
+                                         LostFocus="OnBankCardFieldLostFocus"
+                                         PasswordChanged="PinBox_PasswordChanged" />
+                            <TextBox x:Name="PinPlainTextBox"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     MinWidth="160"
+                                     HorizontalAlignment="Stretch"
+                                     IsReadOnly="True"
+                                     IsHitTestVisible="False"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed"
+                                     Foreground="Black" />
                         </Grid>
-                    </Viewbox>
-                </Button>
+
+                        <Button x:Name="BtnTogglePinReveal"
+                                Grid.Column="1"
+                                Style="{StaticResource SmallSquarePrimaryButton}"
+                                ToolTip="Show card PIN"
+                                Click="BtnTogglePinReveal_Click">
+                            <Viewbox Stretch="Uniform">
+                                <Grid Width="20" Height="20">
+                                    <Path Stroke="Black"
+                                          Fill="Transparent"
+                                          StrokeThickness="1.6"
+                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                    <Ellipse Width="6"
+                                             Height="6"
+                                             Stroke="Black"
+                                             StrokeThickness="1.2"
+                                             Fill="White"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                    <Ellipse Width="3"
+                                             Height="3"
+                                             Fill="Black"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Grid>
+                            </Viewbox>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Active -->
+                <StackPanel Grid.Row="1"
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="Active"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <CheckBox x:Name="ChkCardActive"
+                              IsChecked="True"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- ================= ROW 2 (BUTTONS) ================= -->
+                <StackPanel Grid.Row="2"
+                            Grid.ColumnSpan="3"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            Margin="0,6,0,0">
+                    <Button x:Name="BtnBankCardAddOrUpdate"
+                            Margin="0,0,12,0"
+                            Content="Add"
+                            Style="{StaticResource DialogPrimary}"
+                            Click="OnBankCardAddOrUpdateClick" />
+                    <Button x:Name="BtnBankCardClear"
+                            Content="Clear"
+                            Style="{StaticResource DialogSecondary}"
+                            Click="OnBankCardClearClick" />
+                </StackPanel>
+
             </Grid>
-
-            <!-- Card PIN with show/hide button -->
-            <Grid Grid.Row="3"
-                  Grid.Column="1"
-                  Margin="0,0,6,0"
-                  Height="28">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0">
-                    <PasswordBox x:Name="PinBox"
-                                 VerticalAlignment="Center"
-                                 Height="28"
-                                 MaxLength="6"
-                                 LostFocus="OnBankCardFieldLostFocus"
-                                 PasswordChanged="PinBox_PasswordChanged" />
-                    <TextBox x:Name="PinPlainTextBox"
-                             VerticalAlignment="Center"
-                             Height="28"
-                             IsReadOnly="True"
-                             IsHitTestVisible="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Visibility="Collapsed"
-                             Foreground="Black" />
-                </Grid>
-
-                <Button x:Name="BtnTogglePinReveal"
-                        Grid.Column="1"
-                        Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show card PIN"
-                        Click="BtnTogglePinReveal_Click">
-                    <Viewbox Stretch="Uniform">
-                        <Grid Width="20" Height="20">
-                            <Path Stroke="Black"
-                                  Fill="Transparent"
-                                  StrokeThickness="1.6"
-                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                            <Ellipse Width="6"
-                                     Height="6"
-                                     Stroke="Black"
-                                     StrokeThickness="1.2"
-                                     Fill="White"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
-                            <Ellipse Width="3"
-                                     Height="3"
-                                     Fill="Black"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" />
-                        </Grid>
-                    </Viewbox>
-                </Button>
-            </Grid>
-
-            <!-- Active -->
-            <CheckBox x:Name="ChkCardActive"
-                      Grid.Row="3"
-                      Grid.Column="2"
-                      Margin="0,4,0,0"
-                      IsChecked="True"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Top" />
-
-            <!-- ===== Row 4: ACTION BUTTONS (PILLS) ===== -->
-            <StackPanel Grid.Row="4"
-                        Grid.ColumnSpan="3"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        Margin="0,6,0,0">
-                <Button x:Name="BtnBankCardAddOrUpdate"
-                        Margin="0,0,6,0"
-                        Content="Add"
-                        Style="{StaticResource DialogPrimary}"
-                        Click="OnBankCardAddOrUpdateClick" />
-                <Button x:Name="BtnBankCardClear"
-                        Content="Clear"
-                        Style="{StaticResource DialogSecondary}"
-                        Click="OnBankCardClearClick" />
-            </StackPanel>
-        </Grid>
+        </Border>
 
         <!-- Error text -->
         <TextBlock x:Name="BankCardErrorTextBlock"

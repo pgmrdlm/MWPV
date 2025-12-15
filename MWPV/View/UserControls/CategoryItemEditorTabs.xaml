@@ -10,12 +10,18 @@
              Focusable="True">
 
     <UserControl.Resources>
+        <!-- Password-strength brushes (local; ok) -->
         <SolidColorBrush x:Key="PwWeak"       Color="#D32F2F"/>
         <SolidColorBrush x:Key="PwFair"       Color="#FBC02D"/>
         <SolidColorBrush x:Key="PwStrong"     Color="#388E3C"/>
         <SolidColorBrush x:Key="PwVeryStrong" Color="#2E7D32"/>
 
         <SolidColorBrush x:Key="FieldErrorFill" Color="#FFFFEEEE"/>
+
+        <!-- Info strip colors (match AppEntryWindow InfoBanner) -->
+        <SolidColorBrush x:Key="InfoBannerBackground" Color="#1E40AF"/>
+        <SolidColorBrush x:Key="InfoBannerBorder"     Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="InfoBannerForeground" Color="White"/>
 
         <!-- Small square primary icon button -->
         <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
@@ -102,23 +108,22 @@
 
             <!-- ====================== TABS ====================== -->
             <TabControl x:Name="ItemTabs"
-                        Margin="8,8,8,8"
+                        Margin="8"
                         SelectedIndex="0">
 
                 <!-- ========== BASIC TAB ========== -->
                 <TabItem Header="Basic">
-                    <!-- Shared-size scope so columns line up -->
                     <Grid Margin="20"
                           Background="Bisque"
                           Grid.IsSharedSizeScope="True">
 
                         <!-- ROWS:
-                             0: Category name
-                             1: Category name error
+                             0: Item name
+                             1: Item name error
                              2: Password
                              3: Verify password
-                             4: Password/Verify error (red line)   
-                             5: Strength panel (tips/progress)      
+                             4: Password/Verify error
+                             5: Strength panel
                              6: spacer
                              7: User / Email / Url
                              8: Email error
@@ -127,7 +132,7 @@
                             11: Phone error
                             12: spacer
                             13: Notes
-                            14: Save/Cancel
+                            14: Info strip + Save/Cancel
                         -->
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -139,9 +144,9 @@
                             <RowDefinition Height="Auto"/>
                             <!-- 3 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 4 (NEW: error row under pw/verify) -->
+                            <!-- 4 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 5 (Strength panel) -->
+                            <!-- 5 -->
                             <RowDefinition Height="10"/>
                             <!-- 6 spacer -->
                             <RowDefinition Height="Auto"/>
@@ -170,7 +175,7 @@
                             <ColumnDefinition Width="2.5*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- ========== ROW 0: CATEGORY ITEM NAME ========== -->
+                        <!-- ================== ROW 0: ITEM NAME ================== -->
                         <Label Grid.Row="0" Grid.Column="0"
                                Content="* Category Item Name"
                                FontWeight="Bold"
@@ -182,7 +187,7 @@
                                  MinWidth="320"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ========== ROW 1: CATEGORY ITEM NAME ERROR ========== -->
+                        <!-- ================== ROW 1: ITEM NAME ERROR ================== -->
                         <StackPanel x:Name="ItemNameErrorPanel"
                                     Grid.Row="1" Grid.Column="0"
                                     Margin="0,6,0,0"
@@ -194,7 +199,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 2: PASSWORD ========== -->
+                        <!-- ================== ROW 2: PASSWORD ================== -->
                         <Label Grid.Row="2" Grid.Column="0"
                                Content="* Password"
                                FontWeight="Bold"
@@ -274,7 +279,7 @@
                                       ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
                         </Grid>
 
-                        <!-- ========== ROW 3: VERIFY PASSWORD ========== -->
+                        <!-- ================== ROW 3: VERIFY ================== -->
                         <Label x:Name="lblVerifyPassword"
                                Grid.Row="3" Grid.Column="0"
                                Content="Verify Password"
@@ -349,7 +354,7 @@
                                     ToolTip="(not used – spacer only)"/>
                         </Grid>
 
-                        <!-- ========== ROW 4: PASSWORD / VERIFY ERROR (RED, UNDER THE INPUT AREA) ========== -->
+                        <!-- ================== ROW 4: VERIFY ERROR ================== -->
                         <StackPanel x:Name="VerifyErrorPanel"
                                     Grid.Row="4" Grid.Column="0"
                                     Grid.ColumnSpan="3"
@@ -362,7 +367,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 5: STRENGTH PANEL (UNDER ERROR) ========== -->
+                        <!-- ================== ROW 5: STRENGTH PANEL ================== -->
                         <StackPanel x:Name="StrengthPanel"
                                     Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                                     Margin="0,6,0,0"
@@ -384,18 +389,14 @@
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="• "/>
-                                            <TextBlock Text="{Binding}"
-                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
 
-                        <!-- ========== ROW 6: SPACER ========== -->
-                        <!-- empty -->
-
-                        <!-- ========== ROW 7: USER / EMAIL / URL ========== -->
+                        <!-- ================== ROW 7: USER / EMAIL / URL ================== -->
                         <Label Grid.Row="7" Grid.Column="0"
                                Content="User Name"
                                FontWeight="Bold"/>
@@ -427,7 +428,7 @@
                                  MinWidth="200"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ========== ROW 8: EMAIL ERROR ========== -->
+                        <!-- ================== ROW 8: EMAIL ERROR ================== -->
                         <StackPanel x:Name="EmailErrorPanel"
                                     Grid.Row="8" Grid.Column="2"
                                     Margin="0,6,0,0"
@@ -439,10 +440,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 9: SPACER ========== -->
-                        <!-- empty -->
-
-                        <!-- ========== ROW 10–11: PHONE ========== -->
+                        <!-- ================== ROW 10: PHONE ================== -->
                         <Label Grid.Row="10" Grid.Column="0"
                                Content="Phone Number"
                                FontWeight="Bold"/>
@@ -491,6 +489,7 @@
                             </Button>
                         </Grid>
 
+                        <!-- ================== ROW 11: PHONE ERROR ================== -->
                         <StackPanel x:Name="PhoneErrorPanel"
                                     Grid.Row="11" Grid.Column="0"
                                     Margin="0,6,0,0"
@@ -502,10 +501,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ========== ROW 12: SPACER ========== -->
-                        <!-- empty -->
-
-                        <!-- ========== ROW 13: NOTES ========== -->
+                        <!-- ================== ROW 13: NOTES ================== -->
                         <Label Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
                                Content="Freeform Notes"
                                FontWeight="Bold"/>
@@ -517,36 +513,68 @@
                                  VerticalScrollBarVisibility="Auto"
                                  Height="48"/>
 
-                        <!-- ========== ROW 14: SAVE / CANCEL ========== -->
-                        <StackPanel Grid.Row="14"
-                                    Grid.Column="0"
-                                    Grid.ColumnSpan="5"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Right"
-                                    Margin="0,16,0,10">
-                            <Button x:Name="btnSubmit"
-                                    Style="{StaticResource DialogPrimary}"
-                                    Margin="0,0,12,0"
-                                    Click="btnSubmit_Click">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                                               Text="&#xE8FB;"
-                                               Margin="0,0,8,0"/>
-                                    <TextBlock Text="Save"/>
-                                </StackPanel>
-                            </Button>
+                        <!-- ================== ROW 14: INFO STRIP + BUTTONS ================== -->
+                        <Grid Grid.Row="14"
+                              Grid.Column="0"
+                              Grid.ColumnSpan="5"
+                              Margin="0,16,0,10"
+                              VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                            <Button x:Name="btnCancel"
-                                    Style="{StaticResource DialogSecondary}"
-                                    Click="btnCancel_Click">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                                               Text="&#xE711;"
-                                               Margin="0,0,8,0"/>
-                                    <TextBlock Text="Cancel"/>
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
+                            <!-- Info block (match AppEntryWindow InfoBanner dark-blue style) -->
+                            <Border x:Name="ActionInfoStrip"
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    Padding="10"
+                                    Background="{StaticResource InfoBannerBackground}"
+                                    BorderBrush="{StaticResource InfoBannerBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    VerticalAlignment="Center">
+                                <TextBlock x:Name="ActionInfoText"
+                                           Foreground="{StaticResource InfoBannerForeground}"
+                                           FontSize="13"
+                                           TextWrapping="Wrap">
+                                    <Run Text="Tab changes save when there are no errors.  "/>
+                                    <Run Text="Save " FontWeight="SemiBold"/>
+                                    <Run Text="saves and closes.  "/>
+                                    <Run Text="Cancel " FontWeight="SemiBold"/>
+                                    <Run Text="exits (no save)."/>
+                                </TextBlock>
+                            </Border>
+
+                            <!-- Buttons -->
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                <Button x:Name="btnSubmit"
+                                        Style="{StaticResource DialogPrimary}"
+                                        Margin="0,0,12,0"
+                                        Click="btnSubmit_Click">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                                   Text="&#xE8FB;"
+                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Save"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="btnCancel"
+                                        Style="{StaticResource DialogSecondary}"
+                                        Click="btnCancel_Click">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                                   Text="&#xE711;"
+                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Cancel"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
 
                     </Grid>
                 </TabItem>
@@ -554,7 +582,7 @@
                 <!-- ========== BANK CARDS TAB ========== -->
                 <TabItem Header="Bank Cards">
                     <Grid Margin="20" Background="Bisque">
-                        <categoryItems:CategoryItemBankCardsPanel />
+                        <categoryItems:CategoryItemBankCardsPanel/>
                     </Grid>
                 </TabItem>
 
