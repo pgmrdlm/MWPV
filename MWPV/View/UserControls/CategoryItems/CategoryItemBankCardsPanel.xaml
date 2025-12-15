@@ -137,7 +137,7 @@
                                          Height="28"
                                          MinWidth="240"
                                          HorizontalAlignment="Stretch"
-                                         MaxLength="23"
+                                         MaxLength="19"
                                          LostFocus="OnBankCardFieldLostFocus"
                                          PasswordChanged="CardNumberBox_PasswordChanged" />
                             <TextBox x:Name="CardNumberPlainTextBox"
@@ -386,7 +386,10 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   IsReadOnly="True"
-                  ItemsSource="{Binding BankCardRows, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                  ItemsSource="{Binding BankCardRows, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  Background="Bisque"
+                  RowBackground="Bisque"
+                  AlternatingRowBackground="Bisque">
 
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
@@ -403,16 +406,16 @@
                                     Width="120" />
                 <DataGridTextColumn Header="Card Number"
                                     Binding="{Binding CardNumberMasked}"
-                                    Width="150" />
+                                    Width="100" />
                 <DataGridTextColumn Header="Expiration"
                                     Binding="{Binding Expiration}"
-                                    Width="120" />
+                                    Width="70" />
                 <DataGridTextColumn Header="CVV"
                                     Binding="{Binding CvvMasked}"
-                                    Width="80" />
+                                    Width="40" />
                 <DataGridTextColumn Header="PIN"
                                     Binding="{Binding PinMasked}"
-                                    Width="80" />
+                                    Width="50" />
                 <DataGridTemplateColumn Header="Active" Width="70">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -437,7 +440,8 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Header="Del" Width="50">
+                <!-- THIS is the restore: Del column eats remaining space -->
+                <DataGridTemplateColumn Header="Del" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource SmallSquarePrimaryButton}"
