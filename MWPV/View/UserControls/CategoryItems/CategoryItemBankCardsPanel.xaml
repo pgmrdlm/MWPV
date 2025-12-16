@@ -9,6 +9,11 @@
 
     <UserControl.Resources>
 
+        <!-- Info strip colors (match CategoryItemEditorTabs Basic tab / AppEntryWindow InfoBanner) -->
+        <SolidColorBrush x:Key="InfoBannerBackground" Color="#1E40AF"/>
+        <SolidColorBrush x:Key="InfoBannerBorder"     Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="InfoBannerForeground" Color="White"/>
+
         <!-- Small square primary button (matches other panels) -->
         <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
             <Setter Property="Width" Value="28" />
@@ -58,20 +63,22 @@
 
     </UserControl.Resources>
 
-    <!-- Match Basic tab background; no outer GroupBox -->
+    <!-- Match other CategoryItem tabs (same Bisque surface) -->
     <Grid Margin="0"
           Background="Bisque">
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <!-- entry area -->
+            <!-- entry -->
             <RowDefinition Height="Auto" />
-            <!-- error text -->
+            <!-- error -->
             <RowDefinition Height="*" />
             <!-- grid -->
+            <RowDefinition Height="Auto" />
+            <!-- tab Save/Cancel -->
         </Grid.RowDefinitions>
 
         <!-- ================= ENTRY AREA ================= -->
-        <!-- Centered wrapper so the edit block feels less crowded and more "anchored" -->
         <Border Grid.Row="0"
                 Margin="0,0,0,6"
                 Padding="14,10"
@@ -79,15 +86,11 @@
                 HorizontalAlignment="Center"
                 MaxWidth="760">
 
-            <!-- 3 rows x 3 columns -->
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <!-- line 1 -->
                     <RowDefinition Height="Auto" />
-                    <!-- line 2 -->
                     <RowDefinition Height="Auto" />
-                    <!-- line 3 (buttons) -->
                 </Grid.RowDefinitions>
 
                 <Grid.ColumnDefinitions>
@@ -96,7 +99,7 @@
                     <ColumnDefinition Width="*" MinWidth="170" />
                 </Grid.ColumnDefinitions>
 
-                <!-- ================= ROW 0 ================= -->
+                <!-- ROW 0 -->
                 <!-- Card Type -->
                 <StackPanel Grid.Row="0"
                             Grid.Column="0"
@@ -140,6 +143,7 @@
                                          MaxLength="19"
                                          LostFocus="OnBankCardFieldLostFocus"
                                          PasswordChanged="CardNumberBox_PasswordChanged" />
+
                             <TextBox x:Name="CardNumberPlainTextBox"
                                      VerticalAlignment="Center"
                                      Height="28"
@@ -200,7 +204,7 @@
                              LostFocus="OnBankCardFieldLostFocus" />
                 </StackPanel>
 
-                <!-- ================= ROW 1 ================= -->
+                <!-- ROW 1 -->
                 <!-- CVV -->
                 <StackPanel Grid.Row="1"
                             Grid.Column="0"
@@ -349,7 +353,7 @@
                               VerticalAlignment="Center" />
                 </StackPanel>
 
-                <!-- ================= ROW 2 (BUTTONS) ================= -->
+                <!-- ROW 2 (ROW-LEVEL buttons) -->
                 <StackPanel Grid.Row="2"
                             Grid.ColumnSpan="3"
                             Orientation="Horizontal"
@@ -360,10 +364,10 @@
                             Content="Add"
                             Style="{StaticResource DialogPrimary}"
                             Click="OnBankCardAddOrUpdateClick" />
-                    <Button x:Name="BtnBankCardClear"
-                            Content="Clear"
+                    <Button x:Name="BtnBankCardClearRow"
+                            Content="Clear Row"
                             Style="{StaticResource DialogSecondary}"
-                            Click="OnBankCardClearClick" />
+                            Click="OnBankCardClearRowClick" />
                 </StackPanel>
 
             </Grid>
@@ -385,11 +389,17 @@
                   HeadersVisibility="Column"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
+                  CanUserResizeRows="False"
                   IsReadOnly="True"
                   ItemsSource="{Binding BankCardRows, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   Background="Bisque"
                   RowBackground="Bisque"
-                  AlternatingRowBackground="Bisque">
+                  AlternatingRowBackground="Bisque"
+                  RowHeight="28"
+                  ColumnHeaderHeight="28"
+                  MaxHeight="200"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
 
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
@@ -403,19 +413,20 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Card Type"
                                     Binding="{Binding CardTypeDisplay}"
-                                    Width="120" />
+                                    Width="160" />
                 <DataGridTextColumn Header="Card Number"
                                     Binding="{Binding CardNumberMasked}"
-                                    Width="100" />
+                                    Width="110" />
                 <DataGridTextColumn Header="Expiration"
                                     Binding="{Binding Expiration}"
-                                    Width="70" />
+                                    Width="90" />
                 <DataGridTextColumn Header="CVV"
                                     Binding="{Binding CvvMasked}"
-                                    Width="40" />
+                                    Width="60" />
                 <DataGridTextColumn Header="PIN"
                                     Binding="{Binding PinMasked}"
-                                    Width="50" />
+                                    Width="70" />
+
                 <DataGridTemplateColumn Header="Active" Width="70">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -426,8 +437,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <!-- Edit / Delete -->
-                <DataGridTemplateColumn Header="Edit" Width="50">
+                <DataGridTemplateColumn Header="Edit" Width="60">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource SmallSquarePrimaryButton}"
@@ -440,8 +450,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <!-- THIS is the restore: Del column eats remaining space -->
-                <DataGridTemplateColumn Header="Del" Width="*">
+                <DataGridTemplateColumn Header="Del" Width="60">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource SmallSquarePrimaryButton}"
@@ -455,6 +464,52 @@
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
+
+        <!-- ================= TAB-LEVEL Save/Cancel + INFO STRIP ================= -->
+        <Grid Grid.Row="3"
+              Margin="0,10,0,0"
+              VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Info block (dark-blue, same as Basic tab) -->
+            <Border Grid.Column="0"
+                    Margin="0,0,12,0"
+                    Padding="10"
+                    Background="{StaticResource InfoBannerBackground}"
+                    BorderBrush="{StaticResource InfoBannerBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    VerticalAlignment="Center">
+                <TextBlock Foreground="{StaticResource InfoBannerForeground}"
+                           FontSize="13"
+                           TextWrapping="Wrap">
+                    <Run Text="Tab changes save when there are no errors.  "/>
+                    <Run Text="Save " FontWeight="SemiBold"/>
+                    <Run Text="saves and closes.  "/>
+                    <Run Text="Cancel " FontWeight="SemiBold"/>
+                    <Run Text="exits (no save)."/>
+                </TextBlock>
+            </Border>
+
+            <!-- Buttons (kept intact: names, styles, handlers) -->
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <Button x:Name="BtnTabSave"
+                        Content="Save"
+                        Style="{StaticResource DialogPrimary}"
+                        Margin="0,0,12,0"
+                        Click="OnTabSaveClick" />
+                <Button x:Name="BtnTabCancel"
+                        Content="Cancel"
+                        Style="{StaticResource DialogSecondary}"
+                        Click="OnTabCancelClick" />
+            </StackPanel>
+        </Grid>
 
     </Grid>
 </UserControl>

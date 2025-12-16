@@ -1,4 +1,6 @@
 ﻿using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -10,19 +12,26 @@ namespace MWPV
         // ---- Status line auto-hide timer ----
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer();
 
+        // ---- Close orchestration ----
+        private bool _closingCleanupInProgress;
+        private bool _allowCloseAfterCleanup;
+
         public MainWindow()
         {
             InitializeComponent();
 
             // Set the correct window title explicitly on load
-            this.Title = "MWPV - My Windows Password Vault";
+            Title = "MWPV - My Windows Password Vault";
 
             // Clear the status on any user input
-            this.PreviewKeyDown += (_, __) => ClearStatus();
-            this.PreviewMouseDown += (_, __) => ClearStatus();
+            PreviewKeyDown += (_, __) => ClearStatus();
+            PreviewMouseDown += (_, __) => ClearStatus();
 
             // Timer tick clears the status
             _statusTimer.Tick += (_, __) => ClearStatus();
+
+            // Central place to handle the big X / Alt+F4 / system close
+            Closing += MainWindow_Closing;
         }
 
         // ---------------- Logs overlay bridge ----------------
@@ -40,10 +49,6 @@ namespace MWPV
         }
 
         // ---------------- Status line helpers ----------------
-        /// <summary>
-        /// Show a one-line startup/status message and auto-hide after the given duration.
-        /// Pass null/empty to clear immediately. Default auto-hide = 8 seconds.
-        /// </summary>
         public void ShowStartupStatus(string message, TimeSpan? autoHide = null)
         {
             if (string.IsNullOrWhiteSpace(message))
@@ -52,22 +57,18 @@ namespace MWPV
                 return;
             }
 
-            // StatusText is defined in MainWindow.xaml (TextBlock)
             StatusText.Text = message;
             StatusText.Visibility = Visibility.Visible;
 
             _statusTimer.Stop();
-            var delay = autoHide ?? TimeSpan.FromSeconds(8);
-            _statusTimer.Interval = delay;
+            _statusTimer.Interval = autoHide ?? TimeSpan.FromSeconds(8);
             _statusTimer.Start();
         }
 
-        /// <summary>
-        /// Hide the status line and stop any pending auto-hide.
-        /// </summary>
         private void ClearStatus()
         {
             _statusTimer.Stop();
+
             if (StatusText.Visibility != Visibility.Collapsed)
             {
                 StatusText.Visibility = Visibility.Collapsed;
@@ -75,31 +76,22 @@ namespace MWPV
             }
         }
 
-        // ---------------- Title bar handlers (no visual changes) ----------------
+        // ---------------- Title bar handlers ----------------
         private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Allow dragging the window; double-click toggles maximize/restore
             if (e.ClickCount == 2)
             {
-                MaxRestore_Click(sender, e);
+                MaxRestore_Click(sender, e); // MouseButtonEventArgs derives from RoutedEventArgs
+                return;
             }
-            else
-            {
-                try
-                {
-                    DragMove();
-                }
-                catch
-                {
-                    // ignore if drag starts during resize
-                }
-            }
+
+            try { DragMove(); }
+            catch { /* ignore */ }
         }
 
         private void TitleBar_OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
-            // Intentionally no-op to avoid changing your menu/title bar behavior.
-            // (If you later want a system menu here, we can add it without visual changes.)
+            // no-op (by design)
         }
 
         private void Minimize_Click(object sender, RoutedEventArgs e)
@@ -114,9 +106,81 @@ namespace MWPV
                 : WindowState.Maximized;
         }
 
+        // Big X in our custom title bar
         private void Close_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            Close(); // goes through Closing handler below
+        }
+
+        /// <summary>
+        /// Ensure Unloaded runs for nested controls BEFORE we actually exit.
+        /// Critical: DO NOT call Close() from inside Closing (WPF will throw).
+        /// We cancel, detach content, then schedule the real close after Closing returns.
+        /// </summary>
+        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        {
+            if (_allowCloseAfterCleanup)
+                return;
+
+            if (_closingCleanupInProgress)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            _closingCleanupInProgress = true;
+            e.Cancel = true;
+
+            try
+            {
+                Debug.WriteLine("[MAINWINDOW][CLOSE] Closing requested — beginning UI unload cleanup.");
+
+                // Stop status timer + hide status (safe during close)
+                ClearStatus();
+
+                // Trigger Unloaded down the tree (Panel, ItemTabs, BankCards, etc.)
+                Content = null;
+
+                // Schedule the final close AFTER this Closing handler returns.
+                // Use idle-ish priority so Unloaded handlers get a chance to run first.
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        Debug.WriteLine("[MAINWINDOW][CLOSE] UI unload cleanup pass complete. Proceeding to close.");
+
+                        _allowCloseAfterCleanup = true;
+
+                        // Now it's safe to close (new close pass, we won't cancel it)
+                        Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("[MAINWINDOW][CLOSE] Final-close exception: " + ex);
+
+                        // Last resort: shut down the app to avoid hanging on a blank window
+                        try { Application.Current.Shutdown(); } catch { /* ignore */ }
+                    }
+                    finally
+                    {
+                        _closingCleanupInProgress = false;
+                    }
+                }), DispatcherPriority.ApplicationIdle);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[MAINWINDOW][CLOSE] Cleanup exception: " + ex);
+
+                // If cleanup setup failed, allow close immediately (don’t strand a blank window)
+                _allowCloseAfterCleanup = true;
+                _closingCleanupInProgress = false;
+
+                // Schedule close outside Closing
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { Close(); } catch { /* ignore */ }
+                }), DispatcherPriority.Background);
+            }
         }
     }
 }
