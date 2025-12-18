@@ -1,4 +1,5 @@
-﻿using System;
+﻿// CategoryItemBankCardsPanel.xaml.cs
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -21,13 +22,12 @@ namespace MWPV.View.UserControls.CategoryItems
         // ====================================================================
 
         /// <summary>
-        /// Host should handle "commit these rows into the parent editor model,
-        /// then exit back to item-buttons grid".
+        /// Host should commit these rows into the parent editor model, then exit/close the editor.
         /// </summary>
         public event EventHandler<BankCardsCommitEventArgs>? SaveAndExitRequested;
 
         /// <summary>
-        /// Host should exit back to item-buttons grid (we already restored baseline + wiped).
+        /// Host should exit/close the editor (no save).
         /// </summary>
         public event EventHandler? CancelAndExitRequested;
 
@@ -57,6 +57,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
         // Prevent dirty flag during programmatic loads/clears/restores.
         private bool _suppressDirty;
+
+        // If we disable entry for the session (e.g., card-types load fails),
+        // we keep Save disabled no matter what.
+        private bool _entryDisabled;
 
         // ====================================================================
         // Reveal state + shared auto-hide timer
@@ -108,6 +112,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
+                HideAllRevealsAndStopTimer();
                 WipeSensitiveEntryFields();
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -127,7 +132,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 CaptureBaselineFromCurrent();
                 SetDirty(false);
-                SetErrors(false);
+                SetErrors(_entryDisabled);
                 UpdateTabButtons();
             }
             finally
@@ -175,7 +180,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!HasChanges)
                 return true;
 
-            // If the entry line is "half filled", we require the user to either Add/Update or Clear Row.
+            // If the entry line is "half filled", we require Add/Update or Clear Row.
             if (EntryLineHasAnyInput())
             {
                 ShowBankCardError("Finish Add/Update or Clear Row before leaving this tab.");
@@ -185,7 +190,11 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             if (!ValidateTabStateOnly(showErrors: true))
+            {
+                SetErrors(true);
+                UpdateTabButtons();
                 return false;
+            }
 
             RaiseSaveAndExit();
             return true;
@@ -207,7 +216,7 @@ namespace MWPV.View.UserControls.CategoryItems
             // If host didn't call LoadFromHostRows, baseline is whatever we have now.
             CaptureBaselineFromCurrent();
             SetDirty(false);
-            SetErrors(false);
+            SetErrors(_entryDisabled);
             UpdateTabButtons();
         }
 
@@ -217,6 +226,7 @@ namespace MWPV.View.UserControls.CategoryItems
             UnhookUiEvents();
 
             // Always wipe entry line on unload.
+            HideAllRevealsAndStopTimer();
             WipeSensitiveEntryFields();
 
             // Only wipe/clear the grid if host explicitly requested it.
@@ -269,37 +279,27 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
 
             if (!_hasChanges)
-            {
                 _hasChanges = true;
-                UpdateTabButtons();
-            }
+
+            UpdateTabButtons();
         }
 
-        private void SetDirty(bool value)
-        {
-            _hasChanges = value;
-        }
-
-        private void SetErrors(bool value)
-        {
-            _hasErrors = value;
-        }
+        private void SetDirty(bool value) => _hasChanges = value;
+        private void SetErrors(bool value) => _hasErrors = value;
 
         private void UpdateTabButtons()
         {
-            // Save should only be enabled when we have changes and no errors.
+            // Save should only be enabled when:
+            // - entry isn't disabled
+            // - we have changes
+            // - we have no errors
+            // - the entry line is empty (we do not guess partial input)
             if (BtnTabSave != null)
-                BtnTabSave.IsEnabled = _hasChanges && !_hasErrors;
+                BtnTabSave.IsEnabled = !_entryDisabled && _hasChanges && !_hasErrors && !EntryLineHasAnyInput();
 
-            // Cancel should be enabled if there are changes OR we’re mid-edit OR the entry line has input.
-            bool canCancel =
-                _hasChanges ||
-                _editingRow != null ||
-                EntryLineHasAnyInput() ||
-                _isCardNumberRevealed || _isCvvRevealed || _isPinRevealed;
-
+            // CANCEL MUST NEVER BE DISABLED.
             if (BtnTabCancel != null)
-                BtnTabCancel.IsEnabled = canCancel;
+                BtnTabCancel.IsEnabled = true;
         }
 
         // ====================================================================
@@ -318,6 +318,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
+                HideAllRevealsAndStopTimer();
                 WipeSensitiveEntryFields();
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -338,10 +339,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 }
 
                 _editingRow = null;
-                BtnBankCardAddOrUpdate.Content = "Add";
+                if (BtnBankCardAddOrUpdate != null)
+                    BtnBankCardAddOrUpdate.Content = "Add";
 
                 SetDirty(false);
-                SetErrors(false);
+                SetErrors(_entryDisabled);
                 UpdateTabButtons();
             }
             finally
@@ -371,6 +373,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnRevealTimeout()
         {
+#if DEBUG
+            Debug.WriteLine("[BANK-CARDS-PANEL] Reveal timer elapsed – hiding all reveals");
+#endif
             HideAllRevealsAndStopTimer();
             ClearPlainRevealOverlays();
             UpdateTabButtons();
@@ -380,7 +385,6 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             bool anyRevealed = _isCardNumberRevealed || _isCvvRevealed || _isPinRevealed;
             _revealAutoHide.Touch(anyRevealed);
-            UpdateTabButtons();
         }
 
         private void HideAllRevealsAndStopTimer()
@@ -424,26 +428,57 @@ namespace MWPV.View.UserControls.CategoryItems
                     });
                 }
 
-                // Keep selection stable
-                if (_cardTypeItems.Count > 0 && CardTypeCombo.SelectedIndex < 0)
-                    CardTypeCombo.SelectedIndex = 0;
+                if (CardTypeCombo != null)
+                {
+                    CardTypeCombo.IsEnabled = true;
+                    if (_cardTypeItems.Count > 0 && CardTypeCombo.SelectedIndex < 0)
+                        CardTypeCombo.SelectedIndex = 0;
+                }
+
+                _entryDisabled = false;
+                EnableEntryControls(true);
+
+                SetErrors(false);
+                UpdateTabButtons();
             }
             catch (Exception ex)
             {
 #if DEBUG
                 Debug.WriteLine($"[BANK-CARDS-PANEL][ERROR] LoadBankCardTypes failed: {ex}");
 #endif
-                // No MessageBox: we surface in-tab and disable entry
+                _entryDisabled = true;
+
                 ShowBankCardError("Unable to load card types. Bank card entry is disabled for this session.");
-                CardTypeCombo.IsEnabled = false;
-                BtnBankCardAddOrUpdate.IsEnabled = false;
-                BtnBankCardClearRow.IsEnabled = false;
-                BtnTabSave.IsEnabled = false;
+
+                EnableEntryControls(false);
+
+                SetErrors(true);
+                UpdateTabButtons();
             }
         }
 
+        private void EnableEntryControls(bool enabled)
+        {
+            if (CardTypeCombo != null) CardTypeCombo.IsEnabled = enabled;
+            if (CardNumberBox != null) CardNumberBox.IsEnabled = enabled;
+            if (BtnViewCardNumber != null) BtnViewCardNumber.IsEnabled = enabled;
+
+            if (ExpirationTextBox != null) ExpirationTextBox.IsEnabled = enabled;
+
+            if (CvvBox != null) CvvBox.IsEnabled = enabled;
+            if (BtnToggleCvvReveal != null) BtnToggleCvvReveal.IsEnabled = enabled;
+
+            if (PinBox != null) PinBox.IsEnabled = enabled;
+            if (BtnTogglePinReveal != null) BtnTogglePinReveal.IsEnabled = enabled;
+
+            if (ChkCardActive != null) ChkCardActive.IsEnabled = enabled;
+
+            if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = enabled;
+            if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = enabled;
+        }
+
         // ====================================================================
-        // Entry line reveal helpers
+        // Entry line reveal helpers (read-only transparent overlay)
         // ====================================================================
 
         private void ShowCardNumber()
@@ -455,10 +490,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             CardNumberPlainTextBox.Text = TrimToMaxChars(CardNumberBox.Password);
             CardNumberPlainTextBox.Visibility = Visibility.Visible;
-            CardNumberPlainTextBox.IsHitTestVisible = true;
 
             CardNumberBox.Visibility = Visibility.Collapsed;
-            CardNumberBox.IsEnabled = false;
 
             BtnViewCardNumber.ToolTip = "Hide card number";
 
@@ -472,14 +505,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _isCardNumberRevealed = false;
 
+            // Overlay is read-only, but we still re-sync for safety.
             CardNumberBox.Password = TrimToMaxChars(CardNumberPlainTextBox.Text);
 
             CardNumberBox.Visibility = Visibility.Visible;
-            CardNumberBox.IsEnabled = true;
 
             UICleaner.Clear(CardNumberPlainTextBox);
             CardNumberPlainTextBox.Visibility = Visibility.Collapsed;
-            CardNumberPlainTextBox.IsHitTestVisible = false;
 
             BtnViewCardNumber.ToolTip = "Show card number";
             TouchRevealTimerIfNeeded();
@@ -494,10 +526,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             CvvPlainTextBox.Text = CvvBox.Password ?? string.Empty;
             CvvPlainTextBox.Visibility = Visibility.Visible;
-            CvvPlainTextBox.IsHitTestVisible = true;
 
             CvvBox.Visibility = Visibility.Collapsed;
-            CvvBox.IsEnabled = false;
 
             BtnToggleCvvReveal.ToolTip = "Hide CVV";
             TouchRevealTimerIfNeeded();
@@ -512,11 +542,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
             CvvBox.Password = CvvPlainTextBox.Text ?? string.Empty;
             CvvBox.Visibility = Visibility.Visible;
-            CvvBox.IsEnabled = true;
 
             UICleaner.Clear(CvvPlainTextBox);
             CvvPlainTextBox.Visibility = Visibility.Collapsed;
-            CvvPlainTextBox.IsHitTestVisible = false;
 
             BtnToggleCvvReveal.ToolTip = "Show CVV";
             TouchRevealTimerIfNeeded();
@@ -531,10 +559,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             PinPlainTextBox.Text = PinBox.Password ?? string.Empty;
             PinPlainTextBox.Visibility = Visibility.Visible;
-            PinPlainTextBox.IsHitTestVisible = true;
 
             PinBox.Visibility = Visibility.Collapsed;
-            PinBox.IsEnabled = false;
 
             BtnTogglePinReveal.ToolTip = "Hide card PIN";
             TouchRevealTimerIfNeeded();
@@ -549,11 +575,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
             PinBox.Password = PinPlainTextBox.Text ?? string.Empty;
             PinBox.Visibility = Visibility.Visible;
-            PinBox.IsEnabled = true;
 
             UICleaner.Clear(PinPlainTextBox);
             PinPlainTextBox.Visibility = Visibility.Collapsed;
-            PinPlainTextBox.IsHitTestVisible = false;
 
             BtnTogglePinReveal.ToolTip = "Show card PIN";
             TouchRevealTimerIfNeeded();
@@ -565,61 +589,26 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void CardNumberBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            if (CardNumberBox == null || CardNumberPlainTextBox == null)
+            if (CardNumberBox == null)
                 return;
 
             var trimmed = TrimToMaxChars(CardNumberBox.Password);
             if (!string.Equals(trimmed, CardNumberBox.Password, StringComparison.Ordinal))
                 CardNumberBox.Password = trimmed;
 
-            if (!_isCardNumberRevealed)
-                CardNumberPlainTextBox.Text = CardNumberBox.Password;
-
-            MarkDirty();
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void CardNumberPlainTextBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (CardNumberPlainTextBox == null || CardNumberBox == null)
-                return;
-
-            var caret = CardNumberPlainTextBox.CaretIndex;
-            var trimmed = TrimToMaxChars(CardNumberPlainTextBox.Text);
-
-            if (!string.Equals(trimmed, CardNumberPlainTextBox.Text, StringComparison.Ordinal))
-            {
-                CardNumberPlainTextBox.Text = trimmed;
-                CardNumberPlainTextBox.CaretIndex = Math.Min(caret, trimmed.Length);
-            }
-
-            if (_isCardNumberRevealed)
-                CardNumberBox.Password = trimmed;
-
+            // Do NOT mirror plaintext while hidden; we only populate overlay on reveal.
             MarkDirty();
             TouchRevealTimerIfNeeded();
         }
 
         private void CvvBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            if (CvvPlainTextBox == null || CvvBox == null)
-                return;
-
-            if (!_isCvvRevealed)
-                CvvPlainTextBox.Text = CvvBox.Password;
-
             MarkDirty();
             TouchRevealTimerIfNeeded();
         }
 
         private void PinBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            if (PinPlainTextBox == null || PinBox == null)
-                return;
-
-            if (!_isPinRevealed)
-                PinPlainTextBox.Text = PinBox.Password;
-
             MarkDirty();
             TouchRevealTimerIfNeeded();
         }
@@ -634,44 +623,48 @@ namespace MWPV.View.UserControls.CategoryItems
             ResetBankCardFieldBackgrounds();
 
             // If a row is selected, "peek" it into the entry line, reveal card number only.
-            if (BankCardGrid.SelectedItem is BankCardRow row)
+            if (BankCardGrid != null && BankCardGrid.SelectedItem is BankCardRow row)
             {
                 _suppressDirty = true;
                 try
                 {
                     _editingRow = null;
-                    BtnBankCardAddOrUpdate.Content = "Add";
+                    if (BtnBankCardAddOrUpdate != null)
+                        BtnBankCardAddOrUpdate.Content = "Add";
 
                     var cardType = _cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == row.CardTypeId);
-                    if (cardType != null)
-                        CardTypeCombo.SelectedItem = cardType;
-                    else
-                        CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                    if (CardTypeCombo != null)
+                    {
+                        if (cardType != null)
+                            CardTypeCombo.SelectedItem = cardType;
+                        else
+                            CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                    }
 
-                    CardNumberBox.Password = TrimToMaxChars(row.CardNumberRaw ?? string.Empty);
-                    CardNumberPlainTextBox.Text = TrimToMaxChars(row.CardNumberRaw ?? string.Empty);
+                    if (CardNumberBox != null)
+                        CardNumberBox.Password = TrimToMaxChars(row.CardNumberRaw ?? string.Empty);
 
-                    ExpirationTextBox.Text = row.Expiration ?? string.Empty;
+                    if (ExpirationTextBox != null)
+                        ExpirationTextBox.Text = row.Expiration ?? string.Empty;
 
                     // Do NOT surface CVV or PIN for peek
-                    UICleaner.Clear(CvvBox);
-                    UICleaner.Clear(CvvPlainTextBox);
+                    if (CvvBox != null) UICleaner.Clear(CvvBox);
                     HideCvv();
 
-                    UICleaner.Clear(PinBox);
-                    UICleaner.Clear(PinPlainTextBox);
+                    if (PinBox != null) UICleaner.Clear(PinBox);
                     HidePin();
 
-                    ChkCardActive.IsChecked = row.IsActive;
+                    if (ChkCardActive != null)
+                        ChkCardActive.IsChecked = row.IsActive;
 
                     ShowCardNumber();
-                    CardNumberPlainTextBox.Focus();
-                    CardNumberPlainTextBox.SelectAll();
+                    CardNumberPlainTextBox?.Focus();
                 }
                 finally
                 {
                     _suppressDirty = false;
                 }
+
                 UpdateTabButtons();
                 return;
             }
@@ -680,14 +673,12 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_isCardNumberRevealed)
             {
                 HideCardNumber();
-                CardNumberBox.Focus();
-                CardNumberBox.SelectAll();
+                CardNumberBox?.Focus();
             }
             else
             {
                 ShowCardNumber();
-                CardNumberPlainTextBox.Focus();
-                CardNumberPlainTextBox.SelectAll();
+                CardNumberPlainTextBox?.Focus();
             }
         }
 
@@ -711,6 +702,14 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             ClearBankCardError();
 
+            if (_entryDisabled)
+            {
+                ShowBankCardError("Bank card entry is disabled for this session.");
+                SetErrors(true);
+                UpdateTabButtons();
+                return;
+            }
+
             if (!ValidateBankCardFields(showErrors: true))
             {
                 SetErrors(true);
@@ -718,7 +717,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            var selection = CardTypeCombo.SelectedItem as CardTypeItem;
+            var selection = CardTypeCombo?.SelectedItem as CardTypeItem;
             if (selection == null)
             {
                 ShowBankCardError("Please choose a card type.", CardTypeCombo);
@@ -728,12 +727,12 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             string cardNumber = GetCurrentCardNumber();
-            string expirationInput = (ExpirationTextBox.Text ?? "").Trim();
+            string expirationInput = (ExpirationTextBox?.Text ?? "").Trim();
 
-            string cvv = _isCvvRevealed ? (CvvPlainTextBox.Text ?? string.Empty) : (CvvBox.Password ?? string.Empty);
-            string pin = _isPinRevealed ? (PinPlainTextBox.Text ?? string.Empty) : (PinBox.Password ?? string.Empty);
+            string cvv = _isCvvRevealed ? (CvvPlainTextBox?.Text ?? string.Empty) : (CvvBox?.Password ?? string.Empty);
+            string pin = _isPinRevealed ? (PinPlainTextBox?.Text ?? string.Empty) : (PinBox?.Password ?? string.Empty);
 
-            bool isActive = ChkCardActive.IsChecked == true;
+            bool isActive = ChkCardActive?.IsChecked == true;
 
             if (!TryValidateExpiration(expirationInput, out string expNormalized, out _))
             {
@@ -796,7 +795,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnBankCardFieldLostFocus(object sender, RoutedEventArgs e)
         {
-            // Field-level validation drives the tab error state.
+            if (_entryDisabled)
+            {
+                SetErrors(true);
+                UpdateTabButtons();
+                return;
+            }
+
             bool ok = ValidateBankCardFields(showErrors: true);
             SetErrors(!ok);
             UpdateTabButtons();
@@ -813,26 +818,29 @@ namespace MWPV.View.UserControls.CategoryItems
                 _editingRow = row;
 
                 var cardType = _cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == row.CardTypeId);
-                if (cardType != null)
+                if (CardTypeCombo != null && cardType != null)
                     CardTypeCombo.SelectedItem = cardType;
 
-                CardNumberBox.Password = TrimToMaxChars(row.CardNumberRaw);
-                CardNumberPlainTextBox.Text = TrimToMaxChars(row.CardNumberRaw);
+                if (CardNumberBox != null)
+                    CardNumberBox.Password = TrimToMaxChars(row.CardNumberRaw);
                 HideCardNumber();
 
-                ExpirationTextBox.Text = row.Expiration ?? string.Empty;
+                if (ExpirationTextBox != null)
+                    ExpirationTextBox.Text = row.Expiration ?? string.Empty;
 
-                CvvBox.Password = row.CvvRaw ?? string.Empty;
-                CvvPlainTextBox.Text = row.CvvRaw ?? string.Empty;
+                if (CvvBox != null)
+                    CvvBox.Password = row.CvvRaw ?? string.Empty;
                 HideCvv();
 
-                PinBox.Password = row.PinRaw ?? string.Empty;
-                PinPlainTextBox.Text = row.PinRaw ?? string.Empty;
+                if (PinBox != null)
+                    PinBox.Password = row.PinRaw ?? string.Empty;
                 HidePin();
 
-                ChkCardActive.IsChecked = row.IsActive;
+                if (ChkCardActive != null)
+                    ChkCardActive.IsChecked = row.IsActive;
 
-                BtnBankCardAddOrUpdate.Content = "Update";
+                if (BtnBankCardAddOrUpdate != null)
+                    BtnBankCardAddOrUpdate.Content = "Update";
 
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -853,7 +861,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ClearBankCardError();
 
-            // Keep your original rule:
+            // Keep original rule:
             if (row.Id != 0)
             {
                 ShowBankCardError("Existing cards can't be deleted here. Edit the card or mark it inactive instead.");
@@ -874,12 +882,20 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // TAB-LEVEL Save/Cancel handlers (this is the key design change)
+        // TAB-LEVEL Save/Cancel handlers (key design)
         // ====================================================================
 
         private void OnTabSaveClick(object sender, RoutedEventArgs e)
         {
             ClearBankCardError();
+
+            if (_entryDisabled)
+            {
+                ShowBankCardError("Bank card entry is disabled for this session.");
+                SetErrors(true);
+                UpdateTabButtons();
+                return;
+            }
 
             // If entry line has partial input, we do not guess.
             if (EntryLineHasAnyInput())
@@ -915,12 +931,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void RaiseSaveAndExit()
         {
-            // Save means: we send the current rows to the host, then we become clean baseline.
             var payload = _bankCardRows.Select(CloneRow).ToList();
 
             CaptureBaselineFromCurrent();
             SetDirty(false);
-            SetErrors(false);
+            SetErrors(_entryDisabled);
 
             // Wipe entry line & reveals so we leave this tab clean.
             HideAllRevealsAndStopTimer();
@@ -939,10 +954,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidateTabStateOnly(bool showErrors)
         {
-            // For now, "tab state" validation is:
-            // - no half-filled entry line
-            // - rows are internally consistent (expiration format, card number range, etc.)
-            // We do NOT require CVV/PIN (optional).
             if (EntryLineHasAnyInput())
             {
                 if (showErrors) ShowBankCardError("Finish Add/Update or Clear Row before saving.");
@@ -984,12 +995,12 @@ namespace MWPV.View.UserControls.CategoryItems
             if (showErrors)
                 ResetBankCardFieldBackgrounds();
 
-            var selection = CardTypeCombo.SelectedItem as CardTypeItem;
+            var selection = CardTypeCombo?.SelectedItem as CardTypeItem;
             string cardNumber = GetCurrentCardNumber();
-            string expiration = (ExpirationTextBox.Text ?? "").Trim();
+            string expiration = (ExpirationTextBox?.Text ?? "").Trim();
 
-            string cvv = _isCvvRevealed ? (CvvPlainTextBox.Text ?? string.Empty) : (CvvBox.Password ?? string.Empty);
-            string pin = _isPinRevealed ? (PinPlainTextBox.Text ?? string.Empty) : (PinBox.Password ?? string.Empty);
+            string cvv = _isCvvRevealed ? (CvvPlainTextBox?.Text ?? string.Empty) : (CvvBox?.Password ?? string.Empty);
+            string pin = _isPinRevealed ? (PinPlainTextBox?.Text ?? string.Empty) : (PinBox?.Password ?? string.Empty);
 
             if (selection == null)
             {
@@ -999,7 +1010,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (!TryValidateCardNumber(cardNumber, out string cardError))
             {
-                if (showErrors) ShowBankCardError(cardError, _isCardNumberRevealed ? (Control)CardNumberPlainTextBox : CardNumberBox);
+                if (showErrors) ShowBankCardError(cardError, _isCardNumberRevealed ? (Control?)CardNumberPlainTextBox : CardNumberBox);
                 return false;
             }
 
@@ -1011,13 +1022,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (!TryValidateCvv(cvv, out string cvvError))
             {
-                if (showErrors) ShowBankCardError(cvvError, _isCvvRevealed ? (Control)CvvPlainTextBox : CvvBox);
+                if (showErrors) ShowBankCardError(cvvError, _isCvvRevealed ? (Control?)CvvPlainTextBox : CvvBox);
                 return false;
             }
 
             if (!TryValidateCardPin(pin, out string pinError))
             {
-                if (showErrors) ShowBankCardError(pinError, _isPinRevealed ? (Control)PinPlainTextBox : PinBox);
+                if (showErrors) ShowBankCardError(pinError, _isPinRevealed ? (Control?)PinPlainTextBox : PinBox);
                 return false;
             }
 
@@ -1146,7 +1157,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ShowBankCardError(string message, Control? field = null)
         {
-            BankCardErrorTextBlock.Text = message ?? string.Empty;
+            if (BankCardErrorTextBlock != null)
+                BankCardErrorTextBlock.Text = message ?? string.Empty;
 
             if (field != null)
                 field.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x99));
@@ -1154,24 +1166,26 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ClearBankCardError()
         {
-            BankCardErrorTextBlock.Text = string.Empty;
+            if (BankCardErrorTextBlock != null)
+                BankCardErrorTextBlock.Text = string.Empty;
+
             ResetBankCardFieldBackgrounds();
         }
 
         private void ResetBankCardFieldBackgrounds()
         {
-            CardTypeCombo.ClearValue(BackgroundProperty);
+            CardTypeCombo?.ClearValue(BackgroundProperty);
 
-            CardNumberBox.ClearValue(BackgroundProperty);
-            CardNumberPlainTextBox.ClearValue(BackgroundProperty);
+            CardNumberBox?.ClearValue(BackgroundProperty);
+            CardNumberPlainTextBox?.ClearValue(BackgroundProperty);
 
-            ExpirationTextBox.ClearValue(BackgroundProperty);
+            ExpirationTextBox?.ClearValue(BackgroundProperty);
 
-            CvvBox.ClearValue(BackgroundProperty);
-            CvvPlainTextBox.ClearValue(BackgroundProperty);
+            CvvBox?.ClearValue(BackgroundProperty);
+            CvvPlainTextBox?.ClearValue(BackgroundProperty);
 
-            PinBox.ClearValue(BackgroundProperty);
-            PinPlainTextBox.ClearValue(BackgroundProperty);
+            PinBox?.ClearValue(BackgroundProperty);
+            PinPlainTextBox?.ClearValue(BackgroundProperty);
         }
 
         // ====================================================================
@@ -1196,26 +1210,26 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
-                CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                if (CardTypeCombo != null)
+                    CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
 
                 if (CardNumberBox != null) UICleaner.Clear(CardNumberBox);
-                if (CardNumberPlainTextBox != null) UICleaner.Clear(CardNumberPlainTextBox);
                 HideCardNumber();
 
                 if (ExpirationTextBox != null) UICleaner.Clear(ExpirationTextBox);
 
                 if (CvvBox != null) UICleaner.Clear(CvvBox);
-                if (CvvPlainTextBox != null) UICleaner.Clear(CvvPlainTextBox);
                 HideCvv();
 
                 if (PinBox != null) UICleaner.Clear(PinBox);
-                if (PinPlainTextBox != null) UICleaner.Clear(PinPlainTextBox);
                 HidePin();
 
-                ChkCardActive.IsChecked = true;
+                if (ChkCardActive != null)
+                    ChkCardActive.IsChecked = true;
 
                 _editingRow = null;
-                BtnBankCardAddOrUpdate.Content = "Add";
+                if (BtnBankCardAddOrUpdate != null)
+                    BtnBankCardAddOrUpdate.Content = "Add";
 
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -1251,30 +1265,31 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool EntryLineHasAnyInput()
         {
-            // We treat ANY meaningful input as "pending work".
-            if (!string.IsNullOrWhiteSpace(_isCardNumberRevealed ? CardNumberPlainTextBox.Text : CardNumberBox.Password))
+            // Card number
+            if (CardNumberBox != null && !string.IsNullOrWhiteSpace(CardNumberBox.Password))
                 return true;
 
-            if (!string.IsNullOrWhiteSpace(ExpirationTextBox.Text))
+            // Expiration
+            if (ExpirationTextBox != null && !string.IsNullOrWhiteSpace(ExpirationTextBox.Text))
                 return true;
 
-            if (!string.IsNullOrWhiteSpace(_isCvvRevealed ? CvvPlainTextBox.Text : CvvBox.Password))
+            // CVV
+            if (CvvBox != null && !string.IsNullOrWhiteSpace(CvvBox.Password))
                 return true;
 
-            if (!string.IsNullOrWhiteSpace(_isPinRevealed ? PinPlainTextBox.Text : PinBox.Password))
+            // PIN
+            if (PinBox != null && !string.IsNullOrWhiteSpace(PinBox.Password))
                 return true;
 
-            // CardType selection alone doesn't count as "pending"
             return false;
         }
 
         private string GetCurrentCardNumber()
         {
-            string value = _isCardNumberRevealed
-                ? (CardNumberPlainTextBox.Text ?? string.Empty)
-                : (CardNumberBox.Password ?? string.Empty);
+            if (CardNumberBox == null)
+                return string.Empty;
 
-            return TrimToMaxChars(value).Trim();
+            return TrimToMaxChars(CardNumberBox.Password).Trim();
         }
 
         private static string TrimToMaxChars(string? value)
@@ -1292,17 +1307,23 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_uiEventsHooked)
                 return;
 
-            CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
-            CardNumberBox.PasswordChanged += CardNumberBox_PasswordChanged;
+            if (CardNumberBox != null)
+            {
+                CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
+                CardNumberBox.PasswordChanged += CardNumberBox_PasswordChanged;
+            }
 
-            CardNumberPlainTextBox.TextChanged -= CardNumberPlainTextBox_TextChanged;
-            CardNumberPlainTextBox.TextChanged += CardNumberPlainTextBox_TextChanged;
+            if (CvvBox != null)
+            {
+                CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
+                CvvBox.PasswordChanged += CvvBox_PasswordChanged;
+            }
 
-            CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
-            CvvBox.PasswordChanged += CvvBox_PasswordChanged;
-
-            PinBox.PasswordChanged -= PinBox_PasswordChanged;
-            PinBox.PasswordChanged += PinBox_PasswordChanged;
+            if (PinBox != null)
+            {
+                PinBox.PasswordChanged -= PinBox_PasswordChanged;
+                PinBox.PasswordChanged += PinBox_PasswordChanged;
+            }
 
             _uiEventsHooked = true;
         }
@@ -1312,11 +1333,14 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!_uiEventsHooked)
                 return;
 
-            CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
-            CardNumberPlainTextBox.TextChanged -= CardNumberPlainTextBox_TextChanged;
+            if (CardNumberBox != null)
+                CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
 
-            CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
-            PinBox.PasswordChanged -= PinBox_PasswordChanged;
+            if (CvvBox != null)
+                CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
+
+            if (PinBox != null)
+                PinBox.PasswordChanged -= PinBox_PasswordChanged;
 
             _uiEventsHooked = false;
         }
@@ -1337,8 +1361,7 @@ namespace MWPV.View.UserControls.CategoryItems
             public string Code { get; set; } = string.Empty;
             public string Description { get; set; } = string.Empty;
 
-            public string DisplayText =>
-                string.IsNullOrWhiteSpace(Description) ? Code : Description;
+            public string DisplayText => string.IsNullOrWhiteSpace(Description) ? Code : Description;
         }
 
         public sealed class BankCardRow : INotifyPropertyChanged

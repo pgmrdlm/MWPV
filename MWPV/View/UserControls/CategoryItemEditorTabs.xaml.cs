@@ -8,7 +8,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
-using MWPV.Utilities.UI; // UICleaner
+using MWPV.Utilities.UI;
+using MWPV.View.UserControls.CategoryItems;
 
 namespace MWPV.View.UserControls
 {
@@ -27,26 +28,39 @@ namespace MWPV.View.UserControls
         private bool _verifyRevealed;
         private bool _phoneRevealed;
 
-        // Centralized helper replaces DispatcherTimer usage
+        // Shared reveal auto-hide
         private readonly AutoHideTimer _revealAutoHide;
 
         private bool _settingPwProgrammatically;
 
-        // Email visuals
+        // Default visuals
         private Brush? _emailDefaultBorderBrush;
         private Brush? _emailDefaultBackground;
-        private string _lastEmailChecked = string.Empty;
-
-        // Phone visuals
         private Brush? _phoneDefaultBorderBrush;
         private Brush? _phoneDefaultBackground;
-
-        // Item name visuals
         private Brush? _itemNameDefaultBorderBrush;
         private Brush? _itemNameDefaultBackground;
 
-        // Prevent event stacking if control is reloaded into the visual tree
+        private string _lastEmailChecked = string.Empty;
+
+        // Prevent event stacking
         private bool _uiEventsHooked;
+        private bool _childPanelsHooked;
+
+        // Tab switching guard
+        private bool _handlingTabSelection;
+        private int _lastTabIndex;
+
+        // Closing guard
+        private bool _isClosing;
+
+        // Draft rows (host can read later when persistence is wired)
+        public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
+            = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+
+        // Tab indexes (keep explicit so we don’t “guess” later)
+        private const int TabIndexBasic = 0;
+        private const int TabIndexBankCards = 1;
 
         public CategoryItemEditorTabs()
         {
@@ -61,6 +75,8 @@ namespace MWPV.View.UserControls
             );
         }
 
+        /* ======================= Lifecycle ======================= */
+
         private void CategoryItemEditorTabs_Loaded(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
@@ -68,9 +84,19 @@ namespace MWPV.View.UserControls
 #endif
             CacheDefaultFieldVisualsIfNeeded();
             HookUiEventsOnce();
+            HookChildPanelsOnce();
+
+            // Track tab changes so we can enforce BankCards leave behavior.
+            if (ItemTabs != null)
+            {
+                ItemTabs.SelectionChanged -= ItemTabs_SelectionChanged;
+                ItemTabs.SelectionChanged += ItemTabs_SelectionChanged;
+                _lastTabIndex = ItemTabs.SelectedIndex;
+            }
 
             ClearForm();
             ResetUiState();
+            SetStatus("");
         }
 
         private void CategoryItemEditorTabs_Unloaded(object? sender, RoutedEventArgs e)
@@ -80,6 +106,10 @@ namespace MWPV.View.UserControls
 #endif
             _revealAutoHide.Stop();
 
+            // NOTE:
+            // Children unload BEFORE this parent. That’s why “host-close wipe preparation”
+            // must happen BEFORE the host removes this control. We still wipe basic fields here.
+            UnhookChildPanels();
             UnhookUiEvents();
 
             ResetUiState();
@@ -97,6 +127,7 @@ namespace MWPV.View.UserControls
 #endif
             ClearForm();
             ResetUiState();
+            SetStatus("");
         }
 
         public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
@@ -108,96 +139,212 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
 #endif
-            // TODO: Map existingItem -> fields once persistence is wired
+            // TODO: Map existingItem -> fields once persistence is wired.
             ResetUiState();
+            SetStatus("");
         }
 
-        /* ======================= Submit / Cancel ======================= */
+        /* ======================= HOST API (critical for wipe ordering) ======================= */
+
+        /// <summary>
+        /// Host MUST call this BEFORE removing the editor control from the visual tree
+        /// (Big X / overlay close). This sets up child panels to wipe their internal grids
+        /// during Unloaded, and performs strong UI wipes immediately.
+        /// </summary>
+        public void WipeAllForHostClose()
+        {
+            if (_isClosing)
+                return;
+
+            _isClosing = true;
+
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose ENTER");
+#endif
+            try
+            {
+                // 1) Child panels FIRST (so their own Unloaded sees the “host-close wipe” flag)
+                TryPrepareChildPanelsForHostClose();
+
+                // 2) Then wipe our Basic tab sensitive fields
+                ResetUiState();
+                WipeSensitiveFields();
+
+                // 3) Status line
+                SetStatus("");
+            }
+            finally
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose EXIT");
+#endif
+            }
+        }
+
+        private void TryPrepareChildPanelsForHostClose()
+        {
+            try
+            {
+                BankCardsPanel?.WipeAllForHostClose();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS] BankCardsPanel.WipeAllForHostClose failed: {ex}");
+#endif
+            }
+        }
+
+        /* ======================= Submit / Cancel (Basic buttons) ======================= */
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] Submit clicked");
 #endif
-            // SAVE RULE: show ALL blocking errors (required + invalid formats) in one pass.
-            // Focus goes to the FIRST field with an error in our agreed order.
+            SetStatus("");
 
-            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
-
-            bool okName = ValidateItemName(forSubmit: true);
-
-            // Password rules:
-            // - Required unless Bookmark-only
-            // - If bookmark-only: we skip all password validation and hide password-related panels
-            bool okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
-
-            // Email / Phone are only errors if user entered a value
-            bool okEmail = ValidateEmailForSubmit();
-            bool okPhone = ValidatePhoneNumber(forSubmit: true);
-
-            bool anyError = !(okName && okPassword && okEmail && okPhone);
-            if (anyError)
+            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone))
             {
+                // Put us on Basic so errors are visible
+                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                    ItemTabs.SelectedIndex = TabIndexBasic;
+
                 FocusFirstError(okName, okPassword, okEmail, okPhone, isBookmarkOnly);
+                SetStatus("Fix the highlighted errors before saving.");
                 return;
             }
 
-            try
-            {
-                Submitted?.Invoke(this, EventArgs.Empty);
-            }
-            catch (Exception ex)
-            {
-                // TODO: Replace with app-standard dialog / ErrorHandler when we wire it in.
-                MessageBox.Show("Error saving item.\n\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void FocusFirstError(bool okName, bool okPassword, bool okEmail, bool okPhone, bool isBookmarkOnly)
-        {
-            if (!okName)
-            {
-                txtItemName.Focus();
-                return;
-            }
-
-            if (!okPassword)
-            {
-                // If verify is visible and non-empty mismatch exists, it’s nicer to land there.
-                if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
-                {
-                    var verify = pwdVerify.Password ?? string.Empty;
-                    if (!string.IsNullOrEmpty(verify))
-                        pwdVerify.Focus();
-                    else
-                        pwdPassword.Focus();
-                }
-                else
-                {
-                    pwdPassword.Focus();
-                }
-                return;
-            }
-
-            if (!okEmail)
-            {
-                txtEmail.Focus();
-                return;
-            }
-
-            if (!okPhone)
-            {
-                txtPhone.Focus();
-                return;
-            }
+            // For this phase: Submitted just closes the editor (persistence wiring later).
+            // We *do* prepare/wipe now so sensitive fields are cleared before the overlay is removed.
+            WipeAllForHostClose();
+            Submitted?.Invoke(this, EventArgs.Empty);
         }
 
         private void btnCancel_Click(object? sender, RoutedEventArgs e)
         {
-            ResetUiState();
-            WipeSensitiveFields();
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] Cancel clicked");
+#endif
+            SetStatus("");
 
+            // Cancel = strong wipe + close
+            WipeAllForHostClose();
             Canceled?.Invoke(this, EventArgs.Empty);
+        }
+
+        /* ======================= Bank Cards panel integration ======================= */
+
+        private void HookChildPanelsOnce()
+        {
+            if (_childPanelsHooked)
+                return;
+
+            if (BankCardsPanel != null)
+            {
+                BankCardsPanel.SaveAndExitRequested -= BankCardsPanel_SaveAndExitRequested;
+                BankCardsPanel.CancelAndExitRequested -= BankCardsPanel_CancelAndExitRequested;
+
+                BankCardsPanel.SaveAndExitRequested += BankCardsPanel_SaveAndExitRequested;
+                BankCardsPanel.CancelAndExitRequested += BankCardsPanel_CancelAndExitRequested;
+            }
+
+            _childPanelsHooked = true;
+        }
+
+        private void UnhookChildPanels()
+        {
+            if (!_childPanelsHooked)
+                return;
+
+            if (BankCardsPanel != null)
+            {
+                BankCardsPanel.SaveAndExitRequested -= BankCardsPanel_SaveAndExitRequested;
+                BankCardsPanel.CancelAndExitRequested -= BankCardsPanel_CancelAndExitRequested;
+            }
+
+            _childPanelsHooked = false;
+        }
+
+        private void BankCardsPanel_SaveAndExitRequested(object? sender, CategoryItemBankCardsPanel.BankCardsCommitEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] BankCardsPanel SaveAndExitRequested");
+#endif
+            // Stash rows for later persistence wiring
+            BankCardsDraftRows = (e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
+
+            // Now behave like Save: validate Basic blockers, then close.
+            SetStatus("");
+            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone))
+            {
+                if (ItemTabs != null)
+                    ItemTabs.SelectedIndex = TabIndexBasic;
+
+                FocusFirstError(okName, okPassword, okEmail, okPhone, isBookmarkOnly);
+                SetStatus("Bank Cards are staged — fix Basic tab errors before saving.");
+                return;
+            }
+
+            WipeAllForHostClose();
+            Submitted?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void BankCardsPanel_CancelAndExitRequested(object? sender, EventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] BankCardsPanel CancelAndExitRequested");
+#endif
+            WipeAllForHostClose();
+            Canceled?.Invoke(this, EventArgs.Empty);
+        }
+
+        /* ======================= Tab switching behavior ======================= */
+
+        private void ItemTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_handlingTabSelection)
+                return;
+
+            if (ItemTabs == null)
+                return;
+
+            int newIndex = ItemTabs.SelectedIndex;
+            int oldIndex = _lastTabIndex;
+
+            // If leaving Bank Cards, enforce its “tabbing out” rules.
+            if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
+            {
+                bool allowLeave = true;
+                try
+                {
+                    _handlingTabSelection = true;
+
+                    if (BankCardsPanel != null)
+                        allowLeave = BankCardsPanel.TryAutoCommitAndWipe();
+                }
+                finally
+                {
+                    _handlingTabSelection = false;
+                }
+
+                if (!allowLeave)
+                {
+                    // Revert selection back to Bank Cards
+                    _handlingTabSelection = true;
+                    try
+                    {
+                        ItemTabs.SelectedIndex = TabIndexBankCards;
+                    }
+                    finally
+                    {
+                        _handlingTabSelection = false;
+                    }
+                    return;
+                }
+            }
+
+            _lastTabIndex = newIndex;
         }
 
         /* ======================= Shared reveal auto-hide ======================= */
@@ -226,11 +373,60 @@ namespace MWPV.View.UserControls
             _revealAutoHide.Touch(anyRevealed);
         }
 
-        /* ======================= Item name validation (new error row) ======================= */
-        // NOTE: XAML must contain:
-        //   StackPanel x:Name="ItemNameErrorPanel" Visibility="Collapsed"
-        //   TextBlock  x:Name="ItemNameErrorText"
-        // matching the pattern we use for EmailErrorPanel/PhoneErrorPanel.
+        /* ======================= Validation gate (Basic blockers) ======================= */
+
+        private bool TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone)
+        {
+            isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            okName = ValidateItemName(forSubmit: true);
+
+            // Password required unless Bookmark-only
+            okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
+
+            // Email / Phone only error if user entered a value
+            okEmail = ValidateEmailForSubmit();
+            okPhone = ValidatePhoneNumber(forSubmit: true);
+
+            return okName && okPassword && okEmail && okPhone;
+        }
+
+        private void FocusFirstError(bool okName, bool okPassword, bool okEmail, bool okPhone, bool isBookmarkOnly)
+        {
+            if (!okName)
+            {
+                txtItemName.Focus();
+                return;
+            }
+
+            if (!okPassword)
+            {
+                if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
+                {
+                    var verify = pwdVerify.Password ?? string.Empty;
+                    if (!string.IsNullOrEmpty(verify))
+                        pwdVerify.Focus();
+                    else
+                        pwdPassword.Focus();
+                }
+                else
+                {
+                    pwdPassword.Focus();
+                }
+                return;
+            }
+
+            if (!okEmail)
+            {
+                txtEmail.Focus();
+                return;
+            }
+
+            if (!okPhone)
+                txtPhone.Focus();
+        }
+
+        /* ======================= Item name validation ======================= */
 
         private bool ValidateItemName(bool forSubmit)
         {
@@ -247,11 +443,8 @@ namespace MWPV.View.UserControls
 
         private void ShowItemNameError(string message)
         {
-            if (ItemNameErrorText != null)
-                ItemNameErrorText.Text = message ?? string.Empty;
-
-            if (ItemNameErrorPanel != null && ItemNameErrorPanel.Visibility != Visibility.Visible)
-                ItemNameErrorPanel.Visibility = Visibility.Visible;
+            ItemNameErrorText.Text = message ?? string.Empty;
+            ItemNameErrorPanel.Visibility = Visibility.Visible;
 
             txtItemName.ToolTip = message;
 
@@ -262,11 +455,8 @@ namespace MWPV.View.UserControls
 
         private void ClearItemNameError()
         {
-            if (ItemNameErrorText != null)
-                ItemNameErrorText.Text = string.Empty;
-
-            if (ItemNameErrorPanel != null && ItemNameErrorPanel.Visibility != Visibility.Collapsed)
-                ItemNameErrorPanel.Visibility = Visibility.Collapsed;
+            ItemNameErrorText.Text = string.Empty;
+            ItemNameErrorPanel.Visibility = Visibility.Collapsed;
 
             txtItemName.ToolTip = null;
             if (_itemNameDefaultBackground != null)
@@ -284,14 +474,8 @@ namespace MWPV.View.UserControls
                 var generated = SecurePassword.GenerateAsString(12);
 
                 _settingPwProgrammatically = true;
-                try
-                {
-                    SetPassword(generated);
-                }
-                finally
-                {
-                    _settingPwProgrammatically = false;
-                }
+                try { SetPassword(generated); }
+                finally { _settingPwProgrammatically = false; }
 
                 HideStrengthRow();
                 HideVerifyRow();
@@ -305,10 +489,8 @@ namespace MWPV.View.UserControls
 
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
         {
-            if (_mainRevealed)
-                HideMainPassword();
-            else
-                ShowMainPassword();
+            if (_mainRevealed) HideMainPassword();
+            else ShowMainPassword();
 
             TouchRevealTimerIfNeeded();
         }
@@ -318,10 +500,8 @@ namespace MWPV.View.UserControls
             if (string.IsNullOrEmpty(pwdVerify.Password))
                 return;
 
-            if (_verifyRevealed)
-                HideVerifyPassword();
-            else
-                ShowVerifyPassword();
+            if (_verifyRevealed) HideVerifyPassword();
+            else ShowVerifyPassword();
 
             TouchRevealTimerIfNeeded();
         }
@@ -348,7 +528,6 @@ namespace MWPV.View.UserControls
 
             TouchRevealTimerIfNeeded();
 
-            // If bookmark-only, we treat password as "ignored" and keep the UI clean.
             if (chkBookmarkOnly.IsChecked == true)
             {
                 HideStrengthRow();
@@ -387,15 +566,12 @@ namespace MWPV.View.UserControls
 
             TouchRevealTimerIfNeeded();
 
+            btnToggleVerifyReveal.Visibility = string.IsNullOrEmpty(pwdVerify.Password)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
             if (string.IsNullOrEmpty(pwdVerify.Password))
-            {
-                btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
                 HideVerifyPassword();
-            }
-            else
-            {
-                btnToggleVerifyReveal.Visibility = Visibility.Visible;
-            }
 
             EvaluateAndDisplayVerifyMismatch();
         }
@@ -457,7 +633,6 @@ namespace MWPV.View.UserControls
 
             var pw = pwdPassword.Password ?? string.Empty;
 
-            // Required on Save unless bookmark-only
             if (string.IsNullOrEmpty(pw))
             {
                 HideStrengthRow();
@@ -465,7 +640,6 @@ namespace MWPV.View.UserControls
                 return false;
             }
 
-            // Verify mismatch (only enforced when verify row is visible)
             if (VerifyRow.Visibility == Visibility.Visible)
             {
                 var verify = pwdVerify.Password ?? string.Empty;
@@ -477,7 +651,6 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            // Policy check (use existing strength panel for tips + also show a red error line)
             UpdateStrengthPanelForPolicy();
             if (!SecurePassword.IsPasswordValid(pw, pw, out _))
             {
@@ -499,9 +672,7 @@ namespace MWPV.View.UserControls
 
         private void HideStrengthRow()
         {
-            if (StrengthPanel.Visibility != Visibility.Collapsed)
-                StrengthPanel.Visibility = Visibility.Collapsed;
-
+            StrengthPanel.Visibility = Visibility.Collapsed;
             PwStrengthBar.Value = 0;
             PwStrengthText.Text = string.Empty;
             PwTipsList.ItemsSource = null;
@@ -566,7 +737,6 @@ namespace MWPV.View.UserControls
             if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
             if (!pw.Any(char.IsDigit)) tips.Add("Add a digit.");
             if (!pw.Any(ch => !char.IsLetterOrDigit(ch))) tips.Add("Add a special character.");
-
             PwTipsList.ItemsSource = tips;
         }
 
@@ -588,7 +758,6 @@ namespace MWPV.View.UserControls
 
             HideVerifyPassword();
             HideVerifyError();
-
             btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
@@ -602,7 +771,6 @@ namespace MWPV.View.UserControls
 
             HideVerifyPassword();
             HideVerifyError();
-
             btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
         }
 
@@ -632,17 +800,13 @@ namespace MWPV.View.UserControls
         private void ShowVerifyError(string message)
         {
             VerifyErrorText.Text = message ?? string.Empty;
-
-            if (VerifyErrorPanel.Visibility != Visibility.Visible)
-                VerifyErrorPanel.Visibility = Visibility.Visible;
+            VerifyErrorPanel.Visibility = Visibility.Visible;
         }
 
         private void HideVerifyError()
         {
             VerifyErrorText.Text = string.Empty;
-
-            if (VerifyErrorPanel.Visibility != Visibility.Collapsed)
-                VerifyErrorPanel.Visibility = Visibility.Collapsed;
+            VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
 
         /* ======================= Email validation ======================= */
@@ -674,7 +838,6 @@ namespace MWPV.View.UserControls
         {
             var s = (txtEmail.Text ?? string.Empty).Trim();
 
-            // Only error if user entered something
             if (s.Length == 0)
             {
                 ClearEmailValidation();
@@ -713,8 +876,7 @@ namespace MWPV.View.UserControls
                 ? "Please enter a valid email address."
                 : message;
 
-            if (EmailErrorPanel.Visibility != Visibility.Visible)
-                EmailErrorPanel.Visibility = Visibility.Visible;
+            EmailErrorPanel.Visibility = Visibility.Visible;
 
             txtEmail.ToolTip = EmailErrorText.Text;
 
@@ -755,10 +917,8 @@ namespace MWPV.View.UserControls
 
         private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
         {
-            if (_phoneRevealed)
-                HidePhone();
-            else
-                ShowPhone();
+            if (_phoneRevealed) HidePhone();
+            else ShowPhone();
 
             TouchRevealTimerIfNeeded();
         }
@@ -785,7 +945,6 @@ namespace MWPV.View.UserControls
             var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
             int len = digitsOnly.Length;
 
-            // Only error if user entered something
             if (len == 0)
             {
                 ClearPhoneError();
@@ -897,10 +1056,6 @@ namespace MWPV.View.UserControls
             if (_uiEventsHooked)
                 return;
 
-            // Ensure no duplicates even if designer/XAML also wires
-            txtEmail.LostFocus -= txtEmail_LostFocus;
-            txtEmail.LostFocus += txtEmail_LostFocus;
-
             txtItemName.TextChanged -= txtItemName_TextChanged;
             txtItemName.TextChanged += txtItemName_TextChanged;
 
@@ -917,11 +1072,13 @@ namespace MWPV.View.UserControls
             if (!_uiEventsHooked)
                 return;
 
-            txtEmail.LostFocus -= txtEmail_LostFocus;
             txtItemName.TextChanged -= txtItemName_TextChanged;
 
             chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+
+            if (ItemTabs != null)
+                ItemTabs.SelectionChanged -= ItemTabs_SelectionChanged;
 
             _uiEventsHooked = false;
         }
@@ -936,11 +1093,18 @@ namespace MWPV.View.UserControls
         {
             if (chkBookmarkOnly.IsChecked == true)
             {
-                // Bookmark-only: keep UI clean and skip password validation signals.
                 HideStrengthRow();
                 HideVerifyRow();
                 HideVerifyError();
             }
+        }
+
+        /* ======================= Status line ======================= */
+
+        private void SetStatus(string text)
+        {
+            if (txtStatusLine == null) return;
+            txtStatusLine.Text = text ?? string.Empty;
         }
     }
 }

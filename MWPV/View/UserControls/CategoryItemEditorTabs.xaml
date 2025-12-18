@@ -79,11 +79,8 @@
     <Grid Background="Bisque">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
-            <!-- header -->
             <RowDefinition Height="*"/>
-            <!-- scrollable body -->
             <RowDefinition Height="Auto"/>
-            <!-- STATUS LINE (always visible) -->
         </Grid.RowDefinitions>
 
         <!-- Header bar -->
@@ -106,7 +103,6 @@
                       PanningMode="VerticalOnly"
                       Focusable="False">
 
-            <!-- ====================== TABS ====================== -->
             <TabControl x:Name="ItemTabs"
                         Margin="8"
                         SelectedIndex="0">
@@ -117,54 +113,23 @@
                           Background="Bisque"
                           Grid.IsSharedSizeScope="True">
 
-                        <!-- ROWS:
-                             0: Item name
-                             1: Item name error
-                             2: Password
-                             3: Verify password
-                             4: Password/Verify error
-                             5: Strength panel
-                             6: spacer
-                             7: User / Email / Url
-                             8: Email error
-                             9: spacer
-                            10: Phone
-                            11: Phone error
-                            12: spacer
-                            13: Notes
-                            14: Info strip + Save/Cancel
-                        -->
+                        <!-- ROWS -->
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <!-- 0 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 1 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 2 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 3 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 4 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 5 -->
                             <RowDefinition Height="10"/>
-                            <!-- 6 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 7 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 8 -->
                             <RowDefinition Height="10"/>
-                            <!-- 9 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 10 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 11 -->
                             <RowDefinition Height="10"/>
-                            <!-- 12 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 13 -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 14 -->
                         </Grid.RowDefinitions>
 
                         <Grid.ColumnDefinitions>
@@ -175,7 +140,7 @@
                             <ColumnDefinition Width="2.5*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- ================== ROW 0: ITEM NAME ================== -->
+                        <!-- ITEM NAME -->
                         <Label Grid.Row="0" Grid.Column="0"
                                Content="* Category Item Name"
                                FontWeight="Bold"
@@ -187,7 +152,7 @@
                                  MinWidth="320"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ================== ROW 1: ITEM NAME ERROR ================== -->
+                        <!-- ITEM NAME ERROR -->
                         <StackPanel x:Name="ItemNameErrorPanel"
                                     Grid.Row="1" Grid.Column="0"
                                     Margin="0,6,0,0"
@@ -199,7 +164,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ================== ROW 2: PASSWORD ================== -->
+                        <!-- PASSWORD ROW -->
                         <Label Grid.Row="2" Grid.Column="0"
                                Content="* Password"
                                FontWeight="Bold"
@@ -279,7 +244,7 @@
                                       ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
                         </Grid>
 
-                        <!-- ================== ROW 3: VERIFY ================== -->
+                        <!-- VERIFY ROW -->
                         <Label x:Name="lblVerifyPassword"
                                Grid.Row="3" Grid.Column="0"
                                Content="Verify Password"
@@ -354,7 +319,7 @@
                                     ToolTip="(not used – spacer only)"/>
                         </Grid>
 
-                        <!-- ================== ROW 4: VERIFY ERROR ================== -->
+                        <!-- VERIFY ERROR -->
                         <StackPanel x:Name="VerifyErrorPanel"
                                     Grid.Row="4" Grid.Column="0"
                                     Grid.ColumnSpan="3"
@@ -367,7 +332,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ================== ROW 5: STRENGTH PANEL ================== -->
+                        <!-- STRENGTH PANEL -->
                         <StackPanel x:Name="StrengthPanel"
                                     Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                                     Margin="0,6,0,0"
@@ -396,7 +361,7 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <!-- ================== ROW 7: USER / EMAIL / URL ================== -->
+                        <!-- USER / EMAIL / URL -->
                         <Label Grid.Row="7" Grid.Column="0"
                                Content="User Name"
                                FontWeight="Bold"/>
@@ -428,7 +393,7 @@
                                  MinWidth="200"
                                  HorizontalAlignment="Left"/>
 
-                        <!-- ================== ROW 8: EMAIL ERROR ================== -->
+                        <!-- EMAIL ERROR -->
                         <StackPanel x:Name="EmailErrorPanel"
                                     Grid.Row="8" Grid.Column="2"
                                     Margin="0,6,0,0"
@@ -440,7 +405,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ================== ROW 10: PHONE ================== -->
+                        <!-- PHONE -->
                         <Label Grid.Row="10" Grid.Column="0"
                                Content="Phone Number"
                                FontWeight="Bold"/>
@@ -489,7 +454,7 @@
                             </Button>
                         </Grid>
 
-                        <!-- ================== ROW 11: PHONE ERROR ================== -->
+                        <!-- PHONE ERROR -->
                         <StackPanel x:Name="PhoneErrorPanel"
                                     Grid.Row="11" Grid.Column="0"
                                     Margin="0,6,0,0"
@@ -501,7 +466,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- ================== ROW 13: NOTES ================== -->
+                        <!-- NOTES -->
                         <Label Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
                                Content="Freeform Notes"
                                FontWeight="Bold"/>
@@ -513,7 +478,7 @@
                                  VerticalScrollBarVisibility="Auto"
                                  Height="48"/>
 
-                        <!-- ================== ROW 14: INFO STRIP + BUTTONS ================== -->
+                        <!-- INFO STRIP + BUTTONS -->
                         <Grid Grid.Row="14"
                               Grid.Column="0"
                               Grid.ColumnSpan="5"
@@ -524,7 +489,6 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Info block (match AppEntryWindow InfoBanner dark-blue style) -->
                             <Border x:Name="ActionInfoStrip"
                                     Grid.Column="0"
                                     Margin="0,0,12,0"
@@ -546,7 +510,6 @@
                                 </TextBlock>
                             </Border>
 
-                            <!-- Buttons -->
                             <StackPanel Grid.Column="1"
                                         Orientation="Horizontal"
                                         HorizontalAlignment="Right"
@@ -582,7 +545,7 @@
                 <!-- ========== BANK CARDS TAB ========== -->
                 <TabItem Header="Bank Cards">
                     <Grid Margin="20" Background="Bisque">
-                        <categoryItems:CategoryItemBankCardsPanel/>
+                        <categoryItems:CategoryItemBankCardsPanel x:Name="BankCardsPanel"/>
                     </Grid>
                 </TabItem>
 
@@ -617,7 +580,7 @@
             </TabControl>
         </ScrollViewer>
 
-        <!-- ====================== STATUS LINE (always visible; not tied to any tab) ====================== -->
+        <!-- STATUS LINE -->
         <Border Grid.Row="2"
                 Background="Transparent"
                 Padding="10,6"

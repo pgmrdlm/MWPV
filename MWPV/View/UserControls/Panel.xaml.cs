@@ -14,6 +14,9 @@ namespace MWPV.View.UserControls
         private int _selectedCategoryKey;
         private string _selectedCategoryName = string.Empty;
 
+        // When true: left-side navigation is visible but inactive.
+        private bool _isNavigationLocked;
+
         public Panel()
         {
             InitializeComponent();
@@ -23,6 +26,9 @@ namespace MWPV.View.UserControls
 
             ShowCategoryGrid();
             InitializeAddCategoryInline();
+
+            // Default: navigation unlocked.
+            SetNavigationLocked(false);
         }
 
         /* ======================= Lifecycle ======================= */
@@ -44,6 +50,58 @@ namespace MWPV.View.UserControls
 #endif
             UnwireCategoryGridEvents();
             UnwireOverlayEvents();
+        }
+
+        /* =================== HOST CLOSE BRIDGE (Big X / window close) =================== */
+
+        /// <summary>
+        /// MainWindow calls this BEFORE it detaches Content to ensure the active editor
+        /// (and child panels like BankCards) gets a host-close wipe ordering.
+        /// </summary>
+        public void PrepareForHostClose()
+        {
+            try
+            {
+                // If the overlay is up, tell the editor to do its host-close wipe path
+                if (AddEditItemOverlayHost?.Visibility == Visibility.Visible)
+                {
+                    if (AddEditItemOverlayHost.Content is CategoryItemEditorTabs tabs)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
+#endif
+                        tabs.WipeAllForHostClose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
+#endif
+            }
+        }
+
+        /* =================== Navigation Lock =================== */
+
+        // Rule: when the right-side editor overlay is shown, lock left-side navigation.
+        private void SetNavigationLocked(bool locked)
+        {
+            _isNavigationLocked = locked;
+
+            // Left side
+            if (btnAddCategory != null) btnAddCategory.IsEnabled = !locked;
+            if (CategoryGrid != null) CategoryGrid.IsEnabled = !locked;
+
+            // If inline add-category host is visible, keep it visible but inactive when locked.
+            if (AddCategoryHost != null) AddCategoryHost.IsEnabled = !locked;
+
+            // Right-side Add Item button should not be clickable while editor overlay is up.
+            if (btnAddCategoryItem != null) btnAddCategoryItem.IsEnabled = !locked;
+
+#if DEBUG
+            Debug.WriteLine($"[PANEL][NAV-LOCK] locked={locked}");
+#endif
         }
 
         /* =================== Category Grid Area =================== */
@@ -75,6 +133,15 @@ namespace MWPV.View.UserControls
 
         private void CategoryGrid_SelectedCategoryChanged(object sender, RoutedEventArgs e)
         {
+            // Hard guard: if nav is locked, ignore selection changes.
+            if (_isNavigationLocked)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][LEFT→RIGHT] Selection ignored (navigation locked).");
+#endif
+                return;
+            }
+
             var sel = CategoryGrid.GetSelectedCategory(e);
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
@@ -122,6 +189,9 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] ShowAddCategory() requested.");
 #endif
+            // If navigation is locked, ignore.
+            if (_isNavigationLocked) return;
+
             ShowAddCategory();
         }
 
@@ -181,6 +251,9 @@ namespace MWPV.View.UserControls
 
         private void btnAddCategoryItem_Click(object sender, RoutedEventArgs e)
         {
+            // If navigation is locked, ignore.
+            if (_isNavigationLocked) return;
+
             ShowAddEditCategoryItem();
         }
 
@@ -208,13 +281,26 @@ namespace MWPV.View.UserControls
 
             AddEditItemOverlayHost.Content = _categoryItemEdit;
             AddEditItemOverlayHost.Visibility = Visibility.Visible;
+
+            // Lock navigation while the editor overlay is up.
+            SetNavigationLocked(true);
         }
 
         private void HideAddEditCategoryItem()
         {
+            // Optional-but-safe: ensure wipe ordering even if something hides us without Save/Cancel.
+            try
+            {
+                _categoryItemEdit?.WipeAllForHostClose();
+            }
+            catch { /* no-op */ }
+
             AddEditItemOverlayHost.Visibility = Visibility.Collapsed;
             AddEditItemOverlayHost.Content = null;
             _categoryItemEdit = null;
+
+            // Unlock navigation now that the editor overlay is gone.
+            SetNavigationLocked(false);
         }
 
         private void CategoryItemEdit_Submitted(object? sender, EventArgs e)

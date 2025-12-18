@@ -1,4 +1,5 @@
-﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBankCardsPanel"
+﻿<!-- CategoryItemBankCardsPanel.xaml -->
+<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBankCardsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -144,6 +145,7 @@
                                          LostFocus="OnBankCardFieldLostFocus"
                                          PasswordChanged="CardNumberBox_PasswordChanged" />
 
+                            <!-- Reveal overlay: read-only + transparent (CW style) -->
                             <TextBox x:Name="CardNumberPlainTextBox"
                                      VerticalAlignment="Center"
                                      Height="28"
@@ -154,8 +156,7 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Visibility="Collapsed"
-                                     Foreground="Black"
-                                     LostFocus="OnBankCardFieldLostFocus" />
+                                     Foreground="Black" />
                         </Grid>
 
                         <Button x:Name="BtnViewCardNumber"
@@ -230,6 +231,7 @@
                                          MaxLength="4"
                                          LostFocus="OnBankCardFieldLostFocus"
                                          PasswordChanged="CvvBox_PasswordChanged" />
+                            <!-- Reveal overlay: read-only + transparent -->
                             <TextBox x:Name="CvvPlainTextBox"
                                      VerticalAlignment="Center"
                                      Height="28"
@@ -297,6 +299,7 @@
                                          MaxLength="6"
                                          LostFocus="OnBankCardFieldLostFocus"
                                          PasswordChanged="PinBox_PasswordChanged" />
+                            <!-- Reveal overlay: read-only + transparent -->
                             <TextBox x:Name="PinPlainTextBox"
                                      VerticalAlignment="Center"
                                      Height="28"

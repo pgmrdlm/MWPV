@@ -138,6 +138,10 @@ namespace MWPV
                 // Stop status timer + hide status (safe during close)
                 ClearStatus();
 
+                // **CRITICAL**: tell the active editor (and its children) to run host-close wipes
+                // BEFORE we rip the visual tree out (Content = null).
+                try { Panel?.PrepareForHostClose(); } catch { /* no-op */ }
+
                 // Trigger Unloaded down the tree (Panel, ItemTabs, BankCards, etc.)
                 Content = null;
 
