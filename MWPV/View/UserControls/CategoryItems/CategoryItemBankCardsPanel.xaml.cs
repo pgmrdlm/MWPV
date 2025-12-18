@@ -22,7 +22,9 @@ namespace MWPV.View.UserControls.CategoryItems
         // ====================================================================
 
         /// <summary>
-        /// Host should commit these rows into the parent editor model, then exit/close the editor.
+        /// Host should validate Basic blockers, and ONLY IF closing the editor,
+        /// call the parent wipe/close flow. This event is now a PURE REQUEST and
+        /// must NOT mutate/wipe state inside this panel.
         /// </summary>
         public event EventHandler<BankCardsCommitEventArgs>? SaveAndExitRequested;
 
@@ -55,11 +57,7 @@ namespace MWPV.View.UserControls.CategoryItems
         public bool HasChanges => _hasChanges;
         public bool HasErrors => _hasErrors;
 
-        // Prevent dirty flag during programmatic loads/clears/restores.
         private bool _suppressDirty;
-
-        // If we disable entry for the session (e.g., card-types load fails),
-        // we keep Save disabled no matter what.
         private bool _entryDisabled;
 
         // ====================================================================
@@ -72,14 +70,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private readonly AutoHideTimer _revealAutoHide;
 
-        // Prevent event stacking if control reloads
         private bool _uiEventsHooked;
 
         // Host-close guard:
-        // We do NOT want to wipe grid rows during incidental unloads.
         private bool _hostRequestedCloseWipe;
 
-        // Entry constraints
         private const int MaxCardNumberChars = 19; // digits + spaces
 
         public CategoryItemBankCardsPanel()
@@ -103,10 +98,6 @@ namespace MWPV.View.UserControls.CategoryItems
         // HOST API (clean + explicit)
         // ====================================================================
 
-        /// <summary>
-        /// Host can call this to set initial rows (DB-loaded or parent-model-loaded).
-        /// This becomes the baseline for Cancel.
-        /// </summary>
         public void LoadFromHostRows(IEnumerable<BankCardRow>? rows)
         {
             _suppressDirty = true;
@@ -142,8 +133,8 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         /// <summary>
-        /// Call this from the host "X" (close editor) BEFORE removing the control.
-        /// This is the strong wipe: entry + grid rows.
+        /// Call this from the host close path BEFORE removing the control.
+        /// Strong wipe: entry + grid rows.
         /// </summary>
         public void WipeAllForHostClose()
         {
@@ -170,17 +161,14 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         /// <summary>
-        /// Future feature hook: "tabbing out" behavior.
-        /// If changed and no errors, we commit + wipe entry + request exit.
-        /// If changed and errors, deny navigate-away (returns false).
-        /// If unchanged, allow navigate-away (returns true).
+        /// TAB SWITCH behavior ONLY (do not close editor):
+        /// - If partial entry line: block leaving
+        /// - If grid invalid: block leaving
+        /// - If ok: wipe/clear ENTRY LINE ONLY and allow leaving
         /// </summary>
         public bool TryAutoCommitAndWipe()
         {
-            if (!HasChanges)
-                return true;
-
-            // If the entry line is "half filled", we require Add/Update or Clear Row.
+            // No special action if nothing changed; still enforce "no partial entry" though.
             if (EntryLineHasAnyInput())
             {
                 ShowBankCardError("Finish Add/Update or Clear Row before leaving this tab.");
@@ -189,6 +177,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 return false;
             }
 
+            // Validate grid rows; if invalid, block leaving.
             if (!ValidateTabStateOnly(showErrors: true))
             {
                 SetErrors(true);
@@ -196,7 +185,12 @@ namespace MWPV.View.UserControls.CategoryItems
                 return false;
             }
 
-            RaiseSaveAndExit();
+            // Allow leaving: wipe ENTRY LINE ONLY (NOT grid).
+            ClearBankCardError();
+            ClearEntryFields();
+            SetErrors(false);
+            UpdateTabButtons();
+
             return true;
         }
 
@@ -213,7 +207,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             LoadBankCardTypes();
 
-            // If host didn't call LoadFromHostRows, baseline is whatever we have now.
             CaptureBaselineFromCurrent();
             SetDirty(false);
             SetErrors(_entryDisabled);
@@ -229,7 +222,7 @@ namespace MWPV.View.UserControls.CategoryItems
             HideAllRevealsAndStopTimer();
             WipeSensitiveEntryFields();
 
-            // Only wipe/clear the grid if host explicitly requested it.
+            // Only wipe/clear grid if host explicitly requested it.
             if (_hostRequestedCloseWipe)
                 WipeAndClearBankCardRows();
         }
@@ -289,21 +282,21 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateTabButtons()
         {
-            // Save should only be enabled when:
+            // Save enabled when:
             // - entry isn't disabled
             // - we have changes
             // - we have no errors
-            // - the entry line is empty (we do not guess partial input)
+            // - entry line is empty
             if (BtnTabSave != null)
                 BtnTabSave.IsEnabled = !_entryDisabled && _hasChanges && !_hasErrors && !EntryLineHasAnyInput();
 
-            // CANCEL MUST NEVER BE DISABLED.
+            // Cancel never disabled.
             if (BtnTabCancel != null)
                 BtnTabCancel.IsEnabled = true;
         }
 
         // ====================================================================
-        // Baseline snapshot (for Cancel)
+        // Baseline snapshot (for in-tab restore scenarios; host-close uses wipe)
         // ====================================================================
 
         private void CaptureBaselineFromCurrent()
@@ -325,7 +318,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 DetachRowHandlers(_bankCardRows);
 
-                // Wipe current rows before clearing
                 foreach (var row in _bankCardRows.ToList())
                     WipeSingleRow(row);
 
@@ -478,7 +470,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // Entry line reveal helpers (read-only transparent overlay)
+        // Entry line reveal helpers (unchanged)
         // ====================================================================
 
         private void ShowCardNumber()
@@ -505,7 +497,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _isCardNumberRevealed = false;
 
-            // Overlay is read-only, but we still re-sync for safety.
             CardNumberBox.Password = TrimToMaxChars(CardNumberPlainTextBox.Text);
 
             CardNumberBox.Visibility = Visibility.Visible;
@@ -584,7 +575,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // Entry line change handlers
+        // Entry line change handlers (unchanged)
         // ====================================================================
 
         private void CardNumberBox_PasswordChanged(object sender, RoutedEventArgs e)
@@ -596,7 +587,6 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.Equals(trimmed, CardNumberBox.Password, StringComparison.Ordinal))
                 CardNumberBox.Password = trimmed;
 
-            // Do NOT mirror plaintext while hidden; we only populate overlay on reveal.
             MarkDirty();
             TouchRevealTimerIfNeeded();
         }
@@ -614,7 +604,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // Reveal button handlers
+        // Reveal button handlers (unchanged)
         // ====================================================================
 
         private void BtnViewCardNumber_Click(object sender, RoutedEventArgs e)
@@ -622,7 +612,6 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearBankCardError();
             ResetBankCardFieldBackgrounds();
 
-            // If a row is selected, "peek" it into the entry line, reveal card number only.
             if (BankCardGrid != null && BankCardGrid.SelectedItem is BankCardRow row)
             {
                 _suppressDirty = true;
@@ -647,7 +636,6 @@ namespace MWPV.View.UserControls.CategoryItems
                     if (ExpirationTextBox != null)
                         ExpirationTextBox.Text = row.Expiration ?? string.Empty;
 
-                    // Do NOT surface CVV or PIN for peek
                     if (CvvBox != null) UICleaner.Clear(CvvBox);
                     HideCvv();
 
@@ -669,7 +657,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            // Otherwise toggle the entry reveal only
             if (_isCardNumberRevealed)
             {
                 HideCardNumber();
@@ -695,7 +682,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // Row-level button handlers (Add/Update + Clear Row)
+        // Row-level button handlers (unchanged)
         // ====================================================================
 
         private void OnBankCardAddOrUpdateClick(object sender, RoutedEventArgs e)
@@ -742,7 +729,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            // Enforce one-per-type
             if (_editingRow == null)
             {
                 bool duplicateType = _bankCardRows.Any(r => r.CardTypeId == selection.ComboDetailId);
@@ -779,7 +765,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 _editingRow.IsActive = isActive;
             }
 
-            ClearEntryFields();   // wipes entry line + clears edit mode
+            ClearEntryFields();
             SetErrors(false);
             MarkDirty();
             UpdateTabButtons();
@@ -861,7 +847,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ClearBankCardError();
 
-            // Keep original rule:
             if (row.Id != 0)
             {
                 ShowBankCardError("Existing cards can't be deleted here. Edit the card or mark it inactive instead.");
@@ -882,7 +867,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // TAB-LEVEL Save/Cancel handlers (key design)
+        // TAB-LEVEL Save/Cancel handlers (FIXED)
         // ====================================================================
 
         private void OnTabSaveClick(object sender, RoutedEventArgs e)
@@ -897,7 +882,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            // If entry line has partial input, we do not guess.
             if (EntryLineHasAnyInput())
             {
                 ShowBankCardError("Finish Add/Update or Clear Row before saving.");
@@ -913,43 +897,31 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            RaiseSaveAndExit();
+            // PURE REQUEST: do not wipe/clear anything here.
+            // Host will decide if close is allowed (Basic validation).
+            RaiseSaveAndExitRequestOnly();
         }
 
         private void OnTabCancelClick(object sender, RoutedEventArgs e)
         {
-            // Cancel means: restore baseline rows, wipe entry line, hide reveals, clear errors, exit.
-            RestoreBaseline();
-
+            // PURE REQUEST: do not restore baseline here (it re-materializes sensitive values).
+            // Host will close; host-close wipe will clear everything.
+            ClearBankCardError();
             HideAllRevealsAndStopTimer();
             WipeSensitiveEntryFields();
-            ClearBankCardError();
             ResetBankCardFieldBackgrounds();
 
             CancelAndExitRequested?.Invoke(this, EventArgs.Empty);
         }
 
-        private void RaiseSaveAndExit()
+        private void RaiseSaveAndExitRequestOnly()
         {
             var payload = _bankCardRows.Select(CloneRow).ToList();
-
-            CaptureBaselineFromCurrent();
-            SetDirty(false);
-            SetErrors(_entryDisabled);
-
-            // Wipe entry line & reveals so we leave this tab clean.
-            HideAllRevealsAndStopTimer();
-            WipeSensitiveEntryFields();
-            ClearBankCardError();
-            ResetBankCardFieldBackgrounds();
-
-            UpdateTabButtons();
-
             SaveAndExitRequested?.Invoke(this, new BankCardsCommitEventArgs(payload));
         }
 
         // ====================================================================
-        // Validation helpers
+        // Validation helpers (unchanged)
         // ====================================================================
 
         private bool ValidateTabStateOnly(bool showErrors)
@@ -1265,19 +1237,15 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool EntryLineHasAnyInput()
         {
-            // Card number
             if (CardNumberBox != null && !string.IsNullOrWhiteSpace(CardNumberBox.Password))
                 return true;
 
-            // Expiration
             if (ExpirationTextBox != null && !string.IsNullOrWhiteSpace(ExpirationTextBox.Text))
                 return true;
 
-            // CVV
             if (CvvBox != null && !string.IsNullOrWhiteSpace(CvvBox.Password))
                 return true;
 
-            // PIN
             if (PinBox != null && !string.IsNullOrWhiteSpace(PinBox.Password))
                 return true;
 
@@ -1346,7 +1314,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ====================================================================
-        // DTOs
+        // DTOs (unchanged)
         // ====================================================================
 
         public sealed class BankCardsCommitEventArgs : EventArgs
