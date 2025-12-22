@@ -304,7 +304,25 @@ WHERE NOT EXISTS (
     WHERE Code = 'log_filters'
 );
 
-/* Ensure ComboDetail rows for log_filters */
+/* Ensure ComboDetail rows for log_filters (idempotent) */
+WITH v(Seq, Code, Description) AS (
+    VALUES
+      ( 0, 'CATEGORY_DUPLICATE',        'Duplicate category detected'),
+      ( 1, 'CATEGORY_INSERTED',         'Category successfully inserted'),
+      ( 2, 'LOGIN',                     'Login events'),
+      ( 3, 'EARLY_FAIL',                'Early-fail events'),
+      ( 4, 'SESSION_START',             'Session started (post-login)'),
+      ( 5, 'SESSION_END',               'Session ended'),
+
+      (10, 'CATEGORYITEM_NAME_ADDED',        'Category item created (name set)'),
+      (11, 'CATEGORYITEM_NAME_CHANGED',      'Category item name changed'),
+      (12, 'CATEGORYITEM_PASSWORD_CHANGED',  'Category item password changed'),
+      (13, 'CATEGORYITEM_PIN_CHANGED',       'Category item PIN changed'),
+      (14, 'CATEGORYITEM_EMAIL_CHANGED',     'Category item email changed'),
+      (15, 'CATEGORYITEM_URL_CHANGED',       'Category item URL changed'),
+      (16, 'CATEGORYITEM_PHONE_CHANGED',     'Category item phone number changed'),
+      (17, 'CATEGORYITEM_NOTES_CHANGED',     'Category item notes changed')
+)
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
     ct.ComboTypeId,
@@ -313,14 +331,7 @@ SELECT
     v.Description,
     1
 FROM ComboType ct
-JOIN (
-    SELECT 0 AS Seq, 'CATEGORY_DUPLICATE' AS Code, 'Duplicate category detected'      AS Description
-    UNION ALL SELECT 1, 'CATEGORY_INSERTED',       'Category successfully inserted'
-    UNION ALL SELECT 2, 'LOGIN',                   'Login events'
-    UNION ALL SELECT 3, 'EARLY_FAIL',              'Early-fail events'
-    UNION ALL SELECT 4, 'SESSION_START',           'Session started (post-login)'
-    UNION ALL SELECT 5, 'SESSION_END',             'Session ended'
-) AS v
+CROSS JOIN v
 WHERE ct.Code = 'log_filters'
   AND NOT EXISTS (
       SELECT 1
@@ -328,6 +339,7 @@ WHERE ct.Code = 'log_filters'
       WHERE d.ComboTypeId = ct.ComboTypeId
         AND d.Code        = v.Code
   );
+
 
 /* Starter Categories (now independent of ComboDetail / category_types) */
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
