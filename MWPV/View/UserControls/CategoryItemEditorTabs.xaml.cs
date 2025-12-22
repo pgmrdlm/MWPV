@@ -27,6 +27,7 @@ namespace MWPV.View.UserControls
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private bool _phoneRevealed;
+        private bool _pinRevealed;
 
         // Shared reveal auto-hide
         private readonly AutoHideTimer _revealAutoHide;
@@ -40,6 +41,8 @@ namespace MWPV.View.UserControls
         private Brush? _phoneDefaultBackground;
         private Brush? _itemNameDefaultBorderBrush;
         private Brush? _itemNameDefaultBackground;
+        private Brush? _pinDefaultBorderBrush;
+        private Brush? _pinDefaultBackground;
 
         private string _lastEmailChecked = string.Empty;
 
@@ -58,9 +61,13 @@ namespace MWPV.View.UserControls
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
 
-        // Tab indexes (keep explicit so we don’t “guess” later)
+        // Tab indexes
         private const int TabIndexBasic = 0;
         private const int TabIndexBankCards = 1;
+
+        // PIN rules
+        private const int PinMinLen = 4;
+        private const int PinMaxLen = 6;
 
         public CategoryItemEditorTabs()
         {
@@ -86,7 +93,6 @@ namespace MWPV.View.UserControls
             HookUiEventsOnce();
             HookChildPanelsOnce();
 
-            // Track tab changes so we can enforce BankCards leave behavior.
             if (ItemTabs != null)
             {
                 ItemTabs.SelectionChanged -= ItemTabs_SelectionChanged;
@@ -106,9 +112,6 @@ namespace MWPV.View.UserControls
 #endif
             _revealAutoHide.Stop();
 
-            // NOTE:
-            // Children unload BEFORE this parent. That’s why “host-close wipe preparation”
-            // must happen BEFORE the host removes this control. We still wipe basic fields here.
             UnhookChildPanels();
             UnhookUiEvents();
 
@@ -144,13 +147,8 @@ namespace MWPV.View.UserControls
             SetStatus("");
         }
 
-        /* ======================= HOST API (critical for wipe ordering) ======================= */
+        /* ======================= HOST API (wipe ordering) ======================= */
 
-        /// <summary>
-        /// Host MUST call this BEFORE removing the editor control from the visual tree
-        /// (Big X / overlay close). This sets up child panels to wipe their internal grids
-        /// during Unloaded, and performs strong UI wipes immediately.
-        /// </summary>
         public void WipeAllForHostClose()
         {
             if (_isClosing)
@@ -163,14 +161,11 @@ namespace MWPV.View.UserControls
 #endif
             try
             {
-                // 1) Child panels FIRST (so their own Unloaded sees the “host-close wipe” flag)
                 TryPrepareChildPanelsForHostClose();
 
-                // 2) Then wipe our Basic tab sensitive fields
                 ResetUiState();
                 WipeSensitiveFields();
 
-                // 3) Status line
                 SetStatus("");
             }
             finally
@@ -195,7 +190,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= Submit / Cancel (Basic buttons) ======================= */
+        /* ======================= Submit / Cancel ======================= */
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
@@ -204,19 +199,18 @@ namespace MWPV.View.UserControls
 #endif
             SetStatus("");
 
-            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone))
+            NormalizeUsernameFromEmailIfEmpty();
+
+            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
-                // Put us on Basic so errors are visible
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
-                FocusFirstError(okName, okPassword, okEmail, okPhone, isBookmarkOnly);
+                FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Fix the highlighted errors before saving.");
                 return;
             }
 
-            // For this phase: Submitted just closes the editor (persistence wiring later).
-            // We *do* prepare/wipe now so sensitive fields are cleared before the overlay is removed.
             WipeAllForHostClose();
             Submitted?.Invoke(this, EventArgs.Empty);
         }
@@ -228,7 +222,6 @@ namespace MWPV.View.UserControls
 #endif
             SetStatus("");
 
-            // Cancel = strong wipe + close
             WipeAllForHostClose();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
@@ -271,17 +264,18 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel SaveAndExitRequested");
 #endif
-            // Stash rows for later persistence wiring
             BankCardsDraftRows = (e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
 
-            // Now behave like Save: validate Basic blockers, then close.
             SetStatus("");
-            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone))
+
+            NormalizeUsernameFromEmailIfEmpty();
+
+            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
                 if (ItemTabs != null)
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
-                FocusFirstError(okName, okPassword, okEmail, okPhone, isBookmarkOnly);
+                FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Bank Cards are staged — fix Basic tab errors before saving.");
                 return;
             }
@@ -312,14 +306,28 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
-            // If leaving Bank Cards, enforce its “tabbing out” rules.
+            // Guard leaving BASIC: no tab switch if Basic has errors (matches the banner).
+            if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
+            {
+                bool allowLeaveBasic = TryValidateAndAllowLeaveBasic();
+                if (!allowLeaveBasic)
+                {
+                    _handlingTabSelection = true;
+                    try { ItemTabs.SelectedIndex = TabIndexBasic; }
+                    finally { _handlingTabSelection = false; }
+
+                    _lastTabIndex = TabIndexBasic;
+                    return;
+                }
+            }
+
+            // Leaving Bank Cards: enforce its own rule.
             if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
             {
                 bool allowLeave = true;
                 try
                 {
                     _handlingTabSelection = true;
-
                     if (BankCardsPanel != null)
                         allowLeave = BankCardsPanel.TryAutoCommitAndWipe();
                 }
@@ -330,21 +338,32 @@ namespace MWPV.View.UserControls
 
                 if (!allowLeave)
                 {
-                    // Revert selection back to Bank Cards
                     _handlingTabSelection = true;
-                    try
-                    {
-                        ItemTabs.SelectedIndex = TabIndexBankCards;
-                    }
-                    finally
-                    {
-                        _handlingTabSelection = false;
-                    }
+                    try { ItemTabs.SelectedIndex = TabIndexBankCards; }
+                    finally { _handlingTabSelection = false; }
+
+                    _lastTabIndex = TabIndexBankCards;
                     return;
                 }
             }
 
             _lastTabIndex = newIndex;
+        }
+
+        private bool TryValidateAndAllowLeaveBasic()
+        {
+            SetStatus("");
+
+            NormalizeUsernameFromEmailIfEmpty();
+
+            if (!TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+            {
+                FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
+                SetStatus("Cannot leave Basic tab — fix highlighted errors first.");
+                return false;
+            }
+
+            return true;
         }
 
         /* ======================= Shared reveal auto-hide ======================= */
@@ -365,17 +384,18 @@ namespace MWPV.View.UserControls
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
+            HidePin();
         }
 
         private void TouchRevealTimerIfNeeded()
         {
-            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed;
+            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed;
             _revealAutoHide.Touch(anyRevealed);
         }
 
         /* ======================= Validation gate (Basic blockers) ======================= */
 
-        private bool TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okEmail, out bool okPhone)
+        private bool TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone)
         {
             isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
 
@@ -384,14 +404,17 @@ namespace MWPV.View.UserControls
             // Password required unless Bookmark-only
             okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
 
+            // PIN optional; if present must be valid
+            okPin = ValidatePin(forSubmit: true);
+
             // Email / Phone only error if user entered a value
             okEmail = ValidateEmailForSubmit();
             okPhone = ValidatePhoneNumber(forSubmit: true);
 
-            return okName && okPassword && okEmail && okPhone;
+            return okName && okPassword && okPin && okEmail && okPhone;
         }
 
-        private void FocusFirstError(bool okName, bool okPassword, bool okEmail, bool okPhone, bool isBookmarkOnly)
+        private void FocusFirstError(bool okName, bool okPassword, bool okPin, bool okEmail, bool okPhone, bool isBookmarkOnly)
         {
             if (!okName)
             {
@@ -413,6 +436,12 @@ namespace MWPV.View.UserControls
                 {
                     pwdPassword.Focus();
                 }
+                return;
+            }
+
+            if (!okPin)
+            {
+                pwdPin.Focus();
                 return;
             }
 
@@ -809,7 +838,197 @@ namespace MWPV.View.UserControls
             VerifyErrorPanel.Visibility = Visibility.Collapsed;
         }
 
-        /* ======================= Email validation ======================= */
+        /* ======================= PIN ======================= */
+
+        private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.Text))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            foreach (char c in e.Text)
+            {
+                if (!char.IsDigit(c))
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (sender is PasswordBox pb)
+            {
+                if (pb.Password.Length + e.Text.Length > PinMaxLen)
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            e.Handled = false;
+        }
+
+        private void Pin_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            bool ctrlPaste = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+                             (e.Key == Key.V || e.Key == Key.Insert);
+            bool shiftInsert = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
+                               e.Key == Key.Insert;
+
+            if (ctrlPaste || shiftInsert)
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
+        private void Pin_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
+            {
+                e.CancelCommand();
+                return;
+            }
+
+            string paste = (e.SourceDataObject.GetData(DataFormats.UnicodeText) as string) ?? "";
+            paste = paste.Trim();
+
+            if (paste.Length == 0)
+            {
+                e.CancelCommand();
+                return;
+            }
+
+            foreach (char c in paste)
+            {
+                if (!char.IsDigit(c))
+                {
+                    e.CancelCommand();
+                    return;
+                }
+            }
+
+            if (sender is not PasswordBox pb)
+            {
+                e.CancelCommand();
+                return;
+            }
+
+            int remaining = PinMaxLen - (pb.Password?.Length ?? 0);
+            if (remaining <= 0)
+            {
+                e.CancelCommand();
+                return;
+            }
+
+            if (paste.Length > remaining)
+            {
+                paste = paste.Substring(0, remaining);
+                e.DataObject = new DataObject(DataFormats.UnicodeText, paste);
+            }
+        }
+
+        private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
+                pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
+
+            if (_pinRevealed)
+                txtPinPlain.Text = pwdPin.Password;
+
+            TouchRevealTimerIfNeeded();
+
+            if (string.IsNullOrEmpty(pwdPin.Password))
+            {
+                HidePin();
+                ClearPinError();
+            }
+            else
+            {
+                ValidatePin(forSubmit: false);
+            }
+        }
+
+        private void Pin_ToggleReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            // Button always enabled now. If empty, do nothing.
+            if (string.IsNullOrEmpty(pwdPin.Password))
+                return;
+
+            if (_pinRevealed) HidePin();
+            else ShowPin();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void ShowPin()
+        {
+            txtPinPlain.Text = pwdPin.Password;
+            txtPinPlain.Visibility = Visibility.Visible;
+            pwdPin.Visibility = Visibility.Collapsed;
+            _pinRevealed = true;
+        }
+
+        private void HidePin()
+        {
+            UICleaner.Clear(txtPinPlain);
+            txtPinPlain.Visibility = Visibility.Collapsed;
+            pwdPin.Visibility = Visibility.Visible;
+            _pinRevealed = false;
+        }
+
+        private bool ValidatePin(bool forSubmit)
+        {
+            var raw = pwdPin.Password ?? string.Empty;
+
+            if (raw.Length == 0)
+            {
+                ClearPinError();
+                return true;
+            }
+
+            if (!raw.All(char.IsDigit))
+            {
+                ShowPinError("PIN must contain digits only (0–9).");
+                return false;
+            }
+
+            if (raw.Length < PinMinLen || raw.Length > PinMaxLen)
+            {
+                ShowPinError("PIN must be 4–6 digits.");
+                return false;
+            }
+
+            ClearPinError();
+            return true;
+        }
+
+        private void ShowPinError(string message)
+        {
+            PinErrorText.Text = message ?? string.Empty;
+            PinErrorPanel.Visibility = Visibility.Visible;
+
+            pwdPin.ToolTip = PinErrorText.Text;
+
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            pwdPin.Background = fill;
+        }
+
+        private void ClearPinError()
+        {
+            PinErrorText.Text = string.Empty;
+            PinErrorPanel.Visibility = Visibility.Collapsed;
+
+            pwdPin.ToolTip = null;
+            if (_pinDefaultBackground != null)
+                pwdPin.Background = _pinDefaultBackground;
+            if (_pinDefaultBorderBrush != null)
+                pwdPin.BorderBrush = _pinDefaultBorderBrush;
+        }
+
+        /* ======================= Email validation + Username autofill ======================= */
 
         private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
@@ -829,9 +1048,14 @@ namespace MWPV.View.UserControls
 
             var result = EmailValidator.IsLikelyEmail(s, out var message);
             if (result == EmailCheck.Ok)
+            {
                 MarkEmailValid();
+                NormalizeUsernameFromEmailIfEmpty();
+            }
             else
+            {
                 MarkEmailInvalid(message);
+            }
         }
 
         private bool ValidateEmailForSubmit()
@@ -856,6 +1080,23 @@ namespace MWPV.View.UserControls
             MarkEmailInvalid(message);
             _lastEmailChecked = s;
             return false;
+        }
+
+        private void NormalizeUsernameFromEmailIfEmpty()
+        {
+            var user = (txtUsername.Text ?? string.Empty).Trim();
+            if (user.Length != 0)
+                return;
+
+            var email = (txtEmail.Text ?? string.Empty).Trim();
+            if (email.Length == 0)
+                return;
+
+            var result = EmailValidator.IsLikelyEmail(email, out _);
+            if (result != EmailCheck.Ok)
+                return;
+
+            txtUsername.Text = email;
         }
 
         private void MarkEmailValid()
@@ -1002,6 +1243,7 @@ namespace MWPV.View.UserControls
             ClearItemNameError();
             ClearEmailValidation();
             ClearPhoneError();
+            ClearPinError();
         }
 
         private void WipeSensitiveFields()
@@ -1011,6 +1253,7 @@ namespace MWPV.View.UserControls
             UICleaner.Clear(pwdPassword);
             UICleaner.Clear(pwdVerify);
             UICleaner.Clear(txtPhone);
+            UICleaner.Clear(pwdPin);
 
             ClearPlainRevealOverlays();
 
@@ -1023,6 +1266,7 @@ namespace MWPV.View.UserControls
             UICleaner.Clear(txtPasswordPlain);
             UICleaner.Clear(txtVerifyPlain);
             UICleaner.Clear(txtPhonePlain);
+            UICleaner.Clear(txtPinPlain);
         }
 
         private void ResetUiState()
@@ -1035,6 +1279,7 @@ namespace MWPV.View.UserControls
             ClearItemNameError();
             ClearEmailValidation();
             ClearPhoneError();
+            ClearPinError();
         }
 
         /* ======================= Load/Unload helpers ======================= */
@@ -1049,6 +1294,9 @@ namespace MWPV.View.UserControls
 
             _phoneDefaultBorderBrush ??= txtPhone.BorderBrush;
             _phoneDefaultBackground ??= txtPhone.Background;
+
+            _pinDefaultBorderBrush ??= pwdPin.BorderBrush;
+            _pinDefaultBackground ??= pwdPin.Background;
         }
 
         private void HookUiEventsOnce()

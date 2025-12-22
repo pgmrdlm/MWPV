@@ -116,20 +116,39 @@
                         <!-- ROWS -->
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <!-- 0 item name -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 1 item name error -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 2 password -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 3 verify -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 4 verify error -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 5 strength -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 6 PIN -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- 7 PIN error -->
                             <RowDefinition Height="10"/>
+                            <!-- 8 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 9 user/email/url -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 10 email error -->
                             <RowDefinition Height="10"/>
+                            <!-- 11 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 12 phone -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 13 phone error -->
                             <RowDefinition Height="10"/>
+                            <!-- 14 spacer -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 15 notes -->
                             <RowDefinition Height="Auto"/>
+                            <!-- 16 info/buttons -->
                         </Grid.RowDefinitions>
 
                         <Grid.ColumnDefinitions>
@@ -361,33 +380,112 @@
                             </ItemsControl>
                         </StackPanel>
 
+                        <!-- PIN (LABEL DIRECTLY ABOVE INPUT, SAME PATTERN AS OTHER FIELDS) -->
+                        <Label Grid.Row="6" Grid.Column="0"
+                               Content="PIN"
+                               FontWeight="Bold"
+                               ToolTip="Optional. If entered, must be 4–6 digits. Stored encrypted in CategoryItem (no history)."/>
+
+                        <Grid Grid.Row="6"
+                              Grid.Column="0"
+                              Grid.ColumnSpan="3"
+                              Margin="0,22,0,0"
+                              Height="28"
+                              MinWidth="320"
+                              HorizontalAlignment="Left">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <PasswordBox x:Name="pwdPin"
+                                             Height="28"
+                                             MinWidth="260"
+                                             VerticalAlignment="Center"
+                                             HorizontalAlignment="Stretch"
+                                             PasswordChanged="Pin_PasswordChanged"
+                                             PreviewTextInput="Pin_PreviewTextInput"
+                                             PreviewKeyDown="Pin_PreviewKeyDown"
+                                             DataObject.Pasting="Pin_Pasting"/>
+
+                                <!-- MATCH Password reveal look: borderless, transparent, non-interactive -->
+                                <TextBox x:Name="txtPinPlain"
+                                         Height="28"
+                                         MinWidth="260"
+                                         VerticalAlignment="Center"
+                                         HorizontalAlignment="Stretch"
+                                         IsReadOnly="True"
+                                         IsTabStop="False"
+                                         IsHitTestVisible="False"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Visibility="Collapsed"
+                                         Foreground="Black"/>
+                            </Grid>
+
+                            <!-- View button ALWAYS visible + ALWAYS enabled -->
+                            <Button x:Name="btnTogglePinReveal"
+                                    Grid.Column="1"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Margin="6,0,0,0"
+                                    Visibility="Visible"
+                                    IsEnabled="True"
+                                    ToolTip="Show/Hide PIN"
+                                    Click="Pin_ToggleReveal_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                                        <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Ellipse Width="3" Height="3" Fill="Black"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+
+                        <!-- PIN ERROR -->
+                        <StackPanel x:Name="PinErrorPanel"
+                                    Grid.Row="7" Grid.Column="0"
+                                    Grid.ColumnSpan="5"
+                                    Margin="0,6,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="PinErrorText"
+                                       Foreground="#D32F2F"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+
                         <!-- USER / EMAIL / URL -->
-                        <Label Grid.Row="7" Grid.Column="0"
+                        <Label Grid.Row="9" Grid.Column="0"
                                Content="User Name"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtUsername"
-                                 Grid.Row="7" Grid.Column="0"
+                                 Grid.Row="9" Grid.Column="0"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="240"
                                  HorizontalAlignment="Left"/>
 
-                        <Label Grid.Row="7" Grid.Column="2"
+                        <Label Grid.Row="9" Grid.Column="2"
                                Content="Email"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtEmail"
-                                 Grid.Row="7" Grid.Column="2"
+                                 Grid.Row="9" Grid.Column="2"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="240"
                                  HorizontalAlignment="Left"
                                  LostFocus="txtEmail_LostFocus"/>
 
-                        <Label Grid.Row="7" Grid.Column="4"
+                        <Label Grid.Row="9" Grid.Column="4"
                                Content="URL or Absolute Location"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtUrl"
-                                 Grid.Row="7" Grid.Column="4"
+                                 Grid.Row="9" Grid.Column="4"
                                  Margin="0,22,0,0"
                                  Height="28"
                                  MinWidth="200"
@@ -395,7 +493,7 @@
 
                         <!-- EMAIL ERROR -->
                         <StackPanel x:Name="EmailErrorPanel"
-                                    Grid.Row="8" Grid.Column="2"
+                                    Grid.Row="10" Grid.Column="2"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="EmailErrorText"
@@ -406,10 +504,12 @@
                         </StackPanel>
 
                         <!-- PHONE -->
-                        <Label Grid.Row="10" Grid.Column="0"
+                        <Label Grid.Row="12" Grid.Column="0"
                                Content="Phone Number"
                                FontWeight="Bold"/>
-                        <Grid Grid.Row="10" Grid.Column="0"
+
+                        <Grid Grid.Row="12"
+                              Grid.Column="0"
                               Margin="0,22,0,0"
                               Height="28"
                               MinWidth="320"
@@ -448,7 +548,7 @@
                                         <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <Ellipse Width="3" Height="3" Fill="Black"
-                                                 HorizontalAlignment="Center"/>
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Viewbox>
                             </Button>
@@ -456,7 +556,7 @@
 
                         <!-- PHONE ERROR -->
                         <StackPanel x:Name="PhoneErrorPanel"
-                                    Grid.Row="11" Grid.Column="0"
+                                    Grid.Row="13" Grid.Column="0"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="PhoneErrorText"
@@ -467,11 +567,11 @@
                         </StackPanel>
 
                         <!-- NOTES -->
-                        <Label Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
+                        <Label Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="5"
                                Content="Freeform Notes"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtDescription"
-                                 Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="5"
+                                 Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="5"
                                  Margin="0,22,0,0"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
@@ -479,7 +579,7 @@
                                  Height="48"/>
 
                         <!-- INFO STRIP + BUTTONS -->
-                        <Grid Grid.Row="14"
+                        <Grid Grid.Row="16"
                               Grid.Column="0"
                               Grid.ColumnSpan="5"
                               Margin="0,16,0,10"
