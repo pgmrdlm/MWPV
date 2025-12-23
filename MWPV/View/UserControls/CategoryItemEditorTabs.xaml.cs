@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Security.Utility.Validation;
+using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 using MWPV.Utilities.Helpers;
 using MWPV.Utilities.UI;
 using MWPV.View.UserControls.CategoryItems;
@@ -21,6 +23,9 @@ namespace MWPV.View.UserControls
 
         private int _categoryKey;
         private string _categoryName = string.Empty;
+
+        // LEGACY: retained for compatibility / future cleanup.
+        // Mode is now derived from SEDS via the ActiveEntityId entry (see helpers below).
         private bool _isEditMode;
 
         // Reveal state flags
@@ -69,6 +74,62 @@ namespace MWPV.View.UserControls
         // PIN rules
         private const int PinMinLen = 4;
         private const int PinMaxLen = 6;
+
+        /*
+         * ADD vs EDIT (NEW METHOD)
+         * -----------------------
+         * We treat the presence of a >0 numeric primary key in SEDS as the source of truth:
+         *   - Missing / <=0 => Add
+         *   - >0            => Edit
+         *
+         * IMPORTANT:
+         * - During "Add", we must NOT set this key until a real DB insert returns a real PK.
+         * - Host code can set this key once insert is wired, or when launching editor for an existing item.
+         *
+         * This key name is intentionally generic (applies to any editor context).
+         */
+        private const string SedsKey_ActiveEntityId = "MWPV.Context.ActiveEntityId";
+
+        private static int? TryGetActiveEntityId()
+        {
+            try
+            {
+                if (!SecureEncryptedDataStore.HasKey(SedsKey_ActiveEntityId))
+                    return null;
+
+                var s = SecureEncryptedDataStore.GetString(SedsKey_ActiveEntityId);
+                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id) && id > 0)
+                    return id;
+
+                return null;
+            }
+            catch
+            {
+                // Treat failures as "no id"
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// True when SEDS contains a valid (>0) active entity id.
+        /// </summary>
+        private bool IsEditModeFromSeds() => TryGetActiveEntityId().HasValue;
+
+        /// <summary>
+        /// For Add scenarios: clear the active id (so editor is definitively in Add mode).
+        /// Do NOT set an id during Add until we have a real insert result.
+        /// </summary>
+        private static void ClearActiveEntityId()
+        {
+            try
+            {
+                SecureEncryptedDataStore.Clear(SedsKey_ActiveEntityId);
+            }
+            catch
+            {
+                // ignore: store may already be wiped/closed
+            }
+        }
 
         public CategoryItemEditorTabs()
         {
@@ -124,10 +185,16 @@ namespace MWPV.View.UserControls
         {
             _categoryKey = categoryKey;
             _categoryName = categoryName;
+
+            // NEW METHOD: Add mode is signaled by absence of the active entity id.
+            // We explicitly clear it here to avoid stale "edit" state bleeding into Add.
+            ClearActiveEntityId();
+
+            // LEGACY flag kept but no longer authoritative.
             _isEditMode = false;
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: key={categoryKey}, name='{categoryName}'");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (SEDS id cleared)");
 #endif
             ClearForm();
             ResetUiState();
@@ -138,10 +205,16 @@ namespace MWPV.View.UserControls
         {
             _categoryKey = categoryKey;
             _categoryName = categoryName;
-            _isEditMode = true;
+
+            // NEW METHOD: Edit/Add is derived from SEDS.
+            // We do NOT set the id here (IO not wired yet; host should set once available).
+            bool isEdit = IsEditModeFromSeds();
+
+            // LEGACY flag kept but no longer authoritative.
+            _isEditMode = isEdit;
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: key={categoryKey}, name='{categoryName}'");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(isEdit ? "EDIT" : "ADD")} (derived from SEDS)");
 #endif
             // TODO: Map existingItem -> fields once persistence is wired.
             ResetUiState();
