@@ -2,10 +2,15 @@
    MWPV - MASTER DDL (FULL REWRITE WITH SEEDS)  -- v2025-10-16b
    Fix: seed inserts now use UNION ALL SELECT blocks (no VALUES(...) alias).
    Change in this revision: add back ComboType 'log_filters' + ComboDetail rows.
-   This edition: REMOVED CREATE TABLE for CategoryItemSecurityQuestions, BankCards, CategoryItemAccounts.
+   This edition: REMOVED CREATE TABLE for CategoryItemSecurityQuestions, BankCards, CategoryItemAccounts.********** after we do the ddl and scripts., we need a view on the phone number.  ***** script names should be built with following naming standards_s_<tablename>_<description>.sql
    2025-11-24 edit: Category_Type no longer FK to ComboDetail; defaults to 0.
                     Removed category_types ComboType/ComboDetail seeding and
                     rewrote starter categories to use Category_Type = 0.
+
+   2025-12-23 edit (per current discussion):
+   - CategoryItem: removed CI_MFAType, CI_MFABackupCodes, CI_NbrSecurityQuestions
+   - CategoryItemPasswordHistory: CIPaH_CreatedAt now defaults to now (epoch seconds)
+   - Added supporting index for "most recent first" access
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -77,8 +82,6 @@ CREATE TABLE CategoryItem (
     CI_SignInUrl             TEXT,
     CI_AccountEmail          BLOB,
     CI_AccountPhoneNumber    BLOB,
-    CI_MFAType               TEXT,
-    CI_MFABackupCodes        BLOB,
     CI_SecretMeta            BLOB,
     CI_SecretData            BLOB,  -- Primary Bank card type(credit/debit/store), card #, exp date, csv, pin #
                                     -- Account number, other payment types(bank account)
@@ -86,7 +89,6 @@ CREATE TABLE CategoryItem (
     CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     IsActive                 INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
-    CI_NbrSecurityQuestions  INTEGER DEFAULT 0,
     CHECK (length(trim(CI_Name)) > 0),
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
@@ -95,13 +97,17 @@ CREATE TABLE CategoryItem (
 CREATE TABLE CategoryItemPasswordHistory (
     CIPaH_PwHistId    INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId      INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPaH_CreatedAt   INTEGER NOT NULL,
+    CIPaH_CreatedAt   REAL NOT NULL DEFAULT (julianday('now')),
     CIPaH_Version     INTEGER NOT NULL DEFAULT 1,
     CIPaH_Password    BLOB    NOT NULL,
     CIPaH_PadLen      INTEGER,
     CIPaH_PwSig       BLOB    NOT NULL,
     CIPaH_SigVersion  INTEGER NOT NULL DEFAULT 1
 );
+
+-- Support: fast “most recent first” per item (ORDER BY CreatedAt DESC, PwHistId DESC)
+CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_CreatedAt
+ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_CreatedAt, CIPaH_PwHistId);
 
 /* =========================
    CategoryItemSecurityQuestions

@@ -1,11 +1,29 @@
-INSERT INTO CategoryItem
-(
-  Category_Key, CI_Name, CI_Description,
-  CI_SecretData, CI_SecretMeta
+-- s_CategoryItem_insert.sql
+INSERT INTO CategoryItem (
+    Category_Key,
+    CI_Name,
+    CI_Description,
+    CI_Username,
+    CI_SignInUrl,
+    CI_AccountEmail,
+    CI_AccountPhoneNumber,
+    CI_SecretMeta,
+    CI_SecretData,
+    CI_SecretStorage,
+    IsActive
 )
-VALUES
-(
-  @CategoryKey, @Name, @Description,
-  @SecretData, @SecretMeta
+VALUES (
+    @Category_Key,
+    @CI_Name,
+    @CI_Description,
+    @CI_Username,
+    @CI_SignInUrl,
+    @CI_AccountEmail,
+    @CI_AccountPhoneNumber,
+    @CI_SecretMeta,
+    @CI_SecretData,
+    @CI_SecretStorage,
+    COALESCE(@IsActive, 1)
 );
-SELECT last_insert_rowid() AS NewId;
+
+SELECT last_insert_rowid() AS ItemId;
