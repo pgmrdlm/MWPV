@@ -494,7 +494,7 @@
                               Grid.Column="0"
                               Margin="0,22,0,0"
                               Height="28"
-                              MinWidth="320"
+                              MinWidth="240"
                               HorizontalAlignment="Left">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -505,11 +505,13 @@
                                 <PasswordBox x:Name="txtPhone"
                                              VerticalAlignment="Center"
                                              Height="28"
+                                             MinWidth="240"
                                              PasswordChanged="txtPhone_PasswordChanged"
                                              LostFocus="txtPhone_LostFocus"/>
                                 <TextBox x:Name="txtPhonePlain"
                                          VerticalAlignment="Center"
                                          Height="28"
+                                         MinWidth="240"
                                          IsReadOnly="True"
                                          IsHitTestVisible="False"
                                          Background="Transparent"
