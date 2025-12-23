@@ -47,6 +47,14 @@ namespace Utilities.Sql
             "s_CategoryItem_insert.sql",
             "s_CategoryItem_update.sql",
             "s_Combo_DetailByTypeId.sql",
+            "s_CategoryItem_select_by_category.sql",
+
+            // Category Item Password history
+            "s_CategoryItemPasswordHistory_insert.sql",
+            "s_CategoryItemPasswordHistory_insert.sql",
+            "s_CategoryItemPasswordHistory_select_most_recent.sql",
+            "s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql",
+            "s_CategoryItemPasswordHistory_check_reuse_365days.sql",
 
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"
