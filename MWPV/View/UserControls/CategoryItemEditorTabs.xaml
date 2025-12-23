@@ -134,29 +134,29 @@
                             <RowDefinition Height="10"/>
                             <!-- 8 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 9 user/email/url -->
-                            <RowDefinition Height="Auto"/>
-                            <!-- 10 email error -->
+                            <!-- 9 user/url -->
                             <RowDefinition Height="10"/>
-                            <!-- 11 spacer -->
+                            <!-- 10 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 12 phone -->
+                            <!-- 11 phone + email -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 13 phone error -->
+                            <!-- 12 phone/email errors -->
                             <RowDefinition Height="10"/>
-                            <!-- 14 spacer -->
+                            <!-- 13 spacer -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 15 notes -->
+                            <!-- 14 notes -->
                             <RowDefinition Height="Auto"/>
-                            <!-- 16 info/buttons -->
+                            <!-- 15 info/buttons -->
                         </Grid.RowDefinitions>
 
+                        <!-- IMPORTANT: col 4 used to host URL/Email; now that they’re in col 2,
+                             col 4 must NOT keep stealing width (that’s what was clipping the email reveal). -->
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="3*"/>
                             <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="24"/>
-                            <ColumnDefinition Width="2.5*"/>
+                            <ColumnDefinition Width="3*"/>
+                            <ColumnDefinition Width="0"/>
+                            <ColumnDefinition Width="0"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- ITEM NAME -->
@@ -380,7 +380,7 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <!-- PIN (LABEL DIRECTLY ABOVE INPUT, SAME PATTERN AS OTHER FIELDS) -->
+                        <!-- PIN -->
                         <Label Grid.Row="6" Grid.Column="0"
                                Content="PIN"
                                FontWeight="Bold"
@@ -409,7 +409,6 @@
                                              PreviewKeyDown="Pin_PreviewKeyDown"
                                              DataObject.Pasting="Pin_Pasting"/>
 
-                                <!-- MATCH Password reveal look: borderless, transparent, non-interactive -->
                                 <TextBox x:Name="txtPinPlain"
                                          Height="28"
                                          MinWidth="260"
@@ -424,7 +423,6 @@
                                          Foreground="Black"/>
                             </Grid>
 
-                            <!-- View button ALWAYS visible + ALWAYS enabled -->
                             <Button x:Name="btnTogglePinReveal"
                                     Grid.Column="1"
                                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -459,7 +457,7 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- USER / EMAIL / URL -->
+                        <!-- USER / URL -->
                         <Label Grid.Row="9" Grid.Column="0"
                                Content="User Name"
                                FontWeight="Bold"/>
@@ -470,45 +468,29 @@
                                  MinWidth="240"
                                  HorizontalAlignment="Left"/>
 
+                        <!-- URL moved to col 2 (left of old far-right) -->
                         <Label Grid.Row="9" Grid.Column="2"
-                               Content="Email"
+                               Content="URL or Absolute Location"
                                FontWeight="Bold"/>
-                        <TextBox x:Name="txtEmail"
+
+                        <TextBox x:Name="txtUrl"
                                  Grid.Row="9" Grid.Column="2"
                                  Margin="0,22,0,0"
                                  Height="28"
-                                 MinWidth="240"
-                                 HorizontalAlignment="Left"
-                                 LostFocus="txtEmail_LostFocus"/>
+                                 MinWidth="220"
+                                 HorizontalAlignment="Stretch"/>
 
-                        <Label Grid.Row="9" Grid.Column="4"
-                               Content="URL or Absolute Location"
-                               FontWeight="Bold"/>
-                        <TextBox x:Name="txtUrl"
-                                 Grid.Row="9" Grid.Column="4"
-                                 Margin="0,22,0,0"
-                                 Height="28"
-                                 MinWidth="200"
-                                 HorizontalAlignment="Left"/>
-
-                        <!-- EMAIL ERROR -->
-                        <StackPanel x:Name="EmailErrorPanel"
-                                    Grid.Row="10" Grid.Column="2"
-                                    Margin="0,6,0,0"
-                                    Visibility="Collapsed">
-                            <TextBlock x:Name="EmailErrorText"
-                                       Foreground="#D32F2F"
-                                       FontWeight="Bold"
-                                       FontSize="12"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-
-                        <!-- PHONE -->
-                        <Label Grid.Row="12" Grid.Column="0"
+                        <!-- PHONE + EMAIL (SAME ROW) -->
+                        <Label Grid.Row="11" Grid.Column="0"
                                Content="Phone Number"
                                FontWeight="Bold"/>
 
-                        <Grid Grid.Row="12"
+                        <Label Grid.Row="11" Grid.Column="2"
+                               Content="Email"
+                               FontWeight="Bold"/>
+
+                        <!-- PHONE entry -->
+                        <Grid Grid.Row="11"
                               Grid.Column="0"
                               Margin="0,22,0,0"
                               Height="28"
@@ -554,9 +536,59 @@
                             </Button>
                         </Grid>
 
-                        <!-- PHONE ERROR -->
+                        <!-- EMAIL entry (col 2) - ensure reveal button can never clip -->
+                        <Grid Grid.Row="11"
+                              Grid.Column="2"
+                              Margin="0,22,0,0"
+                              Height="28"
+                              MinWidth="220"
+                              HorizontalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <PasswordBox x:Name="pwdEmail"
+                                             VerticalAlignment="Center"
+                                             Height="28"
+                                             HorizontalAlignment="Stretch"
+                                             PasswordChanged="pwdEmail_PasswordChanged"
+                                             LostFocus="pwdEmail_LostFocus"/>
+                                <TextBox x:Name="txtEmailPlain"
+                                         VerticalAlignment="Center"
+                                         Height="28"
+                                         HorizontalAlignment="Stretch"
+                                         IsReadOnly="True"
+                                         IsHitTestVisible="False"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Visibility="Collapsed"
+                                         Foreground="Black"/>
+                            </Grid>
+
+                            <Button x:Name="btnToggleEmailReveal"
+                                    Grid.Column="1"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Margin="6,0,0,0"
+                                    ToolTip="Show/Hide email"
+                                    Click="BtnToggleEmailReveal_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                                        <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Ellipse Width="3" Height="3" Fill="Black"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+
+                        <!-- PHONE ERROR (left) -->
                         <StackPanel x:Name="PhoneErrorPanel"
-                                    Grid.Row="13" Grid.Column="0"
+                                    Grid.Row="12" Grid.Column="0"
                                     Margin="0,6,0,0"
                                     Visibility="Collapsed">
                             <TextBlock x:Name="PhoneErrorText"
@@ -566,12 +598,24 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
+                        <!-- EMAIL ERROR (col 2) -->
+                        <StackPanel x:Name="EmailErrorPanel"
+                                    Grid.Row="12" Grid.Column="2"
+                                    Margin="0,6,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="EmailErrorText"
+                                       Foreground="#D32F2F"
+                                       FontWeight="Bold"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+
                         <!-- NOTES -->
-                        <Label Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="5"
+                        <Label Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="5"
                                Content="Freeform Notes"
                                FontWeight="Bold"/>
                         <TextBox x:Name="txtDescription"
-                                 Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="5"
+                                 Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="5"
                                  Margin="0,22,0,0"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
@@ -579,7 +623,7 @@
                                  Height="48"/>
 
                         <!-- INFO STRIP + BUTTONS -->
-                        <Grid Grid.Row="16"
+                        <Grid Grid.Row="15"
                               Grid.Column="0"
                               Grid.ColumnSpan="5"
                               Margin="0,16,0,10"

@@ -28,6 +28,7 @@ namespace MWPV.View.UserControls
         private bool _verifyRevealed;
         private bool _phoneRevealed;
         private bool _pinRevealed;
+        private bool _emailRevealed;
 
         // Shared reveal auto-hide
         private readonly AutoHideTimer _revealAutoHide;
@@ -385,11 +386,12 @@ namespace MWPV.View.UserControls
             HideVerifyPassword();
             HidePhone();
             HidePin();
+            HideEmail();
         }
 
         private void TouchRevealTimerIfNeeded()
         {
-            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed;
+            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed || _emailRevealed;
             _revealAutoHide.Touch(anyRevealed);
         }
 
@@ -447,7 +449,7 @@ namespace MWPV.View.UserControls
 
             if (!okEmail)
             {
-                txtEmail.Focus();
+                pwdEmail.Focus();
                 return;
             }
 
@@ -1028,11 +1030,26 @@ namespace MWPV.View.UserControls
                 pwdPin.BorderBrush = _pinDefaultBorderBrush;
         }
 
-        /* ======================= Email validation + Username autofill ======================= */
+        /* ======================= Email validation + Username autofill + reveal ======================= */
 
-        private void txtEmail_LostFocus(object? sender, RoutedEventArgs e)
+        private void pwdEmail_PasswordChanged(object? sender, RoutedEventArgs e)
         {
-            var s = (txtEmail.Text ?? string.Empty).Trim();
+            if (_emailRevealed)
+                txtEmailPlain.Text = pwdEmail.Password;
+
+            TouchRevealTimerIfNeeded();
+
+            if (string.IsNullOrEmpty(pwdEmail.Password))
+            {
+                _lastEmailChecked = string.Empty;
+                ClearEmailValidation();
+                HideEmail();
+            }
+        }
+
+        private void pwdEmail_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
 
             if (s.Length == 0)
             {
@@ -1058,9 +1075,33 @@ namespace MWPV.View.UserControls
             }
         }
 
+        private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_emailRevealed) HideEmail();
+            else ShowEmail();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void ShowEmail()
+        {
+            txtEmailPlain.Text = pwdEmail.Password;
+            txtEmailPlain.Visibility = Visibility.Visible;
+            pwdEmail.Visibility = Visibility.Collapsed;
+            _emailRevealed = true;
+        }
+
+        private void HideEmail()
+        {
+            UICleaner.Clear(txtEmailPlain);
+            txtEmailPlain.Visibility = Visibility.Collapsed;
+            pwdEmail.Visibility = Visibility.Visible;
+            _emailRevealed = false;
+        }
+
         private bool ValidateEmailForSubmit()
         {
-            var s = (txtEmail.Text ?? string.Empty).Trim();
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
 
             if (s.Length == 0)
             {
@@ -1088,7 +1129,7 @@ namespace MWPV.View.UserControls
             if (user.Length != 0)
                 return;
 
-            var email = (txtEmail.Text ?? string.Empty).Trim();
+            var email = (pwdEmail.Password ?? string.Empty).Trim();
             if (email.Length == 0)
                 return;
 
@@ -1104,11 +1145,11 @@ namespace MWPV.View.UserControls
             EmailErrorText.Text = string.Empty;
             EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-            txtEmail.ToolTip = null;
+            pwdEmail.ToolTip = null;
             if (_emailDefaultBackground != null)
-                txtEmail.Background = _emailDefaultBackground;
+                pwdEmail.Background = _emailDefaultBackground;
             if (_emailDefaultBorderBrush != null)
-                txtEmail.BorderBrush = _emailDefaultBorderBrush;
+                pwdEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
         private void MarkEmailInvalid(string message)
@@ -1119,11 +1160,11 @@ namespace MWPV.View.UserControls
 
             EmailErrorPanel.Visibility = Visibility.Visible;
 
-            txtEmail.ToolTip = EmailErrorText.Text;
+            pwdEmail.ToolTip = EmailErrorText.Text;
 
             var fill = TryFindResource("FieldErrorFill") as Brush
                        ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-            txtEmail.Background = fill;
+            pwdEmail.Background = fill;
         }
 
         private void ClearEmailValidation()
@@ -1131,11 +1172,11 @@ namespace MWPV.View.UserControls
             EmailErrorText.Text = string.Empty;
             EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-            txtEmail.ToolTip = null;
+            pwdEmail.ToolTip = null;
             if (_emailDefaultBackground != null)
-                txtEmail.Background = _emailDefaultBackground;
+                pwdEmail.Background = _emailDefaultBackground;
             if (_emailDefaultBorderBrush != null)
-                txtEmail.BorderBrush = _emailDefaultBorderBrush;
+                pwdEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
         /* ======================= Phone validation + reveal ======================= */
@@ -1234,7 +1275,6 @@ namespace MWPV.View.UserControls
 
             txtItemName.Text = string.Empty;
             txtUsername.Text = string.Empty;
-            txtEmail.Text = string.Empty;
             txtUrl.Text = string.Empty;
             txtDescription.Text = string.Empty;
 
@@ -1254,6 +1294,7 @@ namespace MWPV.View.UserControls
             UICleaner.Clear(pwdVerify);
             UICleaner.Clear(txtPhone);
             UICleaner.Clear(pwdPin);
+            UICleaner.Clear(pwdEmail);
 
             ClearPlainRevealOverlays();
 
@@ -1267,6 +1308,7 @@ namespace MWPV.View.UserControls
             UICleaner.Clear(txtVerifyPlain);
             UICleaner.Clear(txtPhonePlain);
             UICleaner.Clear(txtPinPlain);
+            UICleaner.Clear(txtEmailPlain);
         }
 
         private void ResetUiState()
@@ -1289,8 +1331,8 @@ namespace MWPV.View.UserControls
             _itemNameDefaultBorderBrush ??= txtItemName.BorderBrush;
             _itemNameDefaultBackground ??= txtItemName.Background;
 
-            _emailDefaultBorderBrush ??= txtEmail.BorderBrush;
-            _emailDefaultBackground ??= txtEmail.Background;
+            _emailDefaultBorderBrush ??= pwdEmail.BorderBrush;
+            _emailDefaultBackground ??= pwdEmail.Background;
 
             _phoneDefaultBorderBrush ??= txtPhone.BorderBrush;
             _phoneDefaultBackground ??= txtPhone.Background;
