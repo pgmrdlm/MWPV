@@ -1,13 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics; // Debug.WriteLine traces (always-on)
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Security.Utility.Wiping;
-// File: Crypto/KeyArchiveVerifier.cs (example)
-using Security.Utility.Storage;   // SEDS lives here
-using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
-// optional, file-local aliases:
 
 namespace Security.Utility.Storage;
 
@@ -15,13 +11,27 @@ namespace Security.Utility.Storage;
 /// In-memory encrypted key/value store for sensitive data.
 /// - Stores ciphertext only (NONCE(12) || TAG(16) || CIPHERTEXT per entry, AES-GCM).
 /// - Uses the logical key name as AAD to bind entries and prevent swap attacks.
-/// - Returns plaintext as byte[] or char[] (caller must wipe).
+/// - Returns plaintext as byte[] or char[] (caller must wipe returned buffers).
 /// - Session AES-256 key lives in-process and is wiped on global shutdown.
 /// </summary>
 public static class SecureEncryptedDataStore
 {
     private const int NonceSize = 12; // recommended for AesGcm
-    private const int TagSize = 16; // 128-bit tag
+    private const int TagSize = 16;   // 128-bit tag
+
+    // Reserved "context" keys (generic; still app-agnostic).
+    // If we want a single "current entity id" slot, we MUST also store what it refers to.
+    public static class ContextKeys
+    {
+        /// <summary>String describing what entity the CurrentEntityId refers to (ex: "CategoryItem").</summary>
+        public const string CurrentEntityKind = "__CTX__CurrentEntityKind";
+
+        /// <summary>
+        /// Current entity primary key (int, stored as 4 bytes little-endian).
+        /// Convention: 0 => Add/new; >0 => Edit existing.
+        /// </summary>
+        public const string CurrentEntityId = "__CTX__CurrentEntityId";
+    }
 
     // Session-scoped AES-256 key (mutable for zeroization)
     private static readonly byte[] Key;
@@ -58,6 +68,7 @@ public static class SecureEncryptedDataStore
     public static void SetAndWipe(string key, char[] plainChars)
     {
         if (plainChars is null) throw new ArgumentNullException(nameof(plainChars));
+
         byte[]? utf8 = null;
         try
         {
@@ -75,6 +86,7 @@ public static class SecureEncryptedDataStore
     public static void SetNoWipe(string key, char[] plainChars)
     {
         if (plainChars is null) throw new ArgumentNullException(nameof(plainChars));
+
         byte[]? utf8 = null;
         try
         {
@@ -111,34 +123,6 @@ public static class SecureEncryptedDataStore
         }
     }
 
-    private static void SetBytesInternal(string key, byte[] plainBytes)
-    {
-        // Encrypt with a fresh random NONCE per entry + AAD=key name
-        byte[] combined = EncryptWithRandomNonce(key, plainBytes);
-
-        // Defensive copy into store
-        var copy = new byte[combined.Length];
-        Buffer.BlockCopy(combined, 0, copy, 0, combined.Length);
-
-        lock (_gate)
-        {
-            ThrowIfWiped();
-            if (_store.TryGetValue(key, out var existing))
-            {
-                Array.Clear(existing, 0, existing.Length);
-            }
-            _store[key] = copy;
-            Debug.WriteLine($"[STORE] Set entry (total={_store.Count}).");
-        }
-
-        // Wipe our temporary combined buffer
-        Array.Clear(combined, 0, combined.Length);
-    }
-
-    // =========================
-    //      NON-SENSITIVE HELPERS
-    // =========================
-
     /// <summary>
     /// Store a NON-SENSITIVE string (e.g., file paths, SQL). Still encrypted at rest in memory;
     /// the original string cannot be zeroized.
@@ -146,6 +130,7 @@ public static class SecureEncryptedDataStore
     public static void SetString(string key, string value)
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
+
         byte[] bytes = Encoding.UTF8.GetBytes(value);
         try
         {
@@ -157,18 +142,58 @@ public static class SecureEncryptedDataStore
         }
     }
 
-    /// <summary>Retrieve a NON-SENSITIVE string.</summary>
-    public static string GetString(string key)
+    /// <summary>Store a 32-bit integer (little-endian).</summary>
+    public static void SetInt32(string key, int value)
     {
-        byte[] bytes = GetBytes(key);
+        Span<byte> buf = stackalloc byte[4];
+        unchecked
+        {
+            buf[0] = (byte)(value);
+            buf[1] = (byte)(value >> 8);
+            buf[2] = (byte)(value >> 16);
+            buf[3] = (byte)(value >> 24);
+        }
+
+        // stackalloc is already ephemeral; still copy to heap array to pass to SetBytesInternal
+        var tmp = buf.ToArray();
         try
         {
-            return Encoding.UTF8.GetString(bytes);
+            SetBytesInternal(key, tmp);
         }
         finally
         {
-            Array.Clear(bytes, 0, bytes.Length);
+            Array.Clear(tmp, 0, tmp.Length);
         }
+    }
+
+    private static void SetBytesInternal(string key, byte[] plainBytes)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key name is required.", nameof(key));
+
+        byte[] combined;
+        lock (_gate)
+        {
+            ThrowIfWiped();
+
+            // Encrypt under lock so WipeAll() cannot zero Key mid-operation.
+            combined = EncryptWithRandomNonce_NoLock(key, plainBytes);
+
+            // Defensive copy into store
+            var copy = new byte[combined.Length];
+            Buffer.BlockCopy(combined, 0, copy, 0, combined.Length);
+
+            if (_store.TryGetValue(key, out var existing))
+            {
+                Array.Clear(existing, 0, existing.Length);
+            }
+
+            _store[key] = copy;
+            Debug.WriteLine($"[STORE] Set entry (total={_store.Count}).");
+        }
+
+        // Wipe our temporary combined buffer
+        Array.Clear(combined, 0, combined.Length);
     }
 
     // =========================
@@ -178,17 +203,59 @@ public static class SecureEncryptedDataStore
     /// <summary>Get plaintext bytes. Caller MUST wipe the returned buffer after use.</summary>
     public static byte[] GetBytes(string key)
     {
-        byte[] combined;
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key name is required.", nameof(key));
+
+        byte[] combinedCopy;
+
         lock (_gate)
         {
             ThrowIfWiped();
-            if (!_store.TryGetValue(key, out combined!))
-                throw new KeyNotFoundException("Key not found.");
-            Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
-        }
 
-        // Decrypt (creates a new plaintext buffer)
-        return DecryptWithEmbeddedNonce(key, combined);
+            if (!_store.TryGetValue(key, out var combined))
+                throw new KeyNotFoundException("Key not found.");
+
+            // IMPORTANT: copy ciphertext while under lock so Clear/WipeAll can't zero it mid-decrypt.
+            combinedCopy = new byte[combined.Length];
+            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
+
+            Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
+
+            // Decrypt under the same lock so Key cannot be wiped mid-decrypt.
+            // NOTE: DecryptWithEmbeddedNonce_NoLock allocates new plaintext buffer.
+            return DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+        }
+        // (combinedCopy is only ciphertext; no need to wipe here, but it will be GC'd)
+    }
+
+    /// <summary>Try get plaintext bytes. Returns false if missing (no exception).</summary>
+    public static bool TryGetBytes(string key, out byte[] plainBytes)
+    {
+        plainBytes = Array.Empty<byte>();
+
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        lock (_gate)
+        {
+            if (_wiped) return false;
+            if (!_store.TryGetValue(key, out var combined))
+                return false;
+
+            var combinedCopy = new byte[combined.Length];
+            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
+
+            try
+            {
+                plainBytes = DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+                return true;
+            }
+            catch
+            {
+                // Treat tamper/wrong-key as failure for "Try" API.
+                return false;
+            }
+        }
     }
 
     /// <summary>Get plaintext chars (UTF-8). Caller MUST wipe the returned buffer after use.</summary>
@@ -209,12 +276,78 @@ public static class SecureEncryptedDataStore
         }
     }
 
+    /// <summary>Retrieve a NON-SENSITIVE string.</summary>
+    public static string GetString(string key)
+    {
+        byte[] bytes = GetBytes(key);
+        try
+        {
+            return Encoding.UTF8.GetString(bytes);
+        }
+        finally
+        {
+            Array.Clear(bytes, 0, bytes.Length);
+        }
+    }
+
+    /// <summary>Get a 32-bit integer (little-endian). Throws if missing.</summary>
+    public static int GetInt32(string key)
+    {
+        byte[] bytes = GetBytes(key);
+        try
+        {
+            if (bytes.Length != 4)
+                throw new CryptographicException("Stored Int32 value has invalid length.");
+
+            int value =
+                bytes[0]
+                | (bytes[1] << 8)
+                | (bytes[2] << 16)
+                | (bytes[3] << 24);
+
+            return value;
+        }
+        finally
+        {
+            Array.Clear(bytes, 0, bytes.Length);
+        }
+    }
+
+    /// <summary>Try get a 32-bit integer (little-endian). Returns false if missing or invalid.</summary>
+    public static bool TryGetInt32(string key, out int value)
+    {
+        value = 0;
+        if (!TryGetBytes(key, out var bytes) || bytes.Length != 4)
+        {
+            if (bytes.Length != 0) Array.Clear(bytes, 0, bytes.Length);
+            return false;
+        }
+
+        try
+        {
+            value =
+                bytes[0]
+                | (bytes[1] << 8)
+                | (bytes[2] << 16)
+                | (bytes[3] << 24);
+
+            return true;
+        }
+        finally
+        {
+            Array.Clear(bytes, 0, bytes.Length);
+        }
+    }
+
     // =========================
     //       HOUSEKEEPING
     // =========================
 
     public static bool HasKey(string key)
     {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
         lock (_gate)
         {
             ThrowIfWiped();
@@ -226,6 +359,9 @@ public static class SecureEncryptedDataStore
 
     public static void Clear(string key)
     {
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
         lock (_gate)
         {
             ThrowIfWiped();
@@ -257,7 +393,6 @@ public static class SecureEncryptedDataStore
         lock (_gate)
         {
             ThrowIfWiped();
-            // Don’t log names; just the count.
             Debug.WriteLine($"[STORE] Keys requested (entries={_store.Count}).");
             return new List<string>(_store.Keys);
         }
@@ -278,7 +413,6 @@ public static class SecureEncryptedDataStore
                 return;
             }
 
-            // wipe entries
             foreach (var kvp in _store)
             {
                 var buf = kvp.Value;
@@ -287,7 +421,6 @@ public static class SecureEncryptedDataStore
             }
             _store.Clear();
 
-            // wipe session key
             if (Key is { Length: > 0 })
                 Array.Clear(Key, 0, Key.Length);
 
@@ -298,15 +431,17 @@ public static class SecureEncryptedDataStore
 
     private static void ThrowIfWiped()
     {
-        if (_wiped) throw new ObjectDisposedException(nameof(SecureEncryptedDataStore), "Store is wiped/closed.");
+        if (_wiped)
+            throw new ObjectDisposedException(nameof(SecureEncryptedDataStore), "Store is wiped/closed.");
     }
 
     // =========================
     //     CRYPTO PRIMITIVES
     // =========================
     // Layout: NONCE(12) || TAG(16) || CIPHERTEXT
+    // NOTE: These are "_NoLock" and must be called WITH _gate held.
 
-    private static byte[] EncryptWithRandomNonce(string keyName, byte[] plain)
+    private static byte[] EncryptWithRandomNonce_NoLock(string keyName, byte[] plain)
     {
         // AAD binds this ciphertext to the logical key 'keyName'
         byte[] aad = Encoding.UTF8.GetBytes(keyName);
@@ -322,13 +457,11 @@ public static class SecureEncryptedDataStore
             gcm.Encrypt(nonce, plain, ciphertext, tag, aad);
         }
 
-        // layout: NONCE || TAG || CIPHERTEXT
         var combined = new byte[NonceSize + TagSize + ciphertext.Length];
         Buffer.BlockCopy(nonce, 0, combined, 0, NonceSize);
         Buffer.BlockCopy(tag, 0, combined, NonceSize, TagSize);
         Buffer.BlockCopy(ciphertext, 0, combined, NonceSize + TagSize, ciphertext.Length);
 
-        // wipe temps
         Array.Clear(nonce, 0, nonce.Length);
         Array.Clear(tag, 0, tag.Length);
         Array.Clear(ciphertext, 0, ciphertext.Length);
@@ -337,7 +470,7 @@ public static class SecureEncryptedDataStore
         return combined;
     }
 
-    private static byte[] DecryptWithEmbeddedNonce(string keyName, byte[] combined)
+    private static byte[] DecryptWithEmbeddedNonce_NoLock(string keyName, byte[] combined)
     {
         if (combined is null || combined.Length < NonceSize + TagSize)
             throw new CryptographicException("Ciphertext is too short.");
@@ -357,11 +490,9 @@ public static class SecureEncryptedDataStore
         var plain = new byte[ctLen];
         using (var gcm = new AesGcm(Key))
         {
-            // Throws CryptographicException if tampered/wrong key/AAD
             gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
         }
 
-        // wipe temps
         Array.Clear(nonce, 0, nonce.Length);
         Array.Clear(tag, 0, tag.Length);
         Array.Clear(ciphertext, 0, ciphertext.Length);
@@ -373,6 +504,7 @@ public static class SecureEncryptedDataStore
     // =========================
     //    OPTIONAL DIAGNOSTICS
     // =========================
+
     public static void DebugDumpKeys()
     {
         lock (_gate)
