@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 
 namespace MWPV.View.UserControls
 {
@@ -16,6 +17,9 @@ namespace MWPV.View.UserControls
 
         // When true: left-side navigation is visible but inactive.
         private bool _isNavigationLocked;
+
+        // SEDS key (editor reads this; Panel owns clearing for ADD)
+        private const string SedsKey_ActiveEntityId = "MWPV.Context.ActiveEntityId";
 
         public Panel()
         {
@@ -257,6 +261,23 @@ namespace MWPV.View.UserControls
             ShowAddEditCategoryItem();
         }
 
+        private void ClearActiveEntityIdForAdd()
+        {
+            try
+            {
+                SecureEncryptedDataStore.Clear(SedsKey_ActiveEntityId);
+#if DEBUG
+                Debug.WriteLine("[PANEL][ITEM-ADD] Cleared SEDS ActiveEntityId for ADD.");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[PANEL][ITEM-ADD][WARN] Failed to clear SEDS ActiveEntityId: {ex}");
+#endif
+            }
+        }
+
         private void ShowAddEditCategoryItem()
         {
             if (_selectedCategoryKey == 0)
@@ -266,6 +287,9 @@ namespace MWPV.View.UserControls
 #endif
                 return;
             }
+
+            // ADD MODE RULE: caller clears SEDS BEFORE editor is created/shown.
+            ClearActiveEntityIdForAdd();
 
             if (_categoryItemEdit != null)
             {
@@ -277,6 +301,7 @@ namespace MWPV.View.UserControls
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
+            // Editor receives category context only. Mode is determined by SEDS (read-only).
             _categoryItemEdit.ConfigureForAdd(_selectedCategoryKey, _selectedCategoryName);
 
             AddEditItemOverlayHost.Content = _categoryItemEdit;

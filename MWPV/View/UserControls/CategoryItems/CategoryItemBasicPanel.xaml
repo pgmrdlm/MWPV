@@ -1,0 +1,634 @@
+﻿<!-- CategoryItemBasicPanel.xaml (FULL REWRITE) -->
+<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="520"
+             d:DesignWidth="900"
+             Focusable="True">
+
+    <UserControl.Resources>
+
+        <!-- Info strip colors (match BankCards / AppEntryWindow InfoBanner) -->
+        <SolidColorBrush x:Key="InfoBannerBackground" Color="#1E40AF"/>
+        <SolidColorBrush x:Key="InfoBannerBorder"     Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="InfoBannerForeground" Color="White"/>
+
+        <!-- Common error brush -->
+        <SolidColorBrush x:Key="FieldErrorBrush" Color="#D32F2F"/>
+
+        <!-- Small square primary button (same as BankCards) -->
+        <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="UseLayoutRounding" Value="True"/>
+            <Setter Property="Background" Value="{DynamicResource PrimaryNormalBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                CornerRadius="4"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryPressedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBrush}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledForeground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </UserControl.Resources>
+
+    <Grid Margin="20"
+          Background="Bisque"
+          Grid.IsSharedSizeScope="True">
+
+        <!-- ROWS -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- 0 item name -->
+            <RowDefinition Height="Auto"/>
+            <!-- 1 item name error -->
+            <RowDefinition Height="Auto"/>
+            <!-- 2 password -->
+            <RowDefinition Height="Auto"/>
+            <!-- 3 verify -->
+            <RowDefinition Height="Auto"/>
+            <!-- 4 verify error -->
+            <RowDefinition Height="Auto"/>
+            <!-- 5 strength -->
+            <RowDefinition Height="Auto"/>
+            <!-- 6 PIN -->
+            <RowDefinition Height="Auto"/>
+            <!-- 7 PIN error -->
+            <RowDefinition Height="10"/>
+            <!-- 8 spacer -->
+            <RowDefinition Height="Auto"/>
+            <!-- 9 user/url -->
+            <RowDefinition Height="10"/>
+            <!-- 10 spacer -->
+            <RowDefinition Height="Auto"/>
+            <!-- 11 phone + email -->
+            <RowDefinition Height="Auto"/>
+            <!-- 12 phone/email errors -->
+            <RowDefinition Height="10"/>
+            <!-- 13 spacer -->
+            <RowDefinition Height="Auto"/>
+            <!-- 14 notes -->
+            <RowDefinition Height="Auto"/>
+            <!-- 15 info/buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- IMPORTANT: col 4 used to host URL/Email; now that they’re in col 2,
+             col 4 must NOT keep stealing width (that’s what was clipping the email reveal). -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="24"/>
+            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="0"/>
+            <ColumnDefinition Width="0"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ================= ITEM NAME ================= -->
+        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
+            <Label Content="* Category Item Name"
+                   FontWeight="Bold"
+                   ToolTip="Required field"/>
+            <TextBox x:Name="txtItemName"
+                     Height="28"
+                     MinWidth="320"
+                     HorizontalAlignment="Left"/>
+        </StackPanel>
+
+        <!-- ITEM NAME ERROR -->
+        <StackPanel x:Name="ItemNameErrorPanel"
+                    Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <TextBlock x:Name="ItemNameErrorText"
+                       Foreground="{StaticResource FieldErrorBrush}"
+                       FontWeight="Bold"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ================= PASSWORD ================= -->
+        <Label Grid.Row="2" Grid.Column="0"
+               Content="* Password"
+               FontWeight="Bold"
+               ToolTip="Required field"/>
+
+        <Grid Grid.Row="2"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Margin="0,22,0,0"
+              Height="28"
+              MinWidth="320"
+              HorizontalAlignment="Left">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <PasswordBox x:Name="pwdPassword"
+                             VerticalAlignment="Center"
+                             Height="28"
+                             MinWidth="260"
+                             HorizontalAlignment="Stretch"
+                             PasswordChanged="pwdPassword_PasswordChanged"
+                             GotFocus="pwdPassword_GotFocus"
+                             PreviewKeyDown="PwdPassword_PreviewKeyDown"/>
+                <TextBox x:Name="txtPasswordPlain"
+                         VerticalAlignment="Center"
+                         Height="28"
+                         MinWidth="260"
+                         HorizontalAlignment="Stretch"
+                         IsReadOnly="True"
+                         IsHitTestVisible="False"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Visibility="Collapsed"
+                         Foreground="Black"/>
+            </Grid>
+
+            <Button x:Name="btnGeneratePassword"
+                    Grid.Column="1"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    ToolTip="Generate password"
+                    Click="BtnGeneratePassword_Click">
+                <Viewbox Stretch="Uniform">
+                    <Canvas Width="18" Height="18">
+                        <Path Fill="Black"
+                              Data="M9,1.6 L10.1,5.3 13.6,4.2 11.6,7.3 15.4,8.4 11.6,9.5 13.6,12.6 10.1,11.5 9,15.2 7.9,11.5 4.4,12.6 6.4,9.5 2.6,8.4 6.4,7.3 4.4,4.2 7.9,5.3 z"/>
+                    </Canvas>
+                </Viewbox>
+            </Button>
+
+            <Button x:Name="btnTogglePasswordReveal"
+                    Grid.Column="2"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    ToolTip="Show/Hide password"
+                    Click="BtnTogglePasswordReveal_Click">
+                <Viewbox Stretch="Uniform">
+                    <Grid Width="20" Height="20">
+                        <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                        <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Ellipse Width="3" Height="3" Fill="Black"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </Viewbox>
+            </Button>
+
+            <CheckBox x:Name="chkBookmarkOnly"
+                      Grid.Column="3"
+                      VerticalAlignment="Center"
+                      Margin="8,0,0,0"
+                      Content="Bookmark only"
+                      ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
+        </Grid>
+
+        <!-- ================= VERIFY ================= -->
+        <Label x:Name="lblVerifyPassword"
+               Grid.Row="3" Grid.Column="0"
+               Content="Verify Password"
+               FontWeight="Bold"
+               Visibility="Collapsed"/>
+
+        <Grid x:Name="VerifyRow"
+              Grid.Row="3"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Margin="0,22,0,0"
+              Height="28"
+              MinWidth="320"
+              HorizontalAlignment="Left"
+              Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <PasswordBox x:Name="pwdVerify"
+                             VerticalAlignment="Center"
+                             Height="28"
+                             HorizontalAlignment="Stretch"
+                             PasswordChanged="pwdVerify_PasswordChanged"/>
+                <TextBox x:Name="txtVerifyPlain"
+                         VerticalAlignment="Center"
+                         Height="28"
+                         HorizontalAlignment="Stretch"
+                         IsReadOnly="True"
+                         IsHitTestVisible="False"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Visibility="Collapsed"
+                         Foreground="Black"/>
+            </Grid>
+
+            <Button x:Name="btnVerifyDummyGenerate"
+                    Grid.Column="1"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    Visibility="Hidden"
+                    IsHitTestVisible="False"/>
+
+            <Button x:Name="btnToggleVerifyReveal"
+                    Grid.Column="2"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    ToolTip="Show/Hide verification"
+                    Margin="4,0,0,0"
+                    Visibility="Collapsed"
+                    Click="BtnToggleVerifyReveal_Click">
+                <Viewbox Stretch="Uniform">
+                    <Grid Width="20" Height="20">
+                        <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                        <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Ellipse Width="3" Height="3" Fill="Black"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </Viewbox>
+            </Button>
+
+            <Button x:Name="btnVerifyNotUsed"
+                    Grid.Column="3"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    Margin="4,0,0,0"
+                    Visibility="Hidden"
+                    IsHitTestVisible="False"
+                    ToolTip="(not used – spacer only)"/>
+        </Grid>
+
+        <!-- VERIFY ERROR -->
+        <StackPanel x:Name="VerifyErrorPanel"
+                    Grid.Row="4" Grid.Column="0"
+                    Grid.ColumnSpan="3"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <TextBlock x:Name="VerifyErrorText"
+                       Foreground="{StaticResource FieldErrorBrush}"
+                       FontWeight="Bold"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ================= STRENGTH ================= -->
+        <StackPanel x:Name="StrengthPanel"
+                    Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <ProgressBar x:Name="PwStrengthBar"
+                         Height="8"
+                         Minimum="0"
+                         Maximum="1"
+                         Value="0"
+                         Background="#22000000"/>
+            <TextBlock x:Name="PwStrengthText"
+                       Margin="0,4,0,0"
+                       FontSize="12"
+                       Foreground="Black"
+                       Text=""/>
+            <ItemsControl x:Name="PwTipsList"
+                          Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="• "/>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- ================= PIN ================= -->
+        <Label Grid.Row="6" Grid.Column="0"
+               Content="PIN"
+               FontWeight="Bold"
+               ToolTip="Optional. If entered, must be 4–6 digits. Stored encrypted in CategoryItem (no history)."/>
+
+        <Grid Grid.Row="6"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Margin="0,22,0,0"
+              Height="28"
+              MinWidth="320"
+              HorizontalAlignment="Left">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <PasswordBox x:Name="pwdPin"
+                             Height="28"
+                             MinWidth="260"
+                             VerticalAlignment="Center"
+                             HorizontalAlignment="Stretch"
+                             PasswordChanged="Pin_PasswordChanged"
+                             PreviewTextInput="Pin_PreviewTextInput"
+                             PreviewKeyDown="Pin_PreviewKeyDown"
+                             DataObject.Pasting="Pin_Pasting"/>
+
+                <TextBox x:Name="txtPinPlain"
+                         Height="28"
+                         MinWidth="260"
+                         VerticalAlignment="Center"
+                         HorizontalAlignment="Stretch"
+                         IsReadOnly="True"
+                         IsTabStop="False"
+                         IsHitTestVisible="False"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Visibility="Collapsed"
+                         Foreground="Black"/>
+            </Grid>
+
+            <Button x:Name="btnTogglePinReveal"
+                    Grid.Column="1"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    Margin="6,0,0,0"
+                    Visibility="Visible"
+                    IsEnabled="True"
+                    ToolTip="Show/Hide PIN"
+                    Click="Pin_ToggleReveal_Click">
+                <Viewbox Stretch="Uniform">
+                    <Grid Width="20" Height="20">
+                        <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                        <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Ellipse Width="3" Height="3" Fill="Black"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </Viewbox>
+            </Button>
+        </Grid>
+
+        <!-- PIN ERROR -->
+        <StackPanel x:Name="PinErrorPanel"
+                    Grid.Row="7" Grid.Column="0"
+                    Grid.ColumnSpan="3"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <TextBlock x:Name="PinErrorText"
+                       Foreground="{StaticResource FieldErrorBrush}"
+                       FontWeight="Bold"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ================= USER / URL ================= -->
+        <StackPanel Grid.Row="9" Grid.Column="0">
+            <Label Content="User Name" FontWeight="Bold"/>
+            <TextBox x:Name="txtUsername"
+                     Margin="0,0,0,0"
+                     Height="28"
+                     MinWidth="240"
+                     HorizontalAlignment="Left"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="9" Grid.Column="2">
+            <Label Content="URL or Absolute Location" FontWeight="Bold"/>
+            <TextBox x:Name="txtUrl"
+                     Height="28"
+                     MinWidth="220"
+                     HorizontalAlignment="Stretch"/>
+        </StackPanel>
+
+        <!-- ================= PHONE + EMAIL ================= -->
+        <StackPanel Grid.Row="11" Grid.Column="0">
+            <Label Content="Phone Number" FontWeight="Bold"/>
+
+            <Grid Margin="0,0,0,0"
+                  Height="28"
+                  MinWidth="240"
+                  HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <PasswordBox x:Name="txtPhone"
+                                 VerticalAlignment="Center"
+                                 Height="28"
+                                 MinWidth="240"
+                                 PasswordChanged="txtPhone_PasswordChanged"
+                                 LostFocus="txtPhone_LostFocus"/>
+                    <TextBox x:Name="txtPhonePlain"
+                             VerticalAlignment="Center"
+                             Height="28"
+                             MinWidth="240"
+                             IsReadOnly="True"
+                             IsHitTestVisible="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Visibility="Collapsed"
+                             Foreground="Black"/>
+                </Grid>
+
+                <Button x:Name="btnTogglePhoneReveal"
+                        Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        ToolTip="Show/Hide phone number"
+                        Click="BtnTogglePhoneReveal_Click">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="20" Height="20">
+                            <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                            <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Ellipse Width="3" Height="3" Fill="Black"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Viewbox>
+                </Button>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="11" Grid.Column="2">
+            <Label Content="Email" FontWeight="Bold"/>
+
+            <Grid Margin="0,0,0,0"
+                  Height="28"
+                  MinWidth="220"
+                  HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <PasswordBox x:Name="pwdEmail"
+                                 VerticalAlignment="Center"
+                                 Height="28"
+                                 HorizontalAlignment="Stretch"
+                                 PasswordChanged="pwdEmail_PasswordChanged"
+                                 LostFocus="pwdEmail_LostFocus"/>
+                    <TextBox x:Name="txtEmailPlain"
+                             VerticalAlignment="Center"
+                             Height="28"
+                             HorizontalAlignment="Stretch"
+                             IsReadOnly="True"
+                             IsHitTestVisible="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Visibility="Collapsed"
+                             Foreground="Black"/>
+                </Grid>
+
+                <Button x:Name="btnToggleEmailReveal"
+                        Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        Margin="6,0,0,0"
+                        ToolTip="Show/Hide email"
+                        Click="BtnToggleEmailReveal_Click">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="20" Height="20">
+                            <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                            <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Ellipse Width="3" Height="3" Fill="Black"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Viewbox>
+                </Button>
+            </Grid>
+        </StackPanel>
+
+        <!-- PHONE ERROR -->
+        <StackPanel x:Name="PhoneErrorPanel"
+                    Grid.Row="12" Grid.Column="0"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <TextBlock x:Name="PhoneErrorText"
+                       Foreground="{StaticResource FieldErrorBrush}"
+                       FontWeight="Bold"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- EMAIL ERROR -->
+        <StackPanel x:Name="EmailErrorPanel"
+                    Grid.Row="12" Grid.Column="2"
+                    Margin="0,6,0,0"
+                    Visibility="Collapsed">
+            <TextBlock x:Name="EmailErrorText"
+                       Foreground="{StaticResource FieldErrorBrush}"
+                       FontWeight="Bold"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- ================= NOTES ================= -->
+        <StackPanel Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3">
+            <Label Content="Freeform Notes" FontWeight="Bold"/>
+            <TextBox x:Name="txtDescription"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     Height="48"/>
+        </StackPanel>
+
+        <!-- ================= INFO STRIP + BUTTONS ================= -->
+        <Grid Grid.Row="15"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Margin="0,16,0,10"
+              VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="ActionInfoStrip"
+                    Grid.Column="0"
+                    Margin="0,0,12,0"
+                    Padding="10"
+                    Background="{StaticResource InfoBannerBackground}"
+                    BorderBrush="{StaticResource InfoBannerBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    VerticalAlignment="Center">
+                <TextBlock x:Name="ActionInfoText"
+                           Foreground="{StaticResource InfoBannerForeground}"
+                           FontSize="13"
+                           TextWrapping="Wrap">
+                    <Run Text="Tab changes save when there are no errors.  "/>
+                    <Run Text="Save " FontWeight="SemiBold"/>
+                    <Run Text="saves and closes.  "/>
+                    <Run Text="Cancel " FontWeight="SemiBold"/>
+                    <Run Text="exits (no save)."/>
+                </TextBlock>
+            </Border>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <Button x:Name="btnSubmit"
+                        Style="{StaticResource DialogPrimary}"
+                        Margin="0,0,12,0"
+                        Click="btnSubmit_Click">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   Text="&#xE8FB;"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Text="Save"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="btnCancel"
+                        Style="{StaticResource DialogSecondary}"
+                        Click="btnCancel_Click">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   Text="&#xE711;"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Text="Cancel"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+    </Grid>
+</UserControl>
