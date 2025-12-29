@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,6 +19,13 @@ namespace MWPV.View.UserControls.CategoryItems
         public event EventHandler? SaveRequested;
         public event EventHandler? CancelRequested;
         public event EventHandler<string>? PasswordValidationFailed;
+
+        // ======================= IMPORTANT =======================
+        // CI_SecretStorage is NOT NULL in DB. If caller passes null, INSERT fails.
+        // Until we formalize the enum, we guarantee a non-null default here.
+        //
+        // TODO (later): replace 0 with your real enum value (e.g. SecretStorageType.None)
+        private const int SecretStorage_Default = 0;
 
         // Reveal state flags
         private bool _mainRevealed;
@@ -162,7 +171,13 @@ namespace MWPV.View.UserControls.CategoryItems
             txtUsername.Text = email;
         }
 
-        public bool TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone)
+        public bool TryValidateAllForSubmit(
+            out bool isBookmarkOnly,
+            out bool okName,
+            out bool okPassword,
+            out bool okPin,
+            out bool okEmail,
+            out bool okPhone)
         {
             isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
 
@@ -222,6 +237,108 @@ namespace MWPV.View.UserControls.CategoryItems
                 txtPhone.Focus();
         }
 
+        /* ======================= NEW: safe non-null SecretStorage ======================= */
+
+        /// <summary>
+        /// Returns a NON-NULL SecretStorage value for DB inserts.
+        /// We default to SecretStorage_Default to prevent CI_SecretStorage NOT NULL failures.
+        /// </summary>
+        public int GetSecretStorageOrDefault()
+        {
+            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+            return GetSecretStorageOrDefault(isBookmarkOnly);
+        }
+
+        /// <summary>
+        /// Overload for callers who already calculated bookmark-only.
+        /// </summary>
+        public int GetSecretStorageOrDefault(bool isBookmarkOnly)
+        {
+            // For v1, we keep this simple:
+            // - Bookmark-only still needs a value.
+            // - Non-bookmark also needs a value.
+            // Later, we can map different modes if we formalize storage types.
+            _ = isBookmarkOnly;
+            return SecretStorage_Default;
+        }
+
+        /* ======================= Value getters for Service Insert ======================= */
+
+        public string GetItemNameTrim() => (txtItemName.Text ?? string.Empty).Trim();
+
+        public string? GetDescriptionTrimOrNull()
+        {
+            var s = (txtDescription.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetUsernameTrimOrNull()
+        {
+            var s = (txtUsername.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetUrlTrimOrNull()
+        {
+            var s = (txtUrl.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetEmailTrimOrNull()
+        {
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetPhoneTrimOrNull()
+        {
+            var s = (txtPhone.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        /// <summary>
+        /// Build PasswordHistory payload for INSERT.
+        /// TEMP: DPAPI protects the password bytes; replace with vault crypto later.
+        /// Bookmark-only => empty blob + SHA-256(empty).
+        /// </summary>
+        public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
+        {
+            padLen = null;
+
+            if (isBookmarkOnly)
+            {
+                pwCipher = Array.Empty<byte>();
+                pwSig = Sha256(pwCipher);
+                return;
+            }
+
+            var pw = pwdPassword.Password ?? string.Empty;
+            if (pw.Length == 0)
+            {
+                pwCipher = Array.Empty<byte>();
+                pwSig = Sha256(pwCipher);
+                return;
+            }
+
+            byte[] plain = Encoding.UTF8.GetBytes(pw);
+            try
+            {
+                byte[] entropy = Encoding.UTF8.GetBytes("MWPV:CIPaH:PW:v1");
+                pwCipher = ProtectedData.Protect(plain, entropy, DataProtectionScope.CurrentUser);
+                pwSig = Sha256(pwCipher);
+            }
+            finally
+            {
+                Array.Clear(plain, 0, plain.Length);
+            }
+        }
+
+        private static byte[] Sha256(byte[] data)
+        {
+            using var sha = SHA256.Create();
+            return sha.ComputeHash(data ?? Array.Empty<byte>());
+        }
+
         /* ======================= Save / Cancel (raise to host) ======================= */
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
@@ -272,6 +389,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidateItemName(bool forSubmit)
         {
+            _ = forSubmit;
+
             var name = (txtItemName.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
@@ -765,7 +884,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_ToggleReveal_Click(object? sender, RoutedEventArgs e)
         {
-            // Button always enabled now. If empty, do nothing.
             if (string.IsNullOrEmpty(pwdPin.Password))
                 return;
 
@@ -793,6 +911,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidatePin(bool forSubmit)
         {
+            _ = forSubmit;
+
             var raw = pwdPin.Password ?? string.Empty;
 
             if (raw.Length == 0)
@@ -1017,6 +1137,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidatePhoneNumber(bool forSubmit)
         {
+            _ = forSubmit;
+
             var raw = txtPhone.Password ?? string.Empty;
             var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
             int len = digitsOnly.Length;

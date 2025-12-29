@@ -22,8 +22,8 @@ VALUES (
     @CI_AccountPhoneNumber,
     @CI_SecretMeta,
     @CI_SecretData,
-    @CI_SecretStorage,
+    COALESCE(@CI_SecretStorage, '0'),
     COALESCE(@IsActive, 1)
-);
+)
+RETURNING ItemId;
 
-SELECT last_insert_rowid() AS ItemId;

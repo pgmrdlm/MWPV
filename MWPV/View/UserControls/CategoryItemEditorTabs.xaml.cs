@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
+using MWPV.Services;
 using MWPV.View.UserControls.CategoryItems;
 
 namespace MWPV.View.UserControls
@@ -42,16 +43,11 @@ namespace MWPV.View.UserControls
         private const int TabIndexBankCards = 1;
 
         /*
-         * ADD vs EDIT (CALLER-OWNED SEDS)
-         * ------------------------------
+         * ADD vs EDIT (SEDS is single source of truth)
+         * -------------------------------------------
          * Source of truth is the presence of a >0 numeric primary key in SEDS:
          *   - Missing / <=0 => Add
          *   - >0            => Edit
-         *
-         * IMPORTANT DESIGN RULE:
-         * - This editor does NOT set or clear SEDS.
-         * - The caller must clear SEDS before launching Add.
-         * - The caller must set SEDS before launching Edit/View.
          */
         private const string SedsKey_ActiveEntityId = "MWPV.Context.ActiveEntityId";
 
@@ -70,7 +66,6 @@ namespace MWPV.View.UserControls
             }
             catch
             {
-                // Treat failures as "no id"
                 return null;
             }
         }
@@ -140,13 +135,13 @@ namespace MWPV.View.UserControls
 
 #if DEBUG
             if (IsEditModeFromSeds())
-                Debug.WriteLine("[ITEM-TABS][WARN] ConfigureForAdd called but SEDS ActiveEntityId is present. Caller should clear SEDS BEFORE launching Add.");
+                Debug.WriteLine("[ITEM-TABS][WARN] ConfigureForAdd called but SEDS ActiveEntityId is present. Caller should clear it BEFORE launching Add.");
 #endif
 
             _isEditMode = false;
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (caller-owned SEDS)");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (SEDS-derived)");
 #endif
             BasicPanel?.ClearForm();
             BasicPanel?.ResetUiState();
@@ -162,7 +157,7 @@ namespace MWPV.View.UserControls
             _isEditMode = isEdit;
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(isEdit ? "EDIT" : "ADD")} (derived from SEDS)");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(isEdit ? "EDIT" : "ADD")} (SEDS-derived)");
 #endif
             // TODO: Map existingItem -> fields once persistence is wired.
             BasicPanel?.ResetUiState();
@@ -184,7 +179,6 @@ namespace MWPV.View.UserControls
             try
             {
                 TryPreparePanelsForHostClose();
-
                 SetStatus("");
             }
             finally
@@ -211,6 +205,93 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS] BankCardsPanel.WipeAllForHostClose failed: {ex}");
 #endif
+            }
+        }
+
+        /* ======================= Persistence (INSERT only today) ======================= */
+
+        private enum PersistTrigger
+        {
+            LeaveBasicTab,
+            SaveAndExit
+        }
+
+        private bool TryPersistBasicIfNeeded(PersistTrigger trigger, bool isBookmarkOnly)
+        {
+            // Today: INSERT only. Edit/Update is later.
+            if (_isClosing)
+                return true;
+
+            if (BasicPanel == null)
+                return true;
+
+            // If already edit-mode (SEDS has an id), do nothing for now (UPDATE later).
+            if (IsEditModeFromSeds())
+                return true;
+
+            try
+            {
+                // Gather values from Basic panel
+                string name = BasicPanel.GetItemNameTrim();
+                string? desc = BasicPanel.GetDescriptionTrimOrNull();
+                string? username = BasicPanel.GetUsernameTrimOrNull();
+                string? url = BasicPanel.GetUrlTrimOrNull();
+                string? email = BasicPanel.GetEmailTrimOrNull();
+                string? phone = BasicPanel.GetPhoneTrimOrNull();
+
+                // Secret blobs not wired yet (later: secure JSON)
+                byte[]? secretMeta = null;
+                byte[]? secretData = null;
+                int? secretStorage = null;
+
+                // PasswordHistory payload:
+                // - Bookmark-only => empty blobs (temporary marker; later we can switch to "no history row")
+                BasicPanel.BuildPasswordHistoryPayload(isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig);
+
+                long newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
+                    categoryKey: _categoryKey,
+                    name: name,
+                    description: desc,
+                    username: username,
+                    signInUrl: url,
+                    accountEmail: email,
+                    accountPhoneNumber: phone,
+                    secretMeta: secretMeta,
+                    secretData: secretData,
+                    secretStorage: secretStorage,
+                    isActive: 1,
+                    pwCipher: pwCipher,
+                    pwPadLen: padLen,
+                    pwSig: pwSig
+                );
+
+                if (newId <= 0)
+                {
+                    SetStatus("Insert failed (no ItemId returned).");
+                    return false;
+                }
+
+                // Single source of truth: set ActiveEntityId immediately to prevent double-insert.
+                SecureEncryptedDataStore.SetString(SedsKey_ActiveEntityId, newId.ToString(CultureInfo.InvariantCulture));
+                _isEditMode = true;
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS");
+#endif
+
+                // For tab-leave, keep UI open; for SaveAndExit, caller will close.
+                if (trigger == PersistTrigger.LeaveBasicTab)
+                    SetStatus(""); // stay quiet on autosave
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED: {ex}");
+#endif
+                SetStatus("Insert failed. See debug output.");
+                return false;
             }
         }
 
@@ -284,12 +365,19 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
-                // If something else requested save while not on Basic, force Basic.
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Fix the highlighted errors before saving.");
+                return;
+            }
+
+            // INSERT (if needed) before closing
+            if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
+            {
+                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                    ItemTabs.SelectedIndex = TabIndexBasic;
                 return;
             }
 
@@ -334,6 +422,14 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+            // INSERT (if needed) before closing
+            if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
+            {
+                if (ItemTabs != null)
+                    ItemTabs.SelectedIndex = TabIndexBasic;
+                return;
+            }
+
             WipeAllForHostClose();
             Submitted?.Invoke(this, EventArgs.Empty);
         }
@@ -360,10 +456,10 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
-            // Guard leaving BASIC: no tab switch if Basic has errors (matches the banner).
+            // Leaving BASIC: validate; if ok, auto-INSERT (if needed).
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
-                bool allowLeaveBasic = TryValidateAndAllowLeaveBasic();
+                bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
                 if (!allowLeaveBasic)
                 {
                     _handlingTabSelection = true;
@@ -404,7 +500,7 @@ namespace MWPV.View.UserControls
             _lastTabIndex = newIndex;
         }
 
-        private bool TryValidateAndAllowLeaveBasic()
+        private bool TryValidateAndPersistOnLeaveBasic()
         {
             SetStatus("");
 
@@ -419,6 +515,10 @@ namespace MWPV.View.UserControls
                 SetStatus("Cannot leave Basic tab — fix highlighted errors first.");
                 return false;
             }
+
+            // Auto-INSERT if this is a new item.
+            if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
+                return false;
 
             return true;
         }
