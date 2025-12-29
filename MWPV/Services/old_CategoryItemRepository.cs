@@ -9,11 +9,11 @@ using Utilities.Helpers; // CategoryItemDetailJson, SecureDataValidator, Categor
 
 namespace MWPV.Services
 {
-    public sealed class CategoryItemRepository
+    public sealed class old_CategoryItemRepository
     {
         private readonly Func<DbConnection> _open;
         private readonly string _sqlDir;
-        public CategoryItemRepository(Func<DbConnection> openConnection, string sqlDirectory)
+        public old_CategoryItemRepository(Func<DbConnection> openConnection, string sqlDirectory)
         { _open = openConnection; _sqlDir = sqlDirectory; }
 
         // ---- GRID (3 columns per row) ----

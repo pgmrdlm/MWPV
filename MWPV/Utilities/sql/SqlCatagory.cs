@@ -50,7 +50,7 @@ namespace Utilities.Sql
             "s_CategoryItem_select_by_category.sql",
 
             // Category Item Password history
-            "s_CategoryItemPasswordHistory_insert.sql",
+            "s_CategoryItem_exists_by_name.sql",
             "s_CategoryItemPasswordHistory_insert.sql",
             "s_CategoryItemPasswordHistory_select_most_recent.sql",
             "s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql",
