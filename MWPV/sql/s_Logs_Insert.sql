@@ -4,7 +4,7 @@ INSERT INTO Logs
   LoginId, ItemId, MachineId,
   DeviceMake, DeviceModel, OSVersion, DeviceIdHash, InstallType,
   AppVersion, IsCrash,
-  Payload, PayloadFmt, PayloadVer, KeySetVersion, StackHash
+  KeySetVersion, StackHash
 )
 VALUES
 (
@@ -12,5 +12,5 @@ VALUES
   @LoginId, @ItemId, @MachineId,
   @DeviceMake, @DeviceModel, @OSVersion, @DeviceIdHash, @InstallType,
   @AppVersion, @IsCrash,
-  @Payload, @PayloadFmt, @PayloadVer, @KeySetVersion, @StackHash
+  @KeySetVersion, @StackHash
 );

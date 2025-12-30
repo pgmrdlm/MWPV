@@ -201,10 +201,7 @@ CREATE TABLE Logs (
     DeviceIdHash  TEXT,
     InstallType   TEXT,
     AppVersion    TEXT    NOT NULL DEFAULT '',
-    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
-    Payload       BLOB,
-    PayloadFmt    TEXT,
-    PayloadVer    INTEGER NOT NULL DEFAULT 1,
+    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),    
     KeySetVersion INTEGER NOT NULL DEFAULT 1,
     StackHash     TEXT
 );
