@@ -4,7 +4,7 @@ using System.Globalization;
 namespace MWPV.Models
 {
     /// <summary>
-    /// POCO representing a row from the Logs table (payload not included).
+    /// POCO representing a row from the Logs table (NO payload fields).
     /// Suitable for binding to a DataGrid and a right-side details pane.
     /// </summary>
     public class Logs
@@ -28,15 +28,7 @@ namespace MWPV.Models
         // Optional message column (binds to the DataGrid "Message" column and details pane)
         public string? Message { get; set; }
 
-        // Payload metadata only (blob not surfaced here)
-        public string? PayloadFmt { get; set; }         // e.g., "gcm-json-v1", "json", "none"
-        public int PayloadVer { get; set; } = 1;
-        public int KeySetVersion { get; set; } = 1;
-
         public string? StackHash { get; set; }
-
-        // Optional: if your SELECT includes length(Payload) AS PayloadSize
-        public int? PayloadSize { get; set; }
 
         // Convenience (parsed timestamps)
         public DateTimeOffset? WhenParsed => ParseUtc(WhenUtc);
