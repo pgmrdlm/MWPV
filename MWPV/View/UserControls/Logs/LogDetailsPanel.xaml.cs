@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Globalization;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,9 +12,6 @@ namespace MWPV.View.UserControls
         public LogDetailsPanel()
         {
             InitializeComponent();
-
-            btnCopy.Click += BtnCopy_Click;
-            btnClear.Click += BtnClear_Click;
 
             // Wipe when hidden
             IsVisibleChanged += (_, e) =>
@@ -75,7 +71,7 @@ namespace MWPV.View.UserControls
         public static readonly DependencyProperty MessageProperty =
             DependencyProperty.Register(nameof(Message), typeof(string), typeof(LogDetailsPanel), new PropertyMetadata(""));
 
-        // Backing fields for safe copy + stable meta refresh
+        // Backing fields for stable meta refresh
         private string _rawCreatedUtc = "";
         private string _rawLevel = "";
         private string _rawSource = "";
@@ -206,41 +202,6 @@ namespace MWPV.View.UserControls
 
             return "";
         }
-
-        // ===========================
-        // UI Events
-        // ===========================
-
-        private void BtnCopy_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Compose a friendly details block for copy (NO payload)
-                var sb = new StringBuilder();
-
-                if (!string.IsNullOrWhiteSpace(EntryId)) sb.AppendLine($"Id: {EntryId}");
-                if (!string.IsNullOrWhiteSpace(CreatedText)) sb.AppendLine($"Created (UTC): {CreatedText}");
-                if (!string.IsNullOrWhiteSpace(MetaText)) sb.AppendLine($"Level / Source / Event: {MetaText}");
-                if (!string.IsNullOrWhiteSpace(Message)) sb.AppendLine($"Message: {Message}");
-
-                Clipboard.SetText(sb.ToString());
-
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[LOGS][Details] Copied details to clipboard (no payload).");
-#endif
-            }
-            catch
-            {
-                // ignore clipboard exceptions
-            }
-        }
-
-        private void BtnClear_Click(object sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine("[LOGS][Details] Clear button clicked.");
-#endif
-            Clear();
-        }
     }
 }
+    
