@@ -5,6 +5,7 @@ INSERT INTO CategoryItem (
     CI_Description,
     CI_Username,
     CI_SignInUrl,
+    CI_BookMarkOnly,
     CI_AccountEmail,
     CI_AccountPhoneNumber,
     CI_SecretMeta,
@@ -18,6 +19,7 @@ VALUES (
     @CI_Description,
     @CI_Username,
     @CI_SignInUrl,
+    COALESCE(@CI_BookMarkOnly, 0),
     @CI_AccountEmail,
     @CI_AccountPhoneNumber,
     @CI_SecretMeta,
@@ -26,4 +28,3 @@ VALUES (
     COALESCE(@IsActive, 1)
 )
 RETURNING ItemId;
-
