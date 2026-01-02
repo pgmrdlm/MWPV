@@ -6,6 +6,7 @@ SELECT
     CI_Description,
     CI_Username,
     CI_SignInUrl,
+    CI_BookMarkOnly,
     CI_AccountEmail,
     CI_AccountPhoneNumber,
     CI_SecretMeta,

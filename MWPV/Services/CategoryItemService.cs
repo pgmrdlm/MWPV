@@ -10,13 +10,16 @@
 // CHANGE IN THIS REWRITE:
 // - Added public InsertCategoryItemOnly(...) wrapper for bookmark-only flow
 //   (inserts CategoryItem WITHOUT launching PasswordHistory insert)
+//
+// CHANGE NOW (THIS TASK):
+// - Wired CI_BookMarkOnly through the insert SQL + service layer.
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using MWPV.Services;       // LogCatalogService (same namespace, but explicit for clarity)
+using MWPV.Services;       // LogCatalogService
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;       // SqlCagegory (SQL catalog/loader)
 using MWPV.Utilities.Json; // AppJson (LogPayloadDto + serializer helpers)
@@ -157,6 +160,7 @@ namespace MWPV.Services
 
                 try
                 {
+                    // Bookmark-only flow => CI_BookMarkOnly = 1
                     newItemId = InsertCategoryItem(
                         conn, tx, itemSql,
                         categoryKey,
@@ -164,6 +168,7 @@ namespace MWPV.Services
                         description,
                         username,
                         signInUrl,
+                        bookMarkOnly: 1,
                         accountEmail,
                         accountPhoneNumber,
                         secretMeta,
@@ -177,7 +182,7 @@ namespace MWPV.Services
                     tx.Commit();
 
 #if DEBUG
-                    Debug.WriteLine($"[CAT_ITEM][INSERT-ONLY][OK] ItemId={newItemId} CatKey={categoryKey}");
+                    Debug.WriteLine($"[CAT_ITEM][INSERT-ONLY][OK] ItemId={newItemId} CatKey={categoryKey} BookMarkOnly=1");
 #endif
                 }
                 catch
@@ -199,7 +204,8 @@ namespace MWPV.Services
                     secretMetaPresent: secretMeta != null && secretMeta.Length > 0,
                     secretDataPresent: secretData != null && secretData.Length > 0,
                     secretStorage: NormalizeSecretStorage(secretStorage),
-                    isActive: isActive);
+                    isActive: isActive,
+                    bookMarkOnly: 1);
 
                 return newItemId;
             }
@@ -267,7 +273,7 @@ namespace MWPV.Services
 
                 try
                 {
-                    // 1) Insert CategoryItem (must return ItemId)
+                    // Normal password flow => CI_BookMarkOnly = 0
                     newItemId = InsertCategoryItem(
                         conn, tx, itemSql,
                         categoryKey,
@@ -275,6 +281,7 @@ namespace MWPV.Services
                         description,
                         username,
                         signInUrl,
+                        bookMarkOnly: 0,
                         accountEmail,
                         accountPhoneNumber,
                         secretMeta,
@@ -300,7 +307,7 @@ namespace MWPV.Services
                     tx.Commit();
 
 #if DEBUG
-                    Debug.WriteLine($"[CAT_ITEM][INSERT][OK] ItemId={newItemId} CatKey={categoryKey}");
+                    Debug.WriteLine($"[CAT_ITEM][INSERT][OK] ItemId={newItemId} CatKey={categoryKey} BookMarkOnly=0");
                     Debug.WriteLine($"[CAT_ITEM][PW_HIST][INSERT][OK] PwHistId={newPwHistId} ItemId={newItemId}");
 #endif
                 }
@@ -324,14 +331,15 @@ namespace MWPV.Services
                     secretDataPresent: secretData != null && secretData.Length > 0,
                     secretStorage: NormalizeSecretStorage(secretStorage),
                     isActive: isActive,
-                    pwHistId: newPwHistId);
+                    pwHistId: newPwHistId,
+                    bookMarkOnly: 0);
 
                 return newItemId;
             }
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error inserting category item + password history");
-                return 0; // Abend may terminate; this keeps compiler/flow happy.
+                return 0;
             }
         }
 
@@ -348,6 +356,7 @@ namespace MWPV.Services
             string? description,
             string? username,
             string? signInUrl,
+            int bookMarkOnly,        // 0/1 -> CI_BookMarkOnly
             string? accountEmail,
             string? accountPhoneNumber,
             byte[]? secretMeta,
@@ -366,6 +375,9 @@ namespace MWPV.Services
             AddText(cmd, "@CI_Description", description);
             AddText(cmd, "@CI_Username", username);
             AddText(cmd, "@CI_SignInUrl", signInUrl);
+
+            AddInt32(cmd, "@CI_BookMarkOnly", NormalizeBookMarkOnly(bookMarkOnly));
+
             AddText(cmd, "@CI_AccountEmail", accountEmail);
             AddText(cmd, "@CI_AccountPhoneNumber", accountPhoneNumber);
 
@@ -444,7 +456,8 @@ namespace MWPV.Services
             bool secretMetaPresent,
             bool secretDataPresent,
             int secretStorage,
-            int? isActive)
+            int? isActive,
+            int bookMarkOnly)
         {
             try
             {
@@ -458,6 +471,7 @@ namespace MWPV.Services
                     {
                         itemId,
                         categoryKey,
+                        bookMarkOnly,
                         fieldsPresent = new
                         {
                             name = namePresent,
@@ -501,7 +515,8 @@ namespace MWPV.Services
             bool secretDataPresent,
             int secretStorage,
             int? isActive,
-            long pwHistId)
+            long pwHistId,
+            int bookMarkOnly)
         {
             try
             {
@@ -516,6 +531,7 @@ namespace MWPV.Services
                     {
                         itemId,
                         categoryKey,
+                        bookMarkOnly,
                         fieldsPresent = new
                         {
                             name = namePresent,
@@ -599,6 +615,17 @@ namespace MWPV.Services
                 2 => 2,
                 _ => throw new ArgumentOutOfRangeException(nameof(secretStorage), secretStorage.Value,
                         "CI_SecretStorage must be 0, 1, or 2.")
+            };
+        }
+
+        private static int NormalizeBookMarkOnly(int value)
+        {
+            // CI_BookMarkOnly is intended to be 0/1.
+            return value switch
+            {
+                0 => 0,
+                1 => 1,
+                _ => throw new ArgumentOutOfRangeException(nameof(value), value, "CI_BookMarkOnly must be 0 or 1.")
             };
         }
 

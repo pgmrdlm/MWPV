@@ -80,6 +80,7 @@ CREATE TABLE CategoryItem (
     CI_Description           TEXT,
     CI_Username              TEXT,
     CI_SignInUrl             TEXT,
+    CI_BookMarkOnly          INTEGER NOT NULL DEFAULT 0 CHECK (CI_BookMarkOnly IN (0,1)),
     CI_AccountEmail          BLOB,
     CI_AccountPhoneNumber    BLOB,
     CI_SecretMeta            BLOB,
