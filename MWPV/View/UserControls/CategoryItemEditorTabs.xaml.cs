@@ -244,26 +244,46 @@ namespace MWPV.View.UserControls
                 byte[]? secretData = null;
                 int? secretStorage = null;
 
-                // PasswordHistory payload:
-                // - Bookmark-only => empty blobs (temporary marker; later we can switch to "no history row")
-                BasicPanel.BuildPasswordHistoryPayload(isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig);
+                long newId;
 
-                long newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
-                    categoryKey: _categoryKey,
-                    name: name,
-                    description: desc,
-                    username: username,
-                    signInUrl: url,
-                    accountEmail: email,
-                    accountPhoneNumber: phone,
-                    secretMeta: secretMeta,
-                    secretData: secretData,
-                    secretStorage: secretStorage,
-                    isActive: 1,
-                    pwCipher: pwCipher,
-                    pwPadLen: padLen,
-                    pwSig: pwSig
-                );
+                // CHANGE: If bookmark-only, do NOT launch PasswordHistory insert at all.
+                if (isBookmarkOnly)
+                {
+                    newId = CategoryItemService.InsertCategoryItemOnly(
+                        categoryKey: _categoryKey,
+                        name: name,
+                        description: desc,
+                        username: username,
+                        signInUrl: url,
+                        accountEmail: email,
+                        accountPhoneNumber: phone,
+                        secretMeta: secretMeta,
+                        secretData: secretData,
+                        secretStorage: secretStorage,
+                        isActive: 1
+                    );
+                }
+                else
+                {
+                    BasicPanel.BuildPasswordHistoryPayload(isBookmarkOnly: false, out byte[] pwCipher, out int? padLen, out byte[] pwSig);
+
+                    newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
+                        categoryKey: _categoryKey,
+                        name: name,
+                        description: desc,
+                        username: username,
+                        signInUrl: url,
+                        accountEmail: email,
+                        accountPhoneNumber: phone,
+                        secretMeta: secretMeta,
+                        secretData: secretData,
+                        secretStorage: secretStorage,
+                        isActive: 1,
+                        pwCipher: pwCipher,
+                        pwPadLen: padLen,
+                        pwSig: pwSig
+                    );
+                }
 
                 if (newId <= 0)
                 {
