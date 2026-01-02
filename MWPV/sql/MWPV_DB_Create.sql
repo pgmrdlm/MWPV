@@ -401,4 +401,42 @@ INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActi
 SELECT 'Misc', 'Everything else', 0, 1
 WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Misc');
 
+/* ComboType: basic_change_fields (Basic tab field-change descriptors) */
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'basic_change_fields', 'Basic tab: changed field descriptors', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'basic_change_fields'
+);
+
+/* Ensure ComboDetail rows for basic_change_fields */
+INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
+SELECT
+    ct.ComboTypeId,
+    v.Seq,
+    v.Code,
+    v.Description,
+    1
+FROM ComboType ct
+JOIN (
+    SELECT 0  AS Seq, 'BASIC_ITEM_NAME'    AS Code, 'Category Item Name changed'     AS Description
+    UNION ALL SELECT 1,  'BASIC_PASSWORD',       'Password changed'
+    UNION ALL SELECT 2,  'BASIC_PIN',            'PIN changed'
+    UNION ALL SELECT 3,  'BASIC_USERNAME',       'User Name changed'
+    UNION ALL SELECT 4,  'BASIC_URL',            'URL or Absolute Location changed'
+    UNION ALL SELECT 5,  'BASIC_PHONE',          'Phone Number changed'
+    UNION ALL SELECT 6,  'BASIC_EMAIL',          'Email changed'
+    UNION ALL SELECT 7,  'BASIC_NOTES',          'Freeform Notes changed'
+    UNION ALL SELECT 8,  'BASIC_BOOKMARK_ONLY',  'Bookmark-only setting changed'
+) AS v
+WHERE ct.Code = 'basic_change_fields'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ComboDetail cd
+      WHERE cd.ComboTypeId = ct.ComboTypeId
+        AND cd.Code        = v.Code
+  );
+
+
 COMMIT;
