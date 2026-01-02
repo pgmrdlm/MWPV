@@ -3,7 +3,7 @@
 // COMPLETE REWRITE (same responsibilities, but:
 // - Single, consistent SQL loading choke point
 // - Clean, explicit transaction boundaries
-// - Inserts logs for successful inserts (Item created + Password history created)
+// - Inserts logs for successful inserts (Item created)
 // - Logs are "best effort" and NEVER break the insert UX
 // - No sensitive values are logged (only ids + boolean “fields present” flags)
 //
@@ -13,6 +13,8 @@
 //
 // CHANGE NOW (THIS TASK):
 // - Wired CI_BookMarkOnly through the insert SQL + service layer.
+// - FIX: Do NOT log CATEGORYITEM_PASSWORD_CHANGED during NEW item insert.
+//        (That event is reserved for EDIT password changes.)
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
@@ -156,7 +158,7 @@ namespace MWPV.Services
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var tx = conn.BeginTransaction();
 
-                long newItemId = 0;
+                long newItemId;
 
                 try
                 {
@@ -223,6 +225,8 @@ namespace MWPV.Services
         /// <summary>
         /// Inserts CategoryItem and the first PasswordHistory row in a single transaction.
         /// Returns the new ItemId (> 0) on success.
+        /// NOTE: This is a NEW item creation flow; we log item creation only.
+        ///       We do NOT log CATEGORYITEM_PASSWORD_CHANGED here.
         /// </summary>
         public static long InsertCategoryItemWithPasswordHistory(
             int categoryKey,
@@ -268,8 +272,8 @@ namespace MWPV.Services
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var tx = conn.BeginTransaction();
 
-                long newItemId = 0;
-                long newPwHistId = 0;
+                long newItemId;
+                long newPwHistId;
 
                 try
                 {
@@ -292,7 +296,6 @@ namespace MWPV.Services
                     if (newItemId <= 0)
                         throw new InvalidOperationException("Insert failed (no ItemId returned)");
 
-                    // 2) Insert PasswordHistory (must return PwHistId)
                     newPwHistId = InsertPasswordHistory(
                         conn, tx, pwSql,
                         newItemId,
@@ -303,7 +306,6 @@ namespace MWPV.Services
                     if (newPwHistId <= 0)
                         throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
 
-                    // 3) Commit DB work
                     tx.Commit();
 
 #if DEBUG
@@ -317,8 +319,9 @@ namespace MWPV.Services
                     throw;
                 }
 
-                // 4) Best-effort logs AFTER commit (so logs never block the insert)
-                BestEffortLogNewItem(
+                // Best-effort logs AFTER commit (so logs never block the insert)
+                // FIX: no CATEGORYITEM_PASSWORD_CHANGED here.
+                BestEffortLogNewItemCreated(
                     itemId: newItemId,
                     categoryKey: categoryKey,
                     namePresent: true,
@@ -331,7 +334,6 @@ namespace MWPV.Services
                     secretDataPresent: secretData != null && secretData.Length > 0,
                     secretStorage: NormalizeSecretStorage(secretStorage),
                     isActive: isActive,
-                    pwHistId: newPwHistId,
                     bookMarkOnly: 0);
 
                 return newItemId;
@@ -502,7 +504,7 @@ namespace MWPV.Services
             }
         }
 
-        private static void BestEffortLogNewItem(
+        private static void BestEffortLogNewItemCreated(
             long itemId,
             int categoryKey,
             bool namePresent,
@@ -515,12 +517,11 @@ namespace MWPV.Services
             bool secretDataPresent,
             int secretStorage,
             int? isActive,
-            long pwHistId,
             int bookMarkOnly)
         {
             try
             {
-                // Event 1: Item created (name set)
+                // Event: Item created (name set)
                 var createdDto = new AppJson.LogPayloadDto
                 {
                     Message = "Category item created",
@@ -556,27 +557,8 @@ namespace MWPV.Services
                     whenUtc: DateTime.UtcNow,
                     itemId: itemId);
 
-                // Event 2: Password set (history row created)
-                var pwDto = new AppJson.LogPayloadDto
-                {
-                    Message = "Category item password set (history row created)",
-                    Source = "CategoryItemService",
-                    EventCode = "CATEGORYITEM_PASSWORD_CHANGED",
-                    OccurredUtc = DateTime.UtcNow,
-                    Context = BuildContext(new
-                    {
-                        itemId,
-                        pwHistId
-                    })
-                };
-
-                LogCatalogService.AppendJson(
-                    level: "INFO",
-                    source: "CategoryItem",
-                    eventCode: "CATEGORYITEM_PASSWORD_CHANGED",
-                    dto: pwDto,
-                    whenUtc: DateTime.UtcNow,
-                    itemId: itemId);
+                // FIX: Do NOT log CATEGORYITEM_PASSWORD_CHANGED here.
+                // That event should be emitted only by the EDIT password-change workflow.
             }
             catch
             {
