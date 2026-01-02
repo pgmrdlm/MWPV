@@ -2,12 +2,9 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Utilities.Sql;       // SqlCagegory.GetSql(...)
 using Utilities.Helpers;   // DatabaseHelper
-using MWPV.Utilities.Json; // AppJson
 
 namespace MWPV.Services
 {
@@ -22,12 +19,10 @@ namespace MWPV.Services
             public string Level { get; set; } = "";
             public string Source { get; set; } = "";
             public string EventCode { get; set; } = "";
-            public byte[]? Payload { get; set; } = null;
-            public string PayloadFmt { get; set; } = "none";
             public string CreatedUtc { get; set; } = "";
             public string AppVersion { get; set; } = "";
 
-            // Optional extras
+            // Optional extras (kept because they were already part of your insert wiring)
             public string? WhenUtc { get; set; } = null;
             public string? SessionId { get; set; } = null;
             public long? LoginId { get; set; } = null;
@@ -37,10 +32,20 @@ namespace MWPV.Services
             public string? OSVersion { get; set; } = null;
             public string? DeviceIdHash { get; set; } = null;
             public string? InstallType { get; set; } = null;
-            public int? PayloadVer { get; set; } = null;
-            public int? KeySetVersion { get; set; } = null;
             public string? StackHash { get; set; } = null;
             public int? IsCrash { get; set; } = null; // 0/1
+
+            // -----------------------------------------------------------------
+            // Payload STUBS (NO-OP for now)
+            // -----------------------------------------------------------------
+            // These exist ONLY so older callers (EarlyLogIngester, old code paths)
+            // still compile. They are not written to the DB because the DDL/SQL
+            // no longer contains payload columns/params.
+            public byte[]? Payload { get; set; } = null;
+            public string PayloadFmt { get; set; } = "none";
+            public int? PayloadVer { get; set; } = null;
+            public int? KeySetVersion { get; set; } = null;
+            // -----------------------------------------------------------------
         }
 
         public static long Insert(RequestV3 req, Func<SqliteConnection>? openAppConnection = null)
@@ -55,10 +60,19 @@ namespace MWPV.Services
                 var sql = SqlCagegory.GetSql("s_Logs_Insert.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Logs_Insert.sql");
+
                 cmd.CommandText = sql;
 
-                var createdIso = string.IsNullOrWhiteSpace(req.CreatedUtc) ? DateTime.UtcNow.ToString("o") : req.CreatedUtc!;
-                var whenIso = string.IsNullOrWhiteSpace(req.WhenUtc) ? createdIso : req.WhenUtc!;
+                var createdIso = string.IsNullOrWhiteSpace(req.CreatedUtc)
+                    ? DateTime.UtcNow.ToString("o")
+                    : req.CreatedUtc!;
+
+                var whenIso = string.IsNullOrWhiteSpace(req.WhenUtc)
+                    ? createdIso
+                    : req.WhenUtc!;
+
+                // NOTE: Parameter list MUST match s_Logs_Insert.sql.
+                // We intentionally do NOT bind any payload-related params.
 
                 cmd.Parameters.AddWithValue("@WhenUtc", whenIso);
                 cmd.Parameters.AddWithValue("@CreatedUtc", createdIso);
@@ -70,6 +84,7 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@SessionId", req.SessionId ?? "");
                 cmd.Parameters.AddWithValue("@LoginId", (object?)req.LoginId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@ItemId", (object?)req.ItemId ?? DBNull.Value);
+
                 cmd.Parameters.AddWithValue("@MachineId", Environment.MachineName ?? "");
                 cmd.Parameters.AddWithValue("@DeviceMake", (object?)req.DeviceMake ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@DeviceModel", (object?)req.DeviceModel ?? DBNull.Value);
@@ -79,18 +94,12 @@ namespace MWPV.Services
 
                 cmd.Parameters.AddWithValue("@AppVersion",
                     string.IsNullOrWhiteSpace(req.AppVersion) ? AppVersion() : req.AppVersion);
+
                 cmd.Parameters.AddWithValue("@IsCrash", req.IsCrash ?? 0);
-
-                var pPayload = cmd.CreateParameter();
-                pPayload.ParameterName = "@Payload";
-                pPayload.Value = (object?)req.Payload ?? DBNull.Value;
-                cmd.Parameters.Add(pPayload);
-
-                cmd.Parameters.AddWithValue("@PayloadFmt",
-                    string.IsNullOrWhiteSpace(req.PayloadFmt) ? "none" : req.PayloadFmt);
-                cmd.Parameters.AddWithValue("@PayloadVer", (object?)req.PayloadVer ?? 1);
-                cmd.Parameters.AddWithValue("@KeySetVersion", (object?)req.KeySetVersion ?? 1);
                 cmd.Parameters.AddWithValue("@StackHash", req.StackHash ?? "");
+                // KeySetVersion is REQUIRED by s_Logs_Insert.sql
+                cmd.Parameters.AddWithValue("@KeySetVersion", req.KeySetVersion ?? 1);
+
 
                 var affected = cmd.ExecuteNonQuery();
                 if (affected != 1) return -1;
@@ -113,16 +122,11 @@ namespace MWPV.Services
                 Level = "INFO",
                 Source = "Login",
                 EventCode = "LOGIN",
-                Payload = null,
-                PayloadFmt = "none",
                 AppVersion = AppVersion()
             };
             return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
         }
 
-        // ---------------------------------------------------------------------
-        // NEW: Session lifecycle convenience wrappers
-        // ---------------------------------------------------------------------
         public static long InsertSessionStart(Func<SqliteConnection>? openAppConnection = null)
         {
             var req = new RequestV3
@@ -130,8 +134,6 @@ namespace MWPV.Services
                 Level = "INFO",
                 Source = "Session",
                 EventCode = "SESSION_START",
-                Payload = null,
-                PayloadFmt = "none",
                 AppVersion = AppVersion()
             };
             return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
@@ -143,19 +145,17 @@ namespace MWPV.Services
             int? exitCode = null,
             Func<SqliteConnection>? openAppConnection = null)
         {
-            // Keep payload empty; reason/exitCode can be added later via JSON if desired.
+            // Still no payload. Later, when we implement edit-change logging,
+            // we can add dedicated non-sensitive columns or an encrypted blob approach.
             var req = new RequestV3
             {
                 Level = isError ? "ERROR" : "INFO",
                 Source = "Session",
                 EventCode = "SESSION_END",
-                Payload = null,
-                PayloadFmt = "none",
                 AppVersion = AppVersion()
             };
             return Insert(req, openAppConnection ?? DatabaseHelper.GetAppOpenConnection);
         }
-        // ---------------------------------------------------------------------
 
         private static string AppVersion()
         {
@@ -163,6 +163,11 @@ namespace MWPV.Services
             return v?.ToString() ?? "dev";
         }
 
+        // ---------------------------------------------------------------------
+        // AppendJson STUB (NO PAYLOAD WRITES)
+        // ---------------------------------------------------------------------
+        // Kept ONLY to satisfy existing callers. We accept the dto but do not store it.
+        // When we implement edit/change logs later, we’ll replace this with the new logic.
         public static long AppendJson(
             string level,
             string source,
@@ -177,34 +182,33 @@ namespace MWPV.Services
             bool isCrash = false,
             Func<SqliteConnection>? openAppConnection = null)
         {
-            var json = Encoding.UTF8.GetBytes(AppJson.Serialize(dto, pretty: false));
-
             var req = new RequestV3
             {
                 Level = level ?? "INFO",
                 Source = source ?? "",
                 EventCode = eventCode ?? "",
-                Payload = json,
-                PayloadFmt = "json",
-                PayloadVer = payloadVer,
-                KeySetVersion = keySetVersion,
                 AppVersion = AppVersion(),
                 CreatedUtc = DateTime.UtcNow.ToString("o"),
                 WhenUtc = (whenUtc ?? DateTime.UtcNow).ToUniversalTime().ToString("o"),
                 SessionId = sessionId,
                 LoginId = loginId,
                 ItemId = itemId,
-                IsCrash = isCrash ? 1 : 0
+                IsCrash = isCrash ? 1 : 0,
+
+                // no-op stubs (kept so callers compiling against payload fields don’t break)
+                PayloadVer = payloadVer,
+                KeySetVersion = keySetVersion
             };
 
             return Insert(req, openAppConnection);
         }
 
+        // Overload kept for older typed DTO usage
         public static long AppendJson(
             string level,
             string source,
             string eventCode,
-            AppJson.LogPayloadDto dto,
+            MWPV.Utilities.Json.AppJson.LogPayloadDto dto,
             DateTime? whenUtc = null,
             string? sessionId = null,
             long? loginId = null,
@@ -237,8 +241,8 @@ namespace MWPV.Services
                     throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPage.sql");
                 cmd.CommandText = sql;
 
-                var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
-                var pOffset = cmd.CreateParameter(); pOffset.ParameterName = "@offset"; pOffset.Value = offset; cmd.Parameters.Add(pOffset);
+                cmd.Parameters.AddWithValue("@limit", limit);
+                cmd.Parameters.AddWithValue("@offset", offset);
 
                 using var r = cmd.ExecuteReader();
                 while (r.Read())
@@ -280,8 +284,8 @@ namespace MWPV.Services
                     throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPageFilter.sql");
                 cmd.CommandText = sql;
 
-                var pLimit = cmd.CreateParameter(); pLimit.ParameterName = "@limit"; pLimit.Value = limit; cmd.Parameters.Add(pLimit);
-                var pOffset = cmd.CreateParameter(); pOffset.ParameterName = "@offset"; pOffset.Value = offset; cmd.Parameters.Add(pOffset);
+                cmd.Parameters.AddWithValue("@limit", limit);
+                cmd.Parameters.AddWithValue("@offset", offset);
 
                 var filterParam = cmd.CreateParameter();
                 filterParam.ParameterName = "@filter_code";
@@ -314,7 +318,9 @@ namespace MWPV.Services
             Func<SqliteConnection>? openAppConnection = null)
             => SelectPage(offset: 0, limit: limit, openAppConnection);
 
-        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(string? filterCode, int limit = 200,
+        public static IReadOnlyList<global::MWPV.Models.Logs> SelectRecent(
+            string? filterCode,
+            int limit = 200,
             Func<SqliteConnection>? openAppConnection = null)
             => SelectPageFiltered(offset: 0, limit: limit, filterCode: filterCode, openAppConnection);
 
@@ -326,9 +332,6 @@ namespace MWPV.Services
             public string Level { get; init; } = "";
             public string Source { get; init; } = "";
             public string EventCode { get; init; } = "";
-            public string? PayloadFmt { get; init; }
-            public int PayloadSize { get; init; }
-            public string? Payload { get; init; }
         }
 
         public static LogDetailsRecord? SelectById(long id, Func<SqliteConnection>? openAppConnection = null)
@@ -350,27 +353,13 @@ namespace MWPV.Services
                 using var r = cmd.ExecuteReader();
                 if (!r.Read()) return null;
 
-                var createdUtc = ReadString(r, "CreatedUtc") ?? "";
-                var level = ReadString(r, "Level") ?? "";
-                var source = ReadString(r, "Source") ?? "";
-                var eventCode = ReadString(r, "EventCode") ?? "";
-                var payloadFmt = ReadString(r, "PayloadFmt") ?? "none";
-                var payloadSizeC = ReadInt32Nullable(r, "PayloadSize") ?? 0;
-                var blob = ReadBytesNullable(r, "Payload");
-
-                var payloadSize = blob?.Length ?? payloadSizeC;
-                string? payloadText = DecodePayloadText(payloadFmt, blob);
-
                 return new LogDetailsRecord
                 {
                     Id = Convert.ToInt64(r["Id"], CultureInfo.InvariantCulture),
-                    CreatedUtc = createdUtc,
-                    Level = level,
-                    Source = source,
-                    EventCode = eventCode,
-                    PayloadFmt = payloadFmt,
-                    PayloadSize = payloadSize,
-                    Payload = payloadText
+                    CreatedUtc = r["CreatedUtc"] as string ?? "",
+                    Level = r["Level"] as string ?? "",
+                    Source = r["Source"] as string ?? "",
+                    EventCode = r["EventCode"] as string ?? ""
                 };
             }
             catch (Exception ex)
@@ -384,7 +373,6 @@ namespace MWPV.Services
         // Filter options (ComboType/ComboDetail) via packed SQL
         // =====================================================================
 
-        // Legacy lightweight DTO (kept for backward-compat in existing callers)
         public sealed class ComboItem
         {
             public int Id { get; init; }              // ComboDet
@@ -393,10 +381,6 @@ namespace MWPV.Services
             public int Seq { get; init; }
         }
 
-        /// <summary>
-        /// New: return full model rows for a given ComboType.Code (e.g., "log_filters").
-        /// SQL: s_Combo_DetailByTypeId.sql
-        /// </summary>
         public static IReadOnlyList<global::MWPV.Models.ComboDetail> GetComboDetailsByType(
             string comboTypeCode,
             Func<SqliteConnection>? openAppConnection = null)
@@ -440,9 +424,6 @@ namespace MWPV.Services
             return list;
         }
 
-        /// <summary>
-        /// Back-compat wrapper: map model rows to the legacy lightweight DTO.
-        /// </summary>
         public static IReadOnlyList<ComboItem> GetComboItems(
             string comboTypeCode,
             Func<SqliteConnection>? openAppConnection = null)
@@ -466,20 +447,6 @@ namespace MWPV.Services
         // Helpers
         // =====================================================================
 
-        private static string? DecodePayloadText(string? fmt, byte[]? bytes)
-        {
-            if (bytes == null || bytes.Length == 0) return null;
-
-            switch ((fmt ?? "none").ToLowerInvariant())
-            {
-                case "json":
-                case "text":
-                    return Encoding.UTF8.GetString(bytes);
-                default:
-                    return null;
-            }
-        }
-
         private static string? ReadString(SqliteDataReader r, string name)
         {
             var ord = SafeOrdinal(r, name);
@@ -492,24 +459,6 @@ namespace MWPV.Services
             var ord = SafeOrdinal(r, name);
             if (ord < 0 || r.IsDBNull(ord)) return 0;
             return r.GetInt32(ord);
-        }
-
-        private static int? ReadInt32Nullable(SqliteDataReader r, string name)
-        {
-            var ord = SafeOrdinal(r, name);
-            if (ord < 0 || r.IsDBNull(ord)) return null;
-            return r.GetInt32(ord);
-        }
-
-        private static byte[]? ReadBytesNullable(SqliteDataReader r, string name)
-        {
-            var ord = SafeOrdinal(r, name);
-            if (ord < 0 || r.IsDBNull(ord)) return null;
-
-            var len = (int)r.GetBytes(ord, 0, null, 0, 0);
-            var buf = new byte[len];
-            r.GetBytes(ord, 0, buf, 0, len);
-            return buf;
         }
 
         private static int SafeOrdinal(SqliteDataReader r, string name)
