@@ -79,8 +79,8 @@
                   CanUserResizeRows="False"
                   HeadersVisibility="Column"
                   GridLinesVisibility="None"
-                  Background="{DynamicResource Brush.Secondary}"  
-            BorderThickness="0"
+                  Background="{DynamicResource Brush.Secondary}"
+                  BorderThickness="0"
                   RowHeaderWidth="0"
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
@@ -118,7 +118,8 @@
 
                 <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="140"/>
 
-                <DataGridTextColumn Header="EventCode" Binding="{Binding EventCode}" Width="140">
+                <!-- Expanded -->
+                <DataGridTextColumn Header="EventCode" Binding="{Binding EventCode}" Width="*">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="TextAlignment" Value="Center"/>
@@ -127,7 +128,7 @@
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
 
-                <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                <!-- Message column removed -->
             </DataGrid.Columns>
         </DataGrid>
 
