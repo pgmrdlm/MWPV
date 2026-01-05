@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
 using MWPV.Utilities.UI;
@@ -26,6 +27,12 @@ namespace MWPV.View.UserControls.CategoryItems
         //
         // TODO (later): replace 0 with your real enum value (e.g. SecretStorageType.None)
         private const int SecretStorage_Default = 0;
+
+        // ======================= NEW: MODE DETECTION (SEDS) =======================
+        // Convention: 0 => Add/New, >0 => Edit/View existing
+        private const string SedsKey_ActiveEntityId = "MWPV.Context.ActiveEntityId";
+        private int _activeEntityId;
+        private bool IsEditMode => _activeEntityId > 0;
 
         // Reveal state flags
         private bool _mainRevealed;
@@ -83,6 +90,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ClearForm();
             ResetUiState();
+
+            // NEW: determine ADD vs EDIT/VIEW from SEDS (no UI change; debug only)
+            ConfigureModeFromSeds();
         }
 
         private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
@@ -95,6 +105,28 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ResetUiState();
             WipeSensitiveFields();
+        }
+
+        /* ======================= NEW: Mode detection helper ======================= */
+
+        private void ConfigureModeFromSeds()
+        {
+            _activeEntityId = 0;
+
+            try
+            {
+                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_ActiveEntityId, out int id) && id > 0)
+                    _activeEntityId = id;
+            }
+            catch
+            {
+                // Fail-safe: default to ADD
+                _activeEntityId = 0;
+            }
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][MODE] ActiveEntityId={_activeEntityId} => mode={(IsEditMode ? "EDIT/VIEW" : "ADD")}");
+#endif
         }
 
         /* ======================= Host-facing API ======================= */
