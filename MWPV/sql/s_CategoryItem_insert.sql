@@ -8,9 +8,7 @@ INSERT INTO CategoryItem (
     CI_BookMarkOnly,
     CI_AccountEmail,
     CI_AccountPhoneNumber,
-    CI_SecretMeta,
-    CI_SecretData,
-    CI_SecretStorage,
+    CI_Pin,
     IsActive
 )
 VALUES (
@@ -22,9 +20,7 @@ VALUES (
     COALESCE(@CI_BookMarkOnly, 0),
     @CI_AccountEmail,
     @CI_AccountPhoneNumber,
-    @CI_SecretMeta,
-    @CI_SecretData,
-    COALESCE(@CI_SecretStorage, '0'),
+    @CI_Pin,
     COALESCE(@IsActive, 1)
 )
 RETURNING ItemId;

@@ -1,34 +1,42 @@
 ﻿// File: Utilities/Security/ServiceSetUp.cs
 // First-run provisioning and secure loading utilities (JSON-only archive).
+//
+// Responsibilities:
+//  1) Create LocalRoot + DB file (schema is expected to already be in SEDS OR in SqlFolder staging).
+//  2) Build encrypted key archive containing ONE file: keyset.json (secrets + sql map).
+//  3) Load keyset.json from archive -> seed SEDS (DB password + SQL text + optional keys).
+//
+// Notes:
+//  - NO integrity table.
+//  - SQL staging folder is optional and is scrubbed after archive build.
+//  - This class should NOT contain “random helpers” that return string "worked"/"not_found".
+//    Consumers should read from SEDS via SecureSql.Require(...) or equivalent.
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Data;
-using Security.Utility.Archives;        // SevenZipCore
-using Security.Utility.Storage;         // SecureEncryptedDataStore
-using Security.Utility.Wiping;          // SensitiveDataCleaner
-using Security.Utility.Crypto;          // KeysetJsonV2, KeysetJsonBuilder
-using Utilities.Helpers;                // ErrorHandler, DatabaseHelper
-// NOTE: No KeyArchiveIntegrity references
+using System.Threading;
+using Utilities.Helpers;                 // ErrorHandler, DatabaseHelper
+using Security.Utility.Archives;         // SevenZipCore
+using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Wiping;           // SensitiveDataCleaner
+using Security.Utility.Crypto;           // KeysetJsonV2, KeysetJsonBuilder
 
 namespace Utilities.Security
 {
-    /// <summary>
-    /// First-run provisioning and secure loading utilities.
-    /// JSON-only: the encrypted archive contains a single file, "keyset.json",
-    /// which holds ALL secrets and ALL SQL text.
-    /// </summary>
-    internal class ServiceSetUp
+    internal sealed class ServiceSetUp
     {
-        #region Constants / Keys
+        #region SEDS Keys / Constants
 
-        private const string Key_KeyPW = "KeyPW";     // char[] (archive password)
-        private const string Key_KeyFile = "KeyFile";   // string (archive path)
+        // These are the two values the UI must put into SEDS before calling build/load.
+        private const string SedsKey_KeyPW = "KeyPW";     // char[] (archive password)
+        private const string SedsKey_KeyFile = "KeyFile"; // string (archive path)
 
+        // We keep these paths centralized here so callers don't duplicate them.
         private static string LocalRoot =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV");
 
@@ -37,47 +45,55 @@ namespace Utilities.Security
 
         private const string KeysetJsonName = "keyset.json";
 
+        // If we must read schema from disk, this is the filename we expect in staging.
+        private const string SchemaFileName = "MWPV_DB_Create.sql";
+
+        // One-time guard so we don't extract keyset.json for every SQL artifact request.
+        private static int _keysetLoaded; // 0 = no, 1 = yes
+        private static readonly object _keysetLoadLock = new();
+
         #endregion
 
-        #region Database setup
+        #region Public API
 
+        /// <summary>
+        /// Ensures LocalRoot exists, ensures DB file exists, and applies schema.
+        /// Source for schema:
+        ///   1) SEDS entry (preferred): SchemaFileName
+        ///   2) SqlFolder staging file (fallback)
+        /// </summary>
         public string SetUpDataBase()
         {
             try
             {
-                Directory.CreateDirectory(LocalRoot);
-                Directory.CreateDirectory(SqlFolder); // created here; erased after SetUpKeyFile()
+                EnsureLocalFolders();
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorHandler.Abend(ex, "Unable to create MWPV local folders.");
                 return "error";
             }
 
-            string schemaSql = null!;
+            string? schemaSql = null;
             try
             {
-                var schemaPath = Path.Combine(SqlFolder, "MWPV_DB_Create.sql");
-                schemaSql = File.ReadAllText(schemaPath, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                ErrorHandler.Abend(ex, "Unable to read schema file.");
-                return "error";
-            }
+                schemaSql = TryGetSchemaSqlFromSedsOrDisk();
+                if (string.IsNullOrWhiteSpace(schemaSql))
+                {
+                    throw new InvalidOperationException(
+                        $"Schema SQL missing. Expected SEDS['{SchemaFileName}'] or {Path.Combine(SqlFolder, SchemaFileName)}");
+                }
 
-            try
-            {
                 using (var cn = DatabaseHelper.OpenConnection())
                 using (var cmd = cn.CreateCommand())
                 {
-                    // Run your main schema file only (no integrity table).
                     cmd.CommandText = schemaSql;
                     cmd.ExecuteNonQuery();
                 }
 
-                // Persist the DB connection string in SEDS (if that's your pattern).
+                // If your app uses this, fine. If not, remove it (but don’t duplicate it elsewhere).
                 SecureEncryptedDataStore.SetString("DB_String", $"Data Source={DbPath}");
+
+                return LocalRoot;
             }
             catch (Exception ex)
             {
@@ -86,16 +102,18 @@ namespace Utilities.Security
             }
             finally
             {
-                SensitiveDataCleaner.WipeString(ref schemaSql);
+                if (schemaSql != null)
+                    SensitiveDataCleaner.WipeString(ref schemaSql);
             }
-
-            return LocalRoot;
         }
 
-        #endregion
-
-        #region Archive build (JSON-only -> encrypted 7z)
-
+        /// <summary>
+        /// Builds an encrypted 7z archive at SEDS['KeyFile'] containing one entry: keyset.json.
+        /// keyset.json contains:
+        ///   - secrets (dbPassword + additional keys)
+        ///   - sql map (filename -> sql text)
+        /// Then scrubs SqlFolder staging.
+        /// </summary>
         public string SetUpKeyFile()
         {
             string? archivePath = null;
@@ -106,42 +124,24 @@ namespace Utilities.Security
 
             try
             {
-                archivePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
-                if (string.IsNullOrWhiteSpace(archivePath))
-                    return "Missing KeyFile path.";
+                archivePath = GetRequiredArchivePathFromSeds();
+                keyPw = GetRequiredKeyPasswordFromSeds();
+                dbPw = GetRequiredDbPasswordFromSeds();
 
-                keyPw = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                if (keyPw == null || keyPw.Length == 0)
-                    return "Missing key archive password.";
+                // Gather SQL to embed into keyset.json.
+                // Prefer staging folder (current behavior), but allow fallback to SEDS if staging is empty.
+                var sqlMap = LoadSqlMapFromStagingOrSeds();
 
-                dbPw = SecureEncryptedDataStore.GetChars(DatabaseHelper.DbPasswordKey);
-                if (dbPw == null || dbPw.Length == 0)
-                    return "Database password not generated.";
+                // Seed SEDS with SQL now so SecureSql.Require(...) works immediately on first run
+                // (and also so DB setup can read the schema from SEDS if you use that path).
+                SeedSedsWithSql(sqlMap);
 
-                if (!Directory.Exists(SqlFolder))
-                    Directory.CreateDirectory(SqlFolder);
-
-                // Gather *.sql from staging folder (these get embedded into keyset.json)
-                var sqlMap = new Dictionary<string, string>(StringComparer.Ordinal);
-                foreach (var file in Directory.EnumerateFiles(SqlFolder, "*.sql", SearchOption.TopDirectoryOnly))
-                {
-                    var name = Path.GetFileName(file);
-                    var text = File.ReadAllText(file, Encoding.UTF8);
-                    sqlMap[name] = text;
-                }
-
-                // Seed SEDS with SQL now so any SecureSql.Require(...) works on first run
-                foreach (var kv in sqlMap)
-                {
-                    SecureEncryptedDataStore.SetString(kv.Key, kv.Value ?? string.Empty);
-                }
-
-                // Generate additional keys
+                // Generate additional keys (stored in keyset.json)
                 logPayloadKey = RandomNumberGenerator.GetBytes(32);
                 userSecretsKey = RandomNumberGenerator.GetBytes(32);
 
-                // Build keyset.json from secrets + SQL catalog
-                var json = KeysetJsonBuilder.BuildV2(
+                // Build keyset.json from secrets + SQL map
+                string json = KeysetJsonBuilder.BuildV2(
                     dbPassword: dbPw,
                     logPayloadKey: logPayloadKey,
                     userSecretsKey: userSecretsKey,
@@ -159,37 +159,29 @@ namespace Utilities.Security
                         finalZeroPass: true);
                 }
 
-                // Write temporary keyset.json and compress into encrypted archive
-                var tempDir = Path.Combine(Path.GetTempPath(), "mwpv_keyset_" + Guid.NewGuid().ToString("N"));
+                // Create temp dir -> write keyset.json -> compress encrypted -> scrub temp
+                string tempDir = Path.Combine(Path.GetTempPath(), "mwpv_keyset_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempDir);
-                var keysetPath = Path.Combine(tempDir, KeysetJsonName);
+
+                string keysetPath = Path.Combine(tempDir, KeysetJsonName);
                 File.WriteAllText(keysetPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-                var pwString = new string(keyPw);
+                string pwString = new string(keyPw);
                 try
                 {
                     var comp = SevenZipCore.CreateCompressor();
-                    // Single-entry archive; internal name is "keyset.json"
                     comp.CompressFilesEncrypted(archivePath, pwString, keysetPath);
                 }
                 finally
                 {
                     SensitiveDataCleaner.WipeString(ref pwString);
-                    try
-                    {
-                        SensitiveDataCleaner.SecureDeleteDirectory(
-                            tempDir,
-                            overwritePasses: 1,
-                            shredNames: true,
-                            finalZeroPass: false,
-                            removeDirectories: true);
-                    }
-                    catch { /* best-effort */ }
+                    TrySecureDeleteTempDir(tempDir);
                 }
 
-                // NOTE: No integrity table update or verification here anymore.
+                // Mark as not-loaded so next run (or same run) can re-seed from archive if needed.
+                Volatile.Write(ref _keysetLoaded, 0);
 
-                // Clean up any staged SQL now that it is sealed into the archive
+                // Clean up staged SQL now that it is sealed into the archive
                 SecurelyScrubSqlStagingFolder();
 
                 return $"Encrypted archive created at: {archivePath}";
@@ -210,48 +202,34 @@ namespace Utilities.Security
             }
         }
 
-        private static void SecurelyScrubSqlStagingFolder()
-        {
-            if (!Directory.Exists(SqlFolder)) return;
-
-            SensitiveDataCleaner.SecureDeleteAllFiles(SqlFolder, overwritePasses: 3);
-
-            try
-            {
-                SensitiveDataCleaner.SecureDeleteDirectory(
-                    SqlFolder,
-                    overwritePasses: 1,
-                    shredNames: true,
-                    finalZeroPass: false,
-                    removeDirectories: true);
-            }
-            catch { /* best-effort */ }
-        }
-
-        #endregion
-
-        #region Archive read (JSON-only)
-
+        /// <summary>
+        /// Loads keyset.json from the encrypted archive (path/password in SEDS) and seeds SEDS with:
+        ///   - db password (DatabaseHelper.DbPasswordKey) as char[] via SetAndWipe
+        ///   - sql map (filename -> sql text) via SetString
+        /// This is the normal "startup load" path.
+        /// </summary>
         public static void EnsureKeySetFromArchive()
         {
             char[]? keyPw = null;
+            string? pwString = null;
+
             try
             {
-                var archivePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
-                if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
-                    throw new FileNotFoundException("Key archive not found.", archivePath ?? "(null)");
+                string archivePath = GetRequiredArchivePathFromSedsStatic();
+                if (!File.Exists(archivePath))
+                    throw new FileNotFoundException("Key archive not found.", archivePath);
 
-                keyPw = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                var pwString = new string(keyPw ?? Array.Empty<char>());
+                keyPw = GetRequiredKeyPasswordFromSedsStatic();
+                pwString = new string(keyPw);
 
                 using var extractor = SevenZipCore.CreateExtractor(archivePath, pwString);
-                SensitiveDataCleaner.WipeString(ref pwString);
 
                 var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
-                    string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
-                    string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal));
+                    !f.IsDirectory &&
+                    (string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
+                     string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal)));
 
-                if (entry.FileName == null || entry.IsDirectory)
+                if (string.IsNullOrWhiteSpace(entry.FileName))
                     throw new InvalidOperationException("keyset.json missing from archive.");
 
                 using var ms = new MemoryStream();
@@ -264,61 +242,89 @@ namespace Utilities.Security
 
                 var ks = KeysetJsonV2.Deserialize(json);
 
+                // DB password -> SEDS (char[]), wipe source buffers
                 var dbPwChars = KeysetJsonV2.DecodeDbPasswordToChars(ks.secrets.dbPassword);
                 SecureEncryptedDataStore.SetAndWipe(DatabaseHelper.DbPasswordKey, dbPwChars);
 
+                // SQL -> SEDS
                 foreach (var kvp in ks.sql)
                 {
                     if (!string.IsNullOrWhiteSpace(kvp.Key))
                         SecureEncryptedDataStore.SetString(kvp.Key, kvp.Value ?? string.Empty);
                 }
+
+                // Mark as loaded (one-time)
+                Volatile.Write(ref _keysetLoaded, 1);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[ServiceSetUp] EnsureKeySetFromArchive error: " + ex.Message);
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine("[ServiceSetUp] EnsureKeySetFromArchive error: " + ex);
+#endif
+                // Caller decides UI/termination behavior.
             }
             finally
             {
+                if (pwString != null) SensitiveDataCleaner.WipeString(ref pwString);
                 if (keyPw != null) SensitiveDataCleaner.WipeCharArray(keyPw);
             }
         }
 
         /// <summary>
-        /// Minimal loader used by KeyProvisioner.ValidateKeysetJson.
-        /// Reads raw bytes of "keyset.json" from the encrypted archive using SEDS path/password.
-        /// Returns Array.Empty<byte> on any failure.
+        /// Compatibility shim for existing callers (SqlCategory.LoadAll()).
+        /// Ensures keyset.json has been loaded into SEDS, then verifies the requested SQL is present.
+        /// </summary>
+        public static void LoadSqlFromEncryptedArchive(string fileNameInArchive)
+        {
+            if (string.IsNullOrWhiteSpace(fileNameInArchive))
+                throw new ArgumentException("SQL filename cannot be null/empty.", nameof(fileNameInArchive));
+
+            // If already present, done.
+            if (SecureEncryptedDataStore.HasKey(fileNameInArchive))
+                return;
+
+            EnsureKeysetLoadedOnce();
+
+            if (!SecureEncryptedDataStore.HasKey(fileNameInArchive))
+            {
+                throw new FileNotFoundException(
+                    $"SQL artifact '{fileNameInArchive}' was not found in SEDS after loading keyset.json. " +
+                    $"Check the key archive contents and the required SQL catalog names.",
+                    fileNameInArchive);
+            }
+        }
+
+        /// <summary>
+        /// Minimal loader used by validators. Reads raw bytes of keyset.json from the encrypted archive.
+        /// Returns Array.Empty&lt;byte&gt; on failure.
         /// </summary>
         public byte[] LoadKeysetJsonBytes()
         {
             char[]? keyPw = null;
+            string? pwString = null;
+
             try
             {
-                var archivePath = SecureEncryptedDataStore.GetString(Key_KeyFile);
-                if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
+                string archivePath = GetRequiredArchivePathFromSeds();
+                if (!File.Exists(archivePath))
                     return Array.Empty<byte>();
 
-                keyPw = SecureEncryptedDataStore.GetChars(Key_KeyPW);
-                var pwString = new string(keyPw ?? Array.Empty<char>());
-                try
-                {
-                    using var extractor = SevenZipCore.CreateExtractor(archivePath, pwString);
+                keyPw = GetRequiredKeyPasswordFromSeds();
+                pwString = new string(keyPw);
 
-                    var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
-                        !f.IsDirectory && (
-                            string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
-                            string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal)));
+                using var extractor = SevenZipCore.CreateExtractor(archivePath, pwString);
 
-                    if (entry.FileName == null || entry.IsDirectory)
-                        return Array.Empty<byte>();
+                var entry = extractor.ArchiveFileData.FirstOrDefault(f =>
+                    !f.IsDirectory &&
+                    (string.Equals(f.FileName, KeysetJsonName, StringComparison.Ordinal) ||
+                     string.Equals(Path.GetFileName(f.FileName), KeysetJsonName, StringComparison.Ordinal)));
 
-                    using var ms = new MemoryStream();
-                    extractor.ExtractFile(entry.Index, ms);
-                    return ms.ToArray();
-                }
-                finally
-                {
-                    SensitiveDataCleaner.WipeString(ref pwString);
-                }
+                if (string.IsNullOrWhiteSpace(entry.FileName))
+                    return Array.Empty<byte>();
+
+                using var ms = new MemoryStream();
+                extractor.ExtractFile(entry.Index, ms);
+                return ms.ToArray();
             }
             catch
             {
@@ -326,13 +332,191 @@ namespace Utilities.Security
             }
             finally
             {
+                if (pwString != null) SensitiveDataCleaner.WipeString(ref pwString);
                 if (keyPw != null) SensitiveDataCleaner.WipeCharArray(keyPw);
             }
         }
 
-        public static string LoadSqlFromEncryptedArchive(string fileNameInArchive)
+        #endregion
+
+        #region Internals - keyset loaded once
+
+        private static void EnsureKeysetLoadedOnce()
         {
-            return SecureEncryptedDataStore.HasKey(fileNameInArchive) ? "worked" : "not_found";
+            if (Volatile.Read(ref _keysetLoaded) == 1)
+                return;
+
+            lock (_keysetLoadLock)
+            {
+                if (_keysetLoaded == 1)
+                    return;
+
+                EnsureKeySetFromArchive();
+                // EnsureKeySetFromArchive sets _keysetLoaded=1 on success.
+            }
+        }
+
+        #endregion
+
+        #region Internals - folders / schema
+
+        private static void EnsureLocalFolders()
+        {
+            try
+            {
+                Directory.CreateDirectory(LocalRoot);
+                Directory.CreateDirectory(SqlFolder);
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Unable to create MWPV local folders.");
+                throw;
+            }
+        }
+
+        private static string? TryGetSchemaSqlFromSedsOrDisk()
+        {
+            // Prefer SEDS.
+            if (SecureEncryptedDataStore.HasKey(SchemaFileName))
+            {
+                var fromSeds = SecureEncryptedDataStore.GetString(SchemaFileName);
+                if (!string.IsNullOrWhiteSpace(fromSeds))
+                    return fromSeds;
+            }
+
+            // Fallback to disk staging.
+            var schemaPath = Path.Combine(SqlFolder, SchemaFileName);
+            if (File.Exists(schemaPath))
+                return File.ReadAllText(schemaPath, Encoding.UTF8);
+
+            return null;
+        }
+
+        #endregion
+
+        #region Internals - archive build helpers
+
+        private static string GetRequiredArchivePathFromSeds()
+        {
+            var archivePath = SecureEncryptedDataStore.GetString(SedsKey_KeyFile);
+            if (string.IsNullOrWhiteSpace(archivePath))
+                throw new InvalidOperationException("Missing KeyFile path in SEDS.");
+            return archivePath;
+        }
+
+        private static char[] GetRequiredKeyPasswordFromSeds()
+        {
+            var keyPw = SecureEncryptedDataStore.GetChars(SedsKey_KeyPW);
+            if (keyPw == null || keyPw.Length == 0)
+                throw new InvalidOperationException("Missing key archive password in SEDS.");
+            return keyPw;
+        }
+
+        private static char[] GetRequiredDbPasswordFromSeds()
+        {
+            var dbPw = SecureEncryptedDataStore.GetChars(DatabaseHelper.DbPasswordKey);
+            if (dbPw == null || dbPw.Length == 0)
+                throw new InvalidOperationException("Database password not generated.");
+            return dbPw;
+        }
+
+        private static Dictionary<string, string> LoadSqlMapFromStagingOrSeds()
+        {
+            var sqlMap = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            // 1) Prefer staging folder if it exists and has sql
+            if (Directory.Exists(SqlFolder))
+            {
+                foreach (var file in Directory.EnumerateFiles(SqlFolder, "*.sql", SearchOption.TopDirectoryOnly))
+                {
+                    var name = Path.GetFileName(file);
+                    var text = File.ReadAllText(file, Encoding.UTF8);
+                    sqlMap[name] = text ?? string.Empty;
+                }
+            }
+
+            if (sqlMap.Count > 0)
+                return sqlMap;
+
+            // 2) Fallback: if schema already in SEDS, at least embed that.
+            //    (If you later build a SqlCatalog, this can be replaced with enumerating catalog names.)
+            if (SecureEncryptedDataStore.HasKey(SchemaFileName))
+            {
+                var schema = SecureEncryptedDataStore.GetString(SchemaFileName) ?? string.Empty;
+                sqlMap[SchemaFileName] = schema;
+            }
+
+            return sqlMap;
+        }
+
+        private static void SeedSedsWithSql(Dictionary<string, string> sqlMap)
+        {
+            foreach (var kv in sqlMap)
+            {
+                if (string.IsNullOrWhiteSpace(kv.Key))
+                    continue;
+
+                SecureEncryptedDataStore.SetString(kv.Key, kv.Value ?? string.Empty);
+            }
+        }
+
+        private static void TrySecureDeleteTempDir(string tempDir)
+        {
+            try
+            {
+                SensitiveDataCleaner.SecureDeleteDirectory(
+                    tempDir,
+                    overwritePasses: 1,
+                    shredNames: true,
+                    finalZeroPass: false,
+                    removeDirectories: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+
+        private static void SecurelyScrubSqlStagingFolder()
+        {
+            if (!Directory.Exists(SqlFolder))
+                return;
+
+            SensitiveDataCleaner.SecureDeleteAllFiles(SqlFolder, overwritePasses: 3);
+
+            try
+            {
+                SensitiveDataCleaner.SecureDeleteDirectory(
+                    SqlFolder,
+                    overwritePasses: 1,
+                    shredNames: true,
+                    finalZeroPass: false,
+                    removeDirectories: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+
+        #endregion
+
+        #region Internals - static helpers (for static EnsureKeySetFromArchive)
+
+        private static string GetRequiredArchivePathFromSedsStatic()
+        {
+            var archivePath = SecureEncryptedDataStore.GetString(SedsKey_KeyFile);
+            if (string.IsNullOrWhiteSpace(archivePath))
+                throw new InvalidOperationException("Missing KeyFile path in SEDS.");
+            return archivePath;
+        }
+
+        private static char[] GetRequiredKeyPasswordFromSedsStatic()
+        {
+            var keyPw = SecureEncryptedDataStore.GetChars(SedsKey_KeyPW);
+            if (keyPw == null || keyPw.Length == 0)
+                throw new InvalidOperationException("Missing key archive password in SEDS.");
+            return keyPw;
         }
 
         #endregion

@@ -1,30 +1,26 @@
 ﻿// File: Services/CategoryItemService.cs
 //
-// COMPLETE REWRITE (same responsibilities, but:
-// - Single, consistent SQL loading choke point
-// - Clean, explicit transaction boundaries
-// - Inserts logs for successful inserts (Item created)
-// - Logs are "best effort" and NEVER break the insert UX
-// - No sensitive values are logged (only ids + boolean “fields present” flags)
+// FULL REWRITE (with backwards-compatible named parameters)
 //
-// CHANGE IN THIS REWRITE:
-// - Added public InsertCategoryItemOnly(...) wrapper for bookmark-only flow
-//   (inserts CategoryItem WITHOUT launching PasswordHistory insert)
+// Fix for CS1739:
+// - Adds overloads whose parameter NAMES match the UI call sites:
+//     accountEmail, accountPhoneNumber
+// - Internally we treat these as encrypted bytes (BLOB) and forward to the core impl.
 //
-// CHANGE NOW (THIS TASK):
-// - Wired CI_BookMarkOnly through the insert SQL + service layer.
-// - FIX: Do NOT log CATEGORYITEM_PASSWORD_CHANGED during NEW item insert.
-//        (That event is reserved for EDIT password changes.)
+// Notes:
+// - Password stays in CategoryItemPasswordHistory (NOT CategoryItem).
+// - Bookmark-only => inserts CategoryItem only (no PasswordHistory row).
+// - Logging is best-effort and never logs secrets (only “present” flags).
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using MWPV.Services;       // LogCatalogService
+using MWPV.Utilities.Json; // AppJson
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using MWPV.Services;       // LogCatalogService
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;       // SqlCagegory (SQL catalog/loader)
-using MWPV.Utilities.Json; // AppJson (LogPayloadDto + serializer helpers)
 
 namespace MWPV.Services
 {
@@ -69,10 +65,6 @@ namespace MWPV.Services
                 cmd.CommandText = sql;
 
                 AddInt32(cmd, "@Category_Key", categoryKey);
-
-#if DEBUG
-                Debug.WriteLine($"[SQL][PARAM] @Category_Key = {categoryKey} (type=Int32)");
-#endif
 
                 using var r = cmd.ExecuteReader();
 
@@ -122,22 +114,45 @@ namespace MWPV.Services
         // INSERT: CategoryItem ONLY (bookmark-only flow)
         // ============================================================
 
-        /// <summary>
-        /// Inserts CategoryItem only (NO PasswordHistory insert).
-        /// Returns the new ItemId (> 0) on success.
-        /// </summary>
+        // --- Back-compat overload: matches UI named args (accountEmail/accountPhoneNumber)
         public static long InsertCategoryItemOnly(
             int categoryKey,
-            string? name,
+            string name,
             string? description,
             string? username,
             string? signInUrl,
-            string? accountEmail,
-            string? accountPhoneNumber,
-            byte[]? secretMeta,      // -> CI_SecretMeta (BLOB)
-            byte[]? secretData,      // -> CI_SecretData (BLOB)
-            int? secretStorage,      // -> CI_SecretStorage (INTEGER NOT NULL, CHECK 0/1/2)
-            int? isActive            // -> IsActive (nullable or defaulted in SQL)
+            byte[]? accountEmail,
+            byte[]? accountPhoneNumber,
+            byte[]? pin = null,
+            int? isActive = null
+        )
+        {
+            return InsertCategoryItemOnlyCore(
+                categoryKey: categoryKey,
+                name: name,
+                description: description,
+                username: username,
+                signInUrl: signInUrl,
+                accountEmailCipher: accountEmail,
+                accountPhoneCipher: accountPhoneNumber,
+                pinCipher: pin,
+                isActive: isActive);
+        }
+
+        /// <summary>
+        /// Inserts CategoryItem only (NO PasswordHistory insert).
+        /// Values for masked fields must be encrypted bytes (BLOBs).
+        /// </summary>
+        public static long InsertCategoryItemOnlyCore(
+            int categoryKey,
+            string name,
+            string? description,
+            string? username,
+            string? signInUrl,
+            byte[]? accountEmailCipher,
+            byte[]? accountPhoneCipher,
+            byte[]? pinCipher,
+            int? isActive = null
         )
         {
             if (categoryKey < 0)
@@ -149,12 +164,6 @@ namespace MWPV.Services
             {
                 var itemSql = LoadSqlRequired("s_CategoryItem_insert.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_insert.sql");
-                Debug.WriteLine(itemSql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var tx = conn.BeginTransaction();
 
@@ -162,30 +171,23 @@ namespace MWPV.Services
 
                 try
                 {
-                    // Bookmark-only flow => CI_BookMarkOnly = 1
-                    newItemId = InsertCategoryItem(
+                    newItemId = InsertCategoryItemCore(
                         conn, tx, itemSql,
-                        categoryKey,
-                        name!.Trim(),
-                        description,
-                        username,
-                        signInUrl,
+                        categoryKey: categoryKey,
+                        name: name.Trim(),
+                        description: description,
+                        username: username,
+                        signInUrl: signInUrl,
                         bookMarkOnly: 1,
-                        accountEmail,
-                        accountPhoneNumber,
-                        secretMeta,
-                        secretData,
-                        secretStorage,
-                        isActive);
+                        accountEmailCipher: accountEmailCipher,
+                        accountPhoneCipher: accountPhoneCipher,
+                        pinCipher: pinCipher,
+                        isActive: isActive);
 
                     if (newItemId <= 0)
                         throw new InvalidOperationException("Insert failed (no ItemId returned)");
 
                     tx.Commit();
-
-#if DEBUG
-                    Debug.WriteLine($"[CAT_ITEM][INSERT-ONLY][OK] ItemId={newItemId} CatKey={categoryKey} BookMarkOnly=1");
-#endif
                 }
                 catch
                 {
@@ -193,21 +195,18 @@ namespace MWPV.Services
                     throw;
                 }
 
-                // Best-effort log AFTER commit (never blocks UX)
-                BestEffortLogNewItemCreatedOnly(
+                BestEffortLogItemCreated(
                     itemId: newItemId,
                     categoryKey: categoryKey,
+                    bookMarkOnly: 1,
                     namePresent: true,
                     descriptionPresent: !string.IsNullOrWhiteSpace(description),
                     usernamePresent: !string.IsNullOrWhiteSpace(username),
                     urlPresent: !string.IsNullOrWhiteSpace(signInUrl),
-                    emailPresent: !string.IsNullOrWhiteSpace(accountEmail),
-                    phonePresent: !string.IsNullOrWhiteSpace(accountPhoneNumber),
-                    secretMetaPresent: secretMeta != null && secretMeta.Length > 0,
-                    secretDataPresent: secretData != null && secretData.Length > 0,
-                    secretStorage: NormalizeSecretStorage(secretStorage),
-                    isActive: isActive,
-                    bookMarkOnly: 1);
+                    emailPresent: accountEmailCipher is { Length: > 0 },
+                    phonePresent: accountPhoneCipher is { Length: > 0 },
+                    pinPresent: pinCipher is { Length: > 0 },
+                    isActive: isActive);
 
                 return newItemId;
             }
@@ -222,30 +221,56 @@ namespace MWPV.Services
         // INSERT: CategoryItem + PasswordHistory (single transaction)
         // ============================================================
 
-        /// <summary>
-        /// Inserts CategoryItem and the first PasswordHistory row in a single transaction.
-        /// Returns the new ItemId (> 0) on success.
-        /// NOTE: This is a NEW item creation flow; we log item creation only.
-        ///       We do NOT log CATEGORYITEM_PASSWORD_CHANGED here.
-        /// </summary>
+        // --- Back-compat overload: matches UI named args (accountEmail/accountPhoneNumber)
         public static long InsertCategoryItemWithPasswordHistory(
             int categoryKey,
-            string? name,
+            string name,
             string? description,
             string? username,
             string? signInUrl,
-            string? accountEmail,
-            string? accountPhoneNumber,
-            byte[]? secretMeta,      // -> CI_SecretMeta (BLOB)
-            byte[]? secretData,      // -> CI_SecretData (BLOB)
-            int? secretStorage,      // -> CI_SecretStorage (INTEGER NOT NULL, CHECK 0/1/2)
-            int? isActive,           // -> IsActive (nullable or defaulted in SQL)
-            byte[] pwCipher,         // -> CIPaH_Password (BLOB NOT NULL)
-            int? pwPadLen,           // -> CIPaH_PadLen (INTEGER)
-            byte[] pwSig             // -> CIPaH_PwSig (BLOB NOT NULL)
+            byte[]? accountEmail,
+            byte[]? accountPhoneNumber,
+            int? isActive,
+            byte[] pwCipher,
+            int? pwPadLen,
+            byte[] pwSig,
+            byte[]? pin = null
         )
         {
-            // ---- Guards (keep these cheap + obvious)
+            return InsertCategoryItemWithPasswordHistoryCore(
+                categoryKey: categoryKey,
+                name: name,
+                description: description,
+                username: username,
+                signInUrl: signInUrl,
+                accountEmailCipher: accountEmail,
+                accountPhoneCipher: accountPhoneNumber,
+                pinCipher: pin,
+                isActive: isActive,
+                pwCipher: pwCipher,
+                pwPadLen: pwPadLen,
+                pwSig: pwSig);
+        }
+
+        /// <summary>
+        /// Inserts CategoryItem and first PasswordHistory row in a single transaction.
+        /// Values for masked fields must be encrypted bytes (BLOBs).
+        /// </summary>
+        public static long InsertCategoryItemWithPasswordHistoryCore(
+            int categoryKey,
+            string name,
+            string? description,
+            string? username,
+            string? signInUrl,
+            byte[]? accountEmailCipher,
+            byte[]? accountPhoneCipher,
+            byte[]? pinCipher,
+            int? isActive,
+            byte[] pwCipher,
+            int? pwPadLen,
+            byte[] pwSig
+        )
+        {
             if (categoryKey < 0)
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
             if (string.IsNullOrWhiteSpace(name))
@@ -260,15 +285,6 @@ namespace MWPV.Services
                 var itemSql = LoadSqlRequired("s_CategoryItem_insert.sql");
                 var pwSql = LoadSqlRequired("s_CategoryItemPasswordHistory_insert.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_insert.sql");
-                Debug.WriteLine(itemSql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItemPasswordHistory_insert.sql");
-                Debug.WriteLine(pwSql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var tx = conn.BeginTransaction();
 
@@ -277,41 +293,33 @@ namespace MWPV.Services
 
                 try
                 {
-                    // Normal password flow => CI_BookMarkOnly = 0
-                    newItemId = InsertCategoryItem(
+                    newItemId = InsertCategoryItemCore(
                         conn, tx, itemSql,
-                        categoryKey,
-                        name!.Trim(),
-                        description,
-                        username,
-                        signInUrl,
+                        categoryKey: categoryKey,
+                        name: name.Trim(),
+                        description: description,
+                        username: username,
+                        signInUrl: signInUrl,
                         bookMarkOnly: 0,
-                        accountEmail,
-                        accountPhoneNumber,
-                        secretMeta,
-                        secretData,
-                        secretStorage,
-                        isActive);
+                        accountEmailCipher: accountEmailCipher,
+                        accountPhoneCipher: accountPhoneCipher,
+                        pinCipher: pinCipher,
+                        isActive: isActive);
 
                     if (newItemId <= 0)
                         throw new InvalidOperationException("Insert failed (no ItemId returned)");
 
-                    newPwHistId = InsertPasswordHistory(
+                    newPwHistId = InsertPasswordHistoryCore(
                         conn, tx, pwSql,
-                        newItemId,
-                        pwCipher,
-                        pwPadLen,
-                        pwSig);
+                        itemId: newItemId,
+                        pwCipher: pwCipher,
+                        pwPadLen: pwPadLen,
+                        pwSig: pwSig);
 
                     if (newPwHistId <= 0)
                         throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
 
                     tx.Commit();
-
-#if DEBUG
-                    Debug.WriteLine($"[CAT_ITEM][INSERT][OK] ItemId={newItemId} CatKey={categoryKey} BookMarkOnly=0");
-                    Debug.WriteLine($"[CAT_ITEM][PW_HIST][INSERT][OK] PwHistId={newPwHistId} ItemId={newItemId}");
-#endif
                 }
                 catch
                 {
@@ -319,22 +327,19 @@ namespace MWPV.Services
                     throw;
                 }
 
-                // Best-effort logs AFTER commit (so logs never block the insert)
-                // FIX: no CATEGORYITEM_PASSWORD_CHANGED here.
-                BestEffortLogNewItemCreated(
+                // New item creation => item-created log only (no password-changed log here)
+                BestEffortLogItemCreated(
                     itemId: newItemId,
                     categoryKey: categoryKey,
+                    bookMarkOnly: 0,
                     namePresent: true,
                     descriptionPresent: !string.IsNullOrWhiteSpace(description),
                     usernamePresent: !string.IsNullOrWhiteSpace(username),
                     urlPresent: !string.IsNullOrWhiteSpace(signInUrl),
-                    emailPresent: !string.IsNullOrWhiteSpace(accountEmail),
-                    phonePresent: !string.IsNullOrWhiteSpace(accountPhoneNumber),
-                    secretMetaPresent: secretMeta != null && secretMeta.Length > 0,
-                    secretDataPresent: secretData != null && secretData.Length > 0,
-                    secretStorage: NormalizeSecretStorage(secretStorage),
-                    isActive: isActive,
-                    bookMarkOnly: 0);
+                    emailPresent: accountEmailCipher is { Length: > 0 },
+                    phonePresent: accountPhoneCipher is { Length: > 0 },
+                    pinPresent: pinCipher is { Length: > 0 },
+                    isActive: isActive);
 
                 return newItemId;
             }
@@ -349,7 +354,7 @@ namespace MWPV.Services
         // INSERT helpers
         // ============================================================
 
-        private static long InsertCategoryItem(
+        private static long InsertCategoryItemCore(
             SqliteConnection conn,
             SqliteTransaction tx,
             string sql,
@@ -358,12 +363,10 @@ namespace MWPV.Services
             string? description,
             string? username,
             string? signInUrl,
-            int bookMarkOnly,        // 0/1 -> CI_BookMarkOnly
-            string? accountEmail,
-            string? accountPhoneNumber,
-            byte[]? secretMeta,
-            byte[]? secretData,
-            int? secretStorage,
+            int bookMarkOnly,              // 0/1
+            byte[]? accountEmailCipher,    // BLOB
+            byte[]? accountPhoneCipher,    // BLOB
+            byte[]? pinCipher,             // BLOB (optional column)
             int? isActive
         )
         {
@@ -371,32 +374,35 @@ namespace MWPV.Services
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            // IMPORTANT: parameter names MUST match s_CategoryItem_insert.sql exactly
+            // Required
             AddInt32(cmd, "@Category_Key", categoryKey);
-            AddText(cmd, "@CI_Name", name); // never null
-            AddText(cmd, "@CI_Description", description);
-            AddText(cmd, "@CI_Username", username);
-            AddText(cmd, "@CI_SignInUrl", signInUrl);
+            AddText(cmd, "@CI_Name", name);
 
-            AddInt32(cmd, "@CI_BookMarkOnly", NormalizeBookMarkOnly(bookMarkOnly));
+            // Optional plaintext columns
+            AddTextIfSqlUses(cmd, sql, "@CI_Description", description);
+            AddTextIfSqlUses(cmd, sql, "@CI_Username", username);
+            AddTextIfSqlUses(cmd, sql, "@CI_SignInUrl", signInUrl);
 
-            AddText(cmd, "@CI_AccountEmail", accountEmail);
-            AddText(cmd, "@CI_AccountPhoneNumber", accountPhoneNumber);
+            // Bookmark flag
+            AddInt32IfSqlUses(cmd, sql, "@CI_BookMarkOnly", NormalizeBookMarkOnly(bookMarkOnly));
 
-            AddBlob(cmd, "@CI_SecretMeta", secretMeta);
-            AddBlob(cmd, "@CI_SecretData", secretData);
+            // Masked/sensitive -> encrypted BLOBs
+            AddBlobIfSqlUses(cmd, sql, "@CI_AccountEmail", accountEmailCipher);
+            AddBlobIfSqlUses(cmd, sql, "@CI_AccountPhoneNumber", accountPhoneCipher);
+            AddBlobIfSqlUses(cmd, sql, "@CI_Pin", pinCipher);
 
-            // NOT NULL w/ CHECK -> never send NULL
-            AddInt32(cmd, "@CI_SecretStorage", NormalizeSecretStorage(secretStorage));
+            // Active (DDL default is 1; bind only if SQL references it)
+            AddInt32NullableIfSqlUses(cmd, sql, "@IsActive", isActive);
 
-            // Nullable if SQL/schema allow
-            AddInt32Nullable(cmd, "@IsActive", isActive);
+            // Legacy/transition columns (bind only if SQL references them)
+            AddBlobIfSqlUses(cmd, sql, "@CI_SecretMeta", null);
+            AddBlobIfSqlUses(cmd, sql, "@CI_SecretData", null);
+            AddTextIfSqlUses(cmd, sql, "@CI_SecretStorage", null);
 
 #if DEBUG
             DebugDumpParams(cmd, "[CAT_ITEM][INSERT][PARAMS]");
 #endif
 
-            // Script MUST return scalar ItemId (RETURNING ItemId or SELECT last_insert_rowid())
             var scalar = cmd.ExecuteScalar();
             if (scalar == null || scalar == DBNull.Value)
                 throw new InvalidOperationException("Insert failed (no ItemId returned)");
@@ -404,11 +410,7 @@ namespace MWPV.Services
             return Convert.ToInt64(scalar);
         }
 
-        /// <summary>
-        /// Inserts first row into CategoryItemPasswordHistory (CIPaH_* schema).
-        /// Expects SQL to end with: RETURNING CIPaH_PwHistId;
-        /// </summary>
-        private static long InsertPasswordHistory(
+        private static long InsertPasswordHistoryCore(
             SqliteConnection conn,
             SqliteTransaction tx,
             string sql,
@@ -425,7 +427,6 @@ namespace MWPV.Services
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            // IMPORTANT: parameter names MUST match s_CategoryItemPasswordHistory_insert.sql exactly
             AddInt64(cmd, "@CIPaH_ItemId", itemId);
             AddBlob(cmd, "@CIPaH_Password", pwCipher);
             AddInt32Nullable(cmd, "@CIPaH_PadLen", pwPadLen);
@@ -446,28 +447,30 @@ namespace MWPV.Services
         // Logging (best effort, no secrets)
         // ============================================================
 
-        private static void BestEffortLogNewItemCreatedOnly(
+        private static void BestEffortLogItemCreated(
             long itemId,
             int categoryKey,
+            int bookMarkOnly,
             bool namePresent,
             bool descriptionPresent,
             bool usernamePresent,
             bool urlPresent,
             bool emailPresent,
             bool phonePresent,
-            bool secretMetaPresent,
-            bool secretDataPresent,
-            int secretStorage,
-            int? isActive,
-            int bookMarkOnly)
+            bool pinPresent,
+            int? isActive)
         {
             try
             {
-                var createdDto = new AppJson.LogPayloadDto
+                var dto = new AppJson.LogPayloadDto
                 {
-                    Message = "Category item created (bookmark-only / no password history)",
+                    Message = bookMarkOnly == 1
+                        ? "Category item created (bookmark-only)"
+                        : "Category item created",
                     Source = "CategoryItemService",
-                    EventCode = "CATEGORYITEM_CREATED_BOOKMARK_ONLY",
+                    EventCode = bookMarkOnly == 1
+                        ? "CATEGORYITEM_CREATED_BOOKMARK_ONLY"
+                        : "CATEGORYITEM_CREATED",
                     OccurredUtc = DateTime.UtcNow,
                     Context = BuildContext(new
                     {
@@ -482,10 +485,8 @@ namespace MWPV.Services
                             url = urlPresent,
                             email = emailPresent,
                             phone = phonePresent,
-                            secretMeta = secretMetaPresent,
-                            secretData = secretDataPresent
+                            pin = pinPresent
                         },
-                        secretStorage,
                         isActive
                     })
                 };
@@ -493,72 +494,10 @@ namespace MWPV.Services
                 LogCatalogService.AppendJson(
                     level: "INFO",
                     source: "CategoryItem",
-                    eventCode: "CATEGORYITEM_CREATED_BOOKMARK_ONLY",
-                    dto: createdDto,
+                    eventCode: dto.EventCode ?? "CATEGORYITEM_CREATED",
+                    dto: dto,
                     whenUtc: DateTime.UtcNow,
                     itemId: itemId);
-            }
-            catch
-            {
-                // Never allow logging to break insertion UX
-            }
-        }
-
-        private static void BestEffortLogNewItemCreated(
-            long itemId,
-            int categoryKey,
-            bool namePresent,
-            bool descriptionPresent,
-            bool usernamePresent,
-            bool urlPresent,
-            bool emailPresent,
-            bool phonePresent,
-            bool secretMetaPresent,
-            bool secretDataPresent,
-            int secretStorage,
-            int? isActive,
-            int bookMarkOnly)
-        {
-            try
-            {
-                // Event: Item created (name set)
-                var createdDto = new AppJson.LogPayloadDto
-                {
-                    Message = "Category item created",
-                    Source = "CategoryItemService",
-                    EventCode = "CATEGORYITEM_NAME_ADDED",
-                    OccurredUtc = DateTime.UtcNow,
-                    Context = BuildContext(new
-                    {
-                        itemId,
-                        categoryKey,
-                        bookMarkOnly,
-                        fieldsPresent = new
-                        {
-                            name = namePresent,
-                            description = descriptionPresent,
-                            username = usernamePresent,
-                            url = urlPresent,
-                            email = emailPresent,
-                            phone = phonePresent,
-                            secretMeta = secretMetaPresent,
-                            secretData = secretDataPresent
-                        },
-                        secretStorage,
-                        isActive
-                    })
-                };
-
-                LogCatalogService.AppendJson(
-                    level: "INFO",
-                    source: "CategoryItem",
-                    eventCode: "CATEGORYITEM_NAME_ADDED",
-                    dto: createdDto,
-                    whenUtc: DateTime.UtcNow,
-                    itemId: itemId);
-
-                // FIX: Do NOT log CATEGORYITEM_PASSWORD_CHANGED here.
-                // That event should be emitted only by the EDIT password-change workflow.
             }
             catch
             {
@@ -581,28 +520,11 @@ namespace MWPV.Services
         }
 
         // ============================================================
-        // Normalization / validation
+        // Normalization
         // ============================================================
-
-        private static int NormalizeSecretStorage(int? secretStorage)
-        {
-            // DB column is NOT NULL. Legal values: 0/1/2 only.
-            if (!secretStorage.HasValue)
-                return 0;
-
-            return secretStorage.Value switch
-            {
-                0 => 0,
-                1 => 1,
-                2 => 2,
-                _ => throw new ArgumentOutOfRangeException(nameof(secretStorage), secretStorage.Value,
-                        "CI_SecretStorage must be 0, 1, or 2.")
-            };
-        }
 
         private static int NormalizeBookMarkOnly(int value)
         {
-            // CI_BookMarkOnly is intended to be 0/1.
             return value switch
             {
                 0 => 0,
@@ -614,6 +536,33 @@ namespace MWPV.Services
         // ============================================================
         // Param helpers (single place, avoids drift)
         // ============================================================
+
+        private static bool SqlUses(string sql, string paramName)
+            => sql.IndexOf(paramName, StringComparison.OrdinalIgnoreCase) >= 0;
+
+        private static void AddTextIfSqlUses(SqliteCommand cmd, string sql, string name, string? value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddText(cmd, name, value);
+        }
+
+        private static void AddBlobIfSqlUses(SqliteCommand cmd, string sql, string name, byte[]? value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddBlob(cmd, name, value);
+        }
+
+        private static void AddInt32IfSqlUses(SqliteCommand cmd, string sql, string name, int value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddInt32(cmd, name, value);
+        }
+
+        private static void AddInt32NullableIfSqlUses(SqliteCommand cmd, string sql, string name, int? value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddInt32Nullable(cmd, name, value);
+        }
 
         private static void AddText(SqliteCommand cmd, string name, string? value)
         {

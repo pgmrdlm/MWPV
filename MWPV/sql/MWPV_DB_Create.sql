@@ -72,27 +72,31 @@ CREATE TABLE Category (
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- CategoryItem (+ added CI_* fields)
+-- CategoryItem (Basic tab only; masked fields stored encrypted as BLOBs)
 CREATE TABLE CategoryItem (
     ItemId                   INTEGER PRIMARY KEY AUTOINCREMENT,
     Category_Key             INTEGER NOT NULL REFERENCES Category (Category_Key) ON DELETE CASCADE,
+
     CI_Name                  TEXT    NOT NULL,
     CI_Description           TEXT,
     CI_Username              TEXT,
     CI_SignInUrl             TEXT,
+
     CI_BookMarkOnly          INTEGER NOT NULL DEFAULT 0 CHECK (CI_BookMarkOnly IN (0,1)),
+
+    -- Masked/sensitive (store ciphertext bytes)
     CI_AccountEmail          BLOB,
     CI_AccountPhoneNumber    BLOB,
-    CI_SecretMeta            BLOB,
-    CI_SecretData            BLOB,  -- Primary Bank card type(credit/debit/store), card #, exp date, csv, pin #
-                                    -- Account number, other payment types(bank account)
-    CI_SecretStorage         TEXT    NOT NULL DEFAULT '0' CHECK (CI_SecretStorage IN ('0','1','2')),
+    CI_Pin                   BLOB,
+
     CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     IsActive                 INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
+
     CHECK (length(trim(CI_Name)) > 0),
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
+
 
 -- Encrypted detail siblings
 CREATE TABLE CategoryItemPasswordHistory (

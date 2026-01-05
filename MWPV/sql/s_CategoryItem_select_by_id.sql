@@ -9,9 +9,7 @@ SELECT
     CI_BookMarkOnly,
     CI_AccountEmail,
     CI_AccountPhoneNumber,
-    CI_SecretMeta,
-    CI_SecretData,
-    CI_SecretStorage,
+    CI_Pin,
     CI_CreateUTC,
     CI_UpdateUTC,
     IsActive
