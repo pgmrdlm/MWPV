@@ -1,4 +1,6 @@
-﻿using System;
+﻿// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -28,9 +30,14 @@ namespace MWPV.View.UserControls.CategoryItems
         // TODO (later): replace 0 with your real enum value (e.g. SecretStorageType.None)
         private const int SecretStorage_Default = 0;
 
-        // ======================= NEW: MODE DETECTION (SEDS) =======================
+        // ======================= MODE DETECTION (SEDS) =======================
         // Convention: 0 => Add/New, >0 => Edit/View existing
-        private const string SedsKey_ActiveEntityId = "MWPV.Context.ActiveEntityId";
+        // IMPORTANT: Use Security.Utility ContextKeys to avoid string-key drift.
+        // ALSO: only treat id as active if CurrentEntityKind == "CategoryItem"
+        private const string EntityKind_CategoryItem = "CategoryItem";
+        private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
+        private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+
         private int _activeEntityId;
         private bool IsEditMode => _activeEntityId > 0;
 
@@ -91,7 +98,7 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearForm();
             ResetUiState();
 
-            // NEW: determine ADD vs EDIT/VIEW from SEDS (no UI change; debug only)
+            // Determine ADD vs EDIT/VIEW from SEDS (no UI change; debug only)
             ConfigureModeFromSeds();
         }
 
@@ -107,7 +114,7 @@ namespace MWPV.View.UserControls.CategoryItems
             WipeSensitiveFields();
         }
 
-        /* ======================= NEW: Mode detection helper ======================= */
+        /* ======================= Mode detection helper ======================= */
 
         private void ConfigureModeFromSeds()
         {
@@ -115,7 +122,18 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_ActiveEntityId, out int id) && id > 0)
+                // Kind must match
+                if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
+                    goto Done;
+
+                string kind;
+                try { kind = Encoding.UTF8.GetString(kindBytes); }
+                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
+
+                if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
+                    goto Done;
+
+                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
                     _activeEntityId = id;
             }
             catch
@@ -124,9 +142,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 _activeEntityId = 0;
             }
 
+        Done:
 #if DEBUG
-            Debug.WriteLine($"[BASIC][MODE] ActiveEntityId={_activeEntityId} => mode={(IsEditMode ? "EDIT/VIEW" : "ADD")}");
+            Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => mode={(IsEditMode ? "EDIT/VIEW" : "ADD")}");
 #endif
+            ;
         }
 
         /* ======================= Host-facing API ======================= */
@@ -269,27 +289,16 @@ namespace MWPV.View.UserControls.CategoryItems
                 txtPhone.Focus();
         }
 
-        /* ======================= NEW: safe non-null SecretStorage ======================= */
+        /* ======================= Safe non-null SecretStorage ======================= */
 
-        /// <summary>
-        /// Returns a NON-NULL SecretStorage value for DB inserts.
-        /// We default to SecretStorage_Default to prevent CI_SecretStorage NOT NULL failures.
-        /// </summary>
         public int GetSecretStorageOrDefault()
         {
             bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
             return GetSecretStorageOrDefault(isBookmarkOnly);
         }
 
-        /// <summary>
-        /// Overload for callers who already calculated bookmark-only.
-        /// </summary>
         public int GetSecretStorageOrDefault(bool isBookmarkOnly)
         {
-            // For v1, we keep this simple:
-            // - Bookmark-only still needs a value.
-            // - Non-bookmark also needs a value.
-            // Later, we can map different modes if we formalize storage types.
             _ = isBookmarkOnly;
             return SecretStorage_Default;
         }
@@ -353,15 +362,16 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             byte[] plain = Encoding.UTF8.GetBytes(pw);
+            byte[] entropy = Encoding.UTF8.GetBytes("MWPV:CIPaH:PW:v1");
             try
             {
-                byte[] entropy = Encoding.UTF8.GetBytes("MWPV:CIPaH:PW:v1");
                 pwCipher = ProtectedData.Protect(plain, entropy, DataProtectionScope.CurrentUser);
                 pwSig = Sha256(pwCipher);
             }
             finally
             {
                 Array.Clear(plain, 0, plain.Length);
+                Array.Clear(entropy, 0, entropy.Length);
             }
         }
 
