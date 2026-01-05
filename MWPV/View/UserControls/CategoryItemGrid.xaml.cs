@@ -1,6 +1,8 @@
-﻿using System;
+﻿// CategoryItemGrid.xaml.cs (FULL REWRITE — minimal changes only)
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Windows;
 using System.Windows.Controls;
 using MWPV.Models;
 using MWPV.Services;
@@ -9,6 +11,10 @@ namespace MWPV.View.UserControls
 {
     public partial class CategoryItemGrid : UserControl
     {
+        // Event raised when user clicks an existing item pill.
+        // Panel subscribes and decides how to open editor overlay.
+        public event EventHandler<CategoryItemEditRequestedEventArgs>? EditRequested;
+
         // Keeping the model type name as-is to match your existing service contract.
         public ObservableCollection<CategoryItemGriud> BoundCategoryItems { get; } = new();
 
@@ -87,6 +93,60 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEMS_GRID][REFRESH][EXIT]");
 #endif
+        }
+
+        private void ItemPill_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not Button btn)
+                    return;
+
+                // Buttons with blank content are Collapsed, but keep a defensive guard.
+                var content = btn.Content as string;
+                if (string.IsNullOrWhiteSpace(content))
+                    return;
+
+                // Tag is bound to strCategoryItemKeyN (string). Parse to int.
+                var raw = btn.Tag?.ToString() ?? string.Empty;
+                if (!int.TryParse(raw, out int categoryItemId) || categoryItemId <= 0)
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEMS_GRID][CLICK] Invalid item id in Tag='{raw}'.");
+#endif
+                    return;
+                }
+
+#if DEBUG
+                Debug.WriteLine($"[ITEMS_GRID][CLICK] Edit requested: itemId={categoryItemId}, catKey={_currentCategoryKey}, catName='{_currentCategoryName}', label='{content}'");
+#endif
+
+                EditRequested?.Invoke(this, new CategoryItemEditRequestedEventArgs(
+                    categoryItemId,
+                    _currentCategoryKey,
+                    _currentCategoryName
+                ));
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEMS_GRID][CLICK][ERR] " + ex);
+#endif
+            }
+        }
+    }
+
+    public sealed class CategoryItemEditRequestedEventArgs : EventArgs
+    {
+        public int CategoryItemId { get; }
+        public int CategoryKey { get; }
+        public string CategoryName { get; }
+
+        public CategoryItemEditRequestedEventArgs(int categoryItemId, int categoryKey, string categoryName)
+        {
+            CategoryItemId = categoryItemId;
+            CategoryKey = categoryKey;
+            CategoryName = categoryName ?? string.Empty;
         }
     }
 }
