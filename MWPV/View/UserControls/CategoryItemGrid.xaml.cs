@@ -1,8 +1,23 @@
-﻿// CategoryItemGrid.xaml.cs
-// FULL REWRITE — DEBUG-FIRST, MINIMAL BEHAVIOR CHANGES
+﻿// File: View/UserControls/CategoryItemGrid.xaml.cs
+//
+// FULL REWRITE (restore missing API + keep current event signature)
+//
+// Fixes your 3 remaining errors by restoring:
+//   - Clear()
+//   - Refresh(int categoryKey, string? categoryName = null)
+//
+// Keeps:
+//   - event EventHandler<int>? EditRequested  (your “changed” version signature)
+//
+// Notes:
+// - XAML binding: ItemsSource="{Binding BoundCategoryItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
+//   works with this property (no DP needed).
+// - Refresh() calls CategoryItemService.LoadCategoryItems(categoryKey) and repopulates BoundCategoryItems.
+
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using MWPV.Models;
@@ -12,50 +27,33 @@ namespace MWPV.View.UserControls
 {
     public partial class CategoryItemGrid : UserControl
     {
-        // Panel subscribes to this and decides how to open the editor overlay.
-        public event EventHandler<CategoryItemEditRequestedEventArgs>? EditRequested;
+        // Host subscribes to open the editor overlay (ItemId only).
+        public event EventHandler<int>? EditRequested;
 
-        // Matches existing service contract/model naming.
+        // Bound to the ItemsControl in XAML.
         public ObservableCollection<CategoryItemGriud> BoundCategoryItems { get; } = new();
 
         private int _currentCategoryKey;
         private string _currentCategoryName = string.Empty;
 
+        public int CurrentCategoryKey => _currentCategoryKey;
+        public string CurrentCategoryName => _currentCategoryName;
+
         public CategoryItemGrid()
         {
             InitializeComponent();
 
-            // Ensure the XAML binding:
-            // ItemsSource="{Binding BoundCategoryItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
-            // works consistently even if host code forgets to set DataContext.
+            // Defensive: if anyone ever binds without RelativeSource, this still works.
+            // (Your current XAML uses RelativeSource, so this isn't required, but harmless.)
             DataContext = this;
-
-            Loaded += CategoryItemGrid_Loaded;
-            Unloaded += CategoryItemGrid_Unloaded;
 
 #if DEBUG
             Debug.WriteLine("[ITEMS_GRID][CTOR] Initialized. DataContext=self.");
 #endif
         }
 
-        private void CategoryItemGrid_Loaded(object sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][LOADED]");
-#endif
-            WireClickHandlers();
-        }
-
-        private void CategoryItemGrid_Unloaded(object sender, RoutedEventArgs e)
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][UNLOADED]");
-#endif
-            UnwireClickHandlers();
-        }
-
         // ------------------------------------------------------------
-        // Public API used by Panel
+        // Public API used by Panel (RESTORED)
         // ------------------------------------------------------------
 
         public void Clear()
@@ -79,6 +77,7 @@ namespace MWPV.View.UserControls
             Debug.WriteLine($"[ITEMS_GRID][REFRESH][ENTER] catKey={categoryKey}, catName='{categoryName ?? _currentCategoryName}'");
 #endif
             _currentCategoryKey = categoryKey;
+
             if (!string.IsNullOrWhiteSpace(categoryName))
                 _currentCategoryName = categoryName!;
 
@@ -107,16 +106,6 @@ namespace MWPV.View.UserControls
 
 #if DEBUG
                 Debug.WriteLine($"[ITEMS_GRID][REFRESH] Loaded rows={BoundCategoryItems.Count} for catKey={categoryKey}, name='{_currentCategoryName}'");
-
-                int i = 0;
-                foreach (var r in BoundCategoryItems)
-                {
-                    Debug.WriteLine(
-                        $"[ITEMS_GRID][ROW {i++}] " +
-                        $"Col1='{r.strCategoryItem1}' Key1='{r.strCategoryItemKey1}' | " +
-                        $"Col2='{r.strCategoryItem2}' Key2='{r.strCategoryItemKey2}' | " +
-                        $"Col3='{r.strCategoryItem3}' Key3='{r.strCategoryItemKey3}'");
-                }
 #endif
             }
             catch (Exception ex)
@@ -132,29 +121,9 @@ namespace MWPV.View.UserControls
         }
 
         // ------------------------------------------------------------
-        // Click handling
+        // Click handler (wired in XAML: Click="ItemPill_Click")
         // ------------------------------------------------------------
 
-        // Safety net: ensure we always have a click handler even if XAML drifts.
-        private void WireClickHandlers()
-        {
-            // The XAML already has Click="ItemPill_Click".
-            // This is just a defensive hook: if templates/styles ever change and lose the Click,
-            // we can still capture clicks by walking the visual tree.
-            // Minimal approach: do nothing here unless you remove Click from XAML later.
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][WIRE] (No-op; XAML Click handler is authoritative.)");
-#endif
-        }
-
-        private void UnwireClickHandlers()
-        {
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][UNWIRE] (No-op; XAML Click handler is authoritative.)");
-#endif
-        }
-
-        // This must match the XAML: Click="ItemPill_Click"
         private void ItemPill_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -162,14 +131,10 @@ namespace MWPV.View.UserControls
                 if (sender is not Button btn)
                     return;
 
-                var label = btn.Content?.ToString() ?? string.Empty;
-                var rawTag = btn.Tag?.ToString() ?? string.Empty;
+                string label = btn.Content?.ToString() ?? string.Empty;
+                string tag = btn.Tag?.ToString() ?? string.Empty;
 
-#if DEBUG
-                Debug.WriteLine($"[ITEMS_GRID][CLICK] rawTag='{rawTag}', label='{label}', catKey={_currentCategoryKey}, catName='{_currentCategoryName}'");
-#endif
-
-                // Ignore clicks on blank/hidden pills (extra defensive)
+                // Extra defensive: ignore blank pills even if style fails to collapse.
                 if (string.IsNullOrWhiteSpace(label))
                 {
 #if DEBUG
@@ -178,26 +143,18 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                if (!int.TryParse(rawTag, out int categoryItemId) || categoryItemId <= 0)
+                if (!TryParseItemId(tag, out int itemId) || itemId <= 0)
                 {
 #if DEBUG
-                    Debug.WriteLine($"[ITEMS_GRID][CLICK] Invalid ItemId in Tag='{rawTag}'.");
+                    Debug.WriteLine($"[ITEMS_GRID][CLICK] IGNORE label='{label}' tag='{tag}' (invalid ItemId)");
 #endif
                     return;
                 }
 
 #if DEBUG
-                Debug.WriteLine($"[ITEMS_GRID][CLICK] EditRequested: itemId={categoryItemId}");
+                Debug.WriteLine($"[ITEMS_GRID][CLICK] EDIT label='{label}' ItemId={itemId} catKey={_currentCategoryKey} catName='{_currentCategoryName}'");
 #endif
-
-                EditRequested?.Invoke(
-                    this,
-                    new CategoryItemEditRequestedEventArgs(
-                        categoryItemId,
-                        _currentCategoryKey,
-                        _currentCategoryName
-                    )
-                );
+                EditRequested?.Invoke(this, itemId);
             }
             catch (Exception ex)
             {
@@ -206,19 +163,29 @@ namespace MWPV.View.UserControls
 #endif
             }
         }
-    }
 
-    public sealed class CategoryItemEditRequestedEventArgs : EventArgs
-    {
-        public int CategoryItemId { get; }
-        public int CategoryKey { get; }
-        public string CategoryName { get; }
+        // ------------------------------------------------------------
+        // Parsing helper
+        // ------------------------------------------------------------
 
-        public CategoryItemEditRequestedEventArgs(int categoryItemId, int categoryKey, string categoryName)
+        private static bool TryParseItemId(string raw, out int itemId)
         {
-            CategoryItemId = categoryItemId;
-            CategoryKey = categoryKey;
-            CategoryName = categoryName ?? string.Empty;
+            itemId = 0;
+
+            if (string.IsNullOrWhiteSpace(raw))
+                return false;
+
+            raw = raw.Trim();
+
+            // Accept int-like tags. Some call sites may pass long as string, so parse long first.
+            if (!long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long l))
+                return false;
+
+            if (l <= 0 || l > int.MaxValue)
+                return false;
+
+            itemId = (int)l;
+            return true;
         }
     }
 }

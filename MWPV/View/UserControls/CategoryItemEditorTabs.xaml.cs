@@ -1,4 +1,13 @@
 ﻿// File: View/UserControls/CategoryItemEditorTabs.xaml.cs
+//
+// FULL REWRITE
+//
+// Fix: Mode is PK-driven via SEDS.
+// - If SEDS(kind=="CategoryItem" && id>0) => EDIT/VIEW
+// - Else => ADD
+//
+// Also: do NOT clear the Basic form unconditionally in Loaded,
+// because that makes EDIT look like ADD and can trigger re-inserts.
 
 using System;
 using System.Collections.Generic;
@@ -23,36 +32,19 @@ namespace MWPV.View.UserControls
         private int _categoryKey;
         private string _categoryName = string.Empty;
 
-        // LEGACY: retained for compatibility / future cleanup.
-        // Mode is derived from SEDS (kind+id).
         private bool _isEditMode;
 
-        // Prevent event stacking
         private bool _panelsHooked;
-
-        // Tab switching guard
         private bool _handlingTabSelection;
         private int _lastTabIndex;
-
-        // Closing guard
         private bool _isClosing;
 
-        // Draft rows (host can read later when persistence is wired)
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
 
-        // Tab indexes
         private const int TabIndexBasic = 0;
         private const int TabIndexBankCards = 1;
 
-        /*
-         * ADD vs EDIT (SEDS is single source of truth)
-         * -------------------------------------------
-         * We only treat SEDS as "active CategoryItem edit" if:
-         *   CurrentEntityKind == "CategoryItem" AND CurrentEntityId > 0
-         *
-         * This prevents stale/mismatched IDs coming from other flows (grid/panel/etc.).
-         */
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
@@ -86,7 +78,6 @@ namespace MWPV.View.UserControls
 
         private static void SetSedsContextForCategoryItem(int id)
         {
-            // Write kind first so any reader won't treat an id as CategoryItem unless kind matches.
             SecureEncryptedDataStore.SetString(SedsKey_EntityKind, EntityKind_CategoryItem);
             SecureEncryptedDataStore.SetInt32(SedsKey_EntityId, id);
         }
@@ -105,6 +96,91 @@ namespace MWPV.View.UserControls
             Unloaded += CategoryItemEditorTabs_Unloaded;
         }
 
+        /* ======================= Public Open API ======================= */
+
+        /// <summary>
+        /// Single entry point used by Panel.
+        /// Mode is derived from SEDS:
+        /// - id>0 => EDIT/VIEW
+        /// - else => ADD
+        /// </summary>
+        public void ConfigureForOpen(int categoryKey, string categoryName)
+        {
+            _categoryKey = categoryKey;
+            _categoryName = categoryName;
+
+            _isEditMode = IsEditModeFromSeds();
+
+#if DEBUG
+            var id = TryGetActiveCategoryItemId();
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForOpen: catKey={categoryKey}, name='{categoryName}', mode={(_isEditMode ? "EDIT" : "ADD")}, activeId={(id.HasValue ? id.Value : 0)}");
+#endif
+
+            InitializeUiForMode();
+        }
+
+        // Keep these for compatibility if anything else still calls them.
+        public void ConfigureForAdd(int categoryKey, string categoryName)
+        {
+            _categoryKey = categoryKey;
+            _categoryName = categoryName;
+
+            ClearSedsContext();
+            _isEditMode = false;
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (SEDS cleared)");
+#endif
+            InitializeUiForMode();
+        }
+
+        public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
+        {
+            _categoryKey = categoryKey;
+            _categoryName = categoryName;
+
+            _isEditMode = IsEditModeFromSeds();
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(_isEditMode ? "EDIT" : "ADD")} (SEDS-derived)");
+#endif
+            InitializeUiForMode();
+
+            // TODO: load existingItem/DB into BasicPanel/BankCardsPanel (next step).
+        }
+
+        private void InitializeUiForMode()
+        {
+            // Tabs wiring and UI reset that should not destroy edit context.
+            HookPanelsOnce();
+
+            if (ItemTabs != null)
+            {
+                ItemTabs.SelectionChanged -= ItemTabs_SelectionChanged;
+                ItemTabs.SelectionChanged += ItemTabs_SelectionChanged;
+
+                if (ItemTabs.SelectedIndex < 0)
+                    ItemTabs.SelectedIndex = TabIndexBasic;
+
+                _lastTabIndex = ItemTabs.SelectedIndex;
+            }
+
+            // ADD: clear. EDIT: do not clear here.
+            if (!_isEditMode)
+            {
+                BasicPanel?.ClearForm();
+                BasicPanel?.ResetUiState();
+            }
+            else
+            {
+                BasicPanel?.ResetUiState();
+                // NOTE: we are not loading DB fields here yet.
+                // This fix is strictly about mode detection: id>0 => EDIT/VIEW.
+            }
+
+            SetStatus("");
+        }
+
         /* ======================= Lifecycle ======================= */
 
         private void CategoryItemEditorTabs_Loaded(object? sender, RoutedEventArgs e)
@@ -121,9 +197,13 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
-            // Keep old behavior: clear + reset on load so we never reopen “dirty”.
-            BasicPanel?.ClearForm();
-            BasicPanel?.ResetUiState();
+            // If Panel didn’t call ConfigureForOpen for some reason,
+            // we still derive mode from SEDS on load.
+            _isEditMode = IsEditModeFromSeds();
+
+            // IMPORTANT: do NOT clear form unconditionally here.
+            // That was making EDIT behave like ADD.
+            InitializeUiForMode();
 
             SetStatus("");
         }
@@ -138,7 +218,6 @@ namespace MWPV.View.UserControls
             if (ItemTabs != null)
                 ItemTabs.SelectionChanged -= ItemTabs_SelectionChanged;
 
-            // Safety: if we’re unloaded without the host calling close-wipe, still wipe.
             try
             {
                 BasicPanel?.WipeAllForHostClose();
@@ -146,44 +225,8 @@ namespace MWPV.View.UserControls
             }
             catch { }
 
-            // Safety: clear the context so we don’t reopen with a stale id.
             try { ClearSedsContext(); } catch { }
 
-            SetStatus("");
-        }
-
-        public void ConfigureForAdd(int categoryKey, string categoryName)
-        {
-            _categoryKey = categoryKey;
-            _categoryName = categoryName;
-
-            // ADD means: we MUST NOT carry any stale “active id” forward.
-            ClearSedsContext();
-            _isEditMode = false;
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (SEDS cleared)");
-#endif
-
-            BasicPanel?.ClearForm();
-            BasicPanel?.ResetUiState();
-            SetStatus("");
-        }
-
-        public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
-        {
-            _categoryKey = categoryKey;
-            _categoryName = categoryName;
-
-            bool isEdit = IsEditModeFromSeds();
-            _isEditMode = isEdit;
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(isEdit ? "EDIT" : "ADD")} (SEDS-derived)");
-#endif
-
-            // TODO: Map existingItem -> fields once persistence is wired.
-            BasicPanel?.ResetUiState();
             SetStatus("");
         }
 
@@ -206,9 +249,7 @@ namespace MWPV.View.UserControls
             }
             finally
             {
-                // Always clear context on close to avoid stale edit-mode next time.
                 try { ClearSedsContext(); } catch { }
-
 #if DEBUG
                 Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose EXIT");
 #endif
@@ -235,10 +276,6 @@ namespace MWPV.View.UserControls
         }
 
         /* ======================= Crypto bridge (masked fields -> BLOBs) ======================= */
-
-        // IMPORTANT:
-        // For v1 INSERT, we reuse DPAPI (same approach as BasicPanel.BuildPasswordHistoryPayload).
-        // Later, we will swap this to vault-key encryption (from keyset.json / SEDS) in ONE place.
 
         private static readonly byte[] Entropy_Email = Encoding.UTF8.GetBytes("MWPV:CITabs:Email:v1");
         private static readonly byte[] Entropy_Phone = Encoding.UTF8.GetBytes("MWPV:CITabs:Phone:v1");
@@ -274,14 +311,13 @@ namespace MWPV.View.UserControls
 
         private bool TryPersistBasicIfNeeded(PersistTrigger trigger, bool isBookmarkOnly)
         {
-            // Today: INSERT only. Edit/Update is later.
             if (_isClosing)
                 return true;
 
             if (BasicPanel == null)
                 return true;
 
-            // If already edit-mode (SEDS has matching kind+id), do nothing for now (UPDATE later).
+            // If edit-mode, do not INSERT.
             if (IsEditModeFromSeds())
                 return true;
 
@@ -295,17 +331,14 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // Gather values from Basic panel (plaintext fields)
                 string name = BasicPanel.GetItemNameTrim();
                 string? desc = BasicPanel.GetDescriptionTrimOrNull();
                 string? username = BasicPanel.GetUsernameTrimOrNull();
                 string? url = BasicPanel.GetUrlTrimOrNull();
 
-                // Gather masked fields (we store encrypted BLOBs)
                 string? emailPlain = BasicPanel.GetEmailTrimOrNull();
                 string? phonePlain = BasicPanel.GetPhoneTrimOrNull();
 
-                // PIN is currently optional; if you later add BasicPanel.GetPinTrimOrNull(), wire it here.
                 string? pinPlain = null;
 
                 emailCipher = EncryptMaskedOrNull_Email(emailPlain);
@@ -363,17 +396,15 @@ namespace MWPV.View.UserControls
                     return false;
                 }
 
-                // Single source of truth: set kind+id immediately to prevent double-insert.
                 SetSedsContextForCategoryItem((int)newId);
                 _isEditMode = true;
 
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS (kind={EntityKind_CategoryItem}, id={SedsKey_EntityId})");
+                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS (kind={EntityKind_CategoryItem})");
 #endif
 
-                // For tab-leave, keep UI open; for SaveAndExit, caller will close.
                 if (trigger == PersistTrigger.LeaveBasicTab)
-                    SetStatus(""); // stay quiet on autosave
+                    SetStatus("");
 
                 return true;
             }
@@ -387,7 +418,6 @@ namespace MWPV.View.UserControls
             }
             finally
             {
-                // Best-effort cleanup of local buffers (service should not retain these).
                 try { if (emailCipher is { Length: > 0 }) Array.Clear(emailCipher, 0, emailCipher.Length); } catch { }
                 try { if (phoneCipher is { Length: > 0 }) Array.Clear(phoneCipher, 0, phoneCipher.Length); } catch { }
                 try { if (pinCipher is { Length: > 0 }) Array.Clear(pinCipher, 0, pinCipher.Length); } catch { }
@@ -475,7 +505,6 @@ namespace MWPV.View.UserControls
                 return;
             }
 
-            // INSERT (if needed) before closing
             if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
             {
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
@@ -524,7 +553,6 @@ namespace MWPV.View.UserControls
                 return;
             }
 
-            // INSERT (if needed) before closing
             if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
             {
                 if (ItemTabs != null)
@@ -558,7 +586,6 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
-            // Leaving BASIC: validate; if ok, auto-INSERT (if needed).
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
                 bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
@@ -573,7 +600,6 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            // Leaving Bank Cards: enforce its own rule.
             if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
             {
                 bool allowLeave = true;
@@ -618,7 +644,6 @@ namespace MWPV.View.UserControls
                 return false;
             }
 
-            // Auto-INSERT if this is a new item.
             if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
                 return false;
 
