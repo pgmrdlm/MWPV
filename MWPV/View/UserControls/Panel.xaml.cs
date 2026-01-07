@@ -1,4 +1,19 @@
-﻿using System;
+﻿// File: View/UserControls/Panel.xaml.cs
+//
+// FULL REWRITE
+//
+// Fix: PK decides ADD vs EDIT/VIEW.
+// - ADD: clear SEDS CurrentEntityKind/Id
+// - EDIT/VIEW: set SEDS CurrentEntityKind="CategoryItem" and CurrentEntityId=itemId (>0)
+// - Overlay creation MUST NOT always call ConfigureForAdd (that was clearing SEDS and forcing ADD).
+//
+// Assumptions (based on your current wiring):
+// - CategoryGrid exposes: SelectedCategoryChanged event, GetSelectedCategory(e), Refresh()
+// - CategoryItemGrid exposes: Refresh(int, string?), Clear(), and EditRequested event (EventHandler<int>)
+// - Overlay host names exist in Panel.xaml: AddEditItemOverlayHost, OverlayHost, LogsOverlay,
+//   plus the usual CategoryGrid, CategoryItemGrid, AddCategoryHost/AddCategoryContent, etc.
+
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,6 +25,7 @@ namespace MWPV.View.UserControls
     {
         private AddCategoryInline? _addCategoryInline;
         private CategoryItemEditorTabs? _categoryItemEdit;
+
         private bool _isHandlingInlineEvent;
 
         private int _selectedCategoryKey;
@@ -22,7 +38,7 @@ namespace MWPV.View.UserControls
         private const string SedsKey_CurrentEntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
         private const string SedsKey_CurrentEntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
 
-        // Optional: keep the kind string centralized
+        // Keep the kind string centralized
         private const string EntityKind_CategoryItem = "CategoryItem";
 
         public Panel()
@@ -35,7 +51,6 @@ namespace MWPV.View.UserControls
             ShowCategoryGrid();
             InitializeAddCategoryInline();
 
-            // Default: navigation unlocked.
             SetNavigationLocked(false);
         }
 
@@ -47,7 +62,9 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[PANEL][LOADED]");
 #endif
             WireCategoryGridEvents();
+            WireCategoryItemGridEvents();
             WireOverlayEvents();
+
             SafeRefreshCategories();
         }
 
@@ -57,6 +74,7 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[PANEL][UNLOADED]");
 #endif
             UnwireCategoryGridEvents();
+            UnwireCategoryItemGridEvents();
             UnwireOverlayEvents();
         }
 
@@ -131,6 +149,7 @@ namespace MWPV.View.UserControls
         private void UnwireCategoryGridEvents()
         {
             if (CategoryGrid == null) return;
+
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
 
 #if DEBUG
@@ -168,8 +187,56 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
+#if DEBUG
                 Debug.WriteLine($"[PANEL][RIGHT][REFRESH][ERR] {ex}");
+#endif
             }
+        }
+
+        /* =================== Category Item Grid (pills) =================== */
+
+        private void WireCategoryItemGridEvents()
+        {
+            if (CategoryItemGrid == null) return;
+
+            CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
+            CategoryItemGrid.EditRequested += CategoryItemGrid_EditRequested;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events wired.");
+#endif
+        }
+
+        private void UnwireCategoryItemGridEvents()
+        {
+            if (CategoryItemGrid == null) return;
+
+            CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
+
+#if DEBUG
+            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events unwired.");
+#endif
+        }
+
+        private void CategoryItemGrid_EditRequested(object? sender, int categoryItemId)
+        {
+            if (_isNavigationLocked)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][ITEM-EDIT] Ignored (navigation locked).");
+#endif
+                return;
+            }
+
+            if (categoryItemId <= 0)
+            {
+#if DEBUG
+                Debug.WriteLine($"[PANEL][ITEM-EDIT] Ignored (invalid itemId={categoryItemId}).");
+#endif
+                return;
+            }
+
+            ShowEditCategoryItemEditor(categoryItemId);
         }
 
         /* =================== Add Category Inline =================== */
@@ -208,7 +275,7 @@ namespace MWPV.View.UserControls
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
 
             txtCategoryItemsTitle.Text = "Category Items";
-            try { CategoryItemGrid?.Clear(); } catch { /* no-op */ }
+            try { CategoryItemGrid?.Clear(); } catch { }
         }
 
         private void ShowCategoryGrid()
@@ -258,44 +325,10 @@ namespace MWPV.View.UserControls
         {
             if (_isNavigationLocked) return;
 
-            // ADD mode: context cleared before editor is created.
+            // ADD: id cleared -> tabs should treat as ADD
             ShowAddCategoryItemEditor();
         }
 
-        /// <summary>
-        /// Called by whatever launches an EDIT/VIEW flow (typically CategoryItemGrid).
-        /// Sets the SEDS CurrentEntityId to the selected item's key, then shows the overlay editor.
-        /// </summary>
-        public void ShowEditCategoryItemEditor(int categoryItemId, int categoryKey, string categoryName)
-        {
-            if (_isNavigationLocked) return;
-
-            if (categoryKey <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-EDIT] Edit requested with invalid categoryKey. Ignoring.");
-#endif
-                return;
-            }
-
-            if (categoryItemId <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-EDIT] Edit requested with invalid categoryItemId. Ignoring.");
-#endif
-                return;
-            }
-
-            _selectedCategoryKey = categoryKey;
-            _selectedCategoryName = categoryName ?? string.Empty;
-
-            SetActiveEntityForEdit(categoryItemId);
-            CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);
-        }
-
-        /// <summary>
-        /// Convenience overload when the caller wants to use the Panel's current selected category.
-        /// </summary>
         public void ShowEditCategoryItemEditor(int categoryItemId)
         {
             if (_isNavigationLocked) return;
@@ -316,13 +349,15 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+            // EDIT/VIEW: set PK into SEDS BEFORE creating editor
             SetActiveEntityForEdit(categoryItemId);
+
             CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);
         }
 
         private void ShowAddCategoryItemEditor()
         {
-            if (_selectedCategoryKey == 0)
+            if (_selectedCategoryKey <= 0)
             {
 #if DEBUG
                 Debug.WriteLine("[PANEL][ITEM-ADD] Add requested with no selected category. Ignoring.");
@@ -330,13 +365,14 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+            // ADD: clear context BEFORE creating editor
             ClearActiveEntityForAdd();
+
             CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);
         }
 
         private void CreateAndShowEditorOverlay(int categoryKey, string categoryName)
         {
-            // Always detach handlers from any previous instance.
             if (_categoryItemEdit != null)
             {
                 _categoryItemEdit.Submitted -= CategoryItemEdit_Submitted;
@@ -347,9 +383,10 @@ namespace MWPV.View.UserControls
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
-            // IMPORTANT: editor determines mode by reading SEDS CurrentEntityId.
-            // Keep existing call so we don't break current flow.
-            _categoryItemEdit.ConfigureForAdd(categoryKey, categoryName);
+            // KEY FIX:
+            // Do NOT always call ConfigureForAdd here.
+            // Tabs will decide ADD vs EDIT by reading SEDS (PK).
+            _categoryItemEdit.ConfigureForOpen(categoryKey, categoryName);
 
             AddEditItemOverlayHost.Content = _categoryItemEdit;
             AddEditItemOverlayHost.Visibility = Visibility.Visible;
@@ -363,14 +400,13 @@ namespace MWPV.View.UserControls
 
         private void HideAddEditCategoryItem()
         {
-            // Ensure wipe ordering even if something hides us without Save/Cancel.
-            try { _categoryItemEdit?.WipeAllForHostClose(); } catch { /* no-op */ }
+            try { _categoryItemEdit?.WipeAllForHostClose(); } catch { }
 
             AddEditItemOverlayHost.Visibility = Visibility.Collapsed;
             AddEditItemOverlayHost.Content = null;
             _categoryItemEdit = null;
 
-            // Clear context so a future open never accidentally inherits an old Edit id.
+            // Clear context so a future open never inherits an old Edit id.
             ClearActiveEntityForAdd();
 
             SetNavigationLocked(false);
@@ -397,7 +433,6 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                // Convention: missing key => treated as ADD/new by readers.
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityId);
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityKind);
 
@@ -417,14 +452,12 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                // 0 => Add/new; >0 => Edit existing
+                // Write KIND first, then ID. Tabs read kind first.
+                SecureEncryptedDataStore.SetString(SedsKey_CurrentEntityKind, EntityKind_CategoryItem);
                 SecureEncryptedDataStore.SetInt32(SedsKey_CurrentEntityId, categoryItemId);
 
-                // Optional but recommended: store what the id refers to
-                SecureEncryptedDataStore.SetString(SedsKey_CurrentEntityKind, EntityKind_CategoryItem);
-
 #if DEBUG
-                Debug.WriteLine($"[PANEL][CTX] Set SEDS CurrentEntityId={categoryItemId}, Kind={EntityKind_CategoryItem} (EDIT/VIEW).");
+                Debug.WriteLine($"[PANEL][CTX] Set SEDS Kind={EntityKind_CategoryItem}, CurrentEntityId={categoryItemId} (EDIT/VIEW).");
 #endif
             }
             catch (Exception ex)
@@ -438,14 +471,8 @@ namespace MWPV.View.UserControls
 #if DEBUG
         private int TryGetActiveEntityIdDebug()
         {
-            try
-            {
-                return SecureEncryptedDataStore.GetInt32(SedsKey_CurrentEntityId);
-            }
-            catch
-            {
-                return -1;
-            }
+            try { return SecureEncryptedDataStore.GetInt32(SedsKey_CurrentEntityId); }
+            catch { return -1; }
         }
 #endif
 
@@ -467,7 +494,7 @@ namespace MWPV.View.UserControls
         public void ShowLogs()
         {
             OverlayHost.Visibility = Visibility.Visible;
-            try { LogsOverlay?.Focus(); } catch { /* no-op */ }
+            try { LogsOverlay?.Focus(); } catch { }
         }
 
         private void LogsOverlay_CloseRequested(object? sender, EventArgs e)
@@ -485,7 +512,9 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
+#if DEBUG
                 Debug.WriteLine($"[PANEL][REFRESH][ERR] {ex}");
+#endif
             }
         }
     }

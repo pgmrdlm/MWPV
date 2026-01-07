@@ -60,6 +60,25 @@ public static class SecureEncryptedDataStore
         Debug.WriteLine("[STORE] Initialized (session AES key generated, wiper registered).");
     }
 
+#if DEBUG
+    private static void DebugCaller(string op, string? detail = null)
+    {
+        try
+        {
+            // 0 = this method
+            // 1 = the immediate caller (Clear/ClearAll/WipeAll)
+            // 2+ = the real external caller we care about
+            var st = new StackTrace(skipFrames: 2, fNeedFileInfo: true);
+            Debug.WriteLine($"[STORE][CALLER] {op}" + (string.IsNullOrWhiteSpace(detail) ? "" : $" ({detail})"));
+            Debug.WriteLine(st.ToString());
+        }
+        catch
+        {
+            // Never let diagnostics interfere with runtime.
+        }
+    }
+#endif
+
     // =========================
     //            SET
     // =========================
@@ -357,10 +376,24 @@ public static class SecureEncryptedDataStore
         }
     }
 
+    /// <summary>
+    /// Clear ONLY the generic context keys (CurrentEntityKind/CurrentEntityId).
+    /// This is the safe "navigation clear" for UI panels.
+    /// </summary>
+    public static void ClearContext()
+    {
+        Clear(ContextKeys.CurrentEntityKind);
+        Clear(ContextKeys.CurrentEntityId);
+    }
+
     public static void Clear(string key)
     {
         if (string.IsNullOrWhiteSpace(key))
             return;
+
+#if DEBUG
+        DebugCaller("Clear(key)", key);
+#endif
 
         lock (_gate)
         {
@@ -376,6 +409,10 @@ public static class SecureEncryptedDataStore
 
     public static void ClearAll()
     {
+#if DEBUG
+        DebugCaller("ClearAll()");
+#endif
+
         lock (_gate)
         {
             ThrowIfWiped();
@@ -405,6 +442,10 @@ public static class SecureEncryptedDataStore
     /// </summary>
     public static void WipeAll()
     {
+#if DEBUG
+        DebugCaller("WipeAll()");
+#endif
+
         lock (_gate)
         {
             if (_wiped)
