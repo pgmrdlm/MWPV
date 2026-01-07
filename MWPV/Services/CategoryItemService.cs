@@ -1,16 +1,14 @@
 ﻿// File: Services/CategoryItemService.cs
 //
-// FULL REWRITE (with backwards-compatible named parameters)
+// FULL REWRITE
 //
-// Fix for CS1739:
-// - Adds overloads whose parameter NAMES match the UI call sites:
-//     accountEmail, accountPhoneNumber
-// - Internally we treat these as encrypted bytes (BLOB) and forward to the core impl.
+// Scope for this step:
+// - Keep existing behavior (grid load + inserts + best-effort logging + param helpers).
+// - ADD: Basic-tab SELECT by ItemId (CategoryItem only).
+// - NO PasswordHistory SELECT yet (we’ll add that later only if Basic truly needs it).
 //
-// Notes:
-// - Password stays in CategoryItemPasswordHistory (NOT CategoryItem).
-// - Bookmark-only => inserts CategoryItem only (no PasswordHistory row).
-// - Logging is best-effort and never logs secrets (only “present” flags).
+// Hard rule: parameter names MUST match SQL exactly.
+// - s_CategoryItem_select_by_id.sql uses: @ItemId
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
@@ -19,6 +17,7 @@ using MWPV.Utilities.Json; // AppJson
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;       // SqlCagegory (SQL catalog/loader)
 
@@ -26,6 +25,31 @@ namespace MWPV.Services
 {
     public static class CategoryItemService
     {
+        // ============================================================
+        // DTO: Basic tab row (CategoryItem only)
+        // ============================================================
+        public sealed class CategoryItemBasicRow
+        {
+            public long ItemId { get; init; }
+            public int CategoryKey { get; init; }
+
+            public string Name { get; init; } = string.Empty;
+            public string? Description { get; init; }
+            public string? Username { get; init; }
+            public string? SignInUrl { get; init; }
+
+            public int BookMarkOnly { get; init; }           // 0/1
+            public int? IsActive { get; init; }              // null allowed
+
+            // Encrypted-at-rest blobs (do NOT decrypt here)
+            public byte[]? AccountEmailCipher { get; init; } // CI_AccountEmail
+            public byte[]? AccountPhoneCipher { get; init; } // CI_AccountPhoneNumber
+            public byte[]? PinCipher { get; init; }          // CI_Pin
+
+            public DateTime? CreatedUtc { get; init; }       // CI_CreateUTC
+            public DateTime? UpdatedUtc { get; init; }       // CI_UpdateUTC
+        }
+
         // ============================================================
         // SQL loading (single choke point)
         // ============================================================
@@ -36,6 +60,106 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(sql))
                 throw new InvalidOperationException($"SQL not loaded: {assetName}");
             return sql;
+        }
+
+        // ============================================================
+        // SELECT: Basic tab (CategoryItem by ItemId)
+        // ============================================================
+
+        /// <summary>
+        /// Loads CategoryItem row for Basic tab by ItemId.
+        /// Returns null if not found.
+        /// IMPORTANT: Does NOT decrypt any BLOBs; returns them as-is.
+        /// </summary>
+        public static CategoryItemBasicRow? LoadCategoryItemBasicById(long itemId)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            try
+            {
+                var sql = LoadSqlRequired("s_CategoryItem_select_by_id.sql");
+
+#if DEBUG
+                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_select_by_id.sql");
+                Debug.WriteLine(sql);
+                Debug.WriteLine("[SQL][TEXT] <<<");
+#endif
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                // MUST match SQL exactly:
+                // WHERE ItemId = @ItemId
+                AddInt64(cmd, "@ItemId", itemId);
+
+#if DEBUG
+                DebugDumpParams(cmd, "[BASIC][DB][ITEM_SELECT][PARAMS]");
+#endif
+
+                using var r = cmd.ExecuteReader();
+                if (!r.Read())
+                {
+#if DEBUG
+                    Debug.WriteLine($"[BASIC][DB][ITEM_SELECT] NOT FOUND itemId={itemId}");
+#endif
+                    return null;
+                }
+
+                // ordinals (match SELECT list)
+                var iItemId = r.GetOrdinal("ItemId");
+                var iCatKey = r.GetOrdinal("Category_Key");
+                var iName = r.GetOrdinal("CI_Name");
+                var iDesc = r.GetOrdinal("CI_Description");
+                var iUser = r.GetOrdinal("CI_Username");
+                var iUrl = r.GetOrdinal("CI_SignInUrl");
+                var iBmo = r.GetOrdinal("CI_BookMarkOnly");
+                var iEmail = r.GetOrdinal("CI_AccountEmail");
+                var iPhone = r.GetOrdinal("CI_AccountPhoneNumber");
+                var iPin = r.GetOrdinal("CI_Pin");
+                var iCreate = r.GetOrdinal("CI_CreateUTC");
+                var iUpdate = r.GetOrdinal("CI_UpdateUTC");
+                var iActive = r.GetOrdinal("IsActive");
+
+                var row = new CategoryItemBasicRow
+                {
+                    ItemId = SafeGetInt64(r, iItemId),
+                    CategoryKey = SafeGetInt32(r, iCatKey),
+
+                    Name = r.IsDBNull(iName) ? string.Empty : r.GetString(iName),
+                    Description = r.IsDBNull(iDesc) ? null : r.GetString(iDesc),
+                    Username = r.IsDBNull(iUser) ? null : r.GetString(iUser),
+                    SignInUrl = r.IsDBNull(iUrl) ? null : r.GetString(iUrl),
+
+                    BookMarkOnly = r.IsDBNull(iBmo) ? 0 : SafeGetInt32(r, iBmo),
+                    IsActive = r.IsDBNull(iActive) ? null : SafeGetInt32(r, iActive),
+
+                    AccountEmailCipher = r.IsDBNull(iEmail) ? null : (byte[]?)r.GetValue(iEmail),
+                    AccountPhoneCipher = r.IsDBNull(iPhone) ? null : (byte[]?)r.GetValue(iPhone),
+                    PinCipher = r.IsDBNull(iPin) ? null : (byte[]?)r.GetValue(iPin),
+
+                    CreatedUtc = ReadNullableUtc(r, iCreate),
+                    UpdatedUtc = ReadNullableUtc(r, iUpdate)
+                };
+
+#if DEBUG
+                Debug.WriteLine(
+                    $"[BASIC][DB][ITEM_SELECT] FOUND itemId={row.ItemId} catKey={row.CategoryKey} " +
+                    $"bmo={row.BookMarkOnly} active={(row.IsActive.HasValue ? row.IsActive.Value.ToString(CultureInfo.InvariantCulture) : "NULL")} " +
+                    $"email={(row.AccountEmailCipher is { Length: > 0 } eb ? $"BLOB[{eb.Length}]" : "NULL")} " +
+                    $"phone={(row.AccountPhoneCipher is { Length: > 0 } pb ? $"BLOB[{pb.Length}]" : "NULL")} " +
+                    $"pin={(row.PinCipher is { Length: > 0 } pib ? $"BLOB[{pib.Length}]" : "NULL")}"
+                );
+#endif
+
+                return row;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading CategoryItem (Basic tab) by ItemId");
+                return null;
+            }
         }
 
         // ============================================================
@@ -327,7 +451,6 @@ namespace MWPV.Services
                     throw;
                 }
 
-                // New item creation => item-created log only (no password-changed log here)
                 BestEffortLogItemCreated(
                     itemId: newItemId,
                     categoryKey: categoryKey,
@@ -366,7 +489,7 @@ namespace MWPV.Services
             int bookMarkOnly,              // 0/1
             byte[]? accountEmailCipher,    // BLOB
             byte[]? accountPhoneCipher,    // BLOB
-            byte[]? pinCipher,             // BLOB (optional column)
+            byte[]? pinCipher,             // BLOB
             int? isActive
         )
         {
@@ -407,7 +530,7 @@ namespace MWPV.Services
             if (scalar == null || scalar == DBNull.Value)
                 throw new InvalidOperationException("Insert failed (no ItemId returned)");
 
-            return Convert.ToInt64(scalar);
+            return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
         }
 
         private static long InsertPasswordHistoryCore(
@@ -440,7 +563,7 @@ namespace MWPV.Services
             if (scalar == null || scalar == DBNull.Value)
                 throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
 
-            return Convert.ToInt64(scalar);
+            return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
         }
 
         // ============================================================
@@ -531,6 +654,85 @@ namespace MWPV.Services
                 1 => 1,
                 _ => throw new ArgumentOutOfRangeException(nameof(value), value, "CI_BookMarkOnly must be 0 or 1.")
             };
+        }
+
+        // ============================================================
+        // Read helpers (SQLite typing can vary by column storage)
+        // ============================================================
+
+        private static int SafeGetInt32(SqliteDataReader r, int ordinal)
+        {
+            // SQLite might return Int64 for integer columns depending on schema/driver
+            var v = r.GetValue(ordinal);
+            if (v is int i) return i;
+            if (v is long l) return checked((int)l);
+            if (v is short s) return s;
+            if (v is byte b) return b;
+            if (v is string str && int.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return Convert.ToInt32(v, CultureInfo.InvariantCulture);
+        }
+
+        private static long SafeGetInt64(SqliteDataReader r, int ordinal)
+        {
+            var v = r.GetValue(ordinal);
+            if (v is long l) return l;
+            if (v is int i) return i;
+            if (v is string str && long.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+
+            return Convert.ToInt64(v, CultureInfo.InvariantCulture);
+        }
+
+        private static DateTime? ReadNullableUtc(SqliteDataReader r, int ordinal)
+        {
+            if (r.IsDBNull(ordinal)) return null;
+
+            var v = r.GetValue(ordinal);
+
+            if (v is DateTime dt)
+            {
+                // normalize to UTC if it isn't already
+                return dt.Kind switch
+                {
+                    DateTimeKind.Utc => dt,
+                    DateTimeKind.Local => dt.ToUniversalTime(),
+                    _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+                };
+            }
+
+            if (v is string s)
+            {
+                if (DateTime.TryParse(
+                    s,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var parsed))
+                {
+                    return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+                }
+                return null;
+            }
+
+            // Fallback: attempt string conversion
+            try
+            {
+                var s2 = Convert.ToString(v, CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(s2)) return null;
+
+                if (DateTime.TryParse(
+                    s2,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var parsed2))
+                {
+                    return DateTime.SpecifyKind(parsed2, DateTimeKind.Utc);
+                }
+            }
+            catch { /* ignore */ }
+
+            return null;
         }
 
         // ============================================================
