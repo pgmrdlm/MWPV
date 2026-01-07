@@ -1,22 +1,20 @@
 ﻿// File: View/UserControls/Panel.xaml.cs
 //
-// FULL REWRITE
+// FULL REWRITE (crash fix included)
 //
-// Fix: PK decides ADD vs EDIT/VIEW.
-// - ADD: clear SEDS CurrentEntityKind/Id
-// - EDIT/VIEW: set SEDS CurrentEntityKind="CategoryItem" and CurrentEntityId=itemId (>0)
-// - Overlay creation MUST NOT always call ConfigureForAdd (that was clearing SEDS and forcing ADD).
+// Crash cause:
+// - ADD clears SEDS CurrentEntityId/Kind
+// - Debug code (or any code) calling SEDS.GetInt32(...) on a cleared key throws KeyNotFoundException
 //
-// Assumptions (based on your current wiring):
-// - CategoryGrid exposes: SelectedCategoryChanged event, GetSelectedCategory(e), Refresh()
-// - CategoryItemGrid exposes: Refresh(int, string?), Clear(), and EditRequested event (EventHandler<int>)
-// - Overlay host names exist in Panel.xaml: AddEditItemOverlayHost, OverlayHost, LogsOverlay,
-//   plus the usual CategoryGrid, CategoryItemGrid, AddCategoryHost/AddCategoryContent, etc.
+// Fix:
+// - Use TryGetInt32 for debug reads (and any non-required reads).
+// - Keep ADD behavior as "clear keys" (your design), but do NOT "Get" cleared keys.
 
 using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 
 namespace MWPV.View.UserControls
@@ -35,8 +33,8 @@ namespace MWPV.View.UserControls
         private bool _isNavigationLocked;
 
         // SEDS context keys (reserved + standardized in Security.Utility)
-        private const string SedsKey_CurrentEntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
-        private const string SedsKey_CurrentEntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
+        private static readonly string SedsKey_CurrentEntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+        private static readonly string SedsKey_CurrentEntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
 
         // Keep the kind string centralized
         private const string EntityKind_CategoryItem = "CategoryItem";
@@ -325,8 +323,7 @@ namespace MWPV.View.UserControls
         {
             if (_isNavigationLocked) return;
 
-            // ADD: id cleared -> tabs should treat as ADD
-            ShowAddCategoryItemEditor();
+            ShowAddCategoryItemEditor(); // ADD: clears SEDS keys
         }
 
         public void ShowEditCategoryItemEditor(int categoryItemId)
@@ -383,9 +380,7 @@ namespace MWPV.View.UserControls
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
-            // KEY FIX:
-            // Do NOT always call ConfigureForAdd here.
-            // Tabs will decide ADD vs EDIT by reading SEDS (PK).
+            // Tabs decide ADD vs EDIT by reading SEDS keys.
             _categoryItemEdit.ConfigureForOpen(categoryKey, categoryName);
 
             AddEditItemOverlayHost.Content = _categoryItemEdit;
@@ -394,7 +389,9 @@ namespace MWPV.View.UserControls
             SetNavigationLocked(true);
 
 #if DEBUG
-            Debug.WriteLine($"[PANEL][ITEM-OVERLAY] Shown. catKey={categoryKey}, catName='{categoryName}', CurrentEntityId={TryGetActiveEntityIdDebug()}");
+            Debug.WriteLine(
+                $"[PANEL][ITEM-OVERLAY] Shown. catKey={categoryKey}, catName='{categoryName}', " +
+                $"CurrentEntityKind='{TryGetActiveEntityKindDebug()}', CurrentEntityId={TryGetActiveEntityIdDebug()}");
 #endif
         }
 
@@ -429,10 +426,13 @@ namespace MWPV.View.UserControls
             HideAddEditCategoryItem();
         }
 
+        /* =================== SEDS context helpers =================== */
+
         private void ClearActiveEntityForAdd()
         {
             try
             {
+                // Your design: key missing means ADD.
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityId);
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityKind);
 
@@ -471,8 +471,17 @@ namespace MWPV.View.UserControls
 #if DEBUG
         private int TryGetActiveEntityIdDebug()
         {
-            try { return SecureEncryptedDataStore.GetInt32(SedsKey_CurrentEntityId); }
-            catch { return -1; }
+            // CRASH FIX: never call GetInt32 for a key that may be cleared.
+            return SecureEncryptedDataStore.TryGetInt32(SedsKey_CurrentEntityId, out int id) ? id : 0;
+        }
+
+        private string TryGetActiveEntityKindDebug()
+        {
+            if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_CurrentEntityKind, out var bytes) || bytes.Length == 0)
+                return string.Empty;
+
+            try { return System.Text.Encoding.UTF8.GetString(bytes); }
+            finally { Array.Clear(bytes, 0, bytes.Length); }
         }
 #endif
 

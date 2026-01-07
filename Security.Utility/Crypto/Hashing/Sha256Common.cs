@@ -11,9 +11,74 @@ namespace Security.Utility.Crypto.Hash
     /// <summary>
     /// Central SHA-256 helper covering strings, spans, byte[], streams, and files.
     /// Returns lowercase hex; includes short-hash helpers for identifiers.
+    /// Also provides raw 32-byte digest helpers for DB signatures.
     /// </summary>
     public static class Sha256Common
     {
+        // =========================
+        // RAW DIGEST (32 bytes)
+        // =========================
+
+        /// <summary>SHA-256 of UTF-8 string -> 32-byte digest.</summary>
+        public static byte[] Bytes(string input, Encoding? enc = null)
+        {
+            if (input is null) throw new ArgumentNullException(nameof(input));
+            enc ??= Encoding.UTF8;
+            return Bytes(enc.GetBytes(input));
+        }
+
+        /// <summary>SHA-256 of byte[] -> 32-byte digest.</summary>
+        public static byte[] Bytes(byte[] data)
+        {
+            if (data is null) throw new ArgumentNullException(nameof(data));
+#if NET8_0_OR_GREATER
+            var hash = new byte[32];
+            SHA256.HashData(data, hash);
+            return hash;
+#else
+            using var sha = SHA256.Create();
+            return sha.ComputeHash(data);
+#endif
+        }
+
+        /// <summary>SHA-256 of ReadOnlySpan&lt;byte&gt; -> 32-byte digest.</summary>
+        public static byte[] Bytes(ReadOnlySpan<byte> data)
+        {
+#if NET8_0_OR_GREATER
+            var hash = new byte[32];
+            SHA256.HashData(data, hash);
+            return hash;
+#else
+            var arr = data.ToArray();
+            using var sha = SHA256.Create();
+            return sha.ComputeHash(arr);
+#endif
+        }
+
+        /// <summary>SHA-256 of a Stream -> 32-byte digest. Stream is read from current Position to end.</summary>
+        public static byte[] Bytes(Stream stream, bool leaveOpen = false)
+        {
+            if (stream is null) throw new ArgumentNullException(nameof(stream));
+            using var sha = SHA256.Create();
+            var hash = sha.ComputeHash(stream);
+            if (!leaveOpen) stream.Dispose();
+            return hash;
+        }
+
+        /// <summary>SHA-256 of a file path -> 32-byte digest.</summary>
+        public static byte[] BytesFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) throw new ArgumentNullException(nameof(path));
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Bytes(fs, leaveOpen: false);
+        }
+
+        public static bool TryBytesFile(string path, out byte[]? hash)
+        {
+            try { hash = BytesFile(path); return true; }
+            catch { hash = null; return false; }
+        }
+
         // =========================
         // Core HEX helpers
         // =========================

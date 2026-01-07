@@ -4,13 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto
+using Security.Utility.Storage;     // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
 using MWPV.Utilities.UI;
@@ -23,17 +23,10 @@ namespace MWPV.View.UserControls.CategoryItems
         public event EventHandler? CancelRequested;
         public event EventHandler<string>? PasswordValidationFailed;
 
-        // ======================= IMPORTANT =======================
-        // CI_SecretStorage is NOT NULL in DB. If caller passes null, INSERT fails.
-        // Until we formalize the enum, we guarantee a non-null default here.
-        //
-        // TODO (later): replace 0 with your real enum value (e.g. SecretStorageType.None)
+        // CI_SecretStorage is NOT NULL in DB
         private const int SecretStorage_Default = 0;
 
-        // ======================= MODE DETECTION (SEDS) =======================
-        // Convention: 0 => Add/New, >0 => Edit/View existing
-        // IMPORTANT: Use Security.Utility ContextKeys to avoid string-key drift.
-        // ALSO: only treat id as active if CurrentEntityKind == "CategoryItem"
+        // Mode detection (SEDS)
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
@@ -41,7 +34,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private int _activeEntityId;
         private bool IsEditMode => _activeEntityId > 0;
 
-        // Reveal state flags
+        // Reveal state
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private bool _phoneRevealed;
@@ -98,7 +91,6 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearForm();
             ResetUiState();
 
-            // Determine ADD vs EDIT/VIEW from SEDS (no UI change; debug only)
             ConfigureModeFromSeds();
         }
 
@@ -122,7 +114,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                // Kind must match
                 if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
                     goto Done;
 
@@ -138,7 +129,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             catch
             {
-                // Fail-safe: default to ADD
                 _activeEntityId = 0;
             }
 
@@ -234,14 +224,8 @@ namespace MWPV.View.UserControls.CategoryItems
             isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
 
             okName = ValidateItemName(forSubmit: true);
-
-            // Password required unless Bookmark-only
             okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
-
-            // PIN optional; if present must be valid
             okPin = ValidatePin(forSubmit: true);
-
-            // Email / Phone only error if user entered a value
             okEmail = ValidateEmailForSubmit();
             okPhone = ValidatePhoneNumber(forSubmit: true);
 
@@ -250,21 +234,15 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public void FocusFirstError(bool okName, bool okPassword, bool okPin, bool okEmail, bool okPhone, bool isBookmarkOnly)
         {
-            if (!okName)
-            {
-                txtItemName.Focus();
-                return;
-            }
+            if (!okName) { txtItemName.Focus(); return; }
 
             if (!okPassword)
             {
                 if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
                 {
                     var verify = pwdVerify.Password ?? string.Empty;
-                    if (!string.IsNullOrEmpty(verify))
-                        pwdVerify.Focus();
-                    else
-                        pwdPassword.Focus();
+                    if (!string.IsNullOrEmpty(verify)) pwdVerify.Focus();
+                    else pwdPassword.Focus();
                 }
                 else
                 {
@@ -273,29 +251,14 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            if (!okPin)
-            {
-                pwdPin.Focus();
-                return;
-            }
-
-            if (!okEmail)
-            {
-                pwdEmail.Focus();
-                return;
-            }
-
-            if (!okPhone)
-                txtPhone.Focus();
+            if (!okPin) { pwdPin.Focus(); return; }
+            if (!okEmail) { pwdEmail.Focus(); return; }
+            if (!okPhone) { txtPhone.Focus(); return; }
         }
 
         /* ======================= Safe non-null SecretStorage ======================= */
 
-        public int GetSecretStorageOrDefault()
-        {
-            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
-            return GetSecretStorageOrDefault(isBookmarkOnly);
-        }
+        public int GetSecretStorageOrDefault() => GetSecretStorageOrDefault(chkBookmarkOnly.IsChecked == true);
 
         public int GetSecretStorageOrDefault(bool isBookmarkOnly)
         {
@@ -339,49 +302,21 @@ namespace MWPV.View.UserControls.CategoryItems
 
         /// <summary>
         /// Build PasswordHistory payload for INSERT.
-        /// TEMP: DPAPI protects the password bytes; replace with vault crypto later.
-        /// Bookmark-only => empty blob + SHA-256(empty).
+        /// Bookmark-only => empty cipher + SHA-256(empty) signature.
         /// </summary>
         public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
         {
-            padLen = null;
-
-            if (isBookmarkOnly)
-            {
-                pwCipher = Array.Empty<byte>();
-                pwSig = Sha256(pwCipher);
-                return;
-            }
-
-            var pw = pwdPassword.Password ?? string.Empty;
-            if (pw.Length == 0)
-            {
-                pwCipher = Array.Empty<byte>();
-                pwSig = Sha256(pwCipher);
-                return;
-            }
-
-            byte[] plain = Encoding.UTF8.GetBytes(pw);
-            byte[] entropy = Encoding.UTF8.GetBytes("MWPV:CIPaH:PW:v1");
-            try
-            {
-                pwCipher = ProtectedData.Protect(plain, entropy, DataProtectionScope.CurrentUser);
-                pwSig = Sha256(pwCipher);
-            }
-            finally
-            {
-                Array.Clear(plain, 0, plain.Length);
-                Array.Clear(entropy, 0, entropy.Length);
-            }
+            DpapiDbPayloadCrypto.ProtectPasswordHistory(
+                password: pwdPassword.Password,
+                isBookmarkOnly: isBookmarkOnly,
+                out pwCipher,
+                out padLen,
+                out pwSig,
+                out _ // sigVersion (ignore unless schema stores it)
+            );
         }
 
-        private static byte[] Sha256(byte[] data)
-        {
-            using var sha = SHA256.Create();
-            return sha.ComputeHash(data ?? Array.Empty<byte>());
-        }
-
-        /* ======================= Save / Cancel (raise to host) ======================= */
+        /* ======================= Save / Cancel ======================= */
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
@@ -462,10 +397,8 @@ namespace MWPV.View.UserControls.CategoryItems
             ItemNameErrorPanel.Visibility = Visibility.Collapsed;
 
             txtItemName.ToolTip = null;
-            if (_itemNameDefaultBackground != null)
-                txtItemName.Background = _itemNameDefaultBackground;
-            if (_itemNameDefaultBorderBrush != null)
-                txtItemName.BorderBrush = _itemNameDefaultBorderBrush;
+            if (_itemNameDefaultBackground != null) txtItemName.Background = _itemNameDefaultBackground;
+            if (_itemNameDefaultBorderBrush != null) txtItemName.BorderBrush = _itemNameDefaultBorderBrush;
         }
 
         /* ======================= Password / Verify ======================= */
@@ -723,17 +656,6 @@ namespace MWPV.View.UserControls.CategoryItems
             };
             PwStrengthText.Text = $"Password strength: {label} ({pw.Length} chars)";
 
-            var brushKey = score switch
-            {
-                0 or 1 => "PwWeak",
-                2 => "PwFair",
-                3 => "PwStrong",
-                4 => "PwVeryStrong",
-                _ => "PwWeak"
-            };
-            if (TryFindResource(brushKey) is Brush b)
-                PwStrengthBar.Foreground = b;
-
             var tips = new List<string>();
             if (!lengthOk) tips.Add("Use at least 8 characters.");
             if (!pw.Any(char.IsLower)) tips.Add("Add a lowercase letter.");
@@ -816,24 +738,16 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
-            if (string.IsNullOrEmpty(e.Text))
-            {
-                e.Handled = true;
-                return;
-            }
+            if (string.IsNullOrEmpty(e.Text)) { e.Handled = true; return; }
 
             foreach (char c in e.Text)
             {
-                if (!char.IsDigit(c))
-                {
-                    e.Handled = true;
-                    return;
-                }
+                if (!char.IsDigit(c)) { e.Handled = true; return; }
             }
 
             if (sender is PasswordBox pb)
             {
-                if (pb.Password.Length + e.Text.Length > PinMaxLen)
+                if ((pb.Password?.Length ?? 0) + e.Text.Length > PinMaxLen)
                 {
                     e.Handled = true;
                     return;
@@ -868,33 +782,17 @@ namespace MWPV.View.UserControls.CategoryItems
             string paste = (e.SourceDataObject.GetData(DataFormats.UnicodeText) as string) ?? "";
             paste = paste.Trim();
 
-            if (paste.Length == 0)
-            {
-                e.CancelCommand();
-                return;
-            }
+            if (paste.Length == 0) { e.CancelCommand(); return; }
 
             foreach (char c in paste)
             {
-                if (!char.IsDigit(c))
-                {
-                    e.CancelCommand();
-                    return;
-                }
+                if (!char.IsDigit(c)) { e.CancelCommand(); return; }
             }
 
-            if (sender is not PasswordBox pb)
-            {
-                e.CancelCommand();
-                return;
-            }
+            if (sender is not PasswordBox pb) { e.CancelCommand(); return; }
 
             int remaining = PinMaxLen - (pb.Password?.Length ?? 0);
-            if (remaining <= 0)
-            {
-                e.CancelCommand();
-                return;
-            }
+            if (remaining <= 0) { e.CancelCommand(); return; }
 
             if (paste.Length > remaining)
             {
@@ -997,13 +895,11 @@ namespace MWPV.View.UserControls.CategoryItems
             PinErrorPanel.Visibility = Visibility.Collapsed;
 
             pwdPin.ToolTip = null;
-            if (_pinDefaultBackground != null)
-                pwdPin.Background = _pinDefaultBackground;
-            if (_pinDefaultBorderBrush != null)
-                pwdPin.BorderBrush = _pinDefaultBorderBrush;
+            if (_pinDefaultBackground != null) pwdPin.Background = _pinDefaultBackground;
+            if (_pinDefaultBorderBrush != null) pwdPin.BorderBrush = _pinDefaultBorderBrush;
         }
 
-        /* ======================= Email validation + Username autofill + reveal ======================= */
+        /* ======================= Email ======================= */
 
         private void pwdEmail_PasswordChanged(object? sender, RoutedEventArgs e)
         {
@@ -1102,10 +998,8 @@ namespace MWPV.View.UserControls.CategoryItems
             EmailErrorPanel.Visibility = Visibility.Collapsed;
 
             pwdEmail.ToolTip = null;
-            if (_emailDefaultBackground != null)
-                pwdEmail.Background = _emailDefaultBackground;
-            if (_emailDefaultBorderBrush != null)
-                pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+            if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
         private void MarkEmailInvalid(string message)
@@ -1129,13 +1023,11 @@ namespace MWPV.View.UserControls.CategoryItems
             EmailErrorPanel.Visibility = Visibility.Collapsed;
 
             pwdEmail.ToolTip = null;
-            if (_emailDefaultBackground != null)
-                pwdEmail.Background = _emailDefaultBackground;
-            if (_emailDefaultBorderBrush != null)
-                pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+            if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
         }
 
-        /* ======================= Phone validation + reveal ======================= */
+        /* ======================= Phone ======================= */
 
         private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
         {
@@ -1219,13 +1111,11 @@ namespace MWPV.View.UserControls.CategoryItems
             PhoneErrorPanel.Visibility = Visibility.Collapsed;
 
             txtPhone.ToolTip = null;
-            if (_phoneDefaultBackground != null)
-                txtPhone.Background = _phoneDefaultBackground;
-            if (_phoneDefaultBorderBrush != null)
-                txtPhone.BorderBrush = _phoneDefaultBorderBrush;
+            if (_phoneDefaultBackground != null) txtPhone.Background = _phoneDefaultBackground;
+            if (_phoneDefaultBorderBrush != null) txtPhone.BorderBrush = _phoneDefaultBorderBrush;
         }
 
-        /* ======================= Internal helpers ======================= */
+        /* ======================= Plain reveal overlays ======================= */
 
         private void ClearPlainRevealOverlays()
         {
@@ -1235,6 +1125,8 @@ namespace MWPV.View.UserControls.CategoryItems
             UICleaner.Clear(txtPinPlain);
             UICleaner.Clear(txtEmailPlain);
         }
+
+        /* ======================= Default visuals caching ======================= */
 
         private void CacheDefaultFieldVisualsIfNeeded()
         {
@@ -1251,11 +1143,21 @@ namespace MWPV.View.UserControls.CategoryItems
             _pinDefaultBackground ??= pwdPin.Background;
         }
 
+        /* ======================= UI event hooking ======================= */
+
         private void HookUiEventsOnce()
         {
             if (_uiEventsHooked)
                 return;
 
+            // Submit / Cancel
+            btnSubmit.Click -= btnSubmit_Click;
+            btnSubmit.Click += btnSubmit_Click;
+
+            btnCancel.Click -= btnCancel_Click;
+            btnCancel.Click += btnCancel_Click;
+
+            // Item name + bookmark
             txtItemName.TextChanged -= txtItemName_TextChanged;
             txtItemName.TextChanged += txtItemName_TextChanged;
 
@@ -1263,6 +1165,64 @@ namespace MWPV.View.UserControls.CategoryItems
             chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked += chkBookmarkOnly_Changed;
+
+            // Password + verify
+            pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
+            pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
+
+            pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
+            pwdPassword.PasswordChanged += pwdPassword_PasswordChanged;
+
+            pwdPassword.GotFocus -= pwdPassword_GotFocus;
+            pwdPassword.GotFocus += pwdPassword_GotFocus;
+
+            pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
+            pwdVerify.PasswordChanged += pwdVerify_PasswordChanged;
+
+            btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
+            btnTogglePasswordReveal.Click += BtnTogglePasswordReveal_Click;
+
+            btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
+            btnToggleVerifyReveal.Click += BtnToggleVerifyReveal_Click;
+
+            btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+            btnGeneratePassword.Click += BtnGeneratePassword_Click;
+
+            // PIN
+            pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
+            pwdPin.PreviewTextInput += Pin_PreviewTextInput;
+
+            pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
+            pwdPin.PreviewKeyDown += Pin_PreviewKeyDown;
+
+            pwdPin.PasswordChanged -= Pin_PasswordChanged;
+            pwdPin.PasswordChanged += Pin_PasswordChanged;
+
+            DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
+            DataObject.AddPastingHandler(pwdPin, Pin_Pasting);
+
+            btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
+            btnTogglePinReveal.Click += Pin_ToggleReveal_Click;
+
+            // Email
+            pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
+            pwdEmail.PasswordChanged += pwdEmail_PasswordChanged;
+
+            pwdEmail.LostFocus -= pwdEmail_LostFocus;
+            pwdEmail.LostFocus += pwdEmail_LostFocus;
+
+            btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
+            btnToggleEmailReveal.Click += BtnToggleEmailReveal_Click;
+
+            // Phone
+            txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
+            txtPhone.PasswordChanged += txtPhone_PasswordChanged;
+
+            txtPhone.LostFocus -= txtPhone_LostFocus;
+            txtPhone.LostFocus += txtPhone_LostFocus;
+
+            btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
+            btnTogglePhoneReveal.Click += BtnTogglePhoneReveal_Click;
 
             _uiEventsHooked = true;
         }
@@ -1272,10 +1232,37 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!_uiEventsHooked)
                 return;
 
+            btnSubmit.Click -= btnSubmit_Click;
+            btnCancel.Click -= btnCancel_Click;
+
             txtItemName.TextChanged -= txtItemName_TextChanged;
 
             chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+
+            pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
+            pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
+            pwdPassword.GotFocus -= pwdPassword_GotFocus;
+
+            pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
+
+            btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
+            btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
+            btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+
+            pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
+            pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
+            pwdPin.PasswordChanged -= Pin_PasswordChanged;
+            DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
+            btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
+
+            pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
+            pwdEmail.LostFocus -= pwdEmail_LostFocus;
+            btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
+
+            txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
+            txtPhone.LostFocus -= txtPhone_LostFocus;
+            btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
 
             _uiEventsHooked = false;
         }
