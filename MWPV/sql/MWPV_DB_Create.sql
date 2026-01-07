@@ -33,6 +33,11 @@ DROP TABLE IF EXISTS Category;
 DROP TABLE IF EXISTS KeyArchiveIntegrity;
 DROP TABLE IF EXISTS DbVersion;
 DROP TABLE IF EXISTS Logs;
+/* =========================
+   NEW TABLE: LogMessageTemplate
+   (Add this ONE drop line into your Drops section)
+   ========================= */
+DROP TABLE IF EXISTS LogMessageTemplate;
 
 DROP TABLE IF EXISTS CategoryItemPinHistory;
 
@@ -189,6 +194,49 @@ CREATE TABLE DbVersion (
     IsCurrent   INTEGER NOT NULL CHECK (IsCurrent IN (0, 1))
 );
 
+/* =========================
+   NEW TABLE: LogMessageTemplate
+   (Add this CREATE TABLE block in your CREATE TABLE area)
+   ========================= */
+CREATE TABLE LogMessageTemplate (
+    LMT_Id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    UpdateForm  TEXT    NOT NULL,   -- e.g., 'BasicTab'
+    Seq         INTEGER NOT NULL,   -- display/order index
+    LogMessage  TEXT    NOT NULL,   -- template text with tokens like #CategoryItemName#
+    Active      INTEGER NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
+    CreatedUtc  TEXT    NOT NULL DEFAULT (datetime('now')),
+    UpdatedUtc  TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (UpdateForm, Seq)
+);
+
+-- Optional but sensible: quick lookup by form, ordered by Seq
+CREATE INDEX IF NOT EXISTS IX_LogMessageTemplate_Form_Seq
+ON LogMessageTemplate (UpdateForm, Seq);
+
+/* =========================
+   SEED: LogMessageTemplate (idempotent)
+   (Add this in your SEEDS transaction)
+   ========================= */
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
+FROM (
+    SELECT 'BasicTab' AS UpdateForm, 1  AS Seq, 'Category Item #CategoryItemName# has been created for Category #CategoryName#' AS LogMessage
+    UNION ALL SELECT 'BasicTab', 2,  'Category Item #CategoryItemName# name has changed'
+    UNION ALL SELECT 'BasicTab', 3,  'Category Item #CategoryItemName# password changed'
+    UNION ALL SELECT 'BasicTab', 4,  'Category Item #CategoryItemName# bookmark flag changed'
+    UNION ALL SELECT 'BasicTab', 5,  'Category Item #CategoryItemName# pin changed'
+    UNION ALL SELECT 'BasicTab', 6,  'Category Item #CategoryItemName# user name changed'
+    UNION ALL SELECT 'BasicTab', 7,  'Category Item #CategoryItemName# url/absolute location changed'
+    UNION ALL SELECT 'BasicTab', 8,  'Category Item #CategoryItemName# phone number changed'
+    UNION ALL SELECT 'BasicTab', 9,  'Category Item #CategoryItemName# email changed'
+    UNION ALL SELECT 'BasicTab', 10, 'Category Item #CategoryItemName# freeform notes have changed.'
+) AS v
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate t
+    WHERE t.UpdateForm = v.UpdateForm
+      AND t.Seq        = v.Seq
+);
 CREATE TABLE Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
     WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
