@@ -36,6 +36,10 @@ namespace Utilities.Security
         private const string SedsKey_KeyPW = "KeyPW";     // char[] (archive password)
         private const string SedsKey_KeyFile = "KeyFile"; // string (archive path)
 
+        // AES keys that live in keyset.json and MUST be loaded into SEDS at startup.
+        private const string SedsKey_LogPayloadKey = "LogPayloadKey";   // byte[32]
+        private const string SedsKey_UserSecretsKey = "UserSecretsKey"; // byte[32]
+
         // We keep these paths centralized here so callers don't duplicate them.
         private static string LocalRoot =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV");
@@ -64,18 +68,12 @@ namespace Utilities.Security
         /// </summary>
         public string SetUpDataBase()
         {
+            string? schemaSql = null;
+
             try
             {
                 EnsureLocalFolders();
-            }
-            catch
-            {
-                return "error";
-            }
 
-            string? schemaSql = null;
-            try
-            {
                 schemaSql = TryGetSchemaSqlFromSedsOrDisk();
                 if (string.IsNullOrWhiteSpace(schemaSql))
                 {
@@ -124,6 +122,8 @@ namespace Utilities.Security
 
             try
             {
+                EnsureLocalFolders();
+
                 archivePath = GetRequiredArchivePathFromSeds();
                 keyPw = GetRequiredKeyPasswordFromSeds();
                 dbPw = GetRequiredDbPasswordFromSeds();
@@ -176,6 +176,9 @@ namespace Utilities.Security
                 {
                     SensitiveDataCleaner.WipeString(ref pwString);
                     TrySecureDeleteTempDir(tempDir);
+
+                    // json contains secrets. wipe it.
+                    SensitiveDataCleaner.WipeString(ref json);
                 }
 
                 // Mark as not-loaded so next run (or same run) can re-seed from archive if needed.
@@ -206,12 +209,17 @@ namespace Utilities.Security
         /// Loads keyset.json from the encrypted archive (path/password in SEDS) and seeds SEDS with:
         ///   - db password (DatabaseHelper.DbPasswordKey) as char[] via SetAndWipe
         ///   - sql map (filename -> sql text) via SetString
+        ///   - AES keys (LogPayloadKey/UserSecretsKey) as byte[] via Set + wipe buffers
         /// This is the normal "startup load" path.
         /// </summary>
         public static void EnsureKeySetFromArchive()
         {
             char[]? keyPw = null;
             string? pwString = null;
+
+            string? json = null;
+            byte[]? logKey = null;
+            byte[]? userKey = null;
 
             try
             {
@@ -236,7 +244,6 @@ namespace Utilities.Security
                 extractor.ExtractFile(entry.Index, ms);
                 ms.Position = 0;
 
-                string json;
                 using (var sr = new StreamReader(ms, Encoding.UTF8, true, 1024, leaveOpen: true))
                     json = sr.ReadToEnd();
 
@@ -253,8 +260,33 @@ namespace Utilities.Security
                         SecureEncryptedDataStore.SetString(kvp.Key, kvp.Value ?? string.Empty);
                 }
 
+                // AES keys -> SEDS (these are what your FieldAesCrypto expects)
+                // IMPORTANT: store as byte[] and wipe local buffers after Set.
+                //
+                // KeysetJsonV2 is expected to expose these as base64 strings (or null).
+                // If they are missing/null, we simply don't set them here (caller may fail fast later).
+                if (!string.IsNullOrWhiteSpace(ks.secrets.logPayloadKey))
+                {
+                    logKey = Convert.FromBase64String(ks.secrets.logPayloadKey);
+                    SecureEncryptedDataStore.Set(SedsKey_LogPayloadKey, logKey);
+                }
+
+                if (!string.IsNullOrWhiteSpace(ks.secrets.userSecretsKey))
+                {
+                    userKey = Convert.FromBase64String(ks.secrets.userSecretsKey);
+                    SecureEncryptedDataStore.Set(SedsKey_UserSecretsKey, userKey);
+                }
+
                 // Mark as loaded (one-time)
                 Volatile.Write(ref _keysetLoaded, 1);
+
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine(
+                    "[ServiceSetUp] Keyset loaded into SEDS. " +
+                    $"SQL keys present: {ks.sql?.Count ?? 0}, " +
+                    $"Has LogPayloadKey: {SecureEncryptedDataStore.HasKey(SedsKey_LogPayloadKey)}, " +
+                    $"Has UserSecretsKey: {SecureEncryptedDataStore.HasKey(SedsKey_UserSecretsKey)}");
+#endif
             }
             catch (Exception ex)
             {
@@ -265,6 +297,12 @@ namespace Utilities.Security
             }
             finally
             {
+                // Wipe sensitive buffers
+                if (json != null) SensitiveDataCleaner.WipeString(ref json);
+
+                if (logKey != null) Array.Clear(logKey, 0, logKey.Length);
+                if (userKey != null) Array.Clear(userKey, 0, userKey.Length);
+
                 if (pwString != null) SensitiveDataCleaner.WipeString(ref pwString);
                 if (keyPw != null) SensitiveDataCleaner.WipeCharArray(keyPw);
             }
