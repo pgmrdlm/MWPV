@@ -217,19 +217,24 @@ ON LogMessageTemplate (UpdateForm, Seq);
    SEED: LogMessageTemplate (idempotent)
    (Add this in your SEEDS transaction)
    ========================= */
+-- Seed / upsert BasicTab templates (no tabs/newlines stored in DB; formatting happens in code)
 INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
 SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
-    SELECT 'BasicTab' AS UpdateForm, 1  AS Seq, 'Category Item #CategoryItemName# has been created for Category #CategoryName#' AS LogMessage
-    UNION ALL SELECT 'BasicTab', 2,  'Category Item #CategoryItemName# name has changed'
-    UNION ALL SELECT 'BasicTab', 3,  'Category Item #CategoryItemName# password changed'
-    UNION ALL SELECT 'BasicTab', 4,  'Category Item #CategoryItemName# bookmark flag changed'
-    UNION ALL SELECT 'BasicTab', 5,  'Category Item #CategoryItemName# pin changed'
-    UNION ALL SELECT 'BasicTab', 6,  'Category Item #CategoryItemName# user name changed'
-    UNION ALL SELECT 'BasicTab', 7,  'Category Item #CategoryItemName# url/absolute location changed'
-    UNION ALL SELECT 'BasicTab', 8,  'Category Item #CategoryItemName# phone number changed'
-    UNION ALL SELECT 'BasicTab', 9,  'Category Item #CategoryItemName# email changed'
-    UNION ALL SELECT 'BasicTab', 10, 'Category Item #CategoryItemName# freeform notes have changed.'
+    -- NEW ITEM ONLY
+    SELECT 'BasicTab' AS UpdateForm, 1  AS Seq,
+           'Category Item #CategoryItemName# has been created for Category #CategoryName#' AS LogMessage
+
+    -- EDIT EXISTING ITEM (header + bullet lines; no special chars stored)
+    UNION ALL SELECT 'BasicTab', 2,  'The following changes have been made to #CategoryItemName#'
+    UNION ALL SELECT 'BasicTab', 3,  '- Password changed'
+    UNION ALL SELECT 'BasicTab', 4,  '- Bookmark flag changed'
+    UNION ALL SELECT 'BasicTab', 5,  '- Pin changed'
+    UNION ALL SELECT 'BasicTab', 6,  '- User name changed'
+    UNION ALL SELECT 'BasicTab', 7,  '- url/absolute location changed'
+    UNION ALL SELECT 'BasicTab', 8,  '- Phone number changed'
+    UNION ALL SELECT 'BasicTab', 9,  '- Email changed'
+    UNION ALL SELECT 'BasicTab', 10, '- Freeform notes have changed.'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -237,6 +242,7 @@ WHERE NOT EXISTS (
     WHERE t.UpdateForm = v.UpdateForm
       AND t.Seq        = v.Seq
 );
+
 CREATE TABLE Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
     WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -247,6 +253,13 @@ CREATE TABLE Logs (
     SessionId     TEXT    NOT NULL DEFAULT '',
     LoginId       TEXT,
     ItemId        INTEGER,
+
+    -- NEW: non-sensitive “who/what this log is about” (Category or CategoryItem name)
+    SubjectText   TEXT,
+
+    -- NEW: rendered multi-line message built from templates (no payload)
+    MessageText   TEXT,
+
     MachineId     TEXT,
     DeviceMake    TEXT,
     DeviceModel   TEXT,
@@ -254,10 +267,11 @@ CREATE TABLE Logs (
     DeviceIdHash  TEXT,
     InstallType   TEXT,
     AppVersion    TEXT    NOT NULL DEFAULT '',
-    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),    
+    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
     KeySetVersion INTEGER NOT NULL DEFAULT 1,
     StackHash     TEXT
 );
+
 
 COMMIT;
 
