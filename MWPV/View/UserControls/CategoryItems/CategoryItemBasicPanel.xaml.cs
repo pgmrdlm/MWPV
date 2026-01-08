@@ -1,4 +1,16 @@
 ﻿// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
+//
+// FULL REWRITE
+//
+// Scope (Basic tab ONLY):
+// - Populate the Basic tab from DB when CurrentEntityKind/Id in SEDS indicates an existing CategoryItem.
+// - Uses CategoryItemService.LoadCategoryItemBasicById(...)
+// - Uses CategoryItemService.LoadMostRecentPasswordPlainByItemId(...) for password (legacy DPAPI in service for now).
+// - Email/Phone/PIN populate ONLY if CategoryItemService returns *Plain props.
+//
+// Notes:
+// - No “view-only” policy decisions here. This is strictly: load -> populate controls.
+// - Verify/Strength rows remain hidden on DB-populate (verify is for manual entry).
 
 using System;
 using System.Collections.Generic;
@@ -9,7 +21,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto
+using MWPV.Services;
+using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
 using Security.Utility.Storage;     // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
 using MWPV.Utilities.Helpers;
@@ -34,6 +47,12 @@ namespace MWPV.View.UserControls.CategoryItems
         private int _activeEntityId;
         private bool IsEditMode => _activeEntityId > 0;
 
+        // Prevent event stacking
+        private bool _uiEventsHooked;
+
+        // Loading guard (prevents handlers from doing UI side-effects while we populate)
+        private bool _isPopulating;
+
         // Reveal state
         private bool _mainRevealed;
         private bool _verifyRevealed;
@@ -57,9 +76,6 @@ namespace MWPV.View.UserControls.CategoryItems
         private Brush? _pinDefaultBackground;
 
         private string _lastEmailChecked = string.Empty;
-
-        // Prevent event stacking
-        private bool _uiEventsHooked;
 
         // PIN rules
         private const int PinMinLen = 4;
@@ -92,6 +108,10 @@ namespace MWPV.View.UserControls.CategoryItems
             ResetUiState();
 
             ConfigureModeFromSeds();
+
+            // Populate if we are in edit/view mode
+            if (IsEditMode)
+                PopulateFromDbForCurrentEntity();
         }
 
         private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
@@ -137,6 +157,161 @@ namespace MWPV.View.UserControls.CategoryItems
             Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => mode={(IsEditMode ? "EDIT/VIEW" : "ADD")}");
 #endif
             ;
+        }
+
+        /* ======================= Populate ======================= */
+
+        /// <summary>
+        /// Host can call this after setting SEDS (CurrentEntityKind/Id) to force a reload.
+        /// </summary>
+        public void PopulateFromDbForCurrentEntity()
+        {
+            ConfigureModeFromSeds();
+            if (!IsEditMode)
+            {
+#if DEBUG
+                Debug.WriteLine("[BASIC][POP] Not in edit mode -> skipping DB populate");
+#endif
+                return;
+            }
+
+            LoadAndApplyByItemId(_activeEntityId);
+        }
+
+        private void LoadAndApplyByItemId(long itemId)
+        {
+            if (itemId <= 0) return;
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][POP] Loading itemId={itemId}");
+#endif
+
+            _isPopulating = true;
+            try
+            {
+                ClearForm();
+                ResetUiState();
+
+                var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
+                if (row == null)
+                {
+#if DEBUG
+                    Debug.WriteLine($"[BASIC][POP] DB returned null for itemId={itemId}");
+#endif
+                    return;
+                }
+
+                // Password: most recent history row (legacy service behavior for now)
+                string? pwPlain = null;
+                if (row.BookMarkOnly == 0)
+                {
+                    pwPlain = CategoryItemService.LoadMostRecentPasswordPlainByItemId(itemId);
+#if DEBUG
+                    Debug.WriteLine($"[BASIC][POP] MostRecentPw: {(pwPlain == null ? "NULL" : $"LEN={pwPlain.Length}")}");
+#endif
+                }
+
+                ApplyBasicRowToUi(row, pwPlain);
+            }
+            finally
+            {
+                _isPopulating = false;
+            }
+        }
+
+        private void ApplyBasicRowToUi(CategoryItemService.CategoryItemBasicRow row, string? mostRecentPasswordPlain)
+        {
+            txtItemName.Text = row.Name ?? string.Empty;
+            txtUsername.Text = row.Username ?? string.Empty;
+            txtUrl.Text = row.SignInUrl ?? string.Empty;
+            txtDescription.Text = row.Description ?? string.Empty;
+
+            chkBookmarkOnly.IsChecked = row.BookMarkOnly == 1;
+
+            if (!string.IsNullOrEmpty(row.AccountEmailPlain))
+            {
+                _lastEmailChecked = row.AccountEmailPlain.Trim();
+                pwdEmail.Password = row.AccountEmailPlain;
+                ClearEmailValidation();
+            }
+            else
+            {
+                _lastEmailChecked = string.Empty;
+                UICleaner.Clear(pwdEmail);
+                ClearEmailValidation();
+            }
+
+            if (!string.IsNullOrEmpty(row.AccountPhonePlain))
+            {
+                txtPhone.Password = row.AccountPhonePlain;
+                ClearPhoneError();
+            }
+            else
+            {
+                UICleaner.Clear(txtPhone);
+                ClearPhoneError();
+            }
+
+            if (!string.IsNullOrEmpty(row.PinPlain))
+            {
+                pwdPin.Password = row.PinPlain;
+                ClearPinError();
+            }
+            else
+            {
+                UICleaner.Clear(pwdPin);
+                ClearPinError();
+            }
+
+            _settingPwProgrammatically = true;
+            try
+            {
+                if (row.BookMarkOnly == 1)
+                {
+                    UICleaner.Clear(pwdPassword);
+                    HideVerifyRow();
+                    HideVerifyError();
+                    HideStrengthRow();
+                }
+                else
+                {
+                    if (mostRecentPasswordPlain != null)
+                    {
+                        pwdPassword.Password = mostRecentPasswordPlain;
+                        HideVerifyRow();
+                        HideVerifyError();
+                        HideStrengthRow();
+                    }
+                    else
+                    {
+                        UICleaner.Clear(pwdPassword);
+                        HideVerifyRow();
+                        HideVerifyError();
+                        HideStrengthRow();
+                    }
+                }
+            }
+            finally
+            {
+                _settingPwProgrammatically = false;
+            }
+
+            HideAllRevealsAndStopTimer();
+            ClearPlainRevealOverlays();
+
+            if (!string.IsNullOrWhiteSpace(txtItemName.Text))
+                ClearItemNameError();
+
+#if DEBUG
+            Debug.WriteLine(
+                $"[BASIC][POP][APPLY] itemId={row.ItemId} bmo={row.BookMarkOnly} " +
+                $"nameLen={(row.Name?.Length ?? 0)} userLen={(row.Username?.Length ?? 0)} urlLen={(row.SignInUrl?.Length ?? 0)} " +
+                $"emailPlain={(row.AccountEmailPlain != null ? $"LEN={row.AccountEmailPlain.Length}" : "NULL")} " +
+                $"phonePlain={(row.AccountPhonePlain != null ? $"LEN={row.AccountPhonePlain.Length}" : "NULL")} " +
+                $"pinPlain={(row.PinPlain != null ? $"LEN={row.PinPlain.Length}" : "NULL")} " +
+                $"pw={(mostRecentPasswordPlain != null ? $"LEN={mostRecentPasswordPlain.Length}" : "NULL")}"
+            );
+#endif
         }
 
         /* ======================= Host-facing API ======================= */
@@ -300,9 +475,30 @@ namespace MWPV.View.UserControls.CategoryItems
             return s.Length == 0 ? null : s;
         }
 
+        public string? GetPinTrimOrNull()
+        {
+            var s = (pwdPin.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
         /// <summary>
-        /// Build PasswordHistory payload for INSERT.
-        /// Bookmark-only => empty cipher + SHA-256(empty) signature.
+        /// Centralized password getter for callers that want plaintext.
+        /// Security note: we intentionally do NOT Trim() passwords.
+        /// Trimming creates additional string copies and can change meaning.
+        /// </summary>
+        public string? GetPasswordPlainOrNull()
+        {
+            var pw = pwdPassword.Password;
+            return string.IsNullOrEmpty(pw) ? null : pw;
+        }
+
+        /// <summary>
+        /// Back-compat name used by older code. Intentionally returns the plain password.
+        /// </summary>
+        public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
+
+        /// <summary>
+        /// Build PasswordHistory payload for INSERT (legacy DPAPI path used by some code).
         /// </summary>
         public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
         {
@@ -339,7 +535,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void OnRevealTimeout()
         {
 #if DEBUG
-            Debug.WriteLine("[BASIC] Reveal timer elapsed – hiding all reveals");
+            Debug.WriteLine("[BASIC] Reveal timer elapsed, hiding all reveals");
 #endif
             HideAllRevealsAndStopTimer();
             ClearPlainRevealOverlays();
@@ -445,6 +641,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
             if (_settingPwProgrammatically) return;
+            if (_isPopulating) return;
 
             bool pasteCombo =
                 (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
@@ -459,6 +656,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
 
@@ -488,6 +687,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void pwdPassword_GotFocus(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
             if (_settingPwProgrammatically) return;
             if (chkBookmarkOnly.IsChecked == true) return;
 
@@ -497,6 +697,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
 
@@ -738,6 +940,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
+            if (_isPopulating) { e.Handled = true; return; }
+
             if (string.IsNullOrEmpty(e.Text)) { e.Handled = true; return; }
 
             foreach (char c in e.Text)
@@ -759,6 +963,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (_isPopulating) { e.Handled = true; return; }
+
             bool ctrlPaste = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
                              (e.Key == Key.V || e.Key == Key.Insert);
             bool shiftInsert = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
@@ -773,6 +979,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_Pasting(object sender, DataObjectPastingEventArgs e)
         {
+            if (_isPopulating) { e.CancelCommand(); return; }
+
             if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
             {
                 e.CancelCommand();
@@ -803,6 +1011,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
                 pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
 
@@ -903,6 +1113,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void pwdEmail_PasswordChanged(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             if (_emailRevealed)
                 txtEmailPlain.Text = pwdEmail.Password;
 
@@ -918,6 +1130,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void pwdEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             var s = (pwdEmail.Password ?? string.Empty).Trim();
 
             if (s.Length == 0)
@@ -1031,11 +1245,14 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
             ValidatePhoneNumber(forSubmit: false);
         }
 
         private void txtPhone_PasswordChanged(object sender, RoutedEventArgs e)
         {
+            if (_isPopulating) return;
+
             if (_phoneRevealed)
                 txtPhonePlain.Text = txtPhone.Password;
 
@@ -1150,14 +1367,12 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_uiEventsHooked)
                 return;
 
-            // Submit / Cancel
             btnSubmit.Click -= btnSubmit_Click;
             btnSubmit.Click += btnSubmit_Click;
 
             btnCancel.Click -= btnCancel_Click;
             btnCancel.Click += btnCancel_Click;
 
-            // Item name + bookmark
             txtItemName.TextChanged -= txtItemName_TextChanged;
             txtItemName.TextChanged += txtItemName_TextChanged;
 
@@ -1166,7 +1381,6 @@ namespace MWPV.View.UserControls.CategoryItems
             chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked += chkBookmarkOnly_Changed;
 
-            // Password + verify
             pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
             pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
 
@@ -1188,7 +1402,6 @@ namespace MWPV.View.UserControls.CategoryItems
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
             btnGeneratePassword.Click += BtnGeneratePassword_Click;
 
-            // PIN
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewTextInput += Pin_PreviewTextInput;
 
@@ -1204,7 +1417,6 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
             btnTogglePinReveal.Click += Pin_ToggleReveal_Click;
 
-            // Email
             pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
             pwdEmail.PasswordChanged += pwdEmail_PasswordChanged;
 
@@ -1214,7 +1426,6 @@ namespace MWPV.View.UserControls.CategoryItems
             btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
             btnToggleEmailReveal.Click += BtnToggleEmailReveal_Click;
 
-            // Phone
             txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
             txtPhone.PasswordChanged += txtPhone_PasswordChanged;
 

@@ -1,19 +1,25 @@
 ﻿// File: View/UserControls/CategoryItemEditorTabs.xaml.cs
 //
-// FULL REWRITE
+// FULL REWRITE (AES-only intent, NO UI crypto)
+// - Mode is PK-driven via SEDS.
+//   - If SEDS(kind=="CategoryItem" && id>0) => EDIT/VIEW
+//   - Else => ADD
 //
-// Fix: Mode is PK-driven via SEDS.
-// - If SEDS(kind=="CategoryItem" && id>0) => EDIT/VIEW
-// - Else => ADD
+// - UI does NOT perform encryption anymore.
+//   - BasicPanel returns plaintext strings.
+//   - Service encrypts with AES via CategoryItemService.
 //
-// Also: do NOT clear the Basic form unconditionally in Loaded,
-// because that makes EDIT look like ADD and can trigger re-inserts.
+// - Do NOT clear the Basic form unconditionally in Loaded.
+//   - That makes EDIT look like ADD and can trigger re-inserts.
+//
+// Notes:
+// - ELOG DPAPI is allowed elsewhere; this file stays out of crypto.
+// - This file only inserts today; update/edit wiring can come later.
 
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -48,6 +54,16 @@ namespace MWPV.View.UserControls
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+
+        public CategoryItemEditorTabs()
+        {
+            InitializeComponent();
+
+            Loaded += CategoryItemEditorTabs_Loaded;
+            Unloaded += CategoryItemEditorTabs_Unloaded;
+        }
+
+        /* ======================= SEDS helpers ======================= */
 
         private static int? TryGetActiveCategoryItemId()
         {
@@ -88,22 +104,8 @@ namespace MWPV.View.UserControls
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityKind); } catch { }
         }
 
-        public CategoryItemEditorTabs()
-        {
-            InitializeComponent();
-
-            Loaded += CategoryItemEditorTabs_Loaded;
-            Unloaded += CategoryItemEditorTabs_Unloaded;
-        }
-
         /* ======================= Public Open API ======================= */
 
-        /// <summary>
-        /// Single entry point used by Panel.
-        /// Mode is derived from SEDS:
-        /// - id>0 => EDIT/VIEW
-        /// - else => ADD
-        /// </summary>
         public void ConfigureForOpen(int categoryKey, string categoryName)
         {
             _categoryKey = categoryKey;
@@ -119,7 +121,6 @@ namespace MWPV.View.UserControls
             InitializeUiForMode();
         }
 
-        // Keep these for compatibility if anything else still calls them.
         public void ConfigureForAdd(int categoryKey, string categoryName)
         {
             _categoryKey = categoryKey;
@@ -146,12 +147,11 @@ namespace MWPV.View.UserControls
 #endif
             InitializeUiForMode();
 
-            // TODO: load existingItem/DB into BasicPanel/BankCardsPanel (next step).
+            // Future: load existing item into panels
         }
 
         private void InitializeUiForMode()
         {
-            // Tabs wiring and UI reset that should not destroy edit context.
             HookPanelsOnce();
 
             if (ItemTabs != null)
@@ -165,7 +165,6 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
-            // ADD: clear. EDIT: do not clear here.
             if (!_isEditMode)
             {
                 BasicPanel?.ClearForm();
@@ -174,8 +173,6 @@ namespace MWPV.View.UserControls
             else
             {
                 BasicPanel?.ResetUiState();
-                // NOTE: we are not loading DB fields here yet.
-                // This fix is strictly about mode detection: id>0 => EDIT/VIEW.
             }
 
             SetStatus("");
@@ -197,14 +194,8 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
-            // If Panel didn’t call ConfigureForOpen for some reason,
-            // we still derive mode from SEDS on load.
             _isEditMode = IsEditModeFromSeds();
-
-            // IMPORTANT: do NOT clear form unconditionally here.
-            // That was making EDIT behave like ADD.
             InitializeUiForMode();
-
             SetStatus("");
         }
 
@@ -230,7 +221,7 @@ namespace MWPV.View.UserControls
             SetStatus("");
         }
 
-        /* ======================= Host API (wipe ordering) ======================= */
+        /* ======================= Host API ======================= */
 
         public void WipeAllForHostClose()
         {
@@ -275,33 +266,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= Crypto bridge (masked fields -> BLOBs) ======================= */
-
-        private static readonly byte[] Entropy_Email = Encoding.UTF8.GetBytes("MWPV:CITabs:Email:v1");
-        private static readonly byte[] Entropy_Phone = Encoding.UTF8.GetBytes("MWPV:CITabs:Phone:v1");
-        private static readonly byte[] Entropy_Pin = Encoding.UTF8.GetBytes("MWPV:CITabs:Pin:v1");
-
-        private static byte[]? EncryptMaskedOrNull_Email(string? value) => EncryptDpapiUtf8OrNull(value, Entropy_Email);
-        private static byte[]? EncryptMaskedOrNull_Phone(string? value) => EncryptDpapiUtf8OrNull(value, Entropy_Phone);
-        private static byte[]? EncryptMaskedOrNull_Pin(string? value) => EncryptDpapiUtf8OrNull(value, Entropy_Pin);
-
-        private static byte[]? EncryptDpapiUtf8OrNull(string? value, byte[] entropy)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            byte[] plain = Encoding.UTF8.GetBytes(value.Trim());
-            try
-            {
-                return ProtectedData.Protect(plain, entropy, DataProtectionScope.CurrentUser);
-            }
-            finally
-            {
-                Array.Clear(plain, 0, plain.Length);
-            }
-        }
-
-        /* ======================= Persistence (INSERT only today) ======================= */
+        /* ======================= Persistence (INSERT only) ======================= */
 
         private enum PersistTrigger
         {
@@ -317,17 +282,8 @@ namespace MWPV.View.UserControls
             if (BasicPanel == null)
                 return true;
 
-            // If edit-mode, do not INSERT.
             if (IsEditModeFromSeds())
                 return true;
-
-            byte[]? emailCipher = null;
-            byte[]? phoneCipher = null;
-            byte[]? pinCipher = null;
-
-            byte[]? pwCipher = null;
-            byte[]? pwSig = null;
-            int? padLen = null;
 
             try
             {
@@ -338,12 +294,9 @@ namespace MWPV.View.UserControls
 
                 string? emailPlain = BasicPanel.GetEmailTrimOrNull();
                 string? phonePlain = BasicPanel.GetPhoneTrimOrNull();
+                string? pinPlain = BasicPanel.GetPinTrimOrNull();
 
-                string? pinPlain = null;
-
-                emailCipher = EncryptMaskedOrNull_Email(emailPlain);
-                phoneCipher = EncryptMaskedOrNull_Phone(phonePlain);
-                pinCipher = EncryptMaskedOrNull_Pin(pinPlain);
+                int? isActive = 1;
 
                 long newId;
 
@@ -355,15 +308,15 @@ namespace MWPV.View.UserControls
                         description: desc,
                         username: username,
                         signInUrl: url,
-                        accountEmail: emailCipher,
-                        accountPhoneNumber: phoneCipher,
-                        pin: pinCipher,
-                        isActive: 1
+                        accountEmailPlain: emailPlain,
+                        accountPhonePlain: phonePlain,
+                        pinPlain: pinPlain,
+                        isActive: isActive
                     );
                 }
                 else
                 {
-                    BasicPanel.BuildPasswordHistoryPayload(isBookmarkOnly: false, out pwCipher!, out padLen, out pwSig!);
+                    string? passwordPlain = BasicPanel.GetPasswordPlainOrNull();
 
                     newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
                         categoryKey: _categoryKey,
@@ -371,13 +324,12 @@ namespace MWPV.View.UserControls
                         description: desc,
                         username: username,
                         signInUrl: url,
-                        accountEmail: emailCipher,
-                        accountPhoneNumber: phoneCipher,
-                        isActive: 1,
-                        pwCipher: pwCipher,
-                        pwPadLen: padLen,
-                        pwSig: pwSig,
-                        pin: pinCipher
+                        accountEmailPlain: emailPlain,
+                        accountPhonePlain: phonePlain,
+                        pinPlain: pinPlain,
+                        isActive: isActive,
+                        passwordPlain: passwordPlain,
+                        isBookmarkOnly: false
                     );
                 }
 
@@ -416,18 +368,9 @@ namespace MWPV.View.UserControls
                 SetStatus("Insert failed. See debug output.");
                 return false;
             }
-            finally
-            {
-                try { if (emailCipher is { Length: > 0 }) Array.Clear(emailCipher, 0, emailCipher.Length); } catch { }
-                try { if (phoneCipher is { Length: > 0 }) Array.Clear(phoneCipher, 0, phoneCipher.Length); } catch { }
-                try { if (pinCipher is { Length: > 0 }) Array.Clear(pinCipher, 0, pinCipher.Length); } catch { }
-
-                try { if (pwCipher is { Length: > 0 }) Array.Clear(pwCipher, 0, pwCipher.Length); } catch { }
-                try { if (pwSig is { Length: > 0 }) Array.Clear(pwSig, 0, pwSig.Length); } catch { }
-            }
         }
 
-        /* ======================= Basic panel -> Save/Cancel ======================= */
+        /* ======================= Panel hooks ======================= */
 
         private void HookPanelsOnce()
         {
@@ -527,7 +470,7 @@ namespace MWPV.View.UserControls
             Canceled?.Invoke(this, EventArgs.Empty);
         }
 
-        /* ======================= Bank Cards panel integration ======================= */
+        /* ======================= Bank Cards integration ======================= */
 
         private void BankCardsPanel_SaveAndExitRequested(object? sender, CategoryItemBankCardsPanel.BankCardsCommitEventArgs e)
         {
@@ -549,7 +492,7 @@ namespace MWPV.View.UserControls
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                SetStatus("Bank Cards are staged — fix Basic tab errors before saving.");
+                SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
                 return;
             }
 
@@ -640,7 +583,7 @@ namespace MWPV.View.UserControls
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                SetStatus("Cannot leave Basic tab — fix highlighted errors first.");
+                SetStatus("Cannot leave Basic tab, fix highlighted errors first.");
                 return false;
             }
 
