@@ -3,14 +3,15 @@
 // FULL REWRITE
 //
 // Scope (Basic tab ONLY):
-// - Populate the Basic tab from DB when CurrentEntityKind/Id in SEDS indicates an existing CategoryItem.
-// - Uses CategoryItemService.LoadCategoryItemBasicById(...)
-// - Uses CategoryItemService.LoadMostRecentPasswordPlainByItemId(...) for password (legacy DPAPI in service for now).
-// - Email/Phone/PIN populate ONLY if CategoryItemService returns *Plain props.
+// - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
+// - If CurrentEntityId > 0, load from DB and apply "view-only" protection (read-protect fields).
+// - If CurrentEntityId == 0, behave as Add mode (editable as today).
 //
 // Notes:
-// - No “view-only” policy decisions here. This is strictly: load -> populate controls.
-// - Verify/Strength rows remain hidden on DB-populate (verify is for manual entry).
+// - No DB update logic is added here.
+// - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
+// - Save button is disabled in view-only to prevent accidental "save" behavior.
+//
 
 using System;
 using System.Collections.Generic;
@@ -45,7 +46,12 @@ namespace MWPV.View.UserControls.CategoryItems
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
 
         private int _activeEntityId;
-        private bool IsEditMode => _activeEntityId > 0;
+
+        // Existing item = CurrentEntityId > 0
+        private bool IsExistingItem => _activeEntityId > 0;
+
+        // View-only rules: existing item opens read-protected
+        private bool _isViewOnly;
 
         // Prevent event stacking
         private bool _uiEventsHooked;
@@ -109,9 +115,12 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ConfigureModeFromSeds();
 
-            // Populate if we are in edit/view mode
-            if (IsEditMode)
+            // Populate if we are viewing an existing item
+            if (IsExistingItem)
                 PopulateFromDbForCurrentEntity();
+
+            // Enforce view-only rules based on CurrentEntityId
+            ApplyViewOnlyProtection();
         }
 
         private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
@@ -153,10 +162,51 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
         Done:
+            _isViewOnly = IsExistingItem;
+
 #if DEBUG
-            Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => mode={(IsEditMode ? "EDIT/VIEW" : "ADD")}");
+            Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => mode={(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
 #endif
             ;
+        }
+
+        private void ApplyViewOnlyProtection()
+        {
+            _isViewOnly = IsExistingItem;
+
+            // Save must not happen in view-only
+            btnSubmit.IsEnabled = !_isViewOnly;
+
+            // Cancel always allowed
+            btnCancel.IsEnabled = true;
+
+            // TextBoxes: read-only keeps content readable and selectable
+            txtItemName.IsReadOnly = _isViewOnly;
+            txtUsername.IsReadOnly = _isViewOnly;
+            txtUrl.IsReadOnly = _isViewOnly;
+            txtDescription.IsReadOnly = _isViewOnly;
+
+            // PasswordBoxes cannot be read-only, so disable edit
+            pwdPassword.IsEnabled = !_isViewOnly;
+            pwdVerify.IsEnabled = !_isViewOnly;
+            pwdPin.IsEnabled = !_isViewOnly;
+            pwdEmail.IsEnabled = !_isViewOnly;
+            txtPhone.IsEnabled = !_isViewOnly; // PasswordBox named txtPhone
+
+            // Editing actions should be disabled
+            chkBookmarkOnly.IsEnabled = !_isViewOnly;
+            btnGeneratePassword.IsEnabled = !_isViewOnly;
+
+            // Reveal actions are allowed even in view-only
+            btnTogglePasswordReveal.IsEnabled = true;
+            btnToggleVerifyReveal.IsEnabled = true;
+            btnTogglePinReveal.IsEnabled = true;
+            btnTogglePhoneReveal.IsEnabled = true;
+            btnToggleEmailReveal.IsEnabled = true;
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][VIEWONLY] Applied: IsViewOnly={_isViewOnly} (CurrentEntityId={_activeEntityId})");
+#endif
         }
 
         /* ======================= Populate ======================= */
@@ -167,15 +217,19 @@ namespace MWPV.View.UserControls.CategoryItems
         public void PopulateFromDbForCurrentEntity()
         {
             ConfigureModeFromSeds();
-            if (!IsEditMode)
+            if (!IsExistingItem)
             {
 #if DEBUG
-                Debug.WriteLine("[BASIC][POP] Not in edit mode -> skipping DB populate");
+                Debug.WriteLine("[BASIC][POP] Not existing item -> skipping DB populate");
 #endif
+                ApplyViewOnlyProtection();
                 return;
             }
 
             LoadAndApplyByItemId(_activeEntityId);
+
+            // Enforce view-only after populate
+            ApplyViewOnlyProtection();
         }
 
         private void LoadAndApplyByItemId(long itemId)
@@ -302,16 +356,6 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.IsNullOrWhiteSpace(txtItemName.Text))
                 ClearItemNameError();
 
-#if DEBUG
-            Debug.WriteLine(
-                $"[BASIC][POP][APPLY] itemId={row.ItemId} bmo={row.BookMarkOnly} " +
-                $"nameLen={(row.Name?.Length ?? 0)} userLen={(row.Username?.Length ?? 0)} urlLen={(row.SignInUrl?.Length ?? 0)} " +
-                $"emailPlain={(row.AccountEmailPlain != null ? $"LEN={row.AccountEmailPlain.Length}" : "NULL")} " +
-                $"phonePlain={(row.AccountPhonePlain != null ? $"LEN={row.AccountPhonePlain.Length}" : "NULL")} " +
-                $"pinPlain={(row.PinPlain != null ? $"LEN={row.PinPlain.Length}" : "NULL")} " +
-                $"pw={(mostRecentPasswordPlain != null ? $"LEN={mostRecentPasswordPlain.Length}" : "NULL")}"
-            );
-#endif
         }
 
         /* ======================= Host-facing API ======================= */
@@ -484,7 +528,6 @@ namespace MWPV.View.UserControls.CategoryItems
         /// <summary>
         /// Centralized password getter for callers that want plaintext.
         /// Security note: we intentionally do NOT Trim() passwords.
-        /// Trimming creates additional string copies and can change meaning.
         /// </summary>
         public string? GetPasswordPlainOrNull()
         {
@@ -492,9 +535,6 @@ namespace MWPV.View.UserControls.CategoryItems
             return string.IsNullOrEmpty(pw) ? null : pw;
         }
 
-        /// <summary>
-        /// Back-compat name used by older code. Intentionally returns the plain password.
-        /// </summary>
         public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
 
         /// <summary>
@@ -519,6 +559,14 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
             Debug.WriteLine("[BASIC] Save clicked");
 #endif
+            if (_isViewOnly)
+            {
+#if DEBUG
+                Debug.WriteLine("[BASIC] Save suppressed: view-only mode");
+#endif
+                return;
+            }
+
             SaveRequested?.Invoke(this, EventArgs.Empty);
         }
 
@@ -601,6 +649,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
         {
+            if (_isViewOnly) return;
+
             try
             {
                 var generated = SecurePassword.GenerateAsString(12);
@@ -642,6 +692,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (_settingPwProgrammatically) return;
             if (_isPopulating) return;
+            if (_isViewOnly) { e.Handled = true; return; }
 
             bool pasteCombo =
                 (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
@@ -657,6 +708,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
+            if (_isViewOnly) return;
 
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
@@ -689,6 +741,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (_isPopulating) return;
             if (_settingPwProgrammatically) return;
+            if (_isViewOnly) return;
             if (chkBookmarkOnly.IsChecked == true) return;
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
@@ -698,6 +751,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
+            if (_isViewOnly) return;
 
             if (_verifyRevealed)
                 txtVerifyPlain.Text = pwdVerify.Password;
@@ -760,6 +814,12 @@ namespace MWPV.View.UserControls.CategoryItems
         private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
         {
             error = string.Empty;
+
+            if (_isViewOnly)
+            {
+                error = "View-only mode.";
+                return false;
+            }
 
             if (isBookmarkOnly)
             {
@@ -941,6 +1001,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
             if (_isPopulating) { e.Handled = true; return; }
+            if (_isViewOnly) { e.Handled = true; return; }
 
             if (string.IsNullOrEmpty(e.Text)) { e.Handled = true; return; }
 
@@ -964,6 +1025,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void Pin_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (_isPopulating) { e.Handled = true; return; }
+            if (_isViewOnly) { e.Handled = true; return; }
 
             bool ctrlPaste = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
                              (e.Key == Key.V || e.Key == Key.Insert);
@@ -980,6 +1042,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void Pin_Pasting(object sender, DataObjectPastingEventArgs e)
         {
             if (_isPopulating) { e.CancelCommand(); return; }
+            if (_isViewOnly) { e.CancelCommand(); return; }
 
             if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
             {
@@ -1012,6 +1075,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
+            if (_isViewOnly) return;
 
             if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
                 pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
@@ -1120,6 +1184,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             TouchRevealTimerIfNeeded();
 
+            if (_isViewOnly) return;
+
             if (string.IsNullOrEmpty(pwdEmail.Password))
             {
                 _lastEmailChecked = string.Empty;
@@ -1131,6 +1197,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void pwdEmail_LostFocus(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
+            if (_isViewOnly) return;
 
             var s = (pwdEmail.Password ?? string.Empty).Trim();
 
@@ -1184,6 +1251,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidateEmailForSubmit()
         {
+            if (_isViewOnly) return true;
+
             var s = (pwdEmail.Password ?? string.Empty).Trim();
 
             if (s.Length == 0)
@@ -1246,6 +1315,8 @@ namespace MWPV.View.UserControls.CategoryItems
         private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
+            if (_isViewOnly) return;
+
             ValidatePhoneNumber(forSubmit: false);
         }
 
@@ -1257,6 +1328,8 @@ namespace MWPV.View.UserControls.CategoryItems
                 txtPhonePlain.Text = txtPhone.Password;
 
             TouchRevealTimerIfNeeded();
+
+            if (_isViewOnly) return;
 
             if (string.IsNullOrEmpty(txtPhone.Password))
                 ClearPhoneError();
@@ -1288,6 +1361,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool ValidatePhoneNumber(bool forSubmit)
         {
+            if (_isViewOnly) return true;
+
             _ = forSubmit;
 
             var raw = txtPhone.Password ?? string.Empty;
@@ -1486,6 +1561,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
         {
+            if (_isViewOnly) return;
+
             if (chkBookmarkOnly.IsChecked == true)
             {
                 HideStrengthRow();
