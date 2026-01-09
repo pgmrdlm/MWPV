@@ -41,10 +41,6 @@ namespace Security.Utility.Crypto
                     return false;
                 }
 
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine(
-                    $"[KAV] path='{archivePath}' pw='{password}' len={password?.Length ?? 0}");
-#endif
                 using var extractor = SevenZipCore.CreateExtractor(archivePath, password);
 
                 // find "keyset.json" (either full path or file name)
