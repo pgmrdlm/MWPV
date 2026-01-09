@@ -1,4 +1,6 @@
-﻿<!-- CategoryItemBasicPanel.xaml (FULL REWRITE) -->
+﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
+<!-- FULL REWRITE (unchanged layout; view-only is enforced in code-behind) -->
+
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
