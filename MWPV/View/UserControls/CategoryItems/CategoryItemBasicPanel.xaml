@@ -1,5 +1,5 @@
 ﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
-<!-- FULL REWRITE (layout preserved; adds Copy button for view-only) -->
+<!-- FULL REWRITE (layout preserved; shortens Phone + Email fields ~20% to make room for clipboard buttons) -->
 
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -441,10 +441,11 @@
 
             <Grid Margin="0,0,0,0"
                   Height="28"
-                  MinWidth="240"
+                  MinWidth="190"
                   HorizontalAlignment="Left">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -452,13 +453,13 @@
                     <PasswordBox x:Name="txtPhone"
                                  VerticalAlignment="Center"
                                  Height="28"
-                                 MinWidth="240"
+                                 MinWidth="190"
                                  PasswordChanged="txtPhone_PasswordChanged"
                                  LostFocus="txtPhone_LostFocus"/>
                     <TextBox x:Name="txtPhonePlain"
                              VerticalAlignment="Center"
                              Height="28"
-                             MinWidth="240"
+                             MinWidth="190"
                              IsReadOnly="True"
                              IsHitTestVisible="False"
                              Background="Transparent"
@@ -467,8 +468,23 @@
                              Foreground="Black"/>
                 </Grid>
 
-                <Button x:Name="btnTogglePhoneReveal"
+                <!-- VIEW-ONLY: Copy -->
+                <Button x:Name="btnCopyPhone"
                         Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        ToolTip="Copy phone number to clipboard"
+                        Visibility="Collapsed"
+                        Click="BtnCopyPhone_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               Text="&#xE8C8;"
+                               FontSize="16"
+                               Foreground="Black"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button x:Name="btnTogglePhoneReveal"
+                        Grid.Column="2"
                         Style="{StaticResource SmallSquarePrimaryButton}"
                         ToolTip="Show/Hide phone number"
                         Click="BtnTogglePhoneReveal_Click">
@@ -491,10 +507,11 @@
 
             <Grid Margin="0,0,0,0"
                   Height="28"
-                  MinWidth="220"
-                  HorizontalAlignment="Stretch">
+                  MinWidth="175"
+                  HorizontalAlignment="Left">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -502,12 +519,14 @@
                     <PasswordBox x:Name="pwdEmail"
                                  VerticalAlignment="Center"
                                  Height="28"
+                                 MinWidth="175"
                                  HorizontalAlignment="Stretch"
                                  PasswordChanged="pwdEmail_PasswordChanged"
                                  LostFocus="pwdEmail_LostFocus"/>
                     <TextBox x:Name="txtEmailPlain"
                              VerticalAlignment="Center"
                              Height="28"
+                             MinWidth="175"
                              HorizontalAlignment="Stretch"
                              IsReadOnly="True"
                              IsHitTestVisible="False"
@@ -517,8 +536,24 @@
                              Foreground="Black"/>
                 </Grid>
 
-                <Button x:Name="btnToggleEmailReveal"
+                <!-- VIEW-ONLY: Copy -->
+                <Button x:Name="btnCopyEmail"
                         Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        Margin="6,0,0,0"
+                        ToolTip="Copy email to clipboard"
+                        Visibility="Collapsed"
+                        Click="BtnCopyEmail_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               Text="&#xE8C8;"
+                               FontSize="16"
+                               Foreground="Black"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button x:Name="btnToggleEmailReveal"
+                        Grid.Column="2"
                         Style="{StaticResource SmallSquarePrimaryButton}"
                         Margin="6,0,0,0"
                         ToolTip="Show/Hide email"
