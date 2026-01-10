@@ -11,6 +11,7 @@
 // - No DB update logic is added here.
 // - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
 // - Save button is disabled in view-only to prevent accidental "save" behavior.
+// - NEW: In view-only, replace Generate button with Copy-to-Clipboard button for password.
 //
 
 using System;
@@ -44,6 +45,8 @@ namespace MWPV.View.UserControls.CategoryItems
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+
+        private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
 
         private int _activeEntityId;
 
@@ -195,6 +198,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
             // Editing actions should be disabled
             chkBookmarkOnly.IsEnabled = !_isViewOnly;
+
+            // Replace Generate with Copy in view-only
+            btnGeneratePassword.Visibility = _isViewOnly ? Visibility.Collapsed : Visibility.Visible;
+            btnCopyPassword.Visibility = _isViewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnGeneratePassword.IsEnabled = !_isViewOnly;
 
             // Reveal actions are allowed even in view-only
@@ -204,9 +211,25 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePhoneReveal.IsEnabled = true;
             btnToggleEmailReveal.IsEnabled = true;
 
+            UpdatePasswordCopyButtonState();
+
 #if DEBUG
             Debug.WriteLine($"[BASIC][VIEWONLY] Applied: IsViewOnly={_isViewOnly} (CurrentEntityId={_activeEntityId})");
 #endif
+        }
+
+        private void UpdatePasswordCopyButtonState()
+        {
+            if (!_isViewOnly)
+            {
+                btnCopyPassword.IsEnabled = false;
+                return;
+            }
+
+            bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
+            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            btnCopyPassword.IsEnabled = hasPassword && !isBookmarkOnly;
         }
 
         /* ======================= Populate ======================= */
@@ -356,6 +379,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.IsNullOrWhiteSpace(txtItemName.Text))
                 ClearItemNameError();
 
+            UpdatePasswordCopyButtonState();
         }
 
         /* ======================= Host-facing API ======================= */
@@ -404,6 +428,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             HideStrengthRow();
             HideVerifyError();
+
+            UpdatePasswordCopyButtonState();
         }
 
         public void WipeAllForHostClose()
@@ -669,6 +695,24 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
+        private void BtnCopyPassword_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!_isViewOnly) return;
+
+            if (chkBookmarkOnly.IsChecked == true)
+                return;
+
+            var pw = pwdPassword.Password;
+            if (string.IsNullOrEmpty(pw))
+                return;
+
+            var ok = ClipboardHelper.TryCopySensitiveText(pw, out string reason, ClipboardTtl, tag: "BASIC.PW");
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][CLIP] Copy password requested -> {(ok ? "OK" : "FAIL")} (len={(pw?.Length ?? 0)})");
+#endif
+        }
+
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
         {
             if (_mainRevealed) HideMainPassword();
@@ -708,12 +752,15 @@ namespace MWPV.View.UserControls.CategoryItems
         private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
-            if (_isViewOnly) return;
 
             if (_mainRevealed)
                 txtPasswordPlain.Text = pwdPassword.Password;
 
             TouchRevealTimerIfNeeded();
+
+            UpdatePasswordCopyButtonState();
+
+            if (_isViewOnly) return;
 
             if (chkBookmarkOnly.IsChecked == true)
             {
@@ -809,6 +856,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             HideVerifyRow();
             HideVerifyError();
+
+            UpdatePasswordCopyButtonState();
         }
 
         private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
@@ -1477,6 +1526,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
             btnGeneratePassword.Click += BtnGeneratePassword_Click;
 
+            btnCopyPassword.Click -= BtnCopyPassword_Click;
+            btnCopyPassword.Click += BtnCopyPassword_Click;
+
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewTextInput += Pin_PreviewTextInput;
 
@@ -1535,6 +1587,7 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
             btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+            btnCopyPassword.Click -= BtnCopyPassword_Click;
 
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
@@ -1561,7 +1614,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
         {
-            if (_isViewOnly) return;
+            if (_isViewOnly)
+            {
+                UpdatePasswordCopyButtonState();
+                return;
+            }
 
             if (chkBookmarkOnly.IsChecked == true)
             {
@@ -1569,6 +1626,8 @@ namespace MWPV.View.UserControls.CategoryItems
                 HideVerifyRow();
                 HideVerifyError();
             }
+
+            UpdatePasswordCopyButtonState();
         }
     }
 }
