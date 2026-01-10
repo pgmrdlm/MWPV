@@ -11,7 +11,8 @@
 // - No DB update logic is added here.
 // - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
 // - Save button is disabled in view-only to prevent accidental "save" behavior.
-// - NEW: In view-only, replace Generate button with Copy-to-Clipboard button for password.
+// - In view-only, replace Generate button with Copy-to-Clipboard button for password.
+// - NEW: In view-only, show Copy-to-Clipboard buttons for Phone + Email as well.
 //
 
 using System;
@@ -24,11 +25,11 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using MWPV.Services;
+using MWPV.Utilities.Helpers;
+using MWPV.Utilities.UI;
 using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
 using Security.Utility.Storage;     // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
-using MWPV.Utilities.Helpers;
-using MWPV.Utilities.UI;
 
 namespace MWPV.View.UserControls.CategoryItems
 {
@@ -170,7 +171,6 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
             Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => mode={(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
 #endif
-            ;
         }
 
         private void ApplyViewOnlyProtection()
@@ -204,6 +204,10 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPassword.Visibility = _isViewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnGeneratePassword.IsEnabled = !_isViewOnly;
 
+            // Show phone/email copy buttons in view-only
+            btnCopyPhone.Visibility = _isViewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyEmail.Visibility = _isViewOnly ? Visibility.Visible : Visibility.Collapsed;
+
             // Reveal actions are allowed even in view-only
             btnTogglePasswordReveal.IsEnabled = true;
             btnToggleVerifyReveal.IsEnabled = true;
@@ -211,25 +215,36 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePhoneReveal.IsEnabled = true;
             btnToggleEmailReveal.IsEnabled = true;
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
 
 #if DEBUG
             Debug.WriteLine($"[BASIC][VIEWONLY] Applied: IsViewOnly={_isViewOnly} (CurrentEntityId={_activeEntityId})");
 #endif
         }
 
-        private void UpdatePasswordCopyButtonState()
+        private void UpdateCopyButtonStates()
         {
+            // Password copy (view-only only)
             if (!_isViewOnly)
             {
                 btnCopyPassword.IsEnabled = false;
+                btnCopyPhone.IsEnabled = false;
+                btnCopyEmail.IsEnabled = false;
                 return;
             }
 
-            bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
             bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
 
+            // Password only if present and not bookmark-only
+            bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
             btnCopyPassword.IsEnabled = hasPassword && !isBookmarkOnly;
+
+            // Phone/email independent of bookmark-only
+            bool hasPhone = !string.IsNullOrEmpty(txtPhone.Password);
+            bool hasEmail = !string.IsNullOrEmpty(pwdEmail.Password);
+
+            btnCopyPhone.IsEnabled = hasPhone;
+            btnCopyEmail.IsEnabled = hasEmail;
         }
 
         /* ======================= Populate ======================= */
@@ -379,7 +394,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.IsNullOrWhiteSpace(txtItemName.Text))
                 ClearItemNameError();
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
         }
 
         /* ======================= Host-facing API ======================= */
@@ -429,7 +444,7 @@ namespace MWPV.View.UserControls.CategoryItems
             HideStrengthRow();
             HideVerifyError();
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
         }
 
         public void WipeAllForHostClose()
@@ -698,18 +713,15 @@ namespace MWPV.View.UserControls.CategoryItems
         private void BtnCopyPassword_Click(object? sender, RoutedEventArgs e)
         {
             if (!_isViewOnly) return;
-
-            if (chkBookmarkOnly.IsChecked == true)
-                return;
+            if (chkBookmarkOnly.IsChecked == true) return;
 
             var pw = pwdPassword.Password;
-            if (string.IsNullOrEmpty(pw))
-                return;
+            if (string.IsNullOrEmpty(pw)) return;
 
             var ok = ClipboardHelper.TryCopySensitiveText(pw, out string reason, ClipboardTtl, tag: "BASIC.PW");
 
 #if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy password requested -> {(ok ? "OK" : "FAIL")} (len={(pw?.Length ?? 0)})");
+            Debug.WriteLine($"[BASIC][CLIP] Copy password -> {(ok ? "OK" : "FAIL")} ({reason}) (len={pw.Length})");
 #endif
         }
 
@@ -758,7 +770,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             TouchRevealTimerIfNeeded();
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
 
             if (_isViewOnly) return;
 
@@ -857,7 +869,7 @@ namespace MWPV.View.UserControls.CategoryItems
             HideVerifyRow();
             HideVerifyError();
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
         }
 
         private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
@@ -1274,6 +1286,20 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
+        private void BtnCopyEmail_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!_isViewOnly) return;
+
+            var email = (pwdEmail.Password ?? string.Empty).Trim();
+            if (email.Length == 0) return;
+
+            var ok = ClipboardHelper.TryCopySensitiveText(email, out string reason, ClipboardTtl, tag: "BASIC.EMAIL");
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][CLIP] Copy email -> {(ok ? "OK" : "FAIL")} ({reason}) (len={email.Length})");
+#endif
+        }
+
         private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
         {
             if (_emailRevealed) HideEmail();
@@ -1382,6 +1408,20 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (string.IsNullOrEmpty(txtPhone.Password))
                 ClearPhoneError();
+        }
+
+        private void BtnCopyPhone_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!_isViewOnly) return;
+
+            var phone = (txtPhone.Password ?? string.Empty).Trim();
+            if (phone.Length == 0) return;
+
+            var ok = ClipboardHelper.TryCopySensitiveText(phone, out string reason, ClipboardTtl, tag: "BASIC.PHONE");
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][CLIP] Copy phone -> {(ok ? "OK" : "FAIL")} ({reason}) (len={phone.Length})");
+#endif
         }
 
         private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
@@ -1553,6 +1593,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
             btnToggleEmailReveal.Click += BtnToggleEmailReveal_Click;
 
+            btnCopyEmail.Click -= BtnCopyEmail_Click;
+            btnCopyEmail.Click += BtnCopyEmail_Click;
+
             txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
             txtPhone.PasswordChanged += txtPhone_PasswordChanged;
 
@@ -1561,6 +1604,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
             btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
             btnTogglePhoneReveal.Click += BtnTogglePhoneReveal_Click;
+
+            btnCopyPhone.Click -= BtnCopyPhone_Click;
+            btnCopyPhone.Click += BtnCopyPhone_Click;
 
             _uiEventsHooked = true;
         }
@@ -1598,10 +1644,12 @@ namespace MWPV.View.UserControls.CategoryItems
             pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
             pwdEmail.LostFocus -= pwdEmail_LostFocus;
             btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
+            btnCopyEmail.Click -= BtnCopyEmail_Click;
 
             txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
             txtPhone.LostFocus -= txtPhone_LostFocus;
             btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
+            btnCopyPhone.Click -= BtnCopyPhone_Click;
 
             _uiEventsHooked = false;
         }
@@ -1616,7 +1664,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (_isViewOnly)
             {
-                UpdatePasswordCopyButtonState();
+                UpdateCopyButtonStates();
                 return;
             }
 
@@ -1627,7 +1675,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 HideVerifyError();
             }
 
-            UpdatePasswordCopyButtonState();
+            UpdateCopyButtonStates();
         }
     }
 }
