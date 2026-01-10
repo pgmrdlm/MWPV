@@ -1,5 +1,5 @@
 ﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
-<!-- FULL REWRITE (unchanged layout; view-only is enforced in code-behind) -->
+<!-- FULL REWRITE (layout preserved; adds Copy button for view-only) -->
 
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -77,37 +77,21 @@
         <!-- ROWS -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- 0 item name -->
             <RowDefinition Height="Auto"/>
-            <!-- 1 item name error -->
             <RowDefinition Height="Auto"/>
-            <!-- 2 password -->
             <RowDefinition Height="Auto"/>
-            <!-- 3 verify -->
             <RowDefinition Height="Auto"/>
-            <!-- 4 verify error -->
             <RowDefinition Height="Auto"/>
-            <!-- 5 strength -->
             <RowDefinition Height="Auto"/>
-            <!-- 6 PIN -->
             <RowDefinition Height="Auto"/>
-            <!-- 7 PIN error -->
             <RowDefinition Height="10"/>
-            <!-- 8 spacer -->
             <RowDefinition Height="Auto"/>
-            <!-- 9 user/url -->
             <RowDefinition Height="10"/>
-            <!-- 10 spacer -->
             <RowDefinition Height="Auto"/>
-            <!-- 11 phone + email -->
             <RowDefinition Height="Auto"/>
-            <!-- 12 phone/email errors -->
             <RowDefinition Height="10"/>
-            <!-- 13 spacer -->
             <RowDefinition Height="Auto"/>
-            <!-- 14 notes -->
             <RowDefinition Height="Auto"/>
-            <!-- 15 info/buttons -->
         </Grid.RowDefinitions>
 
         <!-- IMPORTANT: col 4 used to host URL/Email; now that they’re in col 2,
@@ -185,6 +169,7 @@
                          Foreground="Black"/>
             </Grid>
 
+            <!-- ADD/EDIT: Generate -->
             <Button x:Name="btnGeneratePassword"
                     Grid.Column="1"
                     Style="{StaticResource SmallSquarePrimaryButton}"
@@ -196,6 +181,21 @@
                               Data="M9,1.6 L10.1,5.3 13.6,4.2 11.6,7.3 15.4,8.4 11.6,9.5 13.6,12.6 10.1,11.5 9,15.2 7.9,11.5 4.4,12.6 6.4,9.5 2.6,8.4 6.4,7.3 4.4,4.2 7.9,5.3 z"/>
                     </Canvas>
                 </Viewbox>
+            </Button>
+
+            <!-- VIEW-ONLY: Copy -->
+            <Button x:Name="btnCopyPassword"
+                    Grid.Column="1"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    ToolTip="Copy password to clipboard"
+                    Visibility="Collapsed"
+                    Click="BtnCopyPassword_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets"
+                           Text="&#xE8C8;"
+                           FontSize="16"
+                           Foreground="Black"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
             </Button>
 
             <Button x:Name="btnTogglePasswordReveal"
