@@ -1,20 +1,17 @@
 ﻿// File: View/UserControls/Panel.xaml.cs
 //
-// FULL REWRITE (crash fix included)
+// FULL REWRITE
 //
-// Crash cause:
-// - ADD clears SEDS CurrentEntityId/Kind
-// - Debug code (or any code) calling SEDS.GetInt32(...) on a cleared key throws KeyNotFoundException
-//
-// Fix:
-// - Use TryGetInt32 for debug reads (and any non-required reads).
-// - Keep ADD behavior as "clear keys" (your design), but do NOT "Get" cleared keys.
+// Purpose:
+// - Panel is the "bouncer" for the CategoryItem editor overlay.
+// - When overlay is shown, Panel locks left/right navigation.
+// - Shows a clear top-of-panel banner while locked.
+// - Raises an event to MainWindow so it can disable menu/toolbar navigation too.
 
 using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 
 namespace MWPV.View.UserControls
@@ -29,15 +26,35 @@ namespace MWPV.View.UserControls
         private int _selectedCategoryKey;
         private string _selectedCategoryName = string.Empty;
 
-        // When true: left-side navigation is visible but inactive.
+        // When true: navigation is visible but inactive.
         private bool _isNavigationLocked;
 
         // SEDS context keys (reserved + standardized in Security.Utility)
         private static readonly string SedsKey_CurrentEntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
         private static readonly string SedsKey_CurrentEntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
 
-        // Keep the kind string centralized
         private const string EntityKind_CategoryItem = "CategoryItem";
+
+        // -------- Lockdown event bridge to MainWindow --------
+        public event EventHandler<NavigationLockChangedEventArgs>? NavigationLockChanged;
+
+        public sealed class NavigationLockChangedEventArgs : EventArgs
+        {
+            public bool IsLocked { get; }
+            public string Message { get; }
+
+            public NavigationLockChangedEventArgs(bool isLocked, string message)
+            {
+                IsLocked = isLocked;
+                Message = message ?? string.Empty;
+            }
+        }
+
+        public bool IsEditorOverlayActive =>
+            AddEditItemOverlayHost != null && AddEditItemOverlayHost.Visibility == Visibility.Visible;
+
+        private const string LockdownMessage =
+            "Navigation is disabled while the Category Item editor is open. Close the editor (Save / Cancel / Exit) to continue. This insures data security.";
 
         public Panel()
         {
@@ -50,6 +67,7 @@ namespace MWPV.View.UserControls
             InitializeAddCategoryInline();
 
             SetNavigationLocked(false);
+            UpdateLockdownBanner(false);
         }
 
         /* ======================= Lifecycle ======================= */
@@ -78,23 +96,16 @@ namespace MWPV.View.UserControls
 
         /* =================== HOST CLOSE BRIDGE (Big X / window close) =================== */
 
-        /// <summary>
-        /// MainWindow calls this BEFORE it detaches Content to ensure the active editor
-        /// (and child panels like BankCards) gets a host-close wipe ordering.
-        /// </summary>
         public void PrepareForHostClose()
         {
             try
             {
-                if (AddEditItemOverlayHost?.Visibility == Visibility.Visible)
+                if (IsEditorOverlayActive && AddEditItemOverlayHost.Content is CategoryItemEditorTabs tabs)
                 {
-                    if (AddEditItemOverlayHost.Content is CategoryItemEditorTabs tabs)
-                    {
 #if DEBUG
-                        Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
+                    Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
 #endif
-                        tabs.WipeAllForHostClose();
-                    }
+                    tabs.WipeAllForHostClose();
                 }
             }
             catch (Exception ex)
@@ -105,9 +116,8 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* =================== Navigation Lock =================== */
+        /* =================== Navigation Lock + Banner =================== */
 
-        // Rule: when the right-side editor overlay is shown, lock left-side navigation.
         private void SetNavigationLocked(bool locked)
         {
             _isNavigationLocked = locked;
@@ -122,9 +132,42 @@ namespace MWPV.View.UserControls
             // Right-side Add Item button should not be clickable while editor overlay is up.
             if (btnAddCategoryItem != null) btnAddCategoryItem.IsEnabled = !locked;
 
+            UpdateLockdownBanner(locked);
+
 #if DEBUG
             Debug.WriteLine($"[PANEL][NAV-LOCK] locked={locked}");
 #endif
+
+            RaiseNavigationLockChanged(locked);
+        }
+
+        private void UpdateLockdownBanner(bool locked)
+        {
+            try
+            {
+                if (LockdownBannerText != null)
+                    LockdownBannerText.Text = locked ? LockdownMessage : string.Empty;
+
+                if (LockdownBanner != null)
+                    LockdownBanner.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch
+            {
+                // never let UI state updates throw
+            }
+        }
+
+        private void RaiseNavigationLockChanged(bool locked)
+        {
+            try
+            {
+                string msg = locked ? LockdownMessage : string.Empty;
+                NavigationLockChanged?.Invoke(this, new NavigationLockChangedEventArgs(locked, msg));
+            }
+            catch
+            {
+                // no-op
+            }
         }
 
         /* =================== Category Grid Area =================== */
@@ -157,7 +200,6 @@ namespace MWPV.View.UserControls
 
         private void CategoryGrid_SelectedCategoryChanged(object sender, RoutedEventArgs e)
         {
-            // Hard guard: if nav is locked, ignore selection changes.
             if (_isNavigationLocked)
             {
 #if DEBUG
@@ -179,10 +221,7 @@ namespace MWPV.View.UserControls
                 ? "Category Items"
                 : $"Category Items — {_selectedCategoryName}";
 
-            try
-            {
-                CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
-            }
+            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
             catch (Exception ex)
             {
 #if DEBUG
@@ -218,21 +257,8 @@ namespace MWPV.View.UserControls
 
         private void CategoryItemGrid_EditRequested(object? sender, int categoryItemId)
         {
-            if (_isNavigationLocked)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-EDIT] Ignored (navigation locked).");
-#endif
-                return;
-            }
-
-            if (categoryItemId <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine($"[PANEL][ITEM-EDIT] Ignored (invalid itemId={categoryItemId}).");
-#endif
-                return;
-            }
+            if (_isNavigationLocked) return;
+            if (categoryItemId <= 0) return;
 
             ShowEditCategoryItemEditor(categoryItemId);
         }
@@ -258,9 +284,6 @@ namespace MWPV.View.UserControls
 
         private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[PANEL][ADD-CATEGORY-INLINE] ShowAddCategory() requested.");
-#endif
             if (_isNavigationLocked) return;
             ShowAddCategory();
         }
@@ -295,10 +318,7 @@ namespace MWPV.View.UserControls
                 SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
-            finally
-            {
-                _isHandlingInlineEvent = false;
-            }
+            finally { _isHandlingInlineEvent = false; }
         }
 
         private void AddCategoryInline_Canceled(object? sender, EventArgs e)
@@ -311,10 +331,7 @@ namespace MWPV.View.UserControls
                 SafeRefreshCategories();
                 _addCategoryInline?.ResetForm();
             }
-            finally
-            {
-                _isHandlingInlineEvent = false;
-            }
+            finally { _isHandlingInlineEvent = false; }
         }
 
         /* =================== Add/Edit Category Item =================== */
@@ -322,49 +339,24 @@ namespace MWPV.View.UserControls
         private void btnAddCategoryItem_Click(object sender, RoutedEventArgs e)
         {
             if (_isNavigationLocked) return;
-
-            ShowAddCategoryItemEditor(); // ADD: clears SEDS keys
+            ShowAddCategoryItemEditor();
         }
 
         public void ShowEditCategoryItemEditor(int categoryItemId)
         {
             if (_isNavigationLocked) return;
+            if (_selectedCategoryKey <= 0) return;
+            if (categoryItemId <= 0) return;
 
-            if (_selectedCategoryKey <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-EDIT] Edit requested but no selected category. Ignoring.");
-#endif
-                return;
-            }
-
-            if (categoryItemId <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-EDIT] Edit requested with invalid categoryItemId. Ignoring.");
-#endif
-                return;
-            }
-
-            // EDIT/VIEW: set PK into SEDS BEFORE creating editor
             SetActiveEntityForEdit(categoryItemId);
-
             CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);
         }
 
         private void ShowAddCategoryItemEditor()
         {
-            if (_selectedCategoryKey <= 0)
-            {
-#if DEBUG
-                Debug.WriteLine("[PANEL][ITEM-ADD] Add requested with no selected category. Ignoring.");
-#endif
-                return;
-            }
+            if (_selectedCategoryKey <= 0) return;
 
-            // ADD: clear context BEFORE creating editor
             ClearActiveEntityForAdd();
-
             CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);
         }
 
@@ -380,19 +372,12 @@ namespace MWPV.View.UserControls
             _categoryItemEdit.Submitted += CategoryItemEdit_Submitted;
             _categoryItemEdit.Canceled += CategoryItemEdit_Canceled;
 
-            // Tabs decide ADD vs EDIT by reading SEDS keys.
             _categoryItemEdit.ConfigureForOpen(categoryKey, categoryName);
 
             AddEditItemOverlayHost.Content = _categoryItemEdit;
             AddEditItemOverlayHost.Visibility = Visibility.Visible;
 
             SetNavigationLocked(true);
-
-#if DEBUG
-            Debug.WriteLine(
-                $"[PANEL][ITEM-OVERLAY] Shown. catKey={categoryKey}, catName='{categoryName}', " +
-                $"CurrentEntityKind='{TryGetActiveEntityKindDebug()}', CurrentEntityId={TryGetActiveEntityIdDebug()}");
-#endif
         }
 
         private void HideAddEditCategoryItem()
@@ -403,26 +388,18 @@ namespace MWPV.View.UserControls
             AddEditItemOverlayHost.Content = null;
             _categoryItemEdit = null;
 
-            // Clear context so a future open never inherits an old Edit id.
             ClearActiveEntityForAdd();
-
             SetNavigationLocked(false);
         }
 
         private void CategoryItemEdit_Submitted(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[PANEL][ITEM-EDIT][SUBMIT] Hiding overlay, refreshing grid.");
-#endif
             HideAddEditCategoryItem();
             CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
         }
 
         private void CategoryItemEdit_Canceled(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[PANEL][ITEM-EDIT][CANCEL] Hiding overlay.");
-#endif
             HideAddEditCategoryItem();
         }
 
@@ -432,58 +409,21 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                // Your design: key missing means ADD.
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityId);
                 SecureEncryptedDataStore.Clear(SedsKey_CurrentEntityKind);
-
-#if DEBUG
-                Debug.WriteLine("[PANEL][CTX] Cleared SEDS CurrentEntityId/Kind (ADD).");
-#endif
             }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[PANEL][CTX][WARN] Failed to clear SEDS context: {ex}");
-#endif
-            }
+            catch { }
         }
 
         private void SetActiveEntityForEdit(int categoryItemId)
         {
             try
             {
-                // Write KIND first, then ID. Tabs read kind first.
                 SecureEncryptedDataStore.SetString(SedsKey_CurrentEntityKind, EntityKind_CategoryItem);
                 SecureEncryptedDataStore.SetInt32(SedsKey_CurrentEntityId, categoryItemId);
-
-#if DEBUG
-                Debug.WriteLine($"[PANEL][CTX] Set SEDS Kind={EntityKind_CategoryItem}, CurrentEntityId={categoryItemId} (EDIT/VIEW).");
-#endif
             }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[PANEL][CTX][WARN] Failed to set SEDS context: {ex}");
-#endif
-            }
+            catch { }
         }
-
-#if DEBUG
-        private int TryGetActiveEntityIdDebug()
-        {
-            // CRASH FIX: never call GetInt32 for a key that may be cleared.
-            return SecureEncryptedDataStore.TryGetInt32(SedsKey_CurrentEntityId, out int id) ? id : 0;
-        }
-
-        private string TryGetActiveEntityKindDebug()
-        {
-            if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_CurrentEntityKind, out var bytes) || bytes.Length == 0)
-                return string.Empty;
-
-            try { return System.Text.Encoding.UTF8.GetString(bytes); }
-            finally { Array.Clear(bytes, 0, bytes.Length); }
-        }
-#endif
 
         /* ======================= Logs Overlay ======================= */
 
@@ -502,6 +442,16 @@ namespace MWPV.View.UserControls
 
         public void ShowLogs()
         {
+            if (_isNavigationLocked || IsEditorOverlayActive)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][LOGS] Blocked: editor overlay active (navigation locked).");
+#endif
+                UpdateLockdownBanner(true);
+                RaiseNavigationLockChanged(true);
+                return;
+            }
+
             OverlayHost.Visibility = Visibility.Visible;
             try { LogsOverlay?.Focus(); } catch { }
         }
@@ -515,16 +465,8 @@ namespace MWPV.View.UserControls
 
         private void SafeRefreshCategories()
         {
-            try
-            {
-                CategoryGrid?.Refresh();
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[PANEL][REFRESH][ERR] {ex}");
-#endif
-            }
+            try { CategoryGrid?.Refresh(); }
+            catch { }
         }
     }
 }

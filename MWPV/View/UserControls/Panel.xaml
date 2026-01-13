@@ -1,4 +1,5 @@
-﻿<UserControl x:Class="MWPV.View.UserControls.Panel"
+﻿<!-- File: View/UserControls/Panel.xaml -->
+<UserControl x:Class="MWPV.View.UserControls.Panel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -8,104 +9,142 @@
              d:DesignHeight="600"
              d:DesignWidth="1000">
 
+    <UserControl.Resources>
+        <!-- Local fallback banner brushes so Panel never XAML-crashes if App-level keys change -->
+        <!-- Match the same keys used elsewhere (BankCards / AppEntryWindow / BasicPanel). -->
+        <SolidColorBrush x:Key="InfoBannerBackground" Color="#1E40AF"/>
+        <SolidColorBrush x:Key="InfoBannerBorder"     Color="#1D4ED8"/>
+        <SolidColorBrush x:Key="InfoBannerForeground" Color="#FFFFFF"/>
+    </UserControl.Resources>
+
     <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <!-- Top banner (lockdown status) -->
+            <RowDefinition Height="Auto"/>
+            <!-- Main content -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- ====================== MAIN SPLIT ====================== -->
-        <Grid x:Name="SplitRoot">
-            <Grid.ColumnDefinitions>
-                <!-- Left: Categories -->
-                <ColumnDefinition Width="*" MinWidth="260"/>
-                <!-- Right: Category Items & editor overlay -->
-                <ColumnDefinition Width="*" MinWidth="420"/>
-            </Grid.ColumnDefinitions>
+        <!-- ====================== LOCKDOWN BANNER ====================== -->
+        <!-- Visible only while View/Edit/Add editor overlay is open -->
+        <Border x:Name="LockdownBanner"
+                Grid.Row="0"
+                Visibility="Collapsed"
+                Margin="8,8,8,0"
+                Padding="10,8"
+                CornerRadius="6"
+                Background="{StaticResource InfoBannerBackground}"
+                BorderBrush="{StaticResource InfoBannerBorder}"
+                BorderThickness="1"
+                Panel.ZIndex="50">
+            <TextBlock x:Name="LockdownBannerText"
+                       Foreground="{StaticResource InfoBannerForeground}"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       Text="Navigation is disabled while the Category Item editor is open. Close the editor (Save / Cancel / Exit) to continue. This insures data security."/>
+        </Border>
 
-            <!-- ================= LEFT: Categories ================== -->
-            <DockPanel Grid.Column="0"
-                       LastChildFill="True"
-                       Margin="8">
+        <!-- ====================== MAIN AREA ====================== -->
+        <Grid Grid.Row="1">
 
-                <!-- Header -->
-                <TextBlock DockPanel.Dock="Top"
-                           Text="Categories"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Margin="0,0,0,8"/>
+            <!-- ====================== MAIN SPLIT ====================== -->
+            <Grid x:Name="SplitRoot">
+                <Grid.ColumnDefinitions>
+                    <!-- Left: Categories -->
+                    <ColumnDefinition Width="*" MinWidth="260"/>
+                    <!-- Right: Category Items & editor overlay -->
+                    <ColumnDefinition Width="*" MinWidth="420"/>
+                </Grid.ColumnDefinitions>
 
-                <!-- Add Category button -->
-                <StackPanel DockPanel.Dock="Top"
-                            Orientation="Horizontal"
-                            Margin="0,0,0,8">
-                    <Button x:Name="btnAddCategory"
-                            Content="Add Category"
-                            Click="btnAddCategory_Click"
-                            Style="{StaticResource DialogPrimary}"/>
-                </StackPanel>
-
-                <!-- Category grid (default view) -->
-                <uc:CategoryGrid x:Name="CategoryGrid"/>
-
-                <!-- Inline Add Category host (shown when adding) -->
-                <Border x:Name="AddCategoryHost"
-                        Visibility="Collapsed"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Padding="0"
-                        Margin="0">
-                    <ContentControl x:Name="AddCategoryContent"/>
-                </Border>
-            </DockPanel>
-
-            <!-- ============== RIGHT: Items + EDIT OVERLAY =========== -->
-            <Grid Grid.Column="1"
-                  x:Name="RightPane"
-                  Margin="8">
-                <!-- Base right-hand content -->
-                <DockPanel x:Name="RightContent"
-                           LastChildFill="True">
+                <!-- ================= LEFT: Categories ================== -->
+                <DockPanel Grid.Column="0"
+                           LastChildFill="True"
+                           Margin="8">
 
                     <!-- Header -->
                     <TextBlock DockPanel.Dock="Top"
-                               x:Name="txtCategoryItemsTitle"
-                               Text="Category Items"
+                               Text="Categories"
                                FontSize="14"
                                FontWeight="SemiBold"
                                Margin="0,0,0,8"/>
 
-                    <!-- Add Item button -->
+                    <!-- Add Category button -->
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"
                                 Margin="0,0,0,8">
-                        <Button x:Name="btnAddCategoryItem"
-                                Content="Add Item"
-                                Visibility="Collapsed"
-                                Click="btnAddCategoryItem_Click"
+                        <Button x:Name="btnAddCategory"
+                                Content="Add Category"
+                                Click="btnAddCategory_Click"
                                 Style="{StaticResource DialogPrimary}"/>
                     </StackPanel>
 
-                    <!-- Category Item grid -->
-                    <uc:CategoryItemGrid x:Name="CategoryItemGrid"
-                                         Margin="0,4,0,0"/>
+                    <!-- Category grid (default view) -->
+                    <uc:CategoryGrid x:Name="CategoryGrid"/>
+
+                    <!-- Inline Add Category host (shown when adding) -->
+                    <Border x:Name="AddCategoryHost"
+                            Visibility="Collapsed"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Margin="0">
+                        <ContentControl x:Name="AddCategoryContent"/>
+                    </Border>
                 </DockPanel>
 
-                <!-- Add/Edit Category Item overlay
-                     (only covers the RIGHT side now) -->
-                <ContentControl x:Name="AddEditItemOverlayHost"
-                                Visibility="Collapsed"
-                                Panel.ZIndex="200"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"/>
-            </Grid>
-        </Grid>
+                <!-- ============== RIGHT: Items + EDIT OVERLAY =========== -->
+                <Grid Grid.Column="1"
+                      x:Name="RightPane"
+                      Margin="8">
 
-        <!-- ====================== LOGS OVERLAY ===================== -->
-        <!-- This still covers the whole panel (both columns). -->
-        <Border x:Name="OverlayHost"
-                Visibility="Collapsed"
-                Panel.ZIndex="1000"
-                Background="#AA000000">
-            <uc:Logs x:Name="LogsOverlay"
-                     HorizontalAlignment="Stretch"
-                     VerticalAlignment="Stretch"/>
-        </Border>
+                    <!-- Base right-hand content -->
+                    <DockPanel x:Name="RightContent"
+                               LastChildFill="True">
+
+                        <!-- Header -->
+                        <TextBlock DockPanel.Dock="Top"
+                                   x:Name="txtCategoryItemsTitle"
+                                   Text="Category Items"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- Add Item button -->
+                        <StackPanel DockPanel.Dock="Top"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <Button x:Name="btnAddCategoryItem"
+                                    Content="Add Item"
+                                    Visibility="Collapsed"
+                                    Click="btnAddCategoryItem_Click"
+                                    Style="{StaticResource DialogPrimary}"/>
+                        </StackPanel>
+
+                        <!-- Category Item grid -->
+                        <uc:CategoryItemGrid x:Name="CategoryItemGrid"
+                                             Margin="0,4,0,0"/>
+                    </DockPanel>
+
+                    <!-- Add/Edit Category Item overlay (only covers RIGHT side) -->
+                    <ContentControl x:Name="AddEditItemOverlayHost"
+                                    Visibility="Collapsed"
+                                    Panel.ZIndex="200"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"/>
+                </Grid>
+            </Grid>
+
+            <!-- ====================== LOGS OVERLAY ===================== -->
+            <!-- This covers the whole panel (both columns). -->
+            <Border x:Name="OverlayHost"
+                    Visibility="Collapsed"
+                    Panel.ZIndex="1000"
+                    Background="#AA000000">
+                <uc:Logs x:Name="LogsOverlay"
+                         HorizontalAlignment="Stretch"
+                         VerticalAlignment="Stretch"/>
+            </Border>
+
+        </Grid>
     </Grid>
 </UserControl>

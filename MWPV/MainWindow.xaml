@@ -11,7 +11,7 @@
         WindowStyle="None"
         ResizeMode="CanResize"
         SizeToContent="Manual"
-        Width="1536" Height="864"           
+        Width="1536" Height="864"
         MinWidth="1100" MinHeight="700"
         Icon="/Assets/Icons/MWPV.ico">
 
@@ -23,7 +23,7 @@
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
 
-    <!-- Root layout: Title (Auto) / Menu (Auto) / Content (*) / Status (Auto) -->
+    <!-- Root layout: Title (Auto) / Menu (Auto) / Content (*) / Status/Banner (Auto) -->
     <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
@@ -33,7 +33,7 @@
             <RowDefinition Height="*"/>
             <!-- CONTENT VIEWPORT -->
             <RowDefinition Height="Auto"/>
-            <!-- Status Line -->
+            <!-- Status/Banner -->
         </Grid.RowDefinitions>
 
         <!-- TITLE BAR -->
@@ -98,21 +98,29 @@
         </Border>
 
         <!-- MENU (Auto) -->
-        <userControls:MenuBar Grid.Row="1"/>
+        <userControls:MenuBar x:Name="MenuBar" Grid.Row="1"/>
 
         <!-- CONTENT VIEWPORT (row *) — Panel hosts its own outer ScrollViewer -->
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>
 
-        <!-- STATUS (Auto) -->
-        <TextBlock x:Name="StatusText"
-                   Grid.Row="3"
-                   Margin="8,2,8,4"
-                   TextWrapping="Wrap"
-                   FontSize="12"
-                   FontWeight="Bold"
-                   Foreground="#CC0000"
-                   HorizontalAlignment="Stretch"
-                   TextAlignment="Center"
-                   Visibility="Collapsed"/>
+        <!-- STATUS / BANNER (Auto) -->
+        <!-- This is our "blue box" host. MainWindow.xaml.cs still writes to StatusText. -->
+        <Border x:Name="StatusBannerHost"
+                Grid.Row="3"
+                Margin="8,2,8,4"
+                Padding="10,8"
+                CornerRadius="8"
+                Background="#1E40AF"
+                BorderBrush="#1D4ED8"
+                BorderThickness="1"
+                Visibility="Collapsed">
+            <TextBlock x:Name="StatusText"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Foreground="White"
+                       HorizontalAlignment="Stretch"
+                       TextAlignment="Center"/>
+        </Border>
     </Grid>
 </Window>

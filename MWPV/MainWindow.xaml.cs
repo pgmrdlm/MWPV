@@ -1,8 +1,10 @@
-﻿using System;
+﻿// File: MainWindow.xaml.cs
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace MWPV
@@ -16,6 +18,13 @@ namespace MWPV
         private bool _closingCleanupInProgress;
         private bool _allowCloseAfterCleanup;
 
+        // ---- UI Lockdown (editor open) ----
+        private bool _uiLockedDown;
+
+        // Optional: standard message shown during editor lockdown
+        private const string DefaultLockdownMessage =
+            "Navigation is disabled while an item is open. Close the editor (Save/Cancel) to continue.";
+
         public MainWindow()
         {
             InitializeComponent();
@@ -23,21 +32,104 @@ namespace MWPV
             // Set the correct window title explicitly on load
             Title = "MWPV - My Windows Password Vault";
 
-            // Clear the status on any user input
-            PreviewKeyDown += (_, __) => ClearStatus();
-            PreviewMouseDown += (_, __) => ClearStatus();
+            // Clear the status on any user input (unless locked down)
+            PreviewKeyDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
+            PreviewMouseDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
 
-            // Timer tick clears the status
-            _statusTimer.Tick += (_, __) => ClearStatus();
+            // Timer tick clears the status (unless locked down)
+            _statusTimer.Tick += (_, __) =>
+            {
+                if (!_uiLockedDown)
+                    ClearStatus();
+            };
 
             // Central place to handle the big X / Alt+F4 / system close
             Closing += MainWindow_Closing;
         }
 
-        // ---------------- Logs overlay bridge ----------------
+        // ============================================================
+        // LOCKDOWN API (called by Panel via event)
+        // ============================================================
+
+        /// <summary>
+        /// Central lockdown switch:
+        /// - Disables menu bar (and anything else we decide later).
+        /// - Shows a persistent banner while locked.
+        /// - Keeps Big X working (window close).
+        /// </summary>
+        public void SetUiLockdown(bool locked, string? message = null)
+        {
+            _uiLockedDown = locked;
+
+            // 1) Disable the menu bar while locked (Tools/File/etc)
+            TrySetMenuBarEnabled(!locked);
+
+            // 2) Show a persistent banner while locked
+            if (locked)
+            {
+                ShowStartupStatus(message ?? DefaultLockdownMessage, autoHide: null);
+            }
+            else
+            {
+                ClearStatus();
+            }
+
+#if DEBUG
+            Debug.WriteLine($"[MAINWINDOW][LOCKDOWN] locked={locked}");
+#endif
+        }
+
+        private void TrySetMenuBarEnabled(bool enabled)
+        {
+            try
+            {
+                // MenuBar is placed in XAML as <userControls:MenuBar Grid.Row="1"/>
+                // It has no x:Name in your posted XAML, so we locate it by type.
+                var menu = FindChildByType<MWPV.View.UserControls.MenuBar>(this);
+                if (menu != null)
+                    menu.IsEnabled = enabled;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[MAINWINDOW][LOCKDOWN][WARN] Failed to toggle MenuBar: " + ex);
+#endif
+            }
+        }
+
+        private static T? FindChildByType<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null) return null;
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T typed)
+                    return typed;
+
+                var nested = FindChildByType<T>(child);
+                if (nested != null)
+                    return nested;
+            }
+
+            return null;
+        }
+
+        // ============================================================
+        // Logs overlay bridge
+        // ============================================================
+
         // Called by MenuBar (Tools -> View Logs)
         public void ShowLogsPanel()
         {
+            // Hard guard: if editor is open, we do not allow logs.
+            if (_uiLockedDown)
+            {
+                ShowStartupStatus(DefaultLockdownMessage, autoHide: TimeSpan.FromSeconds(6));
+                return;
+            }
+
             try
             {
                 Panel?.ShowLogs();
@@ -48,7 +140,10 @@ namespace MWPV
             }
         }
 
-        // ---------------- Status line helpers ----------------
+        // ============================================================
+        // Status line helpers
+        // ============================================================
+
         public void ShowStartupStatus(string message, TimeSpan? autoHide = null)
         {
             if (string.IsNullOrWhiteSpace(message))
@@ -61,8 +156,13 @@ namespace MWPV
             StatusText.Visibility = Visibility.Visible;
 
             _statusTimer.Stop();
-            _statusTimer.Interval = autoHide ?? TimeSpan.FromSeconds(8);
-            _statusTimer.Start();
+
+            // If autoHide is null: persist until caller clears it.
+            if (autoHide.HasValue)
+            {
+                _statusTimer.Interval = autoHide.Value;
+                _statusTimer.Start();
+            }
         }
 
         private void ClearStatus()
@@ -76,7 +176,10 @@ namespace MWPV
             }
         }
 
-        // ---------------- Title bar handlers ----------------
+        // ============================================================
+        // Title bar handlers
+        // ============================================================
+
         private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2)
@@ -112,6 +215,10 @@ namespace MWPV
             Close(); // goes through Closing handler below
         }
 
+        // ============================================================
+        // Close cleanup orchestration
+        // ============================================================
+
         /// <summary>
         /// Ensure Unloaded runs for nested controls BEFORE we actually exit.
         /// Critical: DO NOT call Close() from inside Closing (WPF will throw).
@@ -136,6 +243,7 @@ namespace MWPV
                 Debug.WriteLine("[MAINWINDOW][CLOSE] Closing requested — beginning UI unload cleanup.");
 
                 // Stop status timer + hide status (safe during close)
+                _uiLockedDown = false; // no need to keep UI locked while closing
                 ClearStatus();
 
                 // **CRITICAL**: tell the active editor (and its children) to run host-close wipes
