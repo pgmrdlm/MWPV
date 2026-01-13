@@ -8,11 +8,9 @@ SET
     CI_BookMarkOnly       = COALESCE(@CI_BookMarkOnly, CI_BookMarkOnly),
     CI_AccountEmail       = @CI_AccountEmail,
     CI_AccountPhoneNumber = @CI_AccountPhoneNumber,
-    CI_SecretMeta         = @CI_SecretMeta,
-    CI_SecretData         = @CI_SecretData,
-    CI_SecretStorage      = @CI_SecretStorage,
+    CI_Pin                = @CI_Pin,
     IsActive              = COALESCE(@IsActive, IsActive),
-    CI_UpdateUTC          = strftime('%s','now')
+    CI_UpdateUTC          = CAST(strftime('%s','now') AS INTEGER)
 WHERE ItemId = @ItemId;
 
 SELECT changes() AS RowsAffected;

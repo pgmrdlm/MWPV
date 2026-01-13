@@ -1,20 +1,21 @@
 ﻿// File: View/UserControls/CategoryItemEditorTabs.xaml.cs
 //
-// FULL REWRITE (AES-only intent, NO UI crypto)
-// - Mode is PK-driven via SEDS.
-//   - If SEDS(kind=="CategoryItem" && id>0) => EDIT/VIEW
-//   - Else => ADD
-//
-// - UI does NOT perform encryption anymore.
-//   - BasicPanel returns plaintext strings.
-//   - Service encrypts with AES via CategoryItemService.
-//
-// - Do NOT clear the Basic form unconditionally in Loaded.
-//   - That makes EDIT look like ADD and can trigger re-inserts.
-//
-// Notes:
-// - ELOG DPAPI is allowed elsewhere; this file stays out of crypto.
-// - This file only inserts today; update/edit wiring can come later.
+// FULL REWRITE (Guardrails-first; INSERT for new items, UPDATE for existing items)
+// -----------------------------------------------------------------------------
+// Ground rules (kept + extended):
+// 1) SEDS tells us ONLY whether the item exists (PK present).
+//    - If PK present => existing item => open in VIEW by default (panel decides).
+// 2) This file stays out of crypto. Services do AES.
+// 3) Inserts happen only once: new item (no PK) => insert => set SEDS PK.
+// 4) Updates happen only on explicit Save actions (NOT on tab-leave).
+// 5) Never clear form on Loaded if PK exists.
+// 6) Tab switching:
+//    - Leaving Basic requires validation.
+//    - If NEW item, we insert-on-leave (so downstream tabs can rely on PK).
+//    - If EXISTING item, we do NOT write on leave (save is explicit).
+// 7) Password history updates for EXISTING items are NOT wired here yet.
+//    - We update CategoryItem basic fields only via CategoryItemService.UpdateCategoryItemBasic.
+// -----------------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -38,7 +39,8 @@ namespace MWPV.View.UserControls
         private int _categoryKey;
         private string _categoryName = string.Empty;
 
-        private bool _isEditMode;
+        // Existence only (PK present)
+        private bool _hasPersistedId;
 
         private bool _panelsHooked;
         private bool _handlingTabSelection;
@@ -90,7 +92,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private static bool IsEditModeFromSeds() => TryGetActiveCategoryItemId().HasValue;
+        private static bool HasPersistedIdFromSeds() => TryGetActiveCategoryItemId().HasValue;
 
         private static void SetSedsContextForCategoryItem(int id)
         {
@@ -111,14 +113,14 @@ namespace MWPV.View.UserControls
             _categoryKey = categoryKey;
             _categoryName = categoryName;
 
-            _isEditMode = IsEditModeFromSeds();
+            _hasPersistedId = HasPersistedIdFromSeds();
 
 #if DEBUG
             var id = TryGetActiveCategoryItemId();
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForOpen: catKey={categoryKey}, name='{categoryName}', mode={(_isEditMode ? "EDIT" : "ADD")}, activeId={(id.HasValue ? id.Value : 0)}");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForOpen: catKey={categoryKey}, name='{categoryName}', exists={_hasPersistedId}, activeId={(id.HasValue ? id.Value : 0)}");
 #endif
 
-            InitializeUiForMode();
+            InitializeUiForOpen();
         }
 
         public void ConfigureForAdd(int categoryKey, string categoryName)
@@ -127,30 +129,34 @@ namespace MWPV.View.UserControls
             _categoryName = categoryName;
 
             ClearSedsContext();
-            _isEditMode = false;
+            _hasPersistedId = false;
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', mode=ADD (SEDS cleared)");
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', exists=false (SEDS cleared)");
 #endif
-            InitializeUiForMode();
+
+            InitializeUiForOpen();
         }
 
         public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
         {
+            // Existence comes from SEDS, not from this method.
             _categoryKey = categoryKey;
             _categoryName = categoryName;
 
-            _isEditMode = IsEditModeFromSeds();
+            _hasPersistedId = HasPersistedIdFromSeds();
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', mode={(_isEditMode ? "EDIT" : "ADD")} (SEDS-derived)");
+            var id = TryGetActiveCategoryItemId();
+            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', exists={_hasPersistedId}, activeId={(id.HasValue ? id.Value : 0)} (SEDS-derived existence)");
 #endif
-            InitializeUiForMode();
 
-            // Future: load existing item into panels
+            InitializeUiForOpen();
+
+            // Future: load existing item into panels, then force view mode in BasicPanel itself.
         }
 
-        private void InitializeUiForMode()
+        private void InitializeUiForOpen()
         {
             HookPanelsOnce();
 
@@ -165,14 +171,18 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
-            if (!_isEditMode)
+            _hasPersistedId = HasPersistedIdFromSeds();
+
+            if (_hasPersistedId)
             {
-                BasicPanel?.ClearForm();
-                BasicPanel?.ResetUiState();
+                // Existing item: do NOT clear. Default is "view" handled by BasicPanel itself.
+                try { BasicPanel?.ResetUiState(); } catch { }
             }
             else
             {
-                BasicPanel?.ResetUiState();
+                // New item: clear + reset.
+                try { BasicPanel?.ClearForm(); } catch { }
+                try { BasicPanel?.ResetUiState(); } catch { }
             }
 
             SetStatus("");
@@ -194,8 +204,8 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
-            _isEditMode = IsEditModeFromSeds();
-            InitializeUiForMode();
+            _hasPersistedId = HasPersistedIdFromSeds();
+            InitializeUiForOpen();
             SetStatus("");
         }
 
@@ -266,7 +276,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= Persistence (INSERT only) ======================= */
+        /* ======================= Persistence (INSERT for new; UPDATE for existing on Save) ======================= */
 
         private enum PersistTrigger
         {
@@ -282,8 +292,101 @@ namespace MWPV.View.UserControls
             if (BasicPanel == null)
                 return true;
 
-            if (IsEditModeFromSeds())
-                return true;
+            // If we believe it's existing, confirm we can resolve the PK.
+            var activeId = TryGetActiveCategoryItemId();
+            bool isExisting = _hasPersistedId && activeId.HasValue && activeId.Value > 0;
+
+            // =========================
+            // EXISTING ITEM
+            // =========================
+            if (isExisting)
+            {
+                // Guardrail: NO update on tab leave.
+                if (trigger == PersistTrigger.LeaveBasicTab)
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][PERSIST] Existing item (id={activeId!.Value}) leave-tab: no write (save is explicit).");
+#endif
+                    return true;
+                }
+
+                // SaveAndExit: perform UPDATE of CategoryItem basic fields only.
+                try
+                {
+                    long itemId = activeId!.Value;
+
+                    string name = BasicPanel.GetItemNameTrim();
+                    string? desc = BasicPanel.GetDescriptionTrimOrNull();
+                    string? username = BasicPanel.GetUsernameTrimOrNull();
+                    string? url = BasicPanel.GetUrlTrimOrNull();
+
+                    string? emailPlain = BasicPanel.GetEmailTrimOrNull();
+                    string? phonePlain = BasicPanel.GetPhoneTrimOrNull();
+                    string? pinPlain = BasicPanel.GetPinTrimOrNull();
+
+                    int? isActive = 1;
+                    int? bookMarkOnly = isBookmarkOnly ? 1 : 0;
+
+                    int rows = CategoryItemService.UpdateCategoryItemBasic(
+                        itemId: itemId,
+                        name: name,
+                        description: desc,
+                        username: username,
+                        signInUrl: url,
+                        bookMarkOnly: bookMarkOnly,
+                        accountEmailPlain: emailPlain,
+                        accountPhonePlain: phonePlain,
+                        pinPlain: pinPlain,
+                        isActive: isActive);
+
+                    if (rows <= 0)
+                    {
+                        SetStatus("Update failed (0 rows affected).");
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] itemId={itemId} rowsAffected=0");
+#endif
+                        return false;
+                    }
+
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][UPDATE] itemId={itemId} rowsAffected={rows}");
+#endif
+
+                    // Ensure SEDS stays correct.
+                    SetSedsContextForCategoryItem(activeId.Value);
+                    _hasPersistedId = true;
+
+                    // Password history updates are not wired here yet.
+                    var pw = BasicPanel.GetPasswordPlainOrNull();
+                    if (!string.IsNullOrWhiteSpace(pw))
+                        SetStatus("Saved Basic fields. Password updates are not wired yet (existing item).");
+                    else
+                        SetStatus("");
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED: {ex}");
+#endif
+                    SetStatus("Update failed. See debug output.");
+                    return false;
+                }
+            }
+
+            // =========================
+            // NEW ITEM
+            // =========================
+            // New item: insert once, then mark existence (needed so other tabs can rely on PK).
+            if (_hasPersistedId && !activeId.HasValue)
+            {
+                // We think we have an ID, but can't resolve it. Treat as new, but log it.
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][PERSIST] _hasPersistedId=true but SEDS has no valid ItemId. Treating as NEW.");
+#endif
+                _hasPersistedId = false;
+            }
 
             try
             {
@@ -349,10 +452,10 @@ namespace MWPV.View.UserControls
                 }
 
                 SetSedsContextForCategoryItem((int)newId);
-                _isEditMode = true;
+                _hasPersistedId = true;
 
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS (kind={EntityKind_CategoryItem})");
+                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS (kind={EntityKind_CategoryItem}); exists now true.");
 #endif
 
                 if (trigger == PersistTrigger.LeaveBasicTab)
@@ -478,7 +581,6 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel SaveAndExitRequested");
 #endif
             BankCardsDraftRows = (e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
-
             SetStatus("");
 
             if (BasicPanel == null)
@@ -561,7 +663,7 @@ namespace MWPV.View.UserControls
                 {
                     _handlingTabSelection = true;
                     try { ItemTabs.SelectedIndex = TabIndexBankCards; }
-                    finally { _handlingTabSelection = false; }
+                    finally { ItemTabs.SelectedIndex = TabIndexBankCards; _handlingTabSelection = false; }
 
                     _lastTabIndex = TabIndexBankCards;
                     return;
@@ -587,6 +689,7 @@ namespace MWPV.View.UserControls
                 return false;
             }
 
+            // Leaving Basic should INSERT only for NEW items. Existing items do not write here.
             if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
                 return false;
 

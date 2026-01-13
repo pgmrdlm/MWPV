@@ -15,7 +15,9 @@
 //
 // Hard rule: parameter names MUST match SQL exactly.
 // - s_CategoryItem_select_by_id.sql uses: @ItemId
+// - s_CategoryItem_update.sql uses: @ItemId plus all @CI_* params (including @CI_Pin)
 // - s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql uses: @CIPaH_ItemId
+// - s_CategoryItemPasswordHistory_insert.sql uses: @ItemId, @Version, @PasswordBlob, @PadLen, @PwSig, @SigVersion
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
@@ -86,9 +88,9 @@ namespace MWPV.Services
             public int? Version { get; init; }
 
             public byte[] PasswordCipher { get; init; } = Array.Empty<byte>();
-            public int? PadLen { get; init; } // kept for schema compatibility; not used by AES-GCM
+            public int? PadLen { get; init; }
             public byte[]? PwSig { get; init; }
-            public int? SigVersion { get; init; } // schema compatibility
+            public int? SigVersion { get; init; }
 
             public bool DecryptOk { get; init; }
             public string? PasswordPlain { get; init; }
@@ -166,7 +168,7 @@ namespace MWPV.Services
 
         /// <summary>
         /// Builds PasswordHistory cipher + sig using AES-GCM (portable).
-        /// - Bookmark-only => stores null/empty cipher (caller chooses); this helper returns EMPTY cipher for that case.
+        /// - Bookmark-only => returns EMPTY cipher.
         /// - pwSig is SHA-256 over cipher bytes (EMPTY is allowed).
         /// </summary>
         public static void BuildPasswordHistoryPayloadAes(
@@ -177,8 +179,8 @@ namespace MWPV.Services
             out byte[] pwSig,
             out int? sigVersion)
         {
-            padLen = null;        // AES-GCM has no padding parameter here
-            sigVersion = 1;       // our "SHA-256(cipher)" version marker (schema optional)
+            padLen = null;
+            sigVersion = 1;
 
             if (isBookmarkOnly)
             {
@@ -189,7 +191,6 @@ namespace MWPV.Services
 
             var pw = password ?? string.Empty;
 
-            // Store EMPTY allowed (but typically password policy prevents it)
             byte[] pwBytes = Encoding.UTF8.GetBytes(pw);
             try
             {
@@ -203,6 +204,105 @@ namespace MWPV.Services
             finally
             {
                 Array.Clear(pwBytes, 0, pwBytes.Length);
+            }
+        }
+
+        // ============================================================
+        // UPDATE: Basic tab (CategoryItem update by ItemId)
+        // ============================================================
+
+        public static int UpdateCategoryItemBasic(
+            long itemId,
+            string name,
+            string? description,
+            string? username,
+            string? signInUrl,
+            int? bookMarkOnly,
+            string? accountEmailPlain,
+            string? accountPhonePlain,
+            string? pinPlain,
+            int? isActive)
+        {
+            return UpdateCategoryItemBasicCore(
+                itemId: itemId,
+                name: name,
+                description: description,
+                username: username,
+                signInUrl: signInUrl,
+                bookMarkOnly: bookMarkOnly,
+                accountEmailCipher: EncryptNullableUtf8(Purpose_CI_Email, accountEmailPlain),
+                accountPhoneCipher: EncryptNullableUtf8(Purpose_CI_Phone, accountPhonePlain),
+                pinCipher: EncryptNullableUtf8(Purpose_CI_Pin, pinPlain),
+                isActive: isActive);
+        }
+
+        private static int UpdateCategoryItemBasicCore(
+            long itemId,
+            string name,
+            string? description,
+            string? username,
+            string? signInUrl,
+            int? bookMarkOnly,
+            byte[]? accountEmailCipher,
+            byte[]? accountPhoneCipher,
+            byte[]? pinCipher,
+            int? isActive)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("name is required.", nameof(name));
+            if (bookMarkOnly.HasValue)
+                _ = NormalizeBookMarkOnly(bookMarkOnly.Value);
+
+            try
+            {
+                var sql = LoadSqlRequired("s_CategoryItem_update.sql");
+
+#if DEBUG
+                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_update.sql");
+                Debug.WriteLine(sql);
+                Debug.WriteLine("[SQL][TEXT] <<<");
+#endif
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                AddInt64(cmd, "@ItemId", itemId);
+                AddText(cmd, "@CI_Name", name.Trim());
+
+                AddTextIfSqlUses(cmd, sql, "@CI_Description", string.IsNullOrWhiteSpace(description) ? null : description);
+                AddTextIfSqlUses(cmd, sql, "@CI_Username", string.IsNullOrWhiteSpace(username) ? null : username);
+                AddTextIfSqlUses(cmd, sql, "@CI_SignInUrl", string.IsNullOrWhiteSpace(signInUrl) ? null : signInUrl);
+
+                AddInt32NullableIfSqlUses(cmd, sql, "@CI_BookMarkOnly", bookMarkOnly);
+                AddInt32NullableIfSqlUses(cmd, sql, "@IsActive", isActive);
+
+                AddBlobIfSqlUses(cmd, sql, "@CI_AccountEmail", accountEmailCipher);
+                AddBlobIfSqlUses(cmd, sql, "@CI_AccountPhoneNumber", accountPhoneCipher);
+                AddBlobIfSqlUses(cmd, sql, "@CI_Pin", pinCipher);
+
+#if DEBUG
+                DebugDumpParams(cmd, "[BASIC][DB][ITEM_UPDATE][PARAMS]");
+#endif
+
+                var scalar = cmd.ExecuteScalar();
+                if (scalar == null || scalar == DBNull.Value)
+                    throw new InvalidOperationException("Update failed (no RowsAffected returned)");
+
+                int rows = Convert.ToInt32(scalar, CultureInfo.InvariantCulture);
+
+#if DEBUG
+                Debug.WriteLine($"[BASIC][DB][ITEM_UPDATE] itemId={itemId} rowsAffected={rows}");
+#endif
+
+                return rows;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error updating CategoryItem (Basic tab) by ItemId");
+                return 0;
             }
         }
 
@@ -237,14 +337,8 @@ namespace MWPV.Services
 
                 using var r = cmd.ExecuteReader();
                 if (!r.Read())
-                {
-#if DEBUG
-                    Debug.WriteLine($"[BASIC][DB][ITEM_SELECT] NOT FOUND itemId={itemId}");
-#endif
                     return null;
-                }
 
-                // ordinals (match SELECT list)
                 int oItemId = r.GetOrdinal("ItemId");
                 int oCatKey = r.GetOrdinal("Category_Key");
                 int oName = r.GetOrdinal("CI_Name");
@@ -263,7 +357,6 @@ namespace MWPV.Services
                 byte[]? phoneCipher = ReadBlobNullable(r, oPhone);
                 byte[]? pinCipher = ReadBlobNullable(r, oPin);
 
-                // Decrypt (best effort; if key missing/wrong, we return null plains)
                 string? emailPlain = null;
                 string? phonePlain = null;
                 string? pinPlain = null;
@@ -272,7 +365,7 @@ namespace MWPV.Services
                 _ = TryDecryptUtf8(Purpose_CI_Phone, phoneCipher, out phonePlain);
                 _ = TryDecryptUtf8(Purpose_CI_Pin, pinCipher, out pinPlain);
 
-                var row = new CategoryItemBasicRow
+                return new CategoryItemBasicRow
                 {
                     ItemId = SafeGetInt64(r, oItemId),
                     CategoryKey = SafeGetInt32(r, oCatKey),
@@ -296,18 +389,6 @@ namespace MWPV.Services
                     CreatedUtc = ReadNullableUtc(r, oCreate),
                     UpdatedUtc = ReadNullableUtc(r, oUpdate)
                 };
-
-#if DEBUG
-                Debug.WriteLine(
-                    $"[BASIC][DB][ITEM_SELECT] FOUND itemId={row.ItemId} catKey={row.CategoryKey} " +
-                    $"bmo={row.BookMarkOnly} active={(row.IsActive.HasValue ? row.IsActive.Value.ToString(CultureInfo.InvariantCulture) : "NULL")} " +
-                    $"email={(row.AccountEmailCipher is { Length: > 0 } eb ? $"BLOB[{eb.Length}]" : "NULL")} decEmail={(row.AccountEmailPlain != null ? "YES" : "NO")} " +
-                    $"phone={(row.AccountPhoneCipher is { Length: > 0 } pb ? $"BLOB[{pb.Length}]" : "NULL")} decPhone={(row.AccountPhonePlain != null ? "YES" : "NO")} " +
-                    $"pin={(row.PinCipher is { Length: > 0 } pib ? $"BLOB[{pib.Length}]" : "NULL")} decPin={(row.PinPlain != null ? "YES" : "NO")}"
-                );
-#endif
-
-                return row;
             }
             catch (Exception ex)
             {
@@ -329,32 +410,16 @@ namespace MWPV.Services
             {
                 var sql = LoadSqlRequired("s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql");
-                Debug.WriteLine(sql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
 
                 AddInt64(cmd, "@CIPaH_ItemId", itemId);
 
-#if DEBUG
-                DebugDumpParams(cmd, "[PW][DB][MOST_RECENT_SELECT][PARAMS]");
-#endif
-
                 using var r = cmd.ExecuteReader();
                 if (!r.Read())
-                {
-#if DEBUG
-                    Debug.WriteLine($"[PW][DB][MOST_RECENT_SELECT] NOT FOUND itemId={itemId}");
-#endif
                     return null;
-                }
 
-                // ordinals per your SQL
                 int oHistId = r.GetOrdinal("CIPaH_PwHistId");
                 int oItemId = r.GetOrdinal("CIPaH_ItemId");
                 int oCreated = r.GetOrdinal("CIPaH_CreatedAt");
@@ -388,7 +453,6 @@ namespace MWPV.Services
 
                 if (cipher.Length == 0)
                 {
-                    // Bookmark-only convention: empty cipher => empty password
                     decOk = true;
                     plain = string.Empty;
                 }
@@ -411,11 +475,6 @@ namespace MWPV.Services
                         }
                     }
                 }
-
-#if DEBUG
-                Debug.WriteLine($"[PW][DB][MOST_RECENT_SELECT] histId={SafeGetInt64(r, oHistId)} itemId={itemId} " +
-                                $"cipher={(cipher.Length == 0 ? "EMPTY" : $"BLOB[{cipher.Length}]")} decOk={decOk} sigOk={sigOk}");
-#endif
 
                 return new PasswordHistoryMostRecent
                 {
@@ -465,12 +524,6 @@ namespace MWPV.Services
             {
                 var sql = LoadSqlRequired("s_CategoryItem_SelectGrid.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_SelectGrid.sql");
-                Debug.WriteLine(sql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
@@ -506,10 +559,6 @@ namespace MWPV.Services
                         strCategoryItemToolTip3 = r.IsDBNull(oDes3) ? "" : r.GetString(oDes3),
                     });
                 }
-
-#if DEBUG
-                Debug.WriteLine($"[CAT_ITEMS][LOAD] rows={rows.Count} for CatKey={categoryKey}");
-#endif
             }
             catch (Exception ex)
             {
@@ -763,46 +812,33 @@ namespace MWPV.Services
             string? description,
             string? username,
             string? signInUrl,
-            int bookMarkOnly,              // 0/1
-            byte[]? accountEmailCipher,    // BLOB (AES)
-            byte[]? accountPhoneCipher,    // BLOB (AES)
-            byte[]? pinCipher,             // BLOB (AES)
+            int bookMarkOnly,
+            byte[]? accountEmailCipher,
+            byte[]? accountPhoneCipher,
+            byte[]? pinCipher,
             int? isActive)
         {
             using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            // Required
             AddInt32(cmd, "@Category_Key", categoryKey);
             AddText(cmd, "@CI_Name", name);
 
-            // Optional plaintext columns
             AddTextIfSqlUses(cmd, sql, "@CI_Description", description);
             AddTextIfSqlUses(cmd, sql, "@CI_Username", username);
             AddTextIfSqlUses(cmd, sql, "@CI_SignInUrl", signInUrl);
 
-            // Bookmark flag
             AddInt32IfSqlUses(cmd, sql, "@CI_BookMarkOnly", NormalizeBookMarkOnly(bookMarkOnly));
 
-            // Sensitive BLOBs
             AddBlobIfSqlUses(cmd, sql, "@CI_AccountEmail", accountEmailCipher);
             AddBlobIfSqlUses(cmd, sql, "@CI_AccountPhoneNumber", accountPhoneCipher);
             AddBlobIfSqlUses(cmd, sql, "@CI_Pin", pinCipher);
 
-            // Active (DDL default is 1; bind only if SQL references it)
             AddInt32NullableIfSqlUses(cmd, sql, "@IsActive", isActive);
-
-            // Legacy/transition columns (bind only if SQL references them)
-            AddBlobIfSqlUses(cmd, sql, "@CI_SecretMeta", null);
-            AddBlobIfSqlUses(cmd, sql, "@CI_SecretData", null);
-            AddTextIfSqlUses(cmd, sql, "@CI_SecretStorage", null);
 
 #if DEBUG
             DebugDumpParams(cmd, "[CAT_ITEM][INSERT][PARAMS]");
-            Debug.WriteLine($"[CAT_ITEM][INSERT][FIELDS] email={(accountEmailCipher is { Length: > 0 } eb ? $"BLOB[{eb.Length}]" : "NULL")} " +
-                            $"phone={(accountPhoneCipher is { Length: > 0 } pb ? $"BLOB[{pb.Length}]" : "NULL")} " +
-                            $"pin={(pinCipher is { Length: > 0 } pib ? $"BLOB[{pib.Length}]" : "NULL")}");
 #endif
 
             var scalar = cmd.ExecuteScalar();
@@ -812,6 +848,11 @@ namespace MWPV.Services
             return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
         }
 
+        /// <summary>
+        /// Inserts into CategoryItemPasswordHistory using sql/s_CategoryItemPasswordHistory_insert.sql.
+        /// IMPORTANT: parameter names MUST match that SQL exactly:
+        ///   @ItemId, @Version, @PasswordBlob, @PadLen, @PwSig, @SigVersion
+        /// </summary>
         private static long InsertPasswordHistoryCore(
             SqliteConnection conn,
             SqliteTransaction tx,
@@ -823,21 +864,27 @@ namespace MWPV.Services
         {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0 for password history insert.");
+            if (pwCipher is null)
+                throw new ArgumentNullException(nameof(pwCipher));
+            if (pwSig is null || pwSig.Length == 0)
+                throw new ArgumentException("pwSig is required.", nameof(pwSig));
 
             using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            AddInt64(cmd, "@CIPaH_ItemId", itemId);
+            // NOTE: these names match sql/s_CategoryItemPasswordHistory_insert.sql
+            AddInt64(cmd, "@ItemId", itemId);
 
-            // Store encrypted cipher (can be EMPTY for bookmark-only)
-            AddBlob(cmd, "@CIPaH_Password", pwCipher);
+            // We can let SQL COALESCE handle defaults by passing NULL
+            AddInt32Nullable(cmd, "@Version", null);
 
-            // Kept for schema compatibility
-            AddInt32Nullable(cmd, "@CIPaH_PadLen", pwPadLen);
+            AddBlob(cmd, "@PasswordBlob", pwCipher);
+            AddInt32Nullable(cmd, "@PadLen", pwPadLen);
+            AddBlob(cmd, "@PwSig", pwSig);
 
-            // SHA-256(cipher) (can be SHA-256(EMPTY))
-            AddBlob(cmd, "@CIPaH_PwSig", pwSig);
+            // Default = 1 via COALESCE in SQL
+            AddInt32Nullable(cmd, "@SigVersion", null);
 
 #if DEBUG
             DebugDumpParams(cmd, "[CAT_ITEM][PW_HIST][INSERT][PARAMS]");
