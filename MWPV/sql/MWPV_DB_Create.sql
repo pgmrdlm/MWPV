@@ -222,19 +222,22 @@ INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
 SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
     -- NEW ITEM ONLY
-    SELECT 'BasicTab' AS UpdateForm, 1  AS Seq,
+    SELECT 'BasicTab' AS UpdateForm, 1 AS Seq,
            'Category Item #CategoryItemName# has been created for Category #CategoryName#' AS LogMessage
 
-    -- EDIT EXISTING ITEM (header + bullet lines; no special chars stored)
-    UNION ALL SELECT 'BasicTab', 2,  'The following changes have been made to #CategoryItemName#'
-    UNION ALL SELECT 'BasicTab', 3,  '- Password changed'
-    UNION ALL SELECT 'BasicTab', 4,  '- Bookmark flag changed'
-    UNION ALL SELECT 'BasicTab', 5,  '- Pin changed'
-    UNION ALL SELECT 'BasicTab', 6,  '- User name changed'
-    UNION ALL SELECT 'BasicTab', 7,  '- url/absolute location changed'
-    UNION ALL SELECT 'BasicTab', 8,  '- Phone number changed'
-    UNION ALL SELECT 'BasicTab', 9,  '- Email changed'
-    UNION ALL SELECT 'BasicTab', 10, '- Freeform notes have changed.'
+    -- EDIT EXISTING ITEM (saved changes; value-blind; no special chars stored)
+    UNION ALL SELECT 'BasicTab', 2,  'The following updates have been saved for #CategoryItemName#'
+    UNION ALL SELECT 'BasicTab', 3,  '- Password updated'
+    UNION ALL SELECT 'BasicTab', 4,  '- Bookmark flag toggled'
+    UNION ALL SELECT 'BasicTab', 5,  '- PIN updated'
+    UNION ALL SELECT 'BasicTab', 6,  '- User name updated'
+    UNION ALL SELECT 'BasicTab', 7,  '- URL/Location updated'
+    UNION ALL SELECT 'BasicTab', 8,  '- Phone number updated'
+    UNION ALL SELECT 'BasicTab', 9,  '- Email updated'
+    UNION ALL SELECT 'BasicTab', 10, '- Notes updated'
+
+    -- OPTIONAL: explicit discard/revert path (only if we wire a "Discard" action)
+    UNION ALL SELECT 'BasicTab', 11, 'Edits were discarded for #CategoryItemName# (no changes saved)'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -242,6 +245,7 @@ WHERE NOT EXISTS (
     WHERE t.UpdateForm = v.UpdateForm
       AND t.Seq        = v.Seq
 );
+
 
 CREATE TABLE Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,

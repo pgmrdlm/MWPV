@@ -1,5 +1,9 @@
 ﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
-<!-- FULL REWRITE (layout preserved; shortens Phone + Email fields ~20% to make room for clipboard buttons) -->
+<!-- FULL REWRITE
+     Change: Add a view-mode "Edit" pill button (uses existing brushes) that unlocks fields for editing.
+     Notes:
+     - Button is visible ONLY when viewing an existing item in view-only mode.
+     - Layout preserved (Edit pill placed on same row as the Item Name label). -->
 
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -68,6 +72,54 @@
             </Setter>
         </Style>
 
+        <!-- View-mode "Edit" pill button (uses existing brushes) -->
+        <Style x:Key="PillPrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="74"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}"/>
+            <Setter Property="Background" Value="{DynamicResource PrimaryNormalBrush}"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="UseLayoutRounding" Value="True"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                CornerRadius="14"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryPressedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBrush}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledForeground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid Margin="20"
@@ -106,9 +158,29 @@
 
         <!-- ================= ITEM NAME ================= -->
         <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
-            <Label Content="* Category Item Name"
-                   FontWeight="Bold"
-                   ToolTip="Required field"/>
+
+            <!-- Label row + Edit pill (view-only only) -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Label Grid.Column="0"
+                       Content="* Category Item Name"
+                       FontWeight="Bold"
+                       ToolTip="Required field"/>
+
+                <Button x:Name="btnEditPill"
+                        Grid.Column="1"
+                        Style="{StaticResource PillPrimaryButton}"
+                        Content="Edit"
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed"
+                        Click="btnEditPill_Click"/>
+            </Grid>
+
             <TextBox x:Name="txtItemName"
                      Height="28"
                      MinWidth="320"

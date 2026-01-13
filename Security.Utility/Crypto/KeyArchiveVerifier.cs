@@ -41,10 +41,7 @@ namespace Security.Utility.Crypto
                     return false;
                 }
 
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine(
-                    $"[KAV] path='{archivePath}' pw='{password}' len={password?.Length ?? 0}");
-#endif
+
                 using var extractor = SevenZipCore.CreateExtractor(archivePath, password);
 
                 // find "keyset.json" (either full path or file name)
@@ -84,17 +81,13 @@ namespace Security.Utility.Crypto
             catch (SevenZipException ex)
             {
                 reason = $"SevenZip:{ex.Message}";
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[KAV] SevenZip error: {ex.Message}");
-#endif
+
                 return false;
             }
             catch (Exception ex)
             {
                 reason = ex.Message;
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[KAV] Unexpected: {ex.GetType().Name}: {ex.Message}");
-#endif
+
                 return false;
             }
         }
