@@ -1,12 +1,14 @@
 ﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
 <!-- FULL REWRITE
-     Change:
-     - Make the view-mode "Edit" button match Save/Cancel sizing by using the shared dialog style family,
-       but use DialogPrimary so it’s GREEN (same family/metrics as Save).
+     Changes:
+     - Keep the view-mode "Edit" button using DialogPrimary (GREEN) so it matches Save/Cancel sizing family.
+     - Add view-only clipboard copy buttons for:
+         - User Name
+         - URL or Absolute Location
+       following the same UI pattern as the existing copy buttons (SmallSquarePrimaryButton, copy icon, default Collapsed).
      Notes:
-     - Edit remains visible ONLY when viewing an existing item in view-only mode.
-     - Layout preserved: Edit button stays on the Item Name label row.
-     - No other behavioral or layout changes. -->
+     - Copy buttons are expected to be shown/hidden by existing view-mode logic (same as other copy buttons).
+     - No other behavioral or layout changes intended. -->
 
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -126,7 +128,7 @@
                        FontWeight="Bold"
                        ToolTip="Required field"/>
 
-                <!-- CHANGED: DialogPrimary = GREEN + same shared sizing family as Save/Cancel -->
+                <!-- DialogPrimary = GREEN + same shared sizing family as Save/Cancel -->
                 <Button x:Name="btnEditPill"
                         Grid.Column="1"
                         Style="{StaticResource DialogPrimary}"
@@ -454,19 +456,74 @@
         <!-- ================= USER / URL ================= -->
         <StackPanel Grid.Row="9" Grid.Column="0">
             <Label Content="User Name" FontWeight="Bold"/>
-            <TextBox x:Name="txtUsername"
-                     Margin="0,0,0,0"
-                     Height="28"
-                     MinWidth="240"
-                     HorizontalAlignment="Left"/>
+
+            <!-- Add copy button host (same pattern as Phone/Email) -->
+            <Grid Height="28"
+                  MinWidth="240"
+                  HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="txtUsername"
+                         Grid.Column="0"
+                         Height="28"
+                         MinWidth="240"
+                         HorizontalAlignment="Stretch"/>
+
+                <!-- VIEW-ONLY: Copy -->
+                <Button x:Name="btnCopyUsername"
+                        Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        Margin="6,0,0,0"
+                        ToolTip="Copy user name to clipboard"
+                        Visibility="Collapsed"
+                        Click="BtnCopyUsername_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               Text="&#xE8C8;"
+                               FontSize="16"
+                               Foreground="Black"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                </Button>
+            </Grid>
         </StackPanel>
 
         <StackPanel Grid.Row="9" Grid.Column="2">
             <Label Content="URL or Absolute Location" FontWeight="Bold"/>
-            <TextBox x:Name="txtUrl"
-                     Height="28"
-                     MinWidth="220"
-                     HorizontalAlignment="Stretch"/>
+
+            <!-- Add copy button host (same pattern as Phone/Email) -->
+            <Grid Height="28"
+                  MinWidth="220"
+                  HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="txtUrl"
+                         Grid.Column="0"
+                         Height="28"
+                         MinWidth="220"
+                         HorizontalAlignment="Stretch"/>
+
+                <!-- VIEW-ONLY: Copy -->
+                <Button x:Name="btnCopyUrl"
+                        Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        Margin="6,0,0,0"
+                        ToolTip="Copy URL to clipboard"
+                        Visibility="Collapsed"
+                        Click="BtnCopyUrl_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               Text="&#xE8C8;"
+                               FontSize="16"
+                               Foreground="Black"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                </Button>
+            </Grid>
         </StackPanel>
 
         <!-- ================= PHONE + EMAIL ================= -->

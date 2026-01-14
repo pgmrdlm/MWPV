@@ -5,12 +5,12 @@
 // Scope (Basic tab ONLY):
 // - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
 // - Existing item opens in VIEW-ONLY mode (read-protected).
-// - NEW: In view-only mode, show an "Edit" pill button. Clicking it unlocks fields for editing.
+// - In view-only mode, show an "Edit" pill button. Clicking it unlocks fields for editing.
 // - No DB update logic is added here.
 // - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
 // - Save button is disabled in view-only to prevent accidental save behavior.
 // - In view-only, replace Generate button with Copy-to-Clipboard button for password.
-// - In view-only, show Copy-to-Clipboard buttons for Phone + Email as well.
+// - In view-only, show Copy-to-Clipboard buttons for: Password, Phone, Email, Username, URL.
 // - In unlocked edit-mode for an existing item, behave like normal Add/Edit mode (Generate visible, Copy hidden, Save enabled).
 //
 
@@ -209,9 +209,16 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPassword.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnGeneratePassword.IsEnabled = !viewOnly;
 
-            // Show phone/email copy buttons in view-only
+            // View-only copy buttons
             btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+
+            // NEW: Username / URL copy buttons (view-only only)
+            if (btnCopyUsername != null)
+                btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+
+            if (btnCopyUrl != null)
+                btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
 
             // Reveal actions are allowed even in view-only
             btnTogglePasswordReveal.IsEnabled = true;
@@ -229,11 +236,15 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateCopyButtonStates()
         {
+            // Default everything off unless we are in view-only mode.
             if (!IsViewOnly)
             {
                 btnCopyPassword.IsEnabled = false;
                 btnCopyPhone.IsEnabled = false;
                 btnCopyEmail.IsEnabled = false;
+
+                if (btnCopyUsername != null) btnCopyUsername.IsEnabled = false;
+                if (btnCopyUrl != null) btnCopyUrl.IsEnabled = false;
                 return;
             }
 
@@ -249,6 +260,19 @@ namespace MWPV.View.UserControls.CategoryItems
 
             btnCopyPhone.IsEnabled = hasPhone;
             btnCopyEmail.IsEnabled = hasEmail;
+
+            // NEW: Username / URL copy (view-only only)
+            if (btnCopyUsername != null)
+            {
+                bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
+                btnCopyUsername.IsEnabled = hasUser;
+            }
+
+            if (btnCopyUrl != null)
+            {
+                bool hasUrl = !string.IsNullOrWhiteSpace(txtUrl.Text);
+                btnCopyUrl.IsEnabled = hasUrl;
+            }
         }
 
         /* ======================= View-only -> Edit unlock ======================= */
@@ -263,9 +287,7 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
             _editUnlocked = true;
 
-            // When unlocking, keep reveals/copy behavior sane:
-            // - Hide copy buttons (handled by ApplyModeProtection)
-            // - Keep reveals allowed, but overlays should stay consistent.
+            // When unlocking, mode protection hides copy buttons and re-enables editing.
             UpdateCopyButtonStates();
             ApplyModeProtection();
         }
@@ -747,6 +769,36 @@ namespace MWPV.View.UserControls.CategoryItems
 
 #if DEBUG
             Debug.WriteLine($"[BASIC][CLIP] Copy password -> {(ok ? "OK" : "FAIL")} ({reason}) (len={pw.Length})");
+#endif
+        }
+
+        // NEW: Username copy (view-only only)
+        private void BtnCopyUsername_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var user = (txtUsername.Text ?? string.Empty).Trim();
+            if (user.Length == 0) return;
+
+            var ok = ClipboardHelper.TryCopySensitiveText(user, out string reason, ClipboardTtl, tag: "BASIC.USER");
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][CLIP] Copy username -> {(ok ? "OK" : "FAIL")} ({reason}) (len={user.Length})");
+#endif
+        }
+
+        // NEW: URL copy (view-only only)
+        private void BtnCopyUrl_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var url = (txtUrl.Text ?? string.Empty).Trim();
+            if (url.Length == 0) return;
+
+            var ok = ClipboardHelper.TryCopySensitiveText(url, out string reason, ClipboardTtl, tag: "BASIC.URL");
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][CLIP] Copy url -> {(ok ? "OK" : "FAIL")} ({reason}) (len={url.Length})");
 #endif
         }
 
@@ -1270,6 +1322,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             TouchRevealTimerIfNeeded();
 
+            UpdateCopyButtonStates();
+
             if (IsViewOnly) return;
 
             if (string.IsNullOrEmpty(pwdEmail.Password))
@@ -1429,6 +1483,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             TouchRevealTimerIfNeeded();
 
+            UpdateCopyButtonStates();
+
             if (IsViewOnly) return;
 
             if (string.IsNullOrEmpty(txtPhone.Password))
@@ -1568,6 +1624,13 @@ namespace MWPV.View.UserControls.CategoryItems
             txtItemName.TextChanged -= txtItemName_TextChanged;
             txtItemName.TextChanged += txtItemName_TextChanged;
 
+            // NEW: username/url text changes update copy enablement (view-only)
+            txtUsername.TextChanged -= txtUsername_TextChanged;
+            txtUsername.TextChanged += txtUsername_TextChanged;
+
+            txtUrl.TextChanged -= txtUrl_TextChanged;
+            txtUrl.TextChanged += txtUrl_TextChanged;
+
             chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
@@ -1596,6 +1659,19 @@ namespace MWPV.View.UserControls.CategoryItems
 
             btnCopyPassword.Click -= BtnCopyPassword_Click;
             btnCopyPassword.Click += BtnCopyPassword_Click;
+
+            // NEW: username/url copy buttons
+            if (btnCopyUsername != null)
+            {
+                btnCopyUsername.Click -= BtnCopyUsername_Click;
+                btnCopyUsername.Click += BtnCopyUsername_Click;
+            }
+
+            if (btnCopyUrl != null)
+            {
+                btnCopyUrl.Click -= BtnCopyUrl_Click;
+                btnCopyUrl.Click += BtnCopyUrl_Click;
+            }
 
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewTextInput += Pin_PreviewTextInput;
@@ -1651,6 +1727,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
             txtItemName.TextChanged -= txtItemName_TextChanged;
 
+            txtUsername.TextChanged -= txtUsername_TextChanged;
+            txtUrl.TextChanged -= txtUrl_TextChanged;
+
             chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
             chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
 
@@ -1664,6 +1743,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
             btnCopyPassword.Click -= BtnCopyPassword_Click;
+
+            if (btnCopyUsername != null) btnCopyUsername.Click -= BtnCopyUsername_Click;
+            if (btnCopyUrl != null) btnCopyUrl.Click -= BtnCopyUrl_Click;
 
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
@@ -1688,6 +1770,18 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (!string.IsNullOrWhiteSpace(txtItemName.Text))
                 ClearItemNameError();
+        }
+
+        private void txtUsername_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (IsViewOnly)
+                UpdateCopyButtonStates();
+        }
+
+        private void txtUrl_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (IsViewOnly)
+                UpdateCopyButtonStates();
         }
 
         private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
