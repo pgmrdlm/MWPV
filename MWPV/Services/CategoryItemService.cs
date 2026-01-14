@@ -2,22 +2,17 @@
 //
 // FULL REWRITE (AES-only, portable, keyfile-derived)
 //
-// What changed (by design):
-// - NO DPAPI anywhere in this service.
-// - CategoryItem sensitive columns (Email/Phone/PIN) use FieldAesCrypto (AES-GCM) with UserSecretsKey from SEDS.
-// - PasswordHistory uses the SAME FieldAesCrypto (AES-GCM) with UserSecretsKey from SEDS.
-// - Optional PwSig is SHA-256 over the encrypted BLOB (cipher blob) for drift/tamper diagnostics.
-// - No “crypto hooks”. Service is the single source of truth for encrypt/decrypt.
+// Change in this rewrite:
+// - Adds PUBLIC wrapper method ItemNameExistsAcrossAllCategories(...) so UI can call it.
+//   Internally this forwards to the existing global check that uses:
+//   sql/s_CategoryItem_exists_by_name.sql
+// - IMPORTANT: We intentionally treat duplicates as GLOBAL across ALL categories.
+//   We do NOT filter by Category_Key anywhere (SQL stays exactly as provided).
 //
-// Requirements:
-// - SEDS must contain FieldAesCrypto.SedsKey_UserSecretsKey as 32 bytes before any decrypt/encrypt.
-// - SQL param names MUST match SQL assets exactly.
+// Notes:
+// - The DB UNIQUE(Category_Key, CI_Name) is still the final authority.
+// - This check is for better UX (no scary SQLite exception dialog).
 //
-// Hard rule: parameter names MUST match SQL exactly.
-// - s_CategoryItem_select_by_id.sql uses: @ItemId
-// - s_CategoryItem_update.sql uses: @ItemId plus all @CI_* params (including @CI_Pin)
-// - s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql uses: @CIPaH_ItemId
-// - s_CategoryItemPasswordHistory_insert.sql uses: @ItemId, @Version, @PasswordBlob, @PadLen, @PwSig, @SigVersion
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
@@ -48,7 +43,6 @@ namespace MWPV.Services
         // ============================================================
         // DTO: Basic tab row (CategoryItem only)
         // ============================================================
-
         public sealed class CategoryItemBasicRow
         {
             public long ItemId { get; init; }
@@ -79,7 +73,6 @@ namespace MWPV.Services
         // ============================================================
         // DTO: Most-recent password history row (AES-GCM)
         // ============================================================
-
         public sealed class PasswordHistoryMostRecent
         {
             public long PwHistId { get; init; }
@@ -100,7 +93,6 @@ namespace MWPV.Services
         // ============================================================
         // SQL loading
         // ============================================================
-
         private static string LoadSqlRequired(string assetName)
         {
             var sql = SqlCagegory.GetSql(assetName);
@@ -112,7 +104,6 @@ namespace MWPV.Services
         // ============================================================
         // AES helpers (portable, multi-machine)
         // ============================================================
-
         private static byte[]? EncryptNullableUtf8(string purpose, string? plain)
         {
             if (string.IsNullOrWhiteSpace(plain))
@@ -204,6 +195,57 @@ namespace MWPV.Services
             finally
             {
                 Array.Clear(pwBytes, 0, pwBytes.Length);
+            }
+        }
+
+        // ============================================================
+        // DUPLICATE NAME CHECK (GLOBAL across all categories)
+        // ============================================================
+
+        /// <summary>
+        /// UI-facing wrapper. This matches the call site in CategoryItemBasicPanel.xaml.cs.
+        /// Global rule across all categories.
+        /// </summary>
+        public static bool ItemNameExistsAcrossAllCategories(string name, long? excludeItemId = null)
+            => CategoryItemNameExistsGlobal(name, excludeItemId);
+
+        /// <summary>
+        /// Returns true if ANY CategoryItem already exists with the same normalized name (global rule).
+        /// Uses sql/s_CategoryItem_exists_by_name.sql exactly as provided:
+        /// - Matches by UPPER(TRIM(ci.CI_Name)) = UPPER(TRIM(@CI_Name))
+        /// - Excludes current item when @ExcludeItemId is provided (edit scenario).
+        /// </summary>
+        private static bool CategoryItemNameExistsGlobal(string name, long? excludeItemId)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            try
+            {
+                var sql = LoadSqlRequired("s_CategoryItem_exists_by_name.sql");
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                // IMPORTANT: parameter names must match SQL exactly
+                AddText(cmd, "@CI_Name", name.Trim());
+                AddInt64Nullable(cmd, "@ExcludeItemId", excludeItemId);
+
+#if DEBUG
+                DebugDumpParams(cmd, "[CAT_ITEM][NAME_EXISTS_GLOBAL][PARAMS]");
+#endif
+
+                using var r = cmd.ExecuteReader();
+                // Global rule: if any row returns, the name exists already somewhere.
+                return r.Read();
+            }
+            catch (Exception ex)
+            {
+                // If the existence check fails for any reason, we do NOT want silent duplicates.
+                // We fail "closed" here, so inserts are blocked rather than allowing a drift state.
+                ErrorHandler.Abend(ex, "Error checking CategoryItem name existence (global)");
+                return true;
             }
         }
 
@@ -611,6 +653,10 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
 
+            // Global duplicate name guard (across all categories)
+            if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
+                throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");
+
             try
             {
                 var itemSql = LoadSqlRequired("s_CategoryItem_insert.sql");
@@ -729,6 +775,10 @@ namespace MWPV.Services
                 throw new ArgumentNullException(nameof(pwCipher));
             if (pwSig is null || pwSig.Length == 0)
                 throw new ArgumentException("pwSig is required.", nameof(pwSig));
+
+            // Global duplicate name guard (across all categories)
+            if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
+                throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");
 
             try
             {
@@ -1159,6 +1209,15 @@ namespace MWPV.Services
             p.ParameterName = name;
             p.SqliteType = SqliteType.Integer;
             p.Value = value;
+            cmd.Parameters.Add(p);
+        }
+
+        private static void AddInt64Nullable(SqliteCommand cmd, string name, long? value)
+        {
+            var p = cmd.CreateParameter();
+            p.ParameterName = name;
+            p.SqliteType = SqliteType.Integer;
+            p.Value = (object?)value ?? DBNull.Value;
             cmd.Parameters.Add(p);
         }
 

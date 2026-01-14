@@ -11,7 +11,9 @@
 // - Save button is disabled in view-only to prevent accidental save behavior.
 // - In view-only, replace Generate button with Copy-to-Clipboard button for password.
 // - In view-only, show Copy-to-Clipboard buttons for: Password, Phone, Email, Username, URL.
-// - In unlocked edit-mode for an existing item, behave like normal Add/Edit mode (Generate visible, Copy hidden, Save enabled).
+// - NEW: Item Name duplicate check runs across ALL categories (service call), with error shown under name.
+//   - For existing items, excludes the current itemId when editing is unlocked.
+//   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
 //
 
 using System;
@@ -89,6 +91,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private string _lastEmailChecked = string.Empty;
 
+        // Duplicate-check guard
+        private string _lastNameChecked = string.Empty;
+
         // PIN rules
         private const int PinMinLen = 4;
         private const int PinMaxLen = 6;
@@ -146,7 +151,8 @@ namespace MWPV.View.UserControls.CategoryItems
         private void ConfigureModeFromSeds()
         {
             _activeEntityId = 0;
-            _editUnlocked = false; // IMPORTANT: existing items start locked each time we load/reload
+            _editUnlocked = false; // existing items start locked each time we load/reload
+            _lastNameChecked = string.Empty;
 
             try
             {
@@ -170,7 +176,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         Done:
 #if DEBUG
-            Debug.WriteLine($"[BASIC][MODE] Kind='{EntityKind_CategoryItem}' CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
+            Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
 #endif
         }
 
@@ -179,8 +185,7 @@ namespace MWPV.View.UserControls.CategoryItems
             bool viewOnly = IsViewOnly;
 
             // Edit pill: only visible while view-only
-            if (btnEditPill != null)
-                btnEditPill.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnEditPill.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
 
             // Save must not happen in view-only
             btnSubmit.IsEnabled = !viewOnly;
@@ -213,12 +218,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
 
-            // NEW: Username / URL copy buttons (view-only only)
-            if (btnCopyUsername != null)
-                btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-
-            if (btnCopyUrl != null)
-                btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            // Username / URL copy buttons (view-only only)
+            btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
 
             // Reveal actions are allowed even in view-only
             btnTogglePasswordReveal.IsEnabled = true;
@@ -236,43 +238,32 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateCopyButtonStates()
         {
-            // Default everything off unless we are in view-only mode.
             if (!IsViewOnly)
             {
                 btnCopyPassword.IsEnabled = false;
                 btnCopyPhone.IsEnabled = false;
                 btnCopyEmail.IsEnabled = false;
-
-                if (btnCopyUsername != null) btnCopyUsername.IsEnabled = false;
-                if (btnCopyUrl != null) btnCopyUrl.IsEnabled = false;
+                btnCopyUsername.IsEnabled = false;
+                btnCopyUrl.IsEnabled = false;
                 return;
             }
 
             bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
 
-            // Password copy (view-only only)
             bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
             btnCopyPassword.IsEnabled = hasPassword && !isBookmarkOnly;
 
-            // Phone/email independent of bookmark-only
             bool hasPhone = !string.IsNullOrEmpty(txtPhone.Password);
             bool hasEmail = !string.IsNullOrEmpty(pwdEmail.Password);
 
             btnCopyPhone.IsEnabled = hasPhone;
             btnCopyEmail.IsEnabled = hasEmail;
 
-            // NEW: Username / URL copy (view-only only)
-            if (btnCopyUsername != null)
-            {
-                bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
-                btnCopyUsername.IsEnabled = hasUser;
-            }
+            bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
+            btnCopyUsername.IsEnabled = hasUser;
 
-            if (btnCopyUrl != null)
-            {
-                bool hasUrl = !string.IsNullOrWhiteSpace(txtUrl.Text);
-                btnCopyUrl.IsEnabled = hasUrl;
-            }
+            bool hasUrl = !string.IsNullOrWhiteSpace(txtUrl.Text);
+            btnCopyUrl.IsEnabled = hasUrl;
         }
 
         /* ======================= View-only -> Edit unlock ======================= */
@@ -287,17 +278,15 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
             _editUnlocked = true;
 
-            // When unlocking, mode protection hides copy buttons and re-enables editing.
             UpdateCopyButtonStates();
             ApplyModeProtection();
+
+            // When we unlock editing, we re-validate name next time it loses focus or on submit
+            _lastNameChecked = string.Empty;
         }
 
         /* ======================= Populate ======================= */
 
-        /// <summary>
-        /// Host can call this after setting SEDS (CurrentEntityKind/Id) to force a reload.
-        /// NOTE: reload always returns to view-only for existing items (EditUnlocked resets).
-        /// </summary>
         public void PopulateFromDbForCurrentEntity()
         {
             ConfigureModeFromSeds();
@@ -313,7 +302,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             LoadAndApplyByItemId(_activeEntityId);
 
-            // Enforce initial view-only after populate
             ApplyModeProtection();
         }
 
@@ -340,7 +328,6 @@ namespace MWPV.View.UserControls.CategoryItems
                     return;
                 }
 
-                // Password: most recent history row (legacy service behavior for now)
                 string? pwPlain = null;
                 if (row.BookMarkOnly == 0)
                 {
@@ -438,8 +425,10 @@ namespace MWPV.View.UserControls.CategoryItems
             HideAllRevealsAndStopTimer();
             ClearPlainRevealOverlays();
 
-            if (!string.IsNullOrWhiteSpace(txtItemName.Text))
-                ClearItemNameError();
+            ClearItemNameError();
+
+            // Reset duplicate-check cache to match loaded name
+            _lastNameChecked = (txtItemName.Text ?? string.Empty).Trim();
 
             UpdateCopyButtonStates();
         }
@@ -456,6 +445,7 @@ namespace MWPV.View.UserControls.CategoryItems
             txtDescription.Text = string.Empty;
 
             _lastEmailChecked = string.Empty;
+            _lastNameChecked = string.Empty;
 
             ClearItemNameError();
             ClearEmailValidation();
@@ -613,10 +603,6 @@ namespace MWPV.View.UserControls.CategoryItems
             return s.Length == 0 ? null : s;
         }
 
-        /// <summary>
-        /// Centralized password getter for callers that want plaintext.
-        /// Security note: we intentionally do NOT Trim() passwords.
-        /// </summary>
         public string? GetPasswordPlainOrNull()
         {
             var pw = pwdPassword.Password;
@@ -625,9 +611,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
 
-        /// <summary>
-        /// Build PasswordHistory payload for INSERT (legacy DPAPI path used by some code).
-        /// </summary>
         public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
         {
             DpapiDbPayloadCrypto.ProtectPasswordHistory(
@@ -636,7 +619,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 out pwCipher,
                 out padLen,
                 out pwSig,
-                out _ // sigVersion (ignore unless schema stores it)
+                out _ // sigVersion
             );
         }
 
@@ -694,17 +677,54 @@ namespace MWPV.View.UserControls.CategoryItems
             _revealAutoHide.Touch(anyRevealed);
         }
 
-        /* ======================= Item name validation ======================= */
+        /* ======================= Item name validation (required + global-duplicate) ======================= */
 
         private bool ValidateItemName(bool forSubmit)
         {
-            _ = forSubmit;
-
             var name = (txtItemName.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
                 ShowItemNameError("Item name is required.");
                 return false;
+            }
+
+            // Never do duplicate checks while populating or in view-only.
+            if (_isPopulating || IsViewOnly)
+            {
+                ClearItemNameError();
+                return true;
+            }
+
+            // We only pay the DB cost:
+            // - on submit OR
+            // - on LostFocus OR
+            // - when the value has changed since last check.
+            if (!forSubmit && string.Equals(name, _lastNameChecked, StringComparison.Ordinal))
+            {
+                ClearItemNameError();
+                return true;
+            }
+
+            _lastNameChecked = name;
+
+            try
+            {
+                long? excludeId = (IsExistingItem && _editUnlocked) ? _activeEntityId : (long?)null;
+
+                // Across every category (service handles the SQL)
+                bool exists = CategoryItemService.ItemNameExistsAcrossAllCategories(name, excludeItemId: excludeId);
+
+                if (exists)
+                {
+                    ShowItemNameError("That item name is already used. Please choose a different name.");
+                    return false;
+                }
+            }
+            catch
+            {
+#if DEBUG
+                Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
+#endif
             }
 
             ClearItemNameError();
@@ -765,14 +785,9 @@ namespace MWPV.View.UserControls.CategoryItems
             var pw = pwdPassword.Password;
             if (string.IsNullOrEmpty(pw)) return;
 
-            var ok = ClipboardHelper.TryCopySensitiveText(pw, out string reason, ClipboardTtl, tag: "BASIC.PW");
-
-#if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy password -> {(ok ? "OK" : "FAIL")} ({reason}) (len={pw.Length})");
-#endif
+            _ = ClipboardHelper.TryCopySensitiveText(pw, out _, ClipboardTtl, tag: "BASIC.PW");
         }
 
-        // NEW: Username copy (view-only only)
         private void BtnCopyUsername_Click(object? sender, RoutedEventArgs e)
         {
             if (!IsViewOnly) return;
@@ -780,14 +795,9 @@ namespace MWPV.View.UserControls.CategoryItems
             var user = (txtUsername.Text ?? string.Empty).Trim();
             if (user.Length == 0) return;
 
-            var ok = ClipboardHelper.TryCopySensitiveText(user, out string reason, ClipboardTtl, tag: "BASIC.USER");
-
-#if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy username -> {(ok ? "OK" : "FAIL")} ({reason}) (len={user.Length})");
-#endif
+            _ = ClipboardHelper.TryCopySensitiveText(user, out _, ClipboardTtl, tag: "BASIC.USER");
         }
 
-        // NEW: URL copy (view-only only)
         private void BtnCopyUrl_Click(object? sender, RoutedEventArgs e)
         {
             if (!IsViewOnly) return;
@@ -795,11 +805,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var url = (txtUrl.Text ?? string.Empty).Trim();
             if (url.Length == 0) return;
 
-            var ok = ClipboardHelper.TryCopySensitiveText(url, out string reason, ClipboardTtl, tag: "BASIC.URL");
-
-#if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy url -> {(ok ? "OK" : "FAIL")} ({reason}) (len={url.Length})");
-#endif
+            _ = ClipboardHelper.TryCopySensitiveText(url, out _, ClipboardTtl, tag: "BASIC.URL");
         }
 
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
@@ -1372,11 +1378,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var email = (pwdEmail.Password ?? string.Empty).Trim();
             if (email.Length == 0) return;
 
-            var ok = ClipboardHelper.TryCopySensitiveText(email, out string reason, ClipboardTtl, tag: "BASIC.EMAIL");
-
-#if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy email -> {(ok ? "OK" : "FAIL")} ({reason}) (len={email.Length})");
-#endif
+            _ = ClipboardHelper.TryCopySensitiveText(email, out _, ClipboardTtl, tag: "BASIC.EMAIL");
         }
 
         private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
@@ -1498,11 +1500,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var phone = (txtPhone.Password ?? string.Empty).Trim();
             if (phone.Length == 0) return;
 
-            var ok = ClipboardHelper.TryCopySensitiveText(phone, out string reason, ClipboardTtl, tag: "BASIC.PHONE");
-
-#if DEBUG
-            Debug.WriteLine($"[BASIC][CLIP] Copy phone -> {(ok ? "OK" : "FAIL")} ({reason}) (len={phone.Length})");
-#endif
+            _ = ClipboardHelper.TryCopySensitiveText(phone, out _, ClipboardTtl, tag: "BASIC.PHONE");
         }
 
         private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
@@ -1624,7 +1622,10 @@ namespace MWPV.View.UserControls.CategoryItems
             txtItemName.TextChanged -= txtItemName_TextChanged;
             txtItemName.TextChanged += txtItemName_TextChanged;
 
-            // NEW: username/url text changes update copy enablement (view-only)
+            // NEW: item name LostFocus triggers duplicate check (but never in view-only)
+            txtItemName.LostFocus -= txtItemName_LostFocus;
+            txtItemName.LostFocus += txtItemName_LostFocus;
+
             txtUsername.TextChanged -= txtUsername_TextChanged;
             txtUsername.TextChanged += txtUsername_TextChanged;
 
@@ -1660,18 +1661,11 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPassword.Click -= BtnCopyPassword_Click;
             btnCopyPassword.Click += BtnCopyPassword_Click;
 
-            // NEW: username/url copy buttons
-            if (btnCopyUsername != null)
-            {
-                btnCopyUsername.Click -= BtnCopyUsername_Click;
-                btnCopyUsername.Click += BtnCopyUsername_Click;
-            }
+            btnCopyUsername.Click -= BtnCopyUsername_Click;
+            btnCopyUsername.Click += BtnCopyUsername_Click;
 
-            if (btnCopyUrl != null)
-            {
-                btnCopyUrl.Click -= BtnCopyUrl_Click;
-                btnCopyUrl.Click += BtnCopyUrl_Click;
-            }
+            btnCopyUrl.Click -= BtnCopyUrl_Click;
+            btnCopyUrl.Click += BtnCopyUrl_Click;
 
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewTextInput += Pin_PreviewTextInput;
@@ -1726,6 +1720,7 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCancel.Click -= btnCancel_Click;
 
             txtItemName.TextChanged -= txtItemName_TextChanged;
+            txtItemName.LostFocus -= txtItemName_LostFocus;
 
             txtUsername.TextChanged -= txtUsername_TextChanged;
             txtUrl.TextChanged -= txtUrl_TextChanged;
@@ -1744,8 +1739,8 @@ namespace MWPV.View.UserControls.CategoryItems
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
             btnCopyPassword.Click -= BtnCopyPassword_Click;
 
-            if (btnCopyUsername != null) btnCopyUsername.Click -= BtnCopyUsername_Click;
-            if (btnCopyUrl != null) btnCopyUrl.Click -= BtnCopyUrl_Click;
+            btnCopyUsername.Click -= BtnCopyUsername_Click;
+            btnCopyUrl.Click -= BtnCopyUrl_Click;
 
             pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
             pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
@@ -1768,8 +1763,23 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void txtItemName_TextChanged(object? sender, TextChangedEventArgs e)
         {
+            // While typing, we clear error only if non-empty.
+            // Duplicate check happens on LostFocus or submit.
             if (!string.IsNullOrWhiteSpace(txtItemName.Text))
-                ClearItemNameError();
+            {
+                if (ItemNameErrorPanel.Visibility == Visibility.Visible)
+                    ClearItemNameError();
+            }
+
+            _lastNameChecked = string.Empty;
+        }
+
+        private void txtItemName_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
+
+            _ = ValidateItemName(forSubmit: false);
         }
 
         private void txtUsername_TextChanged(object? sender, TextChangedEventArgs e)
