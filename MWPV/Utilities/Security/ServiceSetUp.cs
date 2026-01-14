@@ -280,19 +280,19 @@ namespace Utilities.Security
                 // Mark as loaded (one-time)
                 Volatile.Write(ref _keysetLoaded, 1);
 
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine(
-                    "[ServiceSetUp] Keyset loaded into SEDS. " +
-                    $"SQL keys present: {ks.sql?.Count ?? 0}, " +
-                    $"Has LogPayloadKey: {SecureEncryptedDataStore.HasKey(SedsKey_LogPayloadKey)}, " +
-                    $"Has UserSecretsKey: {SecureEncryptedDataStore.HasKey(SedsKey_UserSecretsKey)}");
-#endif
+//#if DEBUG
+//                System.Diagnostics.Debug.WriteLine(
+//                    "[ServiceSetUp] Keyset loaded into SEDS. " +
+//                    $"SQL keys present: {ks.sql?.Count ?? 0}, " +
+//                    $"Has LogPayloadKey: {SecureEncryptedDataStore.HasKey(SedsKey_LogPayloadKey)}, " +
+//                    $"Has UserSecretsKey: {SecureEncryptedDataStore.HasKey(SedsKey_UserSecretsKey)}");
+//#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[ServiceSetUp] EnsureKeySetFromArchive error: " + ex);
-#endif
+//#if DEBUG
+//                System.Diagnostics.Debug.WriteLine("[ServiceSetUp] EnsureKeySetFromArchive error: " + ex);
+//#endif
                 // Caller decides UI/termination behavior.
             }
             finally

@@ -52,9 +52,9 @@ namespace MWPV.Services
             {
                 var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
 
-#if DEBUG
-                try { Debug.WriteLine("[CATEGORIES][SQL] Using asset: s_CategorySelectAll.sql"); } catch { }
-#endif
+//#if DEBUG
+//                try { Debug.WriteLine("[CATEGORIES][SQL] Using asset: s_CategorySelectAll.sql"); } catch { }
+//#endif
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -94,22 +94,22 @@ namespace MWPV.Services
                     rows.Add(row);
                 }
 
-#if DEBUG
-                try
-                {
-                    Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
-                    int idx = 0;
-                    foreach (var c in rows)
-                    {
-                        Debug.WriteLine(
-                            $"[CATEGORIES][{idx++}] " +
-                            $"K1={c.intCategoryKey1?.ToString() ?? "null"} '{c.strCategory1}' | " +
-                            $"K2={c.intCategoryKey2?.ToString() ?? "null"} '{c.strCategory2}' | " +
-                            $"K3={c.intCategoryKey3?.ToString() ?? "null"} '{c.strCategory3}'");
-                    }
-                }
-                catch { }
-#endif
+//#if DEBUG
+//                try
+//                {
+//                    Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
+//                    int idx = 0;
+//                    foreach (var c in rows)
+//                    {
+//                        Debug.WriteLine(
+//                            $"[CATEGORIES][{idx++}] " +
+//                            $"K1={c.intCategoryKey1?.ToString() ?? "null"} '{c.strCategory1}' | " +
+//                            $"K2={c.intCategoryKey2?.ToString() ?? "null"} '{c.strCategory2}' | " +
+//                            $"K3={c.intCategoryKey3?.ToString() ?? "null"} '{c.strCategory3}'");
+//                    }
+//                }
+//                catch { }
+//#endif
             }
             catch (Exception ex)
             {
@@ -210,9 +210,9 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
 
-#if DEBUG
-                try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}'"); } catch { }
-#endif
+//#if DEBUG
+//                try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}'"); } catch { }
+//#endif
                 int affected = cmd.ExecuteNonQuery();
                 if (affected == 0)
                     throw new InvalidOperationException("Insert failed (no rows affected).");

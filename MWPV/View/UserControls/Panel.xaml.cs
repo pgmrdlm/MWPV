@@ -74,9 +74,9 @@ namespace MWPV.View.UserControls
 
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[PANEL][LOADED]");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][LOADED]");
+//#endif
             WireCategoryGridEvents();
             WireCategoryItemGridEvents();
             WireOverlayEvents();
@@ -86,9 +86,9 @@ namespace MWPV.View.UserControls
 
         private void Panel_Unloaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[PANEL][UNLOADED]");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][UNLOADED]");
+//#endif
             UnwireCategoryGridEvents();
             UnwireCategoryItemGridEvents();
             UnwireOverlayEvents();
@@ -102,17 +102,17 @@ namespace MWPV.View.UserControls
             {
                 if (IsEditorOverlayActive && AddEditItemOverlayHost.Content is CategoryItemEditorTabs tabs)
                 {
-#if DEBUG
-                    Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
-#endif
+//#if DEBUG
+//                    Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
+//#endif
                     tabs.WipeAllForHostClose();
                 }
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
-#endif
+//#if DEBUG
+//                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
+//#endif
             }
         }
 
@@ -134,9 +134,9 @@ namespace MWPV.View.UserControls
 
             UpdateLockdownBanner(locked);
 
-#if DEBUG
-            Debug.WriteLine($"[PANEL][NAV-LOCK] locked={locked}");
-#endif
+//#if DEBUG
+//            Debug.WriteLine($"[PANEL][NAV-LOCK] locked={locked}");
+//#endif
 
             RaiseNavigationLockChanged(locked);
         }
@@ -182,9 +182,9 @@ namespace MWPV.View.UserControls
             txtCategoryItemsTitle.Text = "Category Items";
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
 
-#if DEBUG
-            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events wired.");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events wired.");
+//#endif
         }
 
         private void UnwireCategoryGridEvents()
@@ -193,18 +193,18 @@ namespace MWPV.View.UserControls
 
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
 
-#if DEBUG
-            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events unwired.");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events unwired.");
+//#endif
         }
 
         private void CategoryGrid_SelectedCategoryChanged(object sender, RoutedEventArgs e)
         {
             if (_isNavigationLocked)
             {
-#if DEBUG
-                Debug.WriteLine("[PANEL][LEFT→RIGHT] Selection ignored (navigation locked).");
-#endif
+//#if DEBUG
+//                Debug.WriteLine("[PANEL][LEFT→RIGHT] Selection ignored (navigation locked).");
+//#endif
                 return;
             }
 
@@ -212,9 +212,9 @@ namespace MWPV.View.UserControls
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
 
-#if DEBUG
-            Debug.WriteLine($"[PANEL][LEFT→RIGHT] Category selected: key={_selectedCategoryKey}, name='{_selectedCategoryName}'");
-#endif
+//#if DEBUG
+//            Debug.WriteLine($"[PANEL][LEFT→RIGHT] Category selected: key={_selectedCategoryKey}, name='{_selectedCategoryName}'");
+//#endif
 
             btnAddCategoryItem.Visibility = Visibility.Visible;
             txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
@@ -224,9 +224,9 @@ namespace MWPV.View.UserControls
             try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[PANEL][RIGHT][REFRESH][ERR] {ex}");
-#endif
+//#if DEBUG
+//                Debug.WriteLine($"[PANEL][RIGHT][REFRESH][ERR] {ex}");
+//#endif
             }
         }
 
@@ -239,9 +239,9 @@ namespace MWPV.View.UserControls
             CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
             CategoryItemGrid.EditRequested += CategoryItemGrid_EditRequested;
 
-#if DEBUG
-            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events wired.");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events wired.");
+//#endif
         }
 
         private void UnwireCategoryItemGridEvents()
@@ -250,9 +250,9 @@ namespace MWPV.View.UserControls
 
             CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
 
-#if DEBUG
-            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events unwired.");
-#endif
+//#if DEBUG
+//            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events unwired.");
+//#endif
         }
 
         private void CategoryItemGrid_EditRequested(object? sender, int categoryItemId)
@@ -444,9 +444,9 @@ namespace MWPV.View.UserControls
         {
             if (_isNavigationLocked || IsEditorOverlayActive)
             {
-#if DEBUG
-                Debug.WriteLine("[PANEL][LOGS] Blocked: editor overlay active (navigation locked).");
-#endif
+//#if DEBUG
+//                Debug.WriteLine("[PANEL][LOGS] Blocked: editor overlay active (navigation locked).");
+//#endif
                 UpdateLockdownBanner(true);
                 RaiseNavigationLockChanged(true);
                 return;

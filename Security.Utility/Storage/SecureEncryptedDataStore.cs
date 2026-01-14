@@ -208,7 +208,7 @@ public static class SecureEncryptedDataStore
             }
 
             _store[key] = copy;
-            Debug.WriteLine($"[STORE] Set entry (total={_store.Count}).");
+            //Debug.WriteLine($"[STORE] Set entry (total={_store.Count}).");
         }
 
         // Wipe our temporary combined buffer
@@ -238,7 +238,7 @@ public static class SecureEncryptedDataStore
             combinedCopy = new byte[combined.Length];
             Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
 
-            Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
+            //Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
 
             // Decrypt under the same lock so Key cannot be wiped mid-decrypt.
             // NOTE: DecryptWithEmbeddedNonce_NoLock allocates new plaintext buffer.
@@ -371,7 +371,7 @@ public static class SecureEncryptedDataStore
         {
             ThrowIfWiped();
             bool exists = _store.ContainsKey(key);
-            Debug.WriteLine($"[STORE] HasKey={exists} (entries={_store.Count}).");
+            //Debug.WriteLine($"[STORE] HasKey={exists} (entries={_store.Count}).");
             return exists;
         }
     }
@@ -430,7 +430,7 @@ public static class SecureEncryptedDataStore
         lock (_gate)
         {
             ThrowIfWiped();
-            Debug.WriteLine($"[STORE] Keys requested (entries={_store.Count}).");
+           // Debug.WriteLine($"[STORE] Keys requested (entries={_store.Count}).");
             return new List<string>(_store.Keys);
         }
     }

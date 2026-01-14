@@ -2,30 +2,43 @@
 //
 // FULL REWRITE (AES-only, portable, keyfile-derived)
 //
-// Change in this rewrite:
-// - Adds PUBLIC wrapper method ItemNameExistsAcrossAllCategories(...) so UI can call it.
-//   Internally this forwards to the existing global check that uses:
-//   sql/s_CategoryItem_exists_by_name.sql
-// - IMPORTANT: We intentionally treat duplicates as GLOBAL across ALL categories.
-//   We do NOT filter by Category_Key anywhere (SQL stays exactly as provided).
+// Change in this rewrite (password-history “fingerprint” work):
+// - Switches from random-IV ciphertext SHA to a STABLE, keyed fingerprint (HMAC-SHA256) so we can detect
+//   password reuse across time even when AES encryption output changes each save.
+// - Assumes the helper you added exists:
+//     Security.Utility/Crypto/Hashing/Password/PasswordFingerprint.cs
+//   with API:
+//     PasswordFingerprint.Compute(string? passwordPlain, ReadOnlySpan<byte> secretKey, string? purpose = null)
+// - Uses the SEDS “UserSecretsKey” bytes as the fingerprint secret (domain-separated by purpose string).
+//
+// IMPORTANT DB/SQL expectations after your DDL change:
+// - CategoryItemPasswordHistory column is now: CIPaH_PwFp   (not CIPaH_PwSig)
+// - Insert SQL uses parameter:            @PwFp
+// - Reuse-check SQL uses parameters:      @CIPaH_ItemId and @CIPaH_PwFp
+// - Select-most-recent SQL selects column: CIPaH_PwFp
 //
 // Notes:
-// - The DB UNIQUE(Category_Key, CI_Name) is still the final authority.
-// - This check is for better UX (no scary SQLite exception dialog).
+// - No migration logic here (matches your “wack DB / test data” approach).
+// - Item-name global duplicate guard stays as-is.
+// - No DB update logic added beyond what already existed in this file.
 //
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using MWPV.Utilities.Json;               // AppJson
 using Security.Utility.Crypto.Fields;    // FieldAesCrypto (AES-GCM portable)
-using Security.Utility.Crypto.Hash;      // Sha256Common
+using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS) for fingerprint key bytes
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Utilities.Helpers;                 // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                     // SqlCagegory (SQL catalog/loader)
+
+// If your helper namespace is still "...Passwords" instead of "...Password", change this using accordingly.
+using Security.Utility.Crypto.Password;  // PasswordFingerprint
 
 namespace MWPV.Services
 {
@@ -39,6 +52,10 @@ namespace MWPV.Services
         private const string Purpose_CI_Pin = "CI.Pin";
 
         private const string Purpose_CIPaH_PasswordHistory = "CIPaH.PasswordHistory";
+
+        // NOTE: your PasswordFingerprint helper already has DefaultPurpose = "PW.Fingerprint.V1".
+        // We keep the service-side string only as a backup/clarity hook.
+        private const string Purpose_CIPaH_PasswordFingerprint = "PW.Fingerprint.V1";
 
         // ============================================================
         // DTO: Basic tab row (CategoryItem only)
@@ -71,7 +88,7 @@ namespace MWPV.Services
         }
 
         // ============================================================
-        // DTO: Most-recent password history row (AES-GCM)
+        // DTO: Most-recent password history row (AES-GCM + fingerprint check)
         // ============================================================
         public sealed class PasswordHistoryMostRecent
         {
@@ -82,12 +99,15 @@ namespace MWPV.Services
 
             public byte[] PasswordCipher { get; init; } = Array.Empty<byte>();
             public int? PadLen { get; init; }
-            public byte[]? PwSig { get; init; }
-            public int? SigVersion { get; init; }
+
+            // Stable, keyed fingerprint (HMAC-SHA256 over plaintext w/ purpose)
+            public byte[]? PwFp { get; init; }
 
             public bool DecryptOk { get; init; }
             public string? PasswordPlain { get; init; }
-            public bool SigOk { get; init; }
+
+            // True when stored PwFp matches recomputed PwFp from decrypted plaintext
+            public bool FingerprintOk { get; init; }
         }
 
         // ============================================================
@@ -157,26 +177,51 @@ namespace MWPV.Services
             }
         }
 
+        // ============================================================
+        // Password fingerprint helpers (stable reuse detection)
+        // ============================================================
+
         /// <summary>
-        /// Builds PasswordHistory cipher + sig using AES-GCM (portable).
-        /// - Bookmark-only => returns EMPTY cipher.
-        /// - pwSig is SHA-256 over cipher bytes (EMPTY is allowed).
+        /// Computes the stable, keyed fingerprint (32 bytes) for a plaintext password.
+        /// Uses SEDS UserSecretsKey as the secret key, purpose-separated via PW.Fingerprint.V1.
+        /// </summary>
+        private static byte[] ComputePasswordFingerprint(string? passwordPlain)
+        {
+            // IMPORTANT: we assume SEDS returns a COPY of the key bytes.
+            // If it ever returns a live reference, wiping here would be catastrophic.
+            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+
+            try
+            {
+                // Use helper default purpose, but keep it explicit for stability.
+                return PasswordFingerprint.Compute(passwordPlain, keyBytes, purpose: Purpose_CIPaH_PasswordFingerprint);
+            }
+            finally
+            {
+                Array.Clear(keyBytes, 0, keyBytes.Length);
+            }
+        }
+
+        /// <summary>
+        /// Builds PasswordHistory cipher + fp using AES-GCM + stable fingerprint.
+        /// - Bookmark-only => cipher is EMPTY and fp is still computed (over empty string) so checks stay consistent.
         /// </summary>
         public static void BuildPasswordHistoryPayloadAes(
             string? password,
             bool isBookmarkOnly,
             out byte[] pwCipher,
             out int? padLen,
-            out byte[] pwSig,
-            out int? sigVersion)
+            out byte[] pwFp,
+            out int? fpVersion)
         {
             padLen = null;
-            sigVersion = 1;
+            fpVersion = 1;
 
+            // Bookmark-only: we store empty cipher; fingerprint computed over "".
             if (isBookmarkOnly)
             {
                 pwCipher = Array.Empty<byte>();
-                pwSig = Sha256Common.Bytes(pwCipher);
+                pwFp = ComputePasswordFingerprint(string.Empty);
                 return;
             }
 
@@ -190,7 +235,7 @@ namespace MWPV.Services
                     purpose: Purpose_CIPaH_PasswordHistory,
                     plaintext: pwBytes);
 
-                pwSig = Sha256Common.Bytes(pwCipher);
+                pwFp = ComputePasswordFingerprint(pw);
             }
             finally
             {
@@ -242,10 +287,59 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                // If the existence check fails for any reason, we do NOT want silent duplicates.
-                // We fail "closed" here, so inserts are blocked rather than allowing a drift state.
+                // Fail closed: block inserts if the check itself fails.
                 ErrorHandler.Abend(ex, "Error checking CategoryItem name existence (global)");
                 return true;
+            }
+        }
+
+        // ============================================================
+        // PASSWORD REUSE CHECK (per-item, 365 days)
+        // ============================================================
+
+        /// <summary>
+        /// Returns true if the same plaintext password (by stable fingerprint) was used on THIS ITEM
+        /// within the last 365 days.
+        /// Uses sql/s_CategoryItemPasswordHistory_check_reuse_365days.sql.
+        /// Expected params: @CIPaH_ItemId, @CIPaH_PwFp
+        /// </summary>
+        public static bool PasswordReuseWithin365Days(long itemId, string? passwordPlain)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            var fp = ComputePasswordFingerprint(passwordPlain ?? string.Empty);
+
+            try
+            {
+                var sql = LoadSqlRequired("s_CategoryItemPasswordHistory_check_reuse_365days.sql");
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                AddInt64(cmd, "@CIPaH_ItemId", itemId);
+                AddBlob(cmd, "@CIPaH_PwFp", fp);
+
+#if DEBUG
+                DebugDumpParams(cmd, "[PW_REUSE_365][PARAMS]");
+#endif
+
+                object? scalar = cmd.ExecuteScalar();
+                if (scalar == null || scalar == DBNull.Value)
+                    return false;
+
+                int v = Convert.ToInt32(scalar, CultureInfo.InvariantCulture);
+                return v == 1;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error checking password reuse within 365 days");
+                return false;
+            }
+            finally
+            {
+                Array.Clear(fp, 0, fp.Length);
             }
         }
 
@@ -440,7 +534,7 @@ namespace MWPV.Services
         }
 
         // ============================================================
-        // SELECT: PasswordHistory most recent (AES-GCM + optional Sig verify)
+        // SELECT: PasswordHistory most recent (AES-GCM + fingerprint verify)
         // ============================================================
 
         public static PasswordHistoryMostRecent? LoadMostRecentPasswordHistoryByItemId(long itemId)
@@ -468,33 +562,20 @@ namespace MWPV.Services
                 int oVer = r.GetOrdinal("CIPaH_Version");
                 int oPw = r.GetOrdinal("CIPaH_Password");
                 int oPad = r.GetOrdinal("CIPaH_PadLen");
-                int oSig = r.GetOrdinal("CIPaH_PwSig");
-                int oSigVer = r.GetOrdinal("CIPaH_SigVersion");
+
+                // NEW: stable fingerprint column
+                int oFp = r.GetOrdinal("CIPaH_PwFp");
 
                 var cipher = ReadBlobNullable(r, oPw) ?? Array.Empty<byte>();
                 int? padLen = r.IsDBNull(oPad) ? (int?)null : SafeGetInt32(r, oPad);
-                var sig = ReadBlobNullable(r, oSig);
-                int? sigVer = r.IsDBNull(oSigVer) ? (int?)null : SafeGetInt32(r, oSigVer);
-
-                bool sigOk = true;
-                if (sig is { Length: > 0 })
-                {
-                    try
-                    {
-                        var calc = Sha256Common.Bytes(cipher);
-                        sigOk = FixedTimeEquals(calc, sig);
-                    }
-                    catch
-                    {
-                        sigOk = false;
-                    }
-                }
+                var fpStored = ReadBlobNullable(r, oFp);
 
                 bool decOk = false;
                 string? plain = null;
 
                 if (cipher.Length == 0)
                 {
+                    // bookmark-only / empty password history payload
                     decOk = true;
                     plain = string.Empty;
                 }
@@ -518,6 +599,27 @@ namespace MWPV.Services
                     }
                 }
 
+                bool fpOk = true;
+                if (fpStored is { Length: > 0 })
+                {
+                    if (!decOk)
+                    {
+                        fpOk = false;
+                    }
+                    else
+                    {
+                        byte[] fpCalc = ComputePasswordFingerprint(plain ?? string.Empty);
+                        try
+                        {
+                            fpOk = CryptographicOperations.FixedTimeEquals(fpCalc, fpStored);
+                        }
+                        finally
+                        {
+                            Array.Clear(fpCalc, 0, fpCalc.Length);
+                        }
+                    }
+                }
+
                 return new PasswordHistoryMostRecent
                 {
                     PwHistId = SafeGetInt64(r, oHistId),
@@ -527,12 +629,11 @@ namespace MWPV.Services
 
                     PasswordCipher = cipher,
                     PadLen = padLen,
-                    PwSig = sig,
-                    SigVersion = sigVer,
+                    PwFp = fpStored,
 
                     DecryptOk = decOk,
                     PasswordPlain = decOk ? plain : null,
-                    SigOk = sigOk
+                    FingerprintOk = fpOk
                 };
             }
             catch (Exception ex)
@@ -547,7 +648,7 @@ namespace MWPV.Services
             var row = LoadMostRecentPasswordHistoryByItemId(itemId);
             if (row == null) return null;
             if (!row.DecryptOk) return null;
-            if (!row.SigOk) return null;
+            if (!row.FingerprintOk) return null;
             return row.PasswordPlain;
         }
 
@@ -735,8 +836,8 @@ namespace MWPV.Services
                 isBookmarkOnly: isBookmarkOnly,
                 out var pwCipher,
                 out var pwPadLen,
-                out var pwSig,
-                out var _sigVer);
+                out var pwFp,
+                out var _fpVer);
 
             return InsertCategoryItemWithPasswordHistoryCore(
                 categoryKey: categoryKey,
@@ -750,7 +851,7 @@ namespace MWPV.Services
                 isActive: isActive,
                 pwCipher: pwCipher,
                 pwPadLen: pwPadLen,
-                pwSig: pwSig);
+                pwFp: pwFp);
         }
 
         private static long InsertCategoryItemWithPasswordHistoryCore(
@@ -765,7 +866,7 @@ namespace MWPV.Services
             int? isActive,
             byte[] pwCipher,
             int? pwPadLen,
-            byte[] pwSig)
+            byte[] pwFp)
         {
             if (categoryKey < 0)
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
@@ -773,8 +874,8 @@ namespace MWPV.Services
                 throw new ArgumentException("name is required.", nameof(name));
             if (pwCipher is null)
                 throw new ArgumentNullException(nameof(pwCipher));
-            if (pwSig is null || pwSig.Length == 0)
-                throw new ArgumentException("pwSig is required.", nameof(pwSig));
+            if (pwFp is null || pwFp.Length == 0)
+                throw new ArgumentException("pwFp is required.", nameof(pwFp));
 
             // Global duplicate name guard (across all categories)
             if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
@@ -814,7 +915,7 @@ namespace MWPV.Services
                         itemId: newItemId,
                         pwCipher: pwCipher,
                         pwPadLen: pwPadLen,
-                        pwSig: pwSig);
+                        pwFp: pwFp);
 
                     if (newPwHistId <= 0)
                         throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
@@ -900,8 +1001,10 @@ namespace MWPV.Services
 
         /// <summary>
         /// Inserts into CategoryItemPasswordHistory using sql/s_CategoryItemPasswordHistory_insert.sql.
-        /// IMPORTANT: parameter names MUST match that SQL exactly:
-        ///   @ItemId, @Version, @PasswordBlob, @PadLen, @PwSig, @SigVersion
+        /// IMPORTANT: parameter names MUST match that SQL exactly.
+        ///
+        /// Expected (post-change):
+        ///   @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp   (+ optional @FpVersion if present)
         /// </summary>
         private static long InsertPasswordHistoryCore(
             SqliteConnection conn,
@@ -910,31 +1013,33 @@ namespace MWPV.Services
             long itemId,
             byte[] pwCipher,
             int? pwPadLen,
-            byte[] pwSig)
+            byte[] pwFp)
         {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0 for password history insert.");
             if (pwCipher is null)
                 throw new ArgumentNullException(nameof(pwCipher));
-            if (pwSig is null || pwSig.Length == 0)
-                throw new ArgumentException("pwSig is required.", nameof(pwSig));
+            if (pwFp is null || pwFp.Length == 0)
+                throw new ArgumentException("pwFp is required.", nameof(pwFp));
 
             using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            // NOTE: these names match sql/s_CategoryItemPasswordHistory_insert.sql
+            // NOTE: these names must match sql/s_CategoryItemPasswordHistory_insert.sql
             AddInt64(cmd, "@ItemId", itemId);
 
-            // We can let SQL COALESCE handle defaults by passing NULL
+            // Let SQL COALESCE handle defaults by passing NULL
             AddInt32Nullable(cmd, "@Version", null);
 
             AddBlob(cmd, "@PasswordBlob", pwCipher);
             AddInt32Nullable(cmd, "@PadLen", pwPadLen);
-            AddBlob(cmd, "@PwSig", pwSig);
 
-            // Default = 1 via COALESCE in SQL
-            AddInt32Nullable(cmd, "@SigVersion", null);
+            // NEW: stable fingerprint
+            AddBlob(cmd, "@PwFp", pwFp);
+
+            // Optional: only matters if SQL/DDL uses it (safe even if ignored).
+            AddInt32Nullable(cmd, "@FpVersion", null);
 
 #if DEBUG
             DebugDumpParams(cmd, "[CAT_ITEM][PW_HIST][INSERT][PARAMS]");
@@ -1126,14 +1231,6 @@ namespace MWPV.Services
             catch { }
 
             return null;
-        }
-
-        private static bool FixedTimeEquals(byte[] a, byte[] b)
-        {
-            if (a.Length != b.Length) return false;
-            int diff = 0;
-            for (int i = 0; i < a.Length; i++) diff |= (a[i] ^ b[i]);
-            return diff == 0;
         }
 
         // ============================================================

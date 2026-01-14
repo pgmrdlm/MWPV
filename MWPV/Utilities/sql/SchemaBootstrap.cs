@@ -79,13 +79,13 @@ namespace Utilities.Sql
                 TryExec(conn, sql, stats);
             }
 
-#if DEBUG
-            if (VerboseBootstrap)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Bootstrap] OK: ran={stats.Ran} skipped: tables={stats.SkippedTables}, cols={stats.SkippedColumns}, indexes={stats.SkippedIndexes}, benignIgnored={stats.BenignIgnored}");
-            }
-#endif
+//#if DEBUG
+//            if (VerboseBootstrap)
+//            {
+//                System.Diagnostics.Debug.WriteLine(
+//                    $"[Bootstrap] OK: ran={stats.Ran} skipped: tables={stats.SkippedTables}, cols={stats.SkippedColumns}, indexes={stats.SkippedIndexes}, benignIgnored={stats.BenignIgnored}");
+//            }
+//#endif
         }
 
         private static void TryExec(SqliteConnection conn, string sql, BootstrapStats stats)

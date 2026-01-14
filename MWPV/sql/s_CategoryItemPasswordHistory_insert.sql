@@ -1,4 +1,12 @@
 -- File: sql/s_CategoryItemPasswordHistory_insert.sql
+--
+-- PwFp version (stable fingerprint)
+-- Matches DDL:
+--   CIPaH_PwFp      BLOB    NOT NULL
+--   CIPaH_FpVersion INTEGER NOT NULL DEFAULT 1
+--
+-- Matches service params:
+--   @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp, @FpVersion
 
 INSERT INTO CategoryItemPasswordHistory
 (
@@ -6,8 +14,8 @@ INSERT INTO CategoryItemPasswordHistory
     CIPaH_Version,
     CIPaH_Password,
     CIPaH_PadLen,
-    CIPaH_PwSig,
-    CIPaH_SigVersion
+    CIPaH_PwFp,
+    CIPaH_FpVersion
 )
 VALUES
 (
@@ -15,8 +23,8 @@ VALUES
     COALESCE(@Version, 1),
     @PasswordBlob,
     @PadLen,
-    @PwSig,
-    COALESCE(@SigVersion, 1)
+    @PwFp,
+    COALESCE(@FpVersion, 1)
 );
 
 -- Return the new history PK (same pattern we use elsewhere)

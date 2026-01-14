@@ -299,9 +299,9 @@ namespace Utilities.Security
                 var missing = SqlCagegory.GetMissingMustHaves();
                 if (missing.Length > 0)
                 {
-#if DEBUG
-                    System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
-#endif
+//#if DEBUG
+//                    System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
+//#endif
                     SurfaceLoggedError(
                         "Required SQL scripts are missing from the key archive: " +
                         string.Join(", ", missing)

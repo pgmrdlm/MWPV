@@ -725,6 +725,7 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
                 Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
 #endif
+                // In release we don't block typing if the check throws; submit will still validate.
             }
 
             ClearItemNameError();

@@ -37,9 +37,9 @@ namespace Security.Utility.Archives
                     var baseDir = AppContext.BaseDirectory;
                     var envPath = Environment.GetEnvironmentVariable("SEVENZIP_LIBRARY_PATH");
 
-#if DEBUG
-                    Dbg($"EnsureConfigured: explicitPath={explicitPath ?? "<null>"} baseDir={baseDir} is64={is64}");
-#endif
+//#if DEBUG
+//                    Dbg($"EnsureConfigured: explicitPath={explicitPath ?? "<null>"} baseDir={baseDir} is64={is64}");
+//#endif
 
                     var candidates = new List<string?>()
                     {
@@ -61,9 +61,9 @@ namespace Security.Utility.Archives
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-#if DEBUG
-                    Dbg("Probe candidates:\n" + string.Join("\n", candidates));
-#endif
+//#if DEBUG
+//                    Dbg("Probe candidates:\n" + string.Join("\n", candidates));
+//#endif
 
                     var found = candidates.FirstOrDefault(File.Exists);
                     if (found == null)
@@ -73,23 +73,23 @@ namespace Security.Utility.Archives
                     _pathUsed = found;
                     _configured = true;
 
-#if DEBUG
-                    Dbg("SevenZip library path set to: " + _pathUsed);
-#endif
+//#if DEBUG
+//                    Dbg("SevenZip library path set to: " + _pathUsed);
+//#endif
                     return (true, null);
                 }
                 catch (SevenZipLibraryException ex)
                 {
-#if DEBUG
-                    Dbg("Failed to load SevenZip native library: " + ex.Message);
-#endif
+//#if DEBUG
+//                    Dbg("Failed to load SevenZip native library: " + ex.Message);
+//#endif
                     return (false, "Failed to load SevenZip native library (bitness mismatch or invalid DLL)");
                 }
                 catch (Exception ex)
                 {
-#if DEBUG
-                    Dbg("Unexpected error while configuring SevenZip: " + ex);
-#endif
+//#if DEBUG
+//                    Dbg("Unexpected error while configuring SevenZip: " + ex);
+//#endif
                     return (false, "Unexpected error while configuring SevenZip");
                 }
             }
@@ -132,10 +132,10 @@ namespace Security.Utility.Archives
             };
         }
 
-#if DEBUG
-        [Conditional("DEBUG")]
-        private static void Dbg(string msg) =>
-            Debug.WriteLine($"[SevenZipCore] {msg}");
-#endif
+//#if DEBUG
+//        [Conditional("DEBUG")]
+//        private static void Dbg(string msg) =>
+//            Debug.WriteLine($"[SevenZipCore] {msg}");
+//#endif
     }
 }

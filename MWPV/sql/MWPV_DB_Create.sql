@@ -104,20 +104,31 @@ CREATE TABLE CategoryItem (
 
 
 -- Encrypted detail siblings
+-- REPLACE: CategoryItemPasswordHistory (fingerprint-based reuse detection)
+-- Change:
+--   CIPaH_PwSig      -> CIPaH_PwFp        (stable keyed fingerprint, 32-byte HMAC-SHA256)
+--   CIPaH_SigVersion -> CIPaH_FpVersion   (fingerprint version, default 1)
+
 CREATE TABLE CategoryItemPasswordHistory (
     CIPaH_PwHistId    INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId      INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPaH_CreatedAt   REAL NOT NULL DEFAULT (julianday('now')),
+    CIPaH_CreatedAt   REAL    NOT NULL DEFAULT (julianday('now')),
     CIPaH_Version     INTEGER NOT NULL DEFAULT 1,
     CIPaH_Password    BLOB    NOT NULL,
     CIPaH_PadLen      INTEGER,
-    CIPaH_PwSig       BLOB    NOT NULL,
-    CIPaH_SigVersion  INTEGER NOT NULL DEFAULT 1
+
+    -- NEW: stable fingerprint for equality checks across time (not ciphertext-hash)
+    CIPaH_PwFp        BLOB    NOT NULL,
+    CIPaH_FpVersion   INTEGER NOT NULL DEFAULT 1
 );
 
 -- Support: fast “most recent first” per item (ORDER BY CreatedAt DESC, PwHistId DESC)
 CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_CreatedAt
 ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_CreatedAt, CIPaH_PwHistId);
+
+-- Support: fast “reuse within window” checks (WHERE ItemId + PwFp + CreatedAt >= cutoff)
+CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_PwFp_CreatedAt
+ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_PwFp, CIPaH_CreatedAt);
 
 /* =========================
    CategoryItemSecurityQuestions

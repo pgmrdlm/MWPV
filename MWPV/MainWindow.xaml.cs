@@ -74,9 +74,9 @@ namespace MWPV
                 ClearStatus();
             }
 
-#if DEBUG
-            Debug.WriteLine($"[MAINWINDOW][LOCKDOWN] locked={locked}");
-#endif
+//#if DEBUG
+//            Debug.WriteLine($"[MAINWINDOW][LOCKDOWN] locked={locked}");
+//#endif
         }
 
         private void TrySetMenuBarEnabled(bool enabled)

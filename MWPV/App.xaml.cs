@@ -66,9 +66,9 @@ namespace MWPV
                     throw new InvalidOperationException(
                         $"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}. {reason}");
 
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
-#endif
+//#if DEBUG
+//                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
+//#endif
             }
             catch (Exception ex)
             {
@@ -87,9 +87,9 @@ namespace MWPV
                 Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
                 // NOTE: We intentionally DO NOT call EarlyLogIngestor.IngestAll() here.
                 // Ingest runs ONLY after a successful key/database login.
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
-#endif
+//#if DEBUG
+//                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
+//#endif
             }
             catch (Exception ex)
             {
