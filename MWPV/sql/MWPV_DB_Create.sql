@@ -109,7 +109,16 @@ CREATE TABLE CategoryItem (
 --   CIPaH_PwSig      -> CIPaH_PwFp        (stable keyed fingerprint, 32-byte HMAC-SHA256)
 --   CIPaH_SigVersion -> CIPaH_FpVersion   (fingerprint version, default 1)
 
-CREATE TABLE CategoryItemPasswordHistory (
+-- Table: CategoryItemPasswordHistory
+--
+-- Rules:
+-- - Passwords are NEVER updated in place.
+-- - Every password save creates a NEW row in this table.
+-- - CIPaH_Password is encrypted (AES) and therefore changes each time (randomized nonce).
+-- - CIPaH_PwFp is a stable secret-keyed fingerprint used for duplicate checks across ALL history.
+
+CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory
+(
     CIPaH_PwHistId    INTEGER PRIMARY KEY AUTOINCREMENT,
     CIPaH_ItemId      INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
     CIPaH_CreatedAt   REAL    NOT NULL DEFAULT (julianday('now')),
@@ -117,18 +126,19 @@ CREATE TABLE CategoryItemPasswordHistory (
     CIPaH_Password    BLOB    NOT NULL,
     CIPaH_PadLen      INTEGER,
 
-    -- NEW: stable fingerprint for equality checks across time (not ciphertext-hash)
+    -- Stable fingerprint for global equality checks (keyed; NOT plaintext; NOT ciphertext-hash)
     CIPaH_PwFp        BLOB    NOT NULL,
     CIPaH_FpVersion   INTEGER NOT NULL DEFAULT 1
 );
 
--- Support: fast “most recent first” per item (ORDER BY CreatedAt DESC, PwHistId DESC)
+-- Fast "most recent password per item" ordering support
 CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_CreatedAt
 ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_CreatedAt, CIPaH_PwHistId);
 
--- Support: fast “reuse within window” checks (WHERE ItemId + PwFp + CreatedAt >= cutoff)
-CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_PwFp_CreatedAt
-ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_PwFp, CIPaH_CreatedAt);
+-- Fast GLOBAL duplicate-password detection support
+CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_PwFp
+ON CategoryItemPasswordHistory (CIPaH_PwFp);
+
 
 /* =========================
    CategoryItemSecurityQuestions

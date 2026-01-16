@@ -1,9 +1,11 @@
-﻿// File: Security.Utility/Crypto/Passwords/PasswordFingerprint.cs
+﻿// File: Security.Utility/Crypto/Password/PasswordFingerprint.cs
+//
+// FULL REWRITE (tightened + uses SensitiveDataCleaner for wiping)
 //
 // PURPOSE
 // - Computes a stable, secret-keyed fingerprint for a password that can be compared across
 //   different encryptions (AES-GCM uses random nonce, so ciphertext changes each time).
-// - Intended for "password reuse" checks (same item history) without decrypting history rows.
+// - Intended for password reuse checks without decrypting history rows.
 //
 // DESIGN
 // - Fingerprint = HMAC-SHA256(secretKey, purpose || 0x00 || UTF8(password))
@@ -11,14 +13,15 @@
 // - "purpose" is a domain separator so this key is not reused ambiguously.
 //
 // NOTES
-// - secretKey is NOT stored here; caller supplies it (likely from key file / SEDS).
-// - This file is UI-agnostic (no WPF types).
-// - Best-effort wiping of temporary buffers.
+// - secretKey is NOT stored here; caller supplies it (from key file / SEDS).
+// - Best-effort wiping of temporary buffers (byte arrays + key copy).
+// - We cannot wipe the original C# string (immutable), but we wipe derived buffers.
 //
 
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using Security.Utility.Wiping;
 
 namespace Security.Utility.Crypto.Password
 {
@@ -44,33 +47,43 @@ namespace Security.Utility.Crypto.Password
 
             if (secretKey.IsEmpty)
                 throw new ArgumentException("secretKey must be non-empty.", nameof(secretKey));
+
             if (string.IsNullOrWhiteSpace(purpose))
                 throw new ArgumentException("purpose is required.", nameof(purpose));
 
-            // Normalize: treat null as empty string (still produces a deterministic fingerprint).
+            // Normalize: treat null as empty string (still deterministic).
             string pw = passwordPlain ?? string.Empty;
 
-            byte[] purposeBytes = Encoding.UTF8.GetBytes(purpose);
-            byte[] pwBytes = Encoding.UTF8.GetBytes(pw);
-
-            // Compose message: purpose + 0x00 + pwBytes
-            byte[] msg = new byte[purposeBytes.Length + 1 + pwBytes.Length];
+            byte[]? keyCopy = null;
+            byte[]? purposeBytes = null;
+            byte[]? pwBytes = null;
 
             try
             {
-                Buffer.BlockCopy(purposeBytes, 0, msg, 0, purposeBytes.Length);
-                msg[purposeBytes.Length] = 0x00;
-                Buffer.BlockCopy(pwBytes, 0, msg, purposeBytes.Length + 1, pwBytes.Length);
+                // NOTE: HMACSHA256 requires a byte[] key. We copy so we can wipe it after.
+                keyCopy = secretKey.ToArray();
 
-                using var hmac = new HMACSHA256(secretKey.ToArray());
-                return hmac.ComputeHash(msg);
+                purposeBytes = Encoding.UTF8.GetBytes(purpose);
+                pwBytes = Encoding.UTF8.GetBytes(pw);
+
+                using var hmac = new HMACSHA256(keyCopy);
+
+                // Avoid allocating a combined message buffer:
+                // Feed purpose, then separator, then password bytes.
+                hmac.TransformBlock(purposeBytes, 0, purposeBytes.Length, null, 0);
+                hmac.TransformBlock(new byte[] { 0x00 }, 0, 1, null, 0);
+                hmac.TransformFinalBlock(pwBytes, 0, pwBytes.Length);
+
+                // HMACSHA256.Hash is 32 bytes.
+                // Copy it so we return a standalone array not tied to the HMAC object.
+                return hmac.Hash!.ToArray();
             }
             finally
             {
-                // Best-effort wipe temp buffers.
-                Array.Clear(purposeBytes, 0, purposeBytes.Length);
-                Array.Clear(pwBytes, 0, pwBytes.Length);
-                Array.Clear(msg, 0, msg.Length);
+                // Best-effort wipe temp buffers and key material.
+                SensitiveDataCleaner.Zero(purposeBytes);
+                SensitiveDataCleaner.Zero(pwBytes);
+                SensitiveDataCleaner.Zero(keyCopy);
             }
         }
 
