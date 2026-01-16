@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:uc="clr-namespace:MWPV.View.UserControls"
+             xmlns:popup="clr-namespace:MWPV.View.UserControls.Popup"
              mc:Ignorable="d"
              d:DesignHeight="600"
              d:DesignWidth="1000">
@@ -143,6 +144,24 @@
                 <uc:Logs x:Name="LogsOverlay"
                          HorizontalAlignment="Stretch"
                          VerticalAlignment="Stretch"/>
+            </Border>
+
+            <!-- ====================== POPUP OVERLAY (MODAL) ===================== -->
+            <!-- This covers the whole panel and blocks ALL input behind it. -->
+            <Border x:Name="PopupOverlayHost"
+                    Visibility="Collapsed"
+                    Panel.ZIndex="2000"
+                    Background="#AA000000"
+                    Focusable="True"
+                    IsHitTestVisible="True">
+
+                <!-- Center the popup -->
+                <Grid HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch">
+                    <ContentControl x:Name="PopupOverlayContent"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"/>
+                </Grid>
             </Border>
 
         </Grid>

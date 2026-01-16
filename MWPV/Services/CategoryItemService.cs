@@ -2,32 +2,34 @@
 //
 // FULL REWRITE (AES-only, portable, keyfile-derived)
 //
-// Change in this rewrite (password-history “fingerprint” work):
-// - Switches from random-IV ciphertext SHA to a STABLE, keyed fingerprint (HMAC-SHA256) so we can detect
-//   password reuse across time even when AES encryption output changes each save.
-// - Assumes the helper you added exists:
-//     Security.Utility/Crypto/Hashing/Password/PasswordFingerprint.cs
-//   with API:
-//     PasswordFingerprint.Compute(string? passwordPlain, ReadOnlySpan<byte> secretKey, string? purpose = null)
-// - Uses the SEDS “UserSecretsKey” bytes as the fingerprint secret (domain-separated by purpose string).
+// Password-history “fingerprint” work:
+// - Uses STABLE keyed fingerprint (HMAC-SHA256) via PasswordFingerprint.Compute(...)
+// - Stores fingerprint in CategoryItemPasswordHistory.CIPaH_PwFp
+// - Supports fingerprint version via CIPaH_FpVersion (optional but recommended)
 //
-// IMPORTANT DB/SQL expectations after your DDL change:
-// - CategoryItemPasswordHistory column is now: CIPaH_PwFp   (not CIPaH_PwSig)
-// - Insert SQL uses parameter:            @PwFp
-// - Reuse-check SQL uses parameters:      @CIPaH_ItemId and @CIPaH_PwFp
-// - Select-most-recent SQL selects column: CIPaH_PwFp
+// Duplicate-password warning (GLOBAL across vault):
+// - Check runs inside service immediately BEFORE inserting PasswordHistory row
+// - If match found => throws DuplicatePasswordWarningException
+// - UI must decide: Cancel => stop / Accept => call again with allowDuplicate:true
+//
+// Important SQL expectations:
+// - CategoryItemPasswordHistory insert expects params:
+//      @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp
+//   Optional (recommended): @FpVersion
+//
+// - Reuse check SQL expects param:
+//      @CIPaH_PwFp
 //
 // Notes:
-// - No migration logic here (matches your “wack DB / test data” approach).
-// - Item-name global duplicate guard stays as-is.
-// - No DB update logic added beyond what already existed in this file.
+// - This service never reveals which item matched. Warning is generic only.
+// - Bookmark-only does NOT trigger duplicate warning (no password).
 //
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using MWPV.Utilities.Json;               // AppJson
 using Security.Utility.Crypto.Fields;    // FieldAesCrypto (AES-GCM portable)
-using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS) for fingerprint key bytes
+using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -37,7 +39,7 @@ using System.Text;
 using Utilities.Helpers;                 // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                     // SqlCagegory (SQL catalog/loader)
 
-// If your helper namespace is still "...Passwords" instead of "...Password", change this using accordingly.
+// Helper assumed to exist
 using Security.Utility.Crypto.Password;  // PasswordFingerprint
 
 namespace MWPV.Services
@@ -45,21 +47,32 @@ namespace MWPV.Services
     public static class CategoryItemService
     {
         // ============================================================
-        // Purposes (AAD / KDF info) - must be stable forever
+        // Purposes (AAD / domain separation) - must be stable forever
         // ============================================================
+
         private const string Purpose_CI_Email = "CI.Email";
         private const string Purpose_CI_Phone = "CI.Phone";
         private const string Purpose_CI_Pin = "CI.Pin";
 
         private const string Purpose_CIPaH_PasswordHistory = "CIPaH.PasswordHistory";
-
-        // NOTE: your PasswordFingerprint helper already has DefaultPurpose = "PW.Fingerprint.V1".
-        // We keep the service-side string only as a backup/clarity hook.
         private const string Purpose_CIPaH_PasswordFingerprint = "PW.Fingerprint.V1";
+
+        private const int CurrentFingerprintVersion = 1;
+
+        // ============================================================
+        // Duplicate warning exception (service-driven)
+        // ============================================================
+
+        public sealed class DuplicatePasswordWarningException : Exception
+        {
+            public DuplicatePasswordWarningException()
+                : base("DUPLICATE_PASSWORD_WARNING") { }
+        }
 
         // ============================================================
         // DTO: Basic tab row (CategoryItem only)
         // ============================================================
+
         public sealed class CategoryItemBasicRow
         {
             public long ItemId { get; init; }
@@ -70,26 +83,27 @@ namespace MWPV.Services
             public string? Username { get; init; }
             public string? SignInUrl { get; init; }
 
-            public int BookMarkOnly { get; init; }     // 0/1
-            public int? IsActive { get; init; }        // null allowed
+            public int BookMarkOnly { get; init; } // 0/1
+            public int? IsActive { get; init; }    // nullable allowed
 
             // Encrypted-at-rest blobs
             public byte[]? AccountEmailCipher { get; init; } // CI_AccountEmail
             public byte[]? AccountPhoneCipher { get; init; } // CI_AccountPhoneNumber
             public byte[]? PinCipher { get; init; }          // CI_Pin
 
-            // Decrypted (AES-GCM via FieldAesCrypto)
+            // Decrypted (best-effort)
             public string? AccountEmailPlain { get; init; }
             public string? AccountPhonePlain { get; init; }
             public string? PinPlain { get; init; }
 
-            public DateTime? CreatedUtc { get; init; } // CI_CreateUTC
-            public DateTime? UpdatedUtc { get; init; } // CI_UpdateUTC
+            public DateTime? CreatedUtc { get; init; }
+            public DateTime? UpdatedUtc { get; init; }
         }
 
         // ============================================================
-        // DTO: Most-recent password history row (AES-GCM + fingerprint check)
+        // DTO: Most-recent password history row (AES-GCM + fingerprint verify)
         // ============================================================
+
         public sealed class PasswordHistoryMostRecent
         {
             public long PwHistId { get; init; }
@@ -100,8 +114,9 @@ namespace MWPV.Services
             public byte[] PasswordCipher { get; init; } = Array.Empty<byte>();
             public int? PadLen { get; init; }
 
-            // Stable, keyed fingerprint (HMAC-SHA256 over plaintext w/ purpose)
+            // Stable keyed fingerprint (HMAC-SHA256)
             public byte[]? PwFp { get; init; }
+            public int? FpVersion { get; init; }
 
             public bool DecryptOk { get; init; }
             public string? PasswordPlain { get; init; }
@@ -113,6 +128,7 @@ namespace MWPV.Services
         // ============================================================
         // SQL loading
         // ============================================================
+
         private static string LoadSqlRequired(string assetName)
         {
             var sql = SqlCagegory.GetSql(assetName);
@@ -124,12 +140,14 @@ namespace MWPV.Services
         // ============================================================
         // AES helpers (portable, multi-machine)
         // ============================================================
+
         private static byte[]? EncryptNullableUtf8(string purpose, string? plain)
         {
             if (string.IsNullOrWhiteSpace(plain))
                 return null;
 
             byte[] bytes = Encoding.UTF8.GetBytes(plain.Trim());
+
             try
             {
                 return FieldAesCrypto.EncryptBytes(
@@ -182,19 +200,21 @@ namespace MWPV.Services
         // ============================================================
 
         /// <summary>
-        /// Computes the stable, keyed fingerprint (32 bytes) for a plaintext password.
-        /// Uses SEDS UserSecretsKey as the secret key, purpose-separated via PW.Fingerprint.V1.
+        /// Computes stable, keyed fingerprint (32 bytes) for a plaintext password.
+        /// Uses SEDS UserSecretsKey as secret. Purpose-separated with PW.Fingerprint.V1.
         /// </summary>
         private static byte[] ComputePasswordFingerprint(string? passwordPlain)
         {
-            // IMPORTANT: we assume SEDS returns a COPY of the key bytes.
+            // IMPORTANT: We assume SEDS returns a COPY of the key bytes.
             // If it ever returns a live reference, wiping here would be catastrophic.
             byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
 
             try
             {
-                // Use helper default purpose, but keep it explicit for stability.
-                return PasswordFingerprint.Compute(passwordPlain, keyBytes, purpose: Purpose_CIPaH_PasswordFingerprint);
+                return PasswordFingerprint.Compute(
+                    passwordPlain,
+                    keyBytes,
+                    purpose: Purpose_CIPaH_PasswordFingerprint);
             }
             finally
             {
@@ -203,8 +223,8 @@ namespace MWPV.Services
         }
 
         /// <summary>
-        /// Builds PasswordHistory cipher + fp using AES-GCM + stable fingerprint.
-        /// - Bookmark-only => cipher is EMPTY and fp is still computed (over empty string) so checks stay consistent.
+        /// Builds PasswordHistory payload (AES-GCM + stable fingerprint).
+        /// Bookmark-only => empty cipher; fingerprint computed over "" (for stable checks).
         /// </summary>
         public static void BuildPasswordHistoryPayloadAes(
             string? password,
@@ -212,12 +232,11 @@ namespace MWPV.Services
             out byte[] pwCipher,
             out int? padLen,
             out byte[] pwFp,
-            out int? fpVersion)
+            out int fpVersion)
         {
             padLen = null;
-            fpVersion = 1;
+            fpVersion = CurrentFingerprintVersion;
 
-            // Bookmark-only: we store empty cipher; fingerprint computed over "".
             if (isBookmarkOnly)
             {
                 pwCipher = Array.Empty<byte>();
@@ -247,19 +266,9 @@ namespace MWPV.Services
         // DUPLICATE NAME CHECK (GLOBAL across all categories)
         // ============================================================
 
-        /// <summary>
-        /// UI-facing wrapper. This matches the call site in CategoryItemBasicPanel.xaml.cs.
-        /// Global rule across all categories.
-        /// </summary>
         public static bool ItemNameExistsAcrossAllCategories(string name, long? excludeItemId = null)
             => CategoryItemNameExistsGlobal(name, excludeItemId);
 
-        /// <summary>
-        /// Returns true if ANY CategoryItem already exists with the same normalized name (global rule).
-        /// Uses sql/s_CategoryItem_exists_by_name.sql exactly as provided:
-        /// - Matches by UPPER(TRIM(ci.CI_Name)) = UPPER(TRIM(@CI_Name))
-        /// - Excludes current item when @ExcludeItemId is provided (edit scenario).
-        /// </summary>
         private static bool CategoryItemNameExistsGlobal(string name, long? excludeItemId)
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -273,7 +282,6 @@ namespace MWPV.Services
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
 
-                // IMPORTANT: parameter names must match SQL exactly
                 AddText(cmd, "@CI_Name", name.Trim());
                 AddInt64Nullable(cmd, "@ExcludeItemId", excludeItemId);
 
@@ -282,26 +290,22 @@ namespace MWPV.Services
 #endif
 
                 using var r = cmd.ExecuteReader();
-                // Global rule: if any row returns, the name exists already somewhere.
                 return r.Read();
             }
             catch (Exception ex)
             {
-                // Fail closed: block inserts if the check itself fails.
+                // Fail closed
                 ErrorHandler.Abend(ex, "Error checking CategoryItem name existence (global)");
                 return true;
             }
         }
 
         // ============================================================
-        // PASSWORD REUSE CHECK (per-item, 365 days)
+        // PASSWORD REUSE CHECKS (fingerprint-based)
         // ============================================================
 
         /// <summary>
-        /// Returns true if the same plaintext password (by stable fingerprint) was used on THIS ITEM
-        /// within the last 365 days.
-        /// Uses sql/s_CategoryItemPasswordHistory_check_reuse_365days.sql.
-        /// Expected params: @CIPaH_ItemId, @CIPaH_PwFp
+        /// Optional helper (local policy). Not used by the global warning rule.
         /// </summary>
         public static bool PasswordReuseWithin365Days(long itemId, string? passwordPlain)
         {
@@ -341,6 +345,84 @@ namespace MWPV.Services
             {
                 Array.Clear(fp, 0, fp.Length);
             }
+        }
+
+        /// <summary>
+        /// Public helper if UI wants to query, but the ENFORCEMENT is inside insert paths.
+        /// </summary>
+        public static bool PasswordReuseExistsAnywhere(string? passwordPlain)
+        {
+            var fp = ComputePasswordFingerprint(passwordPlain ?? string.Empty);
+
+            try
+            {
+                return PasswordReuseExistsAnywhereByFingerprint(fp);
+            }
+            finally
+            {
+                Array.Clear(fp, 0, fp.Length);
+            }
+        }
+
+        /// <summary>
+        /// Core reuse check: requires fingerprint only. SQL must accept @CIPaH_PwFp.
+        /// </summary>
+        private static bool PasswordReuseExistsAnywhereByFingerprint(byte[] pwFp)
+        {
+            if (pwFp is null || pwFp.Length == 0)
+                return false;
+
+            try
+            {
+                string sql;
+                try
+                {
+                    sql = LoadSqlRequired("s_CategoryItemPasswordHistory_check_reuse_365days.sql");
+                }
+                catch
+                {
+#if DEBUG
+                    Debug.WriteLine("[PW_REUSE_ANYWHERE] SQL asset missing: s_CategoryItemPasswordHistory_check_reuse_anywhere.sql (returning false).");
+#endif
+                    return false;
+                }
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                // IMPORTANT: reuse-check SQL expects @CIPaH_PwFp
+                AddBlob(cmd, "@CIPaH_PwFp", pwFp);
+
+#if DEBUG
+                DebugDumpParams(cmd, "[PW_REUSE_ANYWHERE][BY_FP][PARAMS]");
+#endif
+
+                object? scalar = cmd.ExecuteScalar();
+                if (scalar == null || scalar == DBNull.Value)
+                    return false;
+
+                int v = Convert.ToInt32(scalar, CultureInfo.InvariantCulture);
+                return v == 1;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error checking password reuse anywhere (by fingerprint)");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Enforcer: If reused and not allowed, throws DuplicatePasswordWarningException.
+        /// This is the ONE centralized gate.
+        /// </summary>
+        private static void ThrowIfPasswordReusedElsewhere(byte[] pwFp, bool allowDuplicate)
+        {
+            if (allowDuplicate)
+                return;
+
+            if (PasswordReuseExistsAnywhereByFingerprint(pwFp))
+                throw new DuplicatePasswordWarningException();
         }
 
         // ============================================================
@@ -432,7 +514,6 @@ namespace MWPV.Services
 #if DEBUG
                 Debug.WriteLine($"[BASIC][DB][ITEM_UPDATE] itemId={itemId} rowsAffected={rows}");
 #endif
-
                 return rows;
             }
             catch (Exception ex)
@@ -477,14 +558,17 @@ namespace MWPV.Services
 
                 int oItemId = r.GetOrdinal("ItemId");
                 int oCatKey = r.GetOrdinal("Category_Key");
+
                 int oName = r.GetOrdinal("CI_Name");
                 int oDesc = r.GetOrdinal("CI_Description");
                 int oUser = r.GetOrdinal("CI_Username");
                 int oUrl = r.GetOrdinal("CI_SignInUrl");
+
                 int oBmo = r.GetOrdinal("CI_BookMarkOnly");
                 int oEmail = r.GetOrdinal("CI_AccountEmail");
                 int oPhone = r.GetOrdinal("CI_AccountPhoneNumber");
                 int oPin = r.GetOrdinal("CI_Pin");
+
                 int oCreate = r.GetOrdinal("CI_CreateUTC");
                 int oUpdate = r.GetOrdinal("CI_UpdateUTC");
                 int oActive = r.GetOrdinal("IsActive");
@@ -563,12 +647,17 @@ namespace MWPV.Services
                 int oPw = r.GetOrdinal("CIPaH_Password");
                 int oPad = r.GetOrdinal("CIPaH_PadLen");
 
-                // NEW: stable fingerprint column
                 int oFp = r.GetOrdinal("CIPaH_PwFp");
+
+                // Optional: if present in SELECT
+                int oFpVer = -1;
+                try { oFpVer = r.GetOrdinal("CIPaH_FpVersion"); } catch { oFpVer = -1; }
 
                 var cipher = ReadBlobNullable(r, oPw) ?? Array.Empty<byte>();
                 int? padLen = r.IsDBNull(oPad) ? (int?)null : SafeGetInt32(r, oPad);
+
                 var fpStored = ReadBlobNullable(r, oFp);
+                int? fpVerStored = (oFpVer >= 0 && !r.IsDBNull(oFpVer)) ? SafeGetInt32(r, oFpVer) : null;
 
                 bool decOk = false;
                 string? plain = null;
@@ -600,6 +689,7 @@ namespace MWPV.Services
                 }
 
                 bool fpOk = true;
+
                 if (fpStored is { Length: > 0 })
                 {
                     if (!decOk)
@@ -629,7 +719,9 @@ namespace MWPV.Services
 
                     PasswordCipher = cipher,
                     PadLen = padLen,
+
                     PwFp = fpStored,
+                    FpVersion = fpVerStored,
 
                     DecryptOk = decOk,
                     PasswordPlain = decOk ? plain : null,
@@ -678,9 +770,11 @@ namespace MWPV.Services
                 int oKey1 = r.GetOrdinal("Key1");
                 int oKey2 = r.GetOrdinal("Key2");
                 int oKey3 = r.GetOrdinal("Key3");
+
                 int oCol1 = r.GetOrdinal("Col1");
                 int oCol2 = r.GetOrdinal("Col2");
                 int oCol3 = r.GetOrdinal("Col3");
+
                 int oDes1 = r.GetOrdinal("Des1");
                 int oDes2 = r.GetOrdinal("Des2");
                 int oDes3 = r.GetOrdinal("Des3");
@@ -754,7 +848,6 @@ namespace MWPV.Services
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
 
-            // Global duplicate name guard (across all categories)
             if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
                 throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");
 
@@ -766,6 +859,7 @@ namespace MWPV.Services
                 using var tx = conn.BeginTransaction();
 
                 long newItemId;
+
                 try
                 {
                     newItemId = InsertCategoryItemCore(
@@ -816,6 +910,7 @@ namespace MWPV.Services
 
         // ============================================================
         // INSERT: CategoryItem + PasswordHistory (single transaction)
+        // DUPLICATE WARNING enforced HERE (service gate)
         // ============================================================
 
         public static long InsertCategoryItemWithPasswordHistory(
@@ -829,7 +924,8 @@ namespace MWPV.Services
             string? pinPlain,
             int? isActive,
             string? passwordPlain,
-            bool isBookmarkOnly)
+            bool isBookmarkOnly,
+            bool allowDuplicate = false)
         {
             BuildPasswordHistoryPayloadAes(
                 password: passwordPlain,
@@ -837,21 +933,35 @@ namespace MWPV.Services
                 out var pwCipher,
                 out var pwPadLen,
                 out var pwFp,
-                out var _fpVer);
+                out var fpVersion);
 
-            return InsertCategoryItemWithPasswordHistoryCore(
-                categoryKey: categoryKey,
-                name: name,
-                description: description,
-                username: username,
-                signInUrl: signInUrl,
-                accountEmailCipher: EncryptNullableUtf8(Purpose_CI_Email, accountEmailPlain),
-                accountPhoneCipher: EncryptNullableUtf8(Purpose_CI_Phone, accountPhonePlain),
-                pinCipher: EncryptNullableUtf8(Purpose_CI_Pin, pinPlain),
-                isActive: isActive,
-                pwCipher: pwCipher,
-                pwPadLen: pwPadLen,
-                pwFp: pwFp);
+            try
+            {
+                // DUP CHECK: only real passwords, not bookmark-only
+                if (!isBookmarkOnly)
+                    ThrowIfPasswordReusedElsewhere(pwFp, allowDuplicate);
+
+                return InsertCategoryItemWithPasswordHistoryCore(
+                    categoryKey: categoryKey,
+                    name: name,
+                    description: description,
+                    username: username,
+                    signInUrl: signInUrl,
+                    accountEmailCipher: EncryptNullableUtf8(Purpose_CI_Email, accountEmailPlain),
+                    accountPhoneCipher: EncryptNullableUtf8(Purpose_CI_Phone, accountPhonePlain),
+                    pinCipher: EncryptNullableUtf8(Purpose_CI_Pin, pinPlain),
+                    isActive: isActive,
+                    pwCipher: pwCipher,
+                    pwPadLen: pwPadLen,
+                    pwFp: pwFp,
+                    fpVersion: fpVersion);
+            }
+            finally
+            {
+                // wipe buffers best-effort
+                try { Array.Clear(pwFp, 0, pwFp.Length); } catch { }
+                try { Array.Clear(pwCipher, 0, pwCipher.Length); } catch { }
+            }
         }
 
         private static long InsertCategoryItemWithPasswordHistoryCore(
@@ -866,7 +976,8 @@ namespace MWPV.Services
             int? isActive,
             byte[] pwCipher,
             int? pwPadLen,
-            byte[] pwFp)
+            byte[] pwFp,
+            int fpVersion)
         {
             if (categoryKey < 0)
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
@@ -876,8 +987,9 @@ namespace MWPV.Services
                 throw new ArgumentNullException(nameof(pwCipher));
             if (pwFp is null || pwFp.Length == 0)
                 throw new ArgumentException("pwFp is required.", nameof(pwFp));
+            if (fpVersion <= 0)
+                throw new ArgumentOutOfRangeException(nameof(fpVersion), "fpVersion must be > 0.");
 
-            // Global duplicate name guard (across all categories)
             if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
                 throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");
 
@@ -915,7 +1027,8 @@ namespace MWPV.Services
                         itemId: newItemId,
                         pwCipher: pwCipher,
                         pwPadLen: pwPadLen,
-                        pwFp: pwFp);
+                        pwFp: pwFp,
+                        fpVersion: fpVersion);
 
                     if (newPwHistId <= 0)
                         throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
@@ -947,6 +1060,82 @@ namespace MWPV.Services
             {
                 ErrorHandler.Abend(ex, "Error inserting category item + password history");
                 return 0;
+            }
+        }
+
+        // ============================================================
+        // INSERT: PasswordHistory for EXISTING ITEM
+        // DUPLICATE WARNING enforced HERE (service gate)
+        // ============================================================
+
+        public static long InsertPasswordHistoryForExistingItem(
+            long itemId,
+            string? passwordPlain,
+            bool isBookmarkOnly,
+            bool allowDuplicate = false)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            BuildPasswordHistoryPayloadAes(
+                password: passwordPlain,
+                isBookmarkOnly: isBookmarkOnly,
+                out var pwCipher,
+                out var pwPadLen,
+                out var pwFp,
+                out var fpVersion);
+
+            try
+            {
+                // DUP CHECK: only real passwords, not bookmark-only
+                if (!isBookmarkOnly)
+                    ThrowIfPasswordReusedElsewhere(pwFp, allowDuplicate);
+
+                var pwSql = LoadSqlRequired("s_CategoryItemPasswordHistory_insert.sql");
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var tx = conn.BeginTransaction();
+
+                long newPwHistId;
+
+                try
+                {
+                    newPwHistId = InsertPasswordHistoryCore(
+                        conn, tx, pwSql,
+                        itemId: itemId,
+                        pwCipher: pwCipher,
+                        pwPadLen: pwPadLen,
+                        pwFp: pwFp,
+                        fpVersion: fpVersion);
+
+                    if (newPwHistId <= 0)
+                        throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
+
+                    tx.Commit();
+                }
+                catch
+                {
+                    try { tx.Rollback(); } catch { }
+                    throw;
+                }
+
+                return newPwHistId;
+            }
+            catch (DuplicatePasswordWarningException)
+            {
+                // UI decides Accept/Cancel, do NOT swallow
+                throw;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error inserting password history for existing item");
+                return 0;
+            }
+            finally
+            {
+                // wipe buffers best-effort
+                try { Array.Clear(pwFp, 0, pwFp.Length); } catch { }
+                try { Array.Clear(pwCipher, 0, pwCipher.Length); } catch { }
             }
         }
 
@@ -1001,10 +1190,10 @@ namespace MWPV.Services
 
         /// <summary>
         /// Inserts into CategoryItemPasswordHistory using sql/s_CategoryItemPasswordHistory_insert.sql.
-        /// IMPORTANT: parameter names MUST match that SQL exactly.
-        ///
-        /// Expected (post-change):
-        ///   @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp   (+ optional @FpVersion if present)
+        /// Expected:
+        ///   @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp
+        /// Optional:
+        ///   @FpVersion
         /// </summary>
         private static long InsertPasswordHistoryCore(
             SqliteConnection conn,
@@ -1013,7 +1202,8 @@ namespace MWPV.Services
             long itemId,
             byte[] pwCipher,
             int? pwPadLen,
-            byte[] pwFp)
+            byte[] pwFp,
+            int fpVersion)
         {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0 for password history insert.");
@@ -1021,12 +1211,13 @@ namespace MWPV.Services
                 throw new ArgumentNullException(nameof(pwCipher));
             if (pwFp is null || pwFp.Length == 0)
                 throw new ArgumentException("pwFp is required.", nameof(pwFp));
+            if (fpVersion <= 0)
+                throw new ArgumentOutOfRangeException(nameof(fpVersion), "fpVersion must be > 0.");
 
             using var cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = sql;
 
-            // NOTE: these names must match sql/s_CategoryItemPasswordHistory_insert.sql
             AddInt64(cmd, "@ItemId", itemId);
 
             // Let SQL COALESCE handle defaults by passing NULL
@@ -1035,11 +1226,10 @@ namespace MWPV.Services
             AddBlob(cmd, "@PasswordBlob", pwCipher);
             AddInt32Nullable(cmd, "@PadLen", pwPadLen);
 
-            // NEW: stable fingerprint
             AddBlob(cmd, "@PwFp", pwFp);
 
-            // Optional: only matters if SQL/DDL uses it (safe even if ignored).
-            AddInt32Nullable(cmd, "@FpVersion", null);
+            // drift-safe: only add if SQL actually uses it
+            AddInt32IfSqlUses(cmd, sql, "@FpVersion", fpVersion);
 
 #if DEBUG
             DebugDumpParams(cmd, "[CAT_ITEM][PW_HIST][INSERT][PARAMS]");
@@ -1110,7 +1300,7 @@ namespace MWPV.Services
             }
             catch
             {
-                // Never allow logging to break insertion UX
+                // never break insert UX
             }
         }
 
@@ -1164,10 +1354,12 @@ namespace MWPV.Services
         private static int SafeGetInt32(SqliteDataReader r, int ordinal)
         {
             var v = r.GetValue(ordinal);
+
             if (v is int i) return i;
             if (v is long l) return checked((int)l);
             if (v is short s) return s;
             if (v is byte b) return b;
+
             if (v is string str && int.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
 
@@ -1177,8 +1369,10 @@ namespace MWPV.Services
         private static long SafeGetInt64(SqliteDataReader r, int ordinal)
         {
             var v = r.GetValue(ordinal);
+
             if (v is long l) return l;
             if (v is int i) return i;
+
             if (v is string str && long.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
                 return parsed;
 
@@ -1204,13 +1398,14 @@ namespace MWPV.Services
             if (v is string s)
             {
                 if (DateTime.TryParse(
-                    s,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                    out var parsed))
+                        s,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                        out var parsed))
                 {
                     return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
                 }
+
                 return null;
             }
 
@@ -1220,10 +1415,10 @@ namespace MWPV.Services
                 if (string.IsNullOrWhiteSpace(s2)) return null;
 
                 if (DateTime.TryParse(
-                    s2,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                    out var parsed2))
+                        s2,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                        out var parsed2))
                 {
                     return DateTime.SpecifyKind(parsed2, DateTimeKind.Utc);
                 }
@@ -1263,6 +1458,16 @@ namespace MWPV.Services
             if (!SqlUses(sql, name)) return;
             AddInt32Nullable(cmd, name, value);
         }
+
+        private static void AddInt64NullableIfSqlUses(SqliteCommand cmd, string sql, string name, long? value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddInt64Nullable(cmd, name, value);
+        }
+
+        // ============================================================
+        // Parameter primitives
+        // ============================================================
 
         private static void AddText(SqliteCommand cmd, string name, string? value)
         {
@@ -1322,6 +1527,7 @@ namespace MWPV.Services
         private static void DebugDumpParams(SqliteCommand cmd, string tag)
         {
             Debug.WriteLine(tag);
+
             foreach (SqliteParameter p in cmd.Parameters)
             {
                 string v = (p.Value == null || p.Value == DBNull.Value)

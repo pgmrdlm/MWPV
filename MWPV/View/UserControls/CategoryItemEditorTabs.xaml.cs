@@ -13,10 +13,25 @@
 //    - Leaving Basic requires validation.
 //    - If NEW item, we insert-on-leave (so downstream tabs can rely on PK).
 //    - If EXISTING item, we do NOT write on leave (save is explicit).
-// 7) Password history updates for EXISTING items are NOT wired here yet.
-//    - We update CategoryItem basic fields only via CategoryItemService.UpdateCategoryItemBasic.
+// 7) Password history updates for EXISTING items:
+//    - Only occur on explicit Save.
+//    - Uses CategoryItemService.InsertPasswordHistoryForExistingItem(...)
+// 8) Duplicate password warning (GLOBAL):
+//    - Service throws DuplicatePasswordWarningException
+//    - UI catches, shows OUR PopupDialog (themed) using Panel.xaml overlay host
+//    - Accept => retry with allowDuplicate:true
+//    - Cancel => stop, no save
+// -----------------------------------------------------------------------------
+//
+// DEBUG additions:
+// - Logs bookmark-only state and which persistence path is used.
 // -----------------------------------------------------------------------------
 
+
+using MWPV.Services;
+using MWPV.View.UserControls.CategoryItems;
+using MWPV.View.UserControls.Popup;
+using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -24,9 +39,9 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
-using MWPV.Services;
-using MWPV.View.UserControls.CategoryItems;
+using System.Windows.Input;
+using System.Windows.Media;     // VisualTreeHelper
+using System.Windows.Threading;
 
 namespace MWPV.View.UserControls
 {
@@ -276,7 +291,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= Persistence (INSERT for new; UPDATE for existing on Save) ======================= */
+        /* ======================= Persistence ======================= */
 
         private enum PersistTrigger
         {
@@ -292,9 +307,12 @@ namespace MWPV.View.UserControls
             if (BasicPanel == null)
                 return true;
 
-            // If we believe it's existing, confirm we can resolve the PK.
             var activeId = TryGetActiveCategoryItemId();
             bool isExisting = _hasPersistedId && activeId.HasValue && activeId.Value > 0;
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][PERSIST] ENTER trigger={trigger} bookmarkOnly={isBookmarkOnly} hasPersisted={_hasPersistedId} activeId={(activeId.HasValue ? activeId.Value : 0)} isExisting={isExisting}");
+#endif
 
             // =========================
             // EXISTING ITEM
@@ -305,15 +323,19 @@ namespace MWPV.View.UserControls
                 if (trigger == PersistTrigger.LeaveBasicTab)
                 {
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][PERSIST] Existing item (id={activeId!.Value}) leave-tab: no write (save is explicit).");
+                    Debug.WriteLine($"[ITEM-TABS][PERSIST] Existing item (id={activeId!.Value}) leave-tab: no write. bookmarkOnly={isBookmarkOnly}");
 #endif
                     return true;
                 }
 
-                // SaveAndExit: perform UPDATE of CategoryItem basic fields only.
+                // SaveAndExit: UPDATE basic fields, then (optionally) insert password history.
                 try
                 {
                     long itemId = activeId!.Value;
+
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][UPDATE] Existing SaveAndExit BEGIN itemId={itemId} bookmarkOnly={isBookmarkOnly}");
+#endif
 
                     string name = BasicPanel.GetItemNameTrim();
                     string? desc = BasicPanel.GetDescriptionTrimOrNull();
@@ -343,34 +365,102 @@ namespace MWPV.View.UserControls
                     {
                         SetStatus("Update failed (0 rows affected).");
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] itemId={itemId} rowsAffected=0");
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED itemId={itemId} rowsAffected=0 bookmarkOnly={isBookmarkOnly}");
 #endif
                         return false;
                     }
 
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][UPDATE] itemId={itemId} rowsAffected={rows}");
+                    Debug.WriteLine($"[ITEM-TABS][UPDATE] OK itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
 #endif
 
                     // Ensure SEDS stays correct.
                     SetSedsContextForCategoryItem(activeId.Value);
                     _hasPersistedId = true;
 
-                    // Password history updates are not wired here yet.
-                    var pw = BasicPanel.GetPasswordPlainOrNull();
-                    if (!string.IsNullOrWhiteSpace(pw))
-                        SetStatus("Saved Basic fields. Password updates are not wired yet (existing item).");
+                    // Password History Insert (EXISTING ITEM) - ONLY ON SAVE
+                    if (isBookmarkOnly)
+                    {
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (bookmark-only) itemId={itemId}");
+#endif
+                    }
                     else
-                        SetStatus("");
+                    {
+                        string? pw = BasicPanel.GetPasswordPlainOrNull();
 
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] Existing SaveAndExit passwordCheck itemId={itemId} pwIsNull={(pw == null)} pwIsWhite={(string.IsNullOrWhiteSpace(pw))}");
+#endif
+
+                        if (!string.IsNullOrWhiteSpace(pw))
+                        {
+                            long pwHistId;
+
+                            try
+                            {
+                                pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
+                                    itemId: itemId,
+                                    passwordPlain: pw,
+                                    isBookmarkOnly: false,
+                                    allowDuplicate: false);
+                            }
+                            catch (CategoryItemService.DuplicatePasswordWarningException)
+                            {
+#if DEBUG
+                                Debug.WriteLine($"[ITEM-TABS][DUP-PW] Duplicate warning (existing itemId={itemId}). Prompting user.");
+#endif
+
+                                if (!PromptDuplicatePasswordAccept())
+                                {
+#if DEBUG
+                                    Debug.WriteLine("[ITEM-TABS][DUP-PW] User canceled duplicate warning (existing). Aborting save.");
+#endif
+                                    SetStatus("Save canceled (duplicate password warning).");
+                                    return false;
+                                }
+
+#if DEBUG
+                                Debug.WriteLine("[ITEM-TABS][DUP-PW] User accepted duplicate warning (existing). Retrying allowDuplicate=true.");
+#endif
+
+                                pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
+                                    itemId: itemId,
+                                    passwordPlain: pw,
+                                    isBookmarkOnly: false,
+                                    allowDuplicate: true);
+                            }
+
+                            if (pwHistId <= 0)
+                            {
+                                SetStatus("Saved Basic fields, but password history insert failed.");
+#if DEBUG
+                                Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] FAILED itemId={itemId} pwHistId={pwHistId}");
+#endif
+                                return false;
+                            }
+
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] OK itemId={itemId} pwHistId={pwHistId}");
+#endif
+                        }
+                        else
+                        {
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (empty/no change) itemId={itemId}");
+#endif
+                        }
+                    }
+
+                    SetStatus("");
                     return true;
                 }
                 catch (Exception ex)
                 {
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED: {ex}");
+                    Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] FAILED: {ex}");
 #endif
-                    SetStatus("Update failed. See debug output.");
+                    SetStatus("Save failed. See debug output.");
                     return false;
                 }
             }
@@ -378,10 +468,8 @@ namespace MWPV.View.UserControls
             // =========================
             // NEW ITEM
             // =========================
-            // New item: insert once, then mark existence (needed so other tabs can rely on PK).
             if (_hasPersistedId && !activeId.HasValue)
             {
-                // We think we have an ID, but can't resolve it. Treat as new, but log it.
 #if DEBUG
                 Debug.WriteLine("[ITEM-TABS][PERSIST] _hasPersistedId=true but SEDS has no valid ItemId. Treating as NEW.");
 #endif
@@ -390,6 +478,10 @@ namespace MWPV.View.UserControls
 
             try
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][INSERT] New item persist BEGIN trigger={trigger} bookmarkOnly={isBookmarkOnly} catKey={_categoryKey} catName='{_categoryName}'");
+#endif
+
                 string name = BasicPanel.GetItemNameTrim();
                 string? desc = BasicPanel.GetDescriptionTrimOrNull();
                 string? username = BasicPanel.GetUsernameTrimOrNull();
@@ -405,6 +497,9 @@ namespace MWPV.View.UserControls
 
                 if (isBookmarkOnly)
                 {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][INSERT] PATH=BookmarkOnly => InsertCategoryItemOnly()");
+#endif
                     newId = CategoryItemService.InsertCategoryItemOnly(
                         categoryKey: _categoryKey,
                         name: name,
@@ -421,24 +516,67 @@ namespace MWPV.View.UserControls
                 {
                     string? passwordPlain = BasicPanel.GetPasswordPlainOrNull();
 
-                    newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
-                        categoryKey: _categoryKey,
-                        name: name,
-                        description: desc,
-                        username: username,
-                        signInUrl: url,
-                        accountEmailPlain: emailPlain,
-                        accountPhonePlain: phonePlain,
-                        pinPlain: pinPlain,
-                        isActive: isActive,
-                        passwordPlain: passwordPlain,
-                        isBookmarkOnly: false
-                    );
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][INSERT] PATH=WithPassword => InsertCategoryItemWithPasswordHistory() pwIsNull={(passwordPlain == null)} pwIsWhite={(string.IsNullOrWhiteSpace(passwordPlain))}");
+#endif
+
+                    try
+                    {
+                        newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
+                            categoryKey: _categoryKey,
+                            name: name,
+                            description: desc,
+                            username: username,
+                            signInUrl: url,
+                            accountEmailPlain: emailPlain,
+                            accountPhonePlain: phonePlain,
+                            pinPlain: pinPlain,
+                            isActive: isActive,
+                            passwordPlain: passwordPlain,
+                            isBookmarkOnly: false,
+                            allowDuplicate: false);
+                    }
+                    catch (CategoryItemService.DuplicatePasswordWarningException)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][DUP-PW] Duplicate warning (new item). Prompting user.");
+#endif
+
+                        if (!PromptDuplicatePasswordAccept())
+                        {
+#if DEBUG
+                            Debug.WriteLine("[ITEM-TABS][DUP-PW] User canceled duplicate warning (new). Aborting insert.");
+#endif
+                            SetStatus("Save canceled (duplicate password warning).");
+                            return false;
+                        }
+
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][DUP-PW] User accepted duplicate warning (new). Retrying allowDuplicate=true.");
+#endif
+
+                        newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
+                            categoryKey: _categoryKey,
+                            name: name,
+                            description: desc,
+                            username: username,
+                            signInUrl: url,
+                            accountEmailPlain: emailPlain,
+                            accountPhonePlain: phonePlain,
+                            pinPlain: pinPlain,
+                            isActive: isActive,
+                            passwordPlain: passwordPlain,
+                            isBookmarkOnly: false,
+                            allowDuplicate: true);
+                    }
                 }
 
                 if (newId <= 0)
                 {
                     SetStatus("Insert failed (no ItemId returned).");
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED newId={newId} bookmarkOnly={isBookmarkOnly}");
+#endif
                     return false;
                 }
 
@@ -446,7 +584,7 @@ namespace MWPV.View.UserControls
                 {
                     SetStatus("Insert failed (ItemId overflow).");
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} exceeds Int32.MaxValue; cannot store in SEDS Int32.");
+                    Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED New ItemId={newId} exceeds Int32.MaxValue; cannot store in SEDS Int32.");
 #endif
                     return false;
                 }
@@ -455,7 +593,7 @@ namespace MWPV.View.UserControls
                 _hasPersistedId = true;
 
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] New ItemId={newId} set into SEDS (kind={EntityKind_CategoryItem}); exists now true.");
+                Debug.WriteLine($"[ITEM-TABS][INSERT] OK newId={newId} bookmarkOnly={isBookmarkOnly} => SEDS set (kind={EntityKind_CategoryItem})");
 #endif
 
                 if (trigger == PersistTrigger.LeaveBasicTab)
@@ -466,10 +604,110 @@ namespace MWPV.View.UserControls
             catch (Exception ex)
             {
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED: {ex}");
+                Debug.WriteLine($"[ITEM-TABS][INSERT][NEW] FAILED: {ex}");
 #endif
                 SetStatus("Insert failed. See debug output.");
                 return false;
+            }
+        }
+
+        /* ======================= Duplicate Password Popup (OUR themed PopupDialog) ======================= */
+
+        private bool PromptDuplicatePasswordAccept()
+        {
+            // Message is intentionally generic (no hints, no item/category/site).
+            const string title = "Duplicate Password Warning";
+            const string body =
+                "This password is currently used or has been previously used.\n\n" +
+                "Accept to continue.";
+
+            // We show it using Panel.xaml's modal overlay:
+            //   Border x:Name="PopupOverlayHost"
+            //   ContentControl x:Name="PopupOverlayContent"
+            try
+            {
+                var hostPanel = FindPanelHost();
+                if (hostPanel == null)
+                {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][POPUP] Host Panel not found. Falling back to MessageBox.");
+#endif
+                    var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                    return r == MessageBoxResult.OK;
+                }
+
+                var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
+                var overlayContent = hostPanel.FindName("PopupOverlayContent") as ContentControl;
+
+                if (overlayHost == null || overlayContent == null)
+                {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][POPUP] PopupOverlayHost/PopupOverlayContent not found in Panel. Falling back to MessageBox.");
+#endif
+                    var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                    return r == MessageBoxResult.OK;
+                }
+
+                bool accepted = false;
+
+                var popup = new PopupDialog();
+                popup.ConfigureWarningAcceptCancel(title, body);
+
+                // Modal loop (no Window): nested dispatcher frame
+                var frame = new DispatcherFrame();
+
+                popup.Completed += result =>
+                {
+                    accepted = (result == PopupDialog.PopupResult.Accept);
+
+                    try { overlayContent.Content = null; } catch { }
+                    try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
+
+                    frame.Continue = false;
+                };
+
+                overlayContent.Content = popup;
+                overlayHost.Visibility = Visibility.Visible;
+
+                // Focus it (feels "forced")
+                popup.Focus();
+                Keyboard.Focus(popup);
+
+                Dispatcher.PushFrame(frame);
+
+                return accepted;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][POPUP] Failed to show PopupDialog: {ex}");
+#endif
+                var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                return r == MessageBoxResult.OK;
+            }
+        }
+
+        private MWPV.View.UserControls.Panel? FindPanelHost()
+        {
+            // Walk up the visual tree to locate our main "Panel" usercontrol host.
+            // This avoids name collision with System.Windows.Controls.Panel by fully qualifying MWPV.View.UserControls.Panel.
+            try
+            {
+                DependencyObject? cur = this;
+
+                while (cur != null)
+                {
+                    if (cur is MWPV.View.UserControls.Panel p)
+                        return p;
+
+                    cur = VisualTreeHelper.GetParent(cur);
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -543,6 +781,9 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SAVE] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
+#endif
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
@@ -551,10 +792,15 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][SAVE] Validation OK bookmarkOnly={isBookmarkOnly}");
+#endif
+
             if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
             {
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                     ItemTabs.SelectedIndex = TabIndexBasic;
+
                 return;
             }
 
@@ -590,6 +836,9 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANK-SAVE] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
+#endif
                 if (ItemTabs != null)
                     ItemTabs.SelectedIndex = TabIndexBasic;
 
@@ -598,10 +847,15 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][BANK-SAVE] Validation OK bookmarkOnly={isBookmarkOnly} rowsStaged={BankCardsDraftRows.Count}");
+#endif
+
             if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
             {
                 if (ItemTabs != null)
                     ItemTabs.SelectedIndex = TabIndexBasic;
+
                 return;
             }
 
@@ -631,11 +885,18 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
+            // Leaving Basic -> must validate, and if NEW, persist insert-on-leave
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC => newIndex={newIndex}");
+#endif
                 bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
                 if (!allowLeaveBasic)
                 {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][TAB] Leave BASIC BLOCKED -> force back to Basic.");
+#endif
                     _handlingTabSelection = true;
                     try { ItemTabs.SelectedIndex = TabIndexBasic; }
                     finally { _handlingTabSelection = false; }
@@ -645,9 +906,14 @@ namespace MWPV.View.UserControls
                 }
             }
 
+            // Leaving BankCards -> let panel auto-commit/wipe draft row state
             if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BANKCARDS => newIndex={newIndex}");
+#endif
                 bool allowLeave = true;
+
                 try
                 {
                     _handlingTabSelection = true;
@@ -661,9 +927,12 @@ namespace MWPV.View.UserControls
 
                 if (!allowLeave)
                 {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS BLOCKED -> force back to BankCards.");
+#endif
                     _handlingTabSelection = true;
                     try { ItemTabs.SelectedIndex = TabIndexBankCards; }
-                    finally { ItemTabs.SelectedIndex = TabIndexBankCards; _handlingTabSelection = false; }
+                    finally { _handlingTabSelection = false; }
 
                     _lastTabIndex = TabIndexBankCards;
                     return;
@@ -684,15 +953,30 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
+#endif
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Cannot leave Basic tab, fix highlighted errors first.");
                 return false;
             }
 
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Validation OK bookmarkOnly={isBookmarkOnly} -> persist if needed");
+#endif
+
             // Leaving Basic should INSERT only for NEW items. Existing items do not write here.
             if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Persist FAILED bookmarkOnly={isBookmarkOnly}");
+#endif
                 return false;
+            }
 
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Persist OK bookmarkOnly={isBookmarkOnly}");
+#endif
             return true;
         }
 
@@ -700,8 +984,17 @@ namespace MWPV.View.UserControls
 
         private void SetStatus(string text)
         {
-            if (txtStatusLine == null) return;
-            txtStatusLine.Text = text ?? string.Empty;
+            try
+            {
+                if (txtStatusLine == null)
+                    return;
+
+                txtStatusLine.Text = text ?? string.Empty;
+            }
+            catch
+            {
+                // swallow (status line must never crash the editor)
+            }
         }
     }
 }
