@@ -1,4 +1,4 @@
-﻿// File: Security.Utility/Crypto/Password/PasswordFingerprint.cs
+﻿// File: Security.Utility/Crypto/Password/SensitiveValueSignature.cs
 //
 // FULL REWRITE (tightened + uses SensitiveDataCleaner for wiping)
 //
@@ -23,13 +23,13 @@ using System.Security.Cryptography;
 using System.Text;
 using Security.Utility.Wiping;
 
-namespace Security.Utility.Crypto.Password
+namespace Security.Utility.Crypto.Signatures
 {
     /// <summary>
     /// Stable, keyed password fingerprint helper.
     /// Use this when we need equality checks across time even though encryption is randomized.
     /// </summary>
-    public static class PasswordFingerprint
+    public static class SensitiveValueSignature
     {
         /// <summary>
         /// Domain separator (purpose) used when computing fingerprints.

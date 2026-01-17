@@ -40,7 +40,7 @@ using Utilities.Helpers;                 // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                     // SqlCagegory (SQL catalog/loader)
 
 // Helper assumed to exist
-using Security.Utility.Crypto.Password;  // PasswordFingerprint
+using Security.Utility.Crypto.Signatures;  // Signatures
 
 namespace MWPV.Services
 {
@@ -211,7 +211,7 @@ namespace MWPV.Services
 
             try
             {
-                return PasswordFingerprint.Compute(
+                return SensitiveValueSignature.Compute(
                     passwordPlain,
                     keyBytes,
                     purpose: Purpose_CIPaH_PasswordFingerprint);
