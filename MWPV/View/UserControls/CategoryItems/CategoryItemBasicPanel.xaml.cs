@@ -1,39 +1,4 @@
-<<<<<<< HEAD
-﻿    // File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
-    //
-    // FULL REWRITE
-    //
-    // Scope (Basic tab ONLY):
-    // - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
-    // - Existing item opens in VIEW-ONLY mode (read-protected).
-    // - In view-only mode, show an "Edit" pill button. Clicking it unlocks fields for editing.
-    // - No DB update logic is added here.
-    // - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
-    // - Save button is disabled in view-only to prevent accidental save behavior.
-    // - In view-only, replace Generate button with Copy-to-Clipboard button for password.
-    // - In view-only, show Copy-to-Clipboard buttons for: Password, Phone, Email, Username, URL.
-    // - NEW: Item Name duplicate check runs across ALL categories (service call), with error shown under name.
-    //   - For existing items, excludes the current itemId when editing is unlocked.
-    //   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
-    //
-
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Linq;
-    using System.Text;
-    using System.Windows;
-    using System.Windows.Controls;
-    using System.Windows.Input;
-    using System.Windows.Media;
-    using MWPV.Services;
-    using MWPV.Utilities.Helpers;
-    using MWPV.Utilities.UI;
-    using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
-    using Security.Utility.Storage;     // SecureEncryptedDataStore (SEDS)
-    using Security.Utility.Validation;
-=======
-﻿// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
+// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
 //
 // FULL REWRITE
 //
@@ -75,13 +40,11 @@ using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature (HMAC fing
 using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
 using Security.Utility.Wiping;
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
-    namespace MWPV.View.UserControls.CategoryItems
+namespace MWPV.View.UserControls.CategoryItems
+{
+    public partial class CategoryItemBasicPanel : UserControl
     {
-<<<<<<< HEAD
-        public partial class CategoryItemBasicPanel : UserControl
-=======
         public event EventHandler? SaveRequested;
         public event EventHandler? CancelRequested;
         public event EventHandler<string>? PasswordValidationFailed;
@@ -157,94 +120,83 @@ using Security.Utility.Wiping;
         private const string Purpose_PwFp = SensitiveValueSignature.DefaultPurpose; // "PW.Fingerprint.V1"
 
         public CategoryItemBasicPanel()
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
         {
-            public event EventHandler? SaveRequested;
-            public event EventHandler? CancelRequested;
-            public event EventHandler<string>? PasswordValidationFailed;
+            InitializeComponent();
 
-            // CI_SecretStorage is NOT NULL in DB
-            private const int SecretStorage_Default = 0;
+            Loaded += CategoryItemBasicPanel_Loaded;
+            Unloaded += CategoryItemBasicPanel_Unloaded;
 
-            // Mode detection (SEDS)
-            private const string EntityKind_CategoryItem = "CategoryItem";
-            private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
-            private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+            _revealAutoHide = new AutoHideTimer(
+                interval: TimeSpan.FromSeconds(20),
+                onTimeout: OnRevealTimeout
+            );
+        }
 
-            private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
+        /* ======================= Lifecycle ======================= */
 
-            private int _activeEntityId;
+        private void CategoryItemBasicPanel_Loaded(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] Loaded");
+#endif
+            CacheDefaultFieldVisualsIfNeeded();
+            HookUiEventsOnce();
 
-            // Existing item = CurrentEntityId > 0
-            private bool IsExistingItem => _activeEntityId > 0;
+            ClearForm();
+            ResetUiState();
 
-            // Existing items start view-only; the Edit pill unlocks editing.
-            private bool _editUnlocked;
+            ConfigureModeFromSeds();
 
-            // Central truth: "view-only" means existing item AND not unlocked.
-            private bool IsViewOnly => IsExistingItem && !_editUnlocked;
+            // Populate if we are viewing an existing item
+            if (IsExistingItem)
+                PopulateFromDbForCurrentEntity();
 
-            // Prevent event stacking
-            private bool _uiEventsHooked;
+            // Apply initial protection (view-only for existing items unless unlocked)
+            ApplyModeProtection();
+        }
 
-            // Loading guard (prevents handlers from doing UI side-effects while we populate)
-            private bool _isPopulating;
+        private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] Unloaded");
+#endif
+            _revealAutoHide.Stop();
+            UnhookUiEvents();
 
-<<<<<<< HEAD
-            // Reveal state
-            private bool _mainRevealed;
-            private bool _verifyRevealed;
-            private bool _phoneRevealed;
-            private bool _pinRevealed;
-            private bool _emailRevealed;
-=======
             ResetUiState();
             WipeSensitiveFields();
 
             _sigState.Clear();
         }
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
-            // Shared reveal auto-hide
-            private readonly AutoHideTimer _revealAutoHide;
+        /* ======================= Mode detection helper ======================= */
 
-            private bool _settingPwProgrammatically;
+        private void ConfigureModeFromSeds()
+        {
+            _activeEntityId = 0;
+            _editUnlocked = false; // existing items start locked each time we load/reload
+            _lastNameChecked = string.Empty;
 
-            // Default visuals
-            private Brush? _emailDefaultBorderBrush;
-            private Brush? _emailDefaultBackground;
-            private Brush? _phoneDefaultBorderBrush;
-            private Brush? _phoneDefaultBackground;
-            private Brush? _itemNameDefaultBorderBrush;
-            private Brush? _itemNameDefaultBackground;
-            private Brush? _pinDefaultBorderBrush;
-            private Brush? _pinDefaultBackground;
-
-            private string _lastEmailChecked = string.Empty;
-
-            // Duplicate-check guard
-            private string _lastNameChecked = string.Empty;
-
-            // PIN rules
-            private const int PinMinLen = 4;
-            private const int PinMaxLen = 6;
-
-            public CategoryItemBasicPanel()
+            try
             {
-                InitializeComponent();
+                if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
+                    goto Done;
 
-                Loaded += CategoryItemBasicPanel_Loaded;
-                Unloaded += CategoryItemBasicPanel_Unloaded;
+                string kind;
+                try { kind = Encoding.UTF8.GetString(kindBytes); }
+                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
 
-                _revealAutoHide = new AutoHideTimer(
-                    interval: TimeSpan.FromSeconds(20),
-                    onTimeout: OnRevealTimeout
-                );
+                if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
+                    goto Done;
+
+                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
+                    _activeEntityId = id;
+            }
+            catch
+            {
+                _activeEntityId = 0;
             }
 
-<<<<<<< HEAD
-            /* ======================= Lifecycle ======================= */
-=======
         Done:
 #if DEBUG
             Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
@@ -253,205 +205,166 @@ using Security.Utility.Wiping;
             _sigState.Clear();
 #endif
         }
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
-            private void CategoryItemBasicPanel_Loaded(object? sender, RoutedEventArgs e)
+        private void ApplyModeProtection()
+        {
+            bool viewOnly = IsViewOnly;
+
+            // Edit pill: only visible while view-only
+            btnEditPill.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+
+            // Save must not happen in view-only
+            btnSubmit.IsEnabled = !viewOnly;
+
+            // Cancel always allowed
+            btnCancel.IsEnabled = true;
+
+            // TextBoxes: read-only keeps content readable/selectable
+            txtItemName.IsReadOnly = viewOnly;
+            txtUsername.IsReadOnly = viewOnly;
+            txtUrl.IsReadOnly = viewOnly;
+            txtDescription.IsReadOnly = viewOnly;
+
+            // PasswordBoxes cannot be read-only, so disable edit
+            pwdPassword.IsEnabled = !viewOnly;
+            pwdVerify.IsEnabled = !viewOnly;
+            pwdPin.IsEnabled = !viewOnly;
+            pwdEmail.IsEnabled = !viewOnly;
+            txtPhone.IsEnabled = !viewOnly; // PasswordBox named txtPhone
+
+            // Editing actions should be disabled
+            chkBookmarkOnly.IsEnabled = !viewOnly;
+
+            // Replace Generate with Copy in view-only
+            btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
+            btnCopyPassword.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnGeneratePassword.IsEnabled = !viewOnly;
+
+            // View-only copy buttons
+            btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+
+            // Username / URL copy buttons (view-only only)
+            btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+
+            // Reveal actions are allowed even in view-only
+            btnTogglePasswordReveal.IsEnabled = true;
+            btnToggleVerifyReveal.IsEnabled = true;
+            btnTogglePinReveal.IsEnabled = true;
+            btnTogglePhoneReveal.IsEnabled = true;
+            btnToggleEmailReveal.IsEnabled = true;
+
+            UpdateCopyButtonStates();
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][MODE] Applied: IsExisting={IsExistingItem} EditUnlocked={_editUnlocked} => ViewOnly={viewOnly}");
+#endif
+        }
+
+        private void UpdateCopyButtonStates()
+        {
+            if (!IsViewOnly)
             {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] Loaded");
-    #endif
-                CacheDefaultFieldVisualsIfNeeded();
-                HookUiEventsOnce();
+                btnCopyPassword.IsEnabled = false;
+                btnCopyPhone.IsEnabled = false;
+                btnCopyEmail.IsEnabled = false;
+                btnCopyUsername.IsEnabled = false;
+                btnCopyUrl.IsEnabled = false;
+                return;
+            }
 
+            bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
+            btnCopyPassword.IsEnabled = hasPassword && !isBookmarkOnly;
+
+            bool hasPhone = !string.IsNullOrEmpty(txtPhone.Password);
+            bool hasEmail = !string.IsNullOrEmpty(pwdEmail.Password);
+
+            btnCopyPhone.IsEnabled = hasPhone;
+            btnCopyEmail.IsEnabled = hasEmail;
+
+            bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
+            btnCopyUsername.IsEnabled = hasUser;
+
+            bool hasUrl = !string.IsNullOrWhiteSpace(txtUrl.Text);
+            btnCopyUrl.IsEnabled = hasUrl;
+        }
+
+        /* ======================= View-only -> Edit unlock ======================= */
+
+        private void btnEditPill_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsExistingItem) return;
+            if (!IsViewOnly) return;
+
+#if DEBUG
+            Debug.WriteLine("[BASIC][EDIT] Edit pill clicked -> unlocking edit mode");
+#endif
+            _editUnlocked = true;
+
+            UpdateCopyButtonStates();
+            ApplyModeProtection();
+
+            // When we unlock editing, we re-validate name next time it loses focus or on submit
+            _lastNameChecked = string.Empty;
+        }
+
+        /* ======================= Populate ======================= */
+
+        public void PopulateFromDbForCurrentEntity()
+        {
+            ConfigureModeFromSeds();
+
+            if (!IsExistingItem)
+            {
+#if DEBUG
+                Debug.WriteLine("[BASIC][POP] Not existing item -> skipping DB populate");
+#endif
+                ApplyModeProtection();
+                return;
+            }
+
+            LoadAndApplyByItemId(_activeEntityId);
+
+            ApplyModeProtection();
+        }
+
+        private void LoadAndApplyByItemId(long itemId)
+        {
+            if (itemId <= 0) return;
+
+#if DEBUG
+            Debug.WriteLine($"[BASIC][POP] Loading itemId={itemId}");
+#endif
+
+            _isPopulating = true;
+            try
+            {
                 ClearForm();
                 ResetUiState();
 
-<<<<<<< HEAD
-                ConfigureModeFromSeds();
-
-                // Populate if we are viewing an existing item
-                if (IsExistingItem)
-                    PopulateFromDbForCurrentEntity();
-
-                // Apply initial protection (view-only for existing items unless unlocked)
-                ApplyModeProtection();
-            }
-
-            private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
-            {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] Unloaded");
-    #endif
-                _revealAutoHide.Stop();
-                UnhookUiEvents();
-
-                ResetUiState();
-                WipeSensitiveFields();
-            }
-
-            /* ======================= Mode detection helper ======================= */
-
-            private void ConfigureModeFromSeds()
-            {
-                _activeEntityId = 0;
-                _editUnlocked = false; // existing items start locked each time we load/reload
-                _lastNameChecked = string.Empty;
-
-                try
-=======
                 _sigState.Clear();
 
                 var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
                 if (row == null)
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
                 {
-                    if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
-                        goto Done;
-
-                    string kind;
-                    try { kind = Encoding.UTF8.GetString(kindBytes); }
-                    finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
-
-                    if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
-                        goto Done;
-
-                    if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
-                        _activeEntityId = id;
-                }
-                catch
-                {
-                    _activeEntityId = 0;
-                }
-
-            Done:
-    #if DEBUG
-                Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
-    #endif
-            }
-
-            private void ApplyModeProtection()
-            {
-                bool viewOnly = IsViewOnly;
-
-                // Edit pill: only visible while view-only
-                btnEditPill.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-
-                // Save must not happen in view-only
-                btnSubmit.IsEnabled = !viewOnly;
-
-                // Cancel always allowed
-                btnCancel.IsEnabled = true;
-
-                // TextBoxes: read-only keeps content readable/selectable
-                txtItemName.IsReadOnly = viewOnly;
-                txtUsername.IsReadOnly = viewOnly;
-                txtUrl.IsReadOnly = viewOnly;
-                txtDescription.IsReadOnly = viewOnly;
-
-                // PasswordBoxes cannot be read-only, so disable edit
-                pwdPassword.IsEnabled = !viewOnly;
-                pwdVerify.IsEnabled = !viewOnly;
-                pwdPin.IsEnabled = !viewOnly;
-                pwdEmail.IsEnabled = !viewOnly;
-                txtPhone.IsEnabled = !viewOnly; // PasswordBox named txtPhone
-
-                // Editing actions should be disabled
-                chkBookmarkOnly.IsEnabled = !viewOnly;
-
-                // Replace Generate with Copy in view-only
-                btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
-                btnCopyPassword.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-                btnGeneratePassword.IsEnabled = !viewOnly;
-
-                // View-only copy buttons
-                btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-                btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-
-                // Username / URL copy buttons (view-only only)
-                btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-                btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-
-                // Reveal actions are allowed even in view-only
-                btnTogglePasswordReveal.IsEnabled = true;
-                btnToggleVerifyReveal.IsEnabled = true;
-                btnTogglePinReveal.IsEnabled = true;
-                btnTogglePhoneReveal.IsEnabled = true;
-                btnToggleEmailReveal.IsEnabled = true;
-
-                UpdateCopyButtonStates();
-
-    #if DEBUG
-                Debug.WriteLine($"[BASIC][MODE] Applied: IsExisting={IsExistingItem} EditUnlocked={_editUnlocked} => ViewOnly={viewOnly}");
-    #endif
-            }
-
-            private void UpdateCopyButtonStates()
-            {
-                if (!IsViewOnly)
-                {
-                    btnCopyPassword.IsEnabled = false;
-                    btnCopyPhone.IsEnabled = false;
-                    btnCopyEmail.IsEnabled = false;
-                    btnCopyUsername.IsEnabled = false;
-                    btnCopyUrl.IsEnabled = false;
+#if DEBUG
+                    Debug.WriteLine($"[BASIC][POP] DB returned null for itemId={itemId}");
+#endif
                     return;
                 }
 
-                bool isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
-
-                bool hasPassword = !string.IsNullOrEmpty(pwdPassword.Password);
-                btnCopyPassword.IsEnabled = hasPassword && !isBookmarkOnly;
-
-                bool hasPhone = !string.IsNullOrEmpty(txtPhone.Password);
-                bool hasEmail = !string.IsNullOrEmpty(pwdEmail.Password);
-
-                btnCopyPhone.IsEnabled = hasPhone;
-                btnCopyEmail.IsEnabled = hasEmail;
-
-                bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
-                btnCopyUsername.IsEnabled = hasUser;
-
-                bool hasUrl = !string.IsNullOrWhiteSpace(txtUrl.Text);
-                btnCopyUrl.IsEnabled = hasUrl;
-            }
-
-            /* ======================= View-only -> Edit unlock ======================= */
-
-            private void btnEditPill_Click(object? sender, RoutedEventArgs e)
-            {
-                if (!IsExistingItem) return;
-                if (!IsViewOnly) return;
-
-    #if DEBUG
-                Debug.WriteLine("[BASIC][EDIT] Edit pill clicked -> unlocking edit mode");
-    #endif
-                _editUnlocked = true;
-
-                UpdateCopyButtonStates();
-                ApplyModeProtection();
-
-                // When we unlock editing, we re-validate name next time it loses focus or on submit
-                _lastNameChecked = string.Empty;
-            }
-
-            /* ======================= Populate ======================= */
-
-            public void PopulateFromDbForCurrentEntity()
-            {
-                ConfigureModeFromSeds();
-
-                if (!IsExistingItem)
+                string? pwPlain = null;
+                if (row.BookMarkOnly == 0)
                 {
-    #if DEBUG
-                    Debug.WriteLine("[BASIC][POP] Not existing item -> skipping DB populate");
-    #endif
-                    ApplyModeProtection();
-                    return;
+                    pwPlain = CategoryItemService.LoadMostRecentPasswordPlainByItemId(itemId);
+#if DEBUG
+                    Debug.WriteLine($"[BASIC][POP] MostRecentPw: {(pwPlain == null ? "NULL" : $"LEN={pwPlain.Length}")}");
+#endif
                 }
 
-<<<<<<< HEAD
-                LoadAndApplyByItemId(_activeEntityId);
-=======
                 ApplyBasicRowToUi(row, pwPlain);
 
                 // IMPORTANT: Original signatures are computed from TEXT in the UI AFTER load.
@@ -462,126 +375,78 @@ using Security.Utility.Wiping;
                 _isPopulating = false;
             }
         }
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
-                ApplyModeProtection();
+        private void ApplyBasicRowToUi(CategoryItemService.CategoryItemBasicRow row, string? mostRecentPasswordPlain)
+        {
+            txtItemName.Text = row.Name ?? string.Empty;
+            txtUsername.Text = row.Username ?? string.Empty;
+            txtUrl.Text = row.SignInUrl ?? string.Empty;
+            txtDescription.Text = row.Description ?? string.Empty;
+
+            chkBookmarkOnly.IsChecked = row.BookMarkOnly == 1;
+
+            if (!string.IsNullOrEmpty(row.AccountEmailPlain))
+            {
+                _lastEmailChecked = row.AccountEmailPlain.Trim();
+                pwdEmail.Password = row.AccountEmailPlain;
+                ClearEmailValidation();
+            }
+            else
+            {
+                _lastEmailChecked = string.Empty;
+                UICleaner.Clear(pwdEmail);
+                ClearEmailValidation();
             }
 
-            private void LoadAndApplyByItemId(long itemId)
+            if (!string.IsNullOrEmpty(row.AccountPhonePlain))
             {
-                if (itemId <= 0) return;
-
-    #if DEBUG
-                Debug.WriteLine($"[BASIC][POP] Loading itemId={itemId}");
-    #endif
-
-                _isPopulating = true;
-                try
-                {
-                    ClearForm();
-                    ResetUiState();
-
-                    var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
-                    if (row == null)
-                    {
-    #if DEBUG
-                        Debug.WriteLine($"[BASIC][POP] DB returned null for itemId={itemId}");
-    #endif
-                        return;
-                    }
-
-                    string? pwPlain = null;
-                    if (row.BookMarkOnly == 0)
-                    {
-                        pwPlain = CategoryItemService.LoadMostRecentPasswordPlainByItemId(itemId);
-    #if DEBUG
-                        Debug.WriteLine($"[BASIC][POP] MostRecentPw: {(pwPlain == null ? "NULL" : $"LEN={pwPlain.Length}")}");
-    #endif
-                    }
-
-                    ApplyBasicRowToUi(row, pwPlain);
-                }
-                finally
-                {
-                    _isPopulating = false;
-                }
+                txtPhone.Password = row.AccountPhonePlain;
+                ClearPhoneError();
+            }
+            else
+            {
+                UICleaner.Clear(txtPhone);
+                ClearPhoneError();
             }
 
-            private void ApplyBasicRowToUi(CategoryItemService.CategoryItemBasicRow row, string? mostRecentPasswordPlain)
+            if (!string.IsNullOrEmpty(row.PinPlain))
             {
-                txtItemName.Text = row.Name ?? string.Empty;
-                txtUsername.Text = row.Username ?? string.Empty;
-                txtUrl.Text = row.SignInUrl ?? string.Empty;
-                txtDescription.Text = row.Description ?? string.Empty;
+                pwdPin.Password = row.PinPlain;
+                ClearPinError();
+            }
+            else
+            {
+                UICleaner.Clear(pwdPin);
+                ClearPinError();
+            }
 
-                chkBookmarkOnly.IsChecked = row.BookMarkOnly == 1;
-
-                if (!string.IsNullOrEmpty(row.AccountEmailPlain))
+            _settingPwProgrammatically = true;
+            try
+            {
+                if (row.BookMarkOnly == 1)
                 {
-                    _lastEmailChecked = row.AccountEmailPlain.Trim();
-                    pwdEmail.Password = row.AccountEmailPlain;
-                    ClearEmailValidation();
+                    UICleaner.Clear(pwdPassword);
+                    HideVerifyRow();
+                    HideVerifyError();
+                    HideStrengthRow();
                 }
                 else
                 {
-                    _lastEmailChecked = string.Empty;
-                    UICleaner.Clear(pwdEmail);
-                    ClearEmailValidation();
-                }
-
-                if (!string.IsNullOrEmpty(row.AccountPhonePlain))
-                {
-                    txtPhone.Password = row.AccountPhonePlain;
-                    ClearPhoneError();
-                }
-                else
-                {
-                    UICleaner.Clear(txtPhone);
-                    ClearPhoneError();
-                }
-
-                if (!string.IsNullOrEmpty(row.PinPlain))
-                {
-                    pwdPin.Password = row.PinPlain;
-                    ClearPinError();
-                }
-                else
-                {
-                    UICleaner.Clear(pwdPin);
-                    ClearPinError();
-                }
-
-                _settingPwProgrammatically = true;
-                try
-                {
-                    if (row.BookMarkOnly == 1)
+                    if (mostRecentPasswordPlain != null)
                     {
-                        UICleaner.Clear(pwdPassword);
+                        pwdPassword.Password = mostRecentPasswordPlain;
                         HideVerifyRow();
                         HideVerifyError();
                         HideStrengthRow();
                     }
                     else
                     {
-                        if (mostRecentPasswordPlain != null)
-                        {
-                            pwdPassword.Password = mostRecentPasswordPlain;
-                            HideVerifyRow();
-                            HideVerifyError();
-                            HideStrengthRow();
-                        }
-                        else
-                        {
-                            UICleaner.Clear(pwdPassword);
-                            HideVerifyRow();
-                            HideVerifyError();
-                            HideStrengthRow();
-                        }
+                        UICleaner.Clear(pwdPassword);
+                        HideVerifyRow();
+                        HideVerifyError();
+                        HideStrengthRow();
                     }
                 }
-<<<<<<< HEAD
-                finally
-=======
             }
             finally
             {
@@ -707,16 +572,23 @@ using Security.Utility.Wiping;
             if (!okPassword)
             {
                 if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
                 {
-                    _settingPwProgrammatically = false;
+                    var verify = pwdVerify.Password ?? string.Empty;
+                    if (!string.IsNullOrEmpty(verify)) pwdVerify.Focus();
+                    else pwdPassword.Focus();
                 }
+                else
+                {
+                    pwdPassword.Focus();
+                }
+                return;
+            }
 
-                HideAllRevealsAndStopTimer();
-                ClearPlainRevealOverlays();
+            if (!okPin) { pwdPin.Focus(); return; }
+            if (!okEmail) { pwdEmail.Focus(); return; }
+            if (!okPhone) { txtPhone.Focus(); return; }
+        }
 
-<<<<<<< HEAD
-=======
         /* ======================= Safe non-null SecretStorage ======================= */
 
         public int GetSecretStorageOrDefault() => GetSecretStorageOrDefault(chkBookmarkOnly.IsChecked == true);
@@ -985,1393 +857,1126 @@ using Security.Utility.Wiping;
             // Never do duplicate checks while populating or in view-only.
             if (_isPopulating || IsViewOnly)
             {
->>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
-                ClearItemNameError();
-
-                // Reset duplicate-check cache to match loaded name
-                _lastNameChecked = (txtItemName.Text ?? string.Empty).Trim();
-
-                UpdateCopyButtonStates();
-            }
-
-            /* ======================= Host-facing API ======================= */
-
-            public void ClearForm()
-            {
-                WipeSensitiveFields();
-
-                txtItemName.Text = string.Empty;
-                txtUsername.Text = string.Empty;
-                txtUrl.Text = string.Empty;
-                txtDescription.Text = string.Empty;
-
-                _lastEmailChecked = string.Empty;
-                _lastNameChecked = string.Empty;
-
-                ClearItemNameError();
-                ClearEmailValidation();
-                ClearPhoneError();
-                ClearPinError();
-            }
-
-            public void ResetUiState()
-            {
-                HideAllRevealsAndStopTimer();
-                HideStrengthRow();
-                HideVerifyRow();
-                HideVerifyError();
-
-                ClearItemNameError();
-                ClearEmailValidation();
-                ClearPhoneError();
-                ClearPinError();
-            }
-
-            public void WipeSensitiveFields()
-            {
-                HideAllRevealsAndStopTimer();
-
-                UICleaner.Clear(pwdPassword);
-                UICleaner.Clear(pwdVerify);
-                UICleaner.Clear(txtPhone);
-                UICleaner.Clear(pwdPin);
-                UICleaner.Clear(pwdEmail);
-
-                ClearPlainRevealOverlays();
-
-                HideStrengthRow();
-                HideVerifyError();
-
-                UpdateCopyButtonStates();
-            }
-
-            public void WipeAllForHostClose()
-            {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] WipeAllForHostClose");
-    #endif
-                ResetUiState();
-                WipeSensitiveFields();
-            }
-
-            public void NormalizeUsernameFromEmailIfEmpty()
-            {
-                var user = (txtUsername.Text ?? string.Empty).Trim();
-                if (user.Length != 0)
-                    return;
-
-                var email = (pwdEmail.Password ?? string.Empty).Trim();
-                if (email.Length == 0)
-                    return;
-
-                var result = EmailValidator.IsLikelyEmail(email, out _);
-                if (result != EmailCheck.Ok)
-                    return;
-
-                txtUsername.Text = email;
-            }
-
-            public bool TryValidateAllForSubmit(
-                out bool isBookmarkOnly,
-                out bool okName,
-                out bool okPassword,
-                out bool okPin,
-                out bool okEmail,
-                out bool okPhone)
-            {
-                isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
-
-                okName = ValidateItemName(forSubmit: true);
-                okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
-                okPin = ValidatePin(forSubmit: true);
-                okEmail = ValidateEmailForSubmit();
-                okPhone = ValidatePhoneNumber(forSubmit: true);
-
-                return okName && okPassword && okPin && okEmail && okPhone;
-            }
-
-            public void FocusFirstError(bool okName, bool okPassword, bool okPin, bool okEmail, bool okPhone, bool isBookmarkOnly)
-            {
-                if (!okName) { txtItemName.Focus(); return; }
-
-                if (!okPassword)
-                {
-                    if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
-                    {
-                        var verify = pwdVerify.Password ?? string.Empty;
-                        if (!string.IsNullOrEmpty(verify)) pwdVerify.Focus();
-                        else pwdPassword.Focus();
-                    }
-                    else
-                    {
-                        pwdPassword.Focus();
-                    }
-                    return;
-                }
-
-                if (!okPin) { pwdPin.Focus(); return; }
-                if (!okEmail) { pwdEmail.Focus(); return; }
-                if (!okPhone) { txtPhone.Focus(); return; }
-            }
-
-            /* ======================= Safe non-null SecretStorage ======================= */
-
-            public int GetSecretStorageOrDefault() => GetSecretStorageOrDefault(chkBookmarkOnly.IsChecked == true);
-
-            public int GetSecretStorageOrDefault(bool isBookmarkOnly)
-            {
-                _ = isBookmarkOnly;
-                return SecretStorage_Default;
-            }
-
-            /* ======================= Value getters for Service Insert ======================= */
-
-            public string GetItemNameTrim() => (txtItemName.Text ?? string.Empty).Trim();
-
-            public string? GetDescriptionTrimOrNull()
-            {
-                var s = (txtDescription.Text ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetUsernameTrimOrNull()
-            {
-                var s = (txtUsername.Text ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetUrlTrimOrNull()
-            {
-                var s = (txtUrl.Text ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetEmailTrimOrNull()
-            {
-                var s = (pwdEmail.Password ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetPhoneTrimOrNull()
-            {
-                var s = (txtPhone.Password ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetPinTrimOrNull()
-            {
-                var s = (pwdPin.Password ?? string.Empty).Trim();
-                return s.Length == 0 ? null : s;
-            }
-
-            public string? GetPasswordPlainOrNull()
-            {
-                var pw = pwdPassword.Password;
-                return string.IsNullOrEmpty(pw) ? null : pw;
-            }
-
-            public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
-
-            public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
-            {
-                DpapiDbPayloadCrypto.ProtectPasswordHistory(
-                    password: pwdPassword.Password,
-                    isBookmarkOnly: isBookmarkOnly,
-                    out pwCipher,
-                    out padLen,
-                    out pwSig,
-                    out _ // sigVersion
-                );
-            }
-
-            /* ======================= Save / Cancel ======================= */
-
-            private void btnSubmit_Click(object? sender, RoutedEventArgs e)
-            {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] Save clicked");
-    #endif
-                if (IsViewOnly)
-                {
-    #if DEBUG
-                    Debug.WriteLine("[BASIC] Save suppressed: view-only mode");
-    #endif
-                    return;
-                }
-
-                SaveRequested?.Invoke(this, EventArgs.Empty);
-            }
-
-            private void btnCancel_Click(object? sender, RoutedEventArgs e)
-            {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] Cancel clicked");
-    #endif
-                CancelRequested?.Invoke(this, EventArgs.Empty);
-            }
-
-            /* ======================= Shared reveal auto-hide ======================= */
-
-            private void OnRevealTimeout()
-            {
-    #if DEBUG
-                Debug.WriteLine("[BASIC] Reveal timer elapsed, hiding all reveals");
-    #endif
-                HideAllRevealsAndStopTimer();
-                ClearPlainRevealOverlays();
-            }
-
-            private void HideAllRevealsAndStopTimer()
-            {
-                _revealAutoHide.Stop();
-
-                HideMainPassword();
-                HideVerifyPassword();
-                HidePhone();
-                HidePin();
-                HideEmail();
-            }
-
-            private void TouchRevealTimerIfNeeded()
-            {
-                bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed || _emailRevealed;
-                _revealAutoHide.Touch(anyRevealed);
-            }
-
-            /* ======================= Item name validation (required + global-duplicate) ======================= */
-
-            private bool ValidateItemName(bool forSubmit)
-            {
-                var name = (txtItemName.Text ?? string.Empty).Trim();
-                if (name.Length == 0)
-                {
-                    ShowItemNameError("Item name is required.");
-                    return false;
-                }
-
-                // Never do duplicate checks while populating or in view-only.
-                if (_isPopulating || IsViewOnly)
-                {
-                    ClearItemNameError();
-                    return true;
-                }
-
-                // We only pay the DB cost:
-                // - on submit OR
-                // - on LostFocus OR
-                // - when the value has changed since last check.
-                if (!forSubmit && string.Equals(name, _lastNameChecked, StringComparison.Ordinal))
-                {
-                    ClearItemNameError();
-                    return true;
-                }
-
-                _lastNameChecked = name;
-
-                try
-                {
-                    long? excludeId = (IsExistingItem && _editUnlocked) ? _activeEntityId : (long?)null;
-
-                    // Across every category (service handles the SQL)
-                    bool exists = CategoryItemService.ItemNameExistsAcrossAllCategories(name, excludeItemId: excludeId);
-
-                    if (exists)
-                    {
-                        ShowItemNameError("That item name is already used. Please choose a different name.");
-                        return false;
-                    }
-                }
-                catch
-                {
-    #if DEBUG
-                    Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
-    #endif
-                    // In release we don't block typing if the check throws; submit will still validate.
-                }
-
                 ClearItemNameError();
                 return true;
             }
 
-            private void ShowItemNameError(string message)
+            // We only pay the DB cost:
+            // - on submit OR
+            // - on LostFocus OR
+            // - when the value has changed since last check.
+            if (!forSubmit && string.Equals(name, _lastNameChecked, StringComparison.Ordinal))
             {
-                ItemNameErrorText.Text = message ?? string.Empty;
-                ItemNameErrorPanel.Visibility = Visibility.Visible;
-
-                txtItemName.ToolTip = message;
-
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                txtItemName.Background = fill;
+                ClearItemNameError();
+                return true;
             }
 
-            private void ClearItemNameError()
+            _lastNameChecked = name;
+
+            try
             {
-                ItemNameErrorText.Text = string.Empty;
-                ItemNameErrorPanel.Visibility = Visibility.Collapsed;
+                long? excludeId = (IsExistingItem && _editUnlocked) ? _activeEntityId : (long?)null;
 
-                txtItemName.ToolTip = null;
-                if (_itemNameDefaultBackground != null) txtItemName.Background = _itemNameDefaultBackground;
-                if (_itemNameDefaultBorderBrush != null) txtItemName.BorderBrush = _itemNameDefaultBorderBrush;
-            }
+                // Across every category (service handles the SQL)
+                bool exists = CategoryItemService.ItemNameExistsAcrossAllCategories(name, excludeItemId: excludeId);
 
-            /* ======================= Password / Verify ======================= */
-
-            private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
-            {
-                if (IsViewOnly) return;
-
-                try
+                if (exists)
                 {
-                    var generated = SecurePassword.GenerateAsString(12);
-
-                    _settingPwProgrammatically = true;
-                    try { SetPassword(generated); }
-                    finally { _settingPwProgrammatically = false; }
-
-                    HideStrengthRow();
-                    HideVerifyRow();
-                    HideVerifyError();
-                }
-                catch
-                {
-                    PasswordValidationFailed?.Invoke(this, "Password generator failed.");
+                    ShowItemNameError("That item name is already used. Please choose a different name.");
+                    return false;
                 }
             }
-
-            private void BtnCopyPassword_Click(object? sender, RoutedEventArgs e)
+            catch
             {
-                if (!IsViewOnly) return;
-                if (chkBookmarkOnly.IsChecked == true) return;
-
-                var pw = pwdPassword.Password;
-                if (string.IsNullOrEmpty(pw)) return;
-
-                _ = ClipboardHelper.TryCopySensitiveText(pw, out _, ClipboardTtl, tag: "BASIC.PW");
+#if DEBUG
+                Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
+#endif
+                // In release we don't block typing if the check throws; submit will still validate.
             }
 
-            private void BtnCopyUsername_Click(object? sender, RoutedEventArgs e)
+            ClearItemNameError();
+            return true;
+        }
+
+        private void ShowItemNameError(string message)
+        {
+            ItemNameErrorText.Text = message ?? string.Empty;
+            ItemNameErrorPanel.Visibility = Visibility.Visible;
+
+            txtItemName.ToolTip = message;
+
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            txtItemName.Background = fill;
+        }
+
+        private void ClearItemNameError()
+        {
+            ItemNameErrorText.Text = string.Empty;
+            ItemNameErrorPanel.Visibility = Visibility.Collapsed;
+
+            txtItemName.ToolTip = null;
+            if (_itemNameDefaultBackground != null) txtItemName.Background = _itemNameDefaultBackground;
+            if (_itemNameDefaultBorderBrush != null) txtItemName.BorderBrush = _itemNameDefaultBorderBrush;
+        }
+
+        /* ======================= Password / Verify ======================= */
+
+        private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
+        {
+            if (IsViewOnly) return;
+
+            try
             {
-                if (!IsViewOnly) return;
+                var generated = SecurePassword.GenerateAsString(12);
 
-                var user = (txtUsername.Text ?? string.Empty).Trim();
-                if (user.Length == 0) return;
+                _settingPwProgrammatically = true;
+                try { SetPassword(generated); }
+                finally { _settingPwProgrammatically = false; }
 
-                _ = ClipboardHelper.TryCopySensitiveText(user, out _, ClipboardTtl, tag: "BASIC.USER");
-            }
-
-            private void BtnCopyUrl_Click(object? sender, RoutedEventArgs e)
-            {
-                if (!IsViewOnly) return;
-
-                var url = (txtUrl.Text ?? string.Empty).Trim();
-                if (url.Length == 0) return;
-
-                _ = ClipboardHelper.TryCopySensitiveText(url, out _, ClipboardTtl, tag: "BASIC.URL");
-            }
-
-            private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
-            {
-                if (_mainRevealed) HideMainPassword();
-                else ShowMainPassword();
-
-                TouchRevealTimerIfNeeded();
-            }
-
-            private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
-            {
-                if (string.IsNullOrEmpty(pwdVerify.Password))
-                    return;
-
-                if (_verifyRevealed) HideVerifyPassword();
-                else ShowVerifyPassword();
-
-                TouchRevealTimerIfNeeded();
-            }
-
-            private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
-            {
-                if (_settingPwProgrammatically) return;
-                if (_isPopulating) return;
-                if (IsViewOnly) { e.Handled = true; return; }
-
-                bool pasteCombo =
-                    (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
-                    (e.Key == Key.Insert && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
-
-                if (pasteCombo)
-                {
-                    HideVerifyRow();
-                    HideVerifyError();
-                }
-            }
-
-            private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-
-                if (_mainRevealed)
-                    txtPasswordPlain.Text = pwdPassword.Password;
-
-                TouchRevealTimerIfNeeded();
-
-                UpdateCopyButtonStates();
-
-                if (IsViewOnly) return;
-
-                if (chkBookmarkOnly.IsChecked == true)
-                {
-                    HideStrengthRow();
-                    HideVerifyRow();
-                    HideVerifyError();
-                    return;
-                }
-
-                if (_settingPwProgrammatically) return;
-
-                if (!string.IsNullOrEmpty(pwdPassword.Password))
-                    EnsureVerifyRowVisibleForManual();
-                else
-                {
-                    HideVerifyRow();
-                    HideVerifyError();
-                }
-
-                EvaluateAndDisplayVerifyMismatch();
-                UpdateStrengthPanelForPolicy();
-            }
-
-            private void pwdPassword_GotFocus(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-                if (_settingPwProgrammatically) return;
-                if (IsViewOnly) return;
-                if (chkBookmarkOnly.IsChecked == true) return;
-
-                if (!string.IsNullOrEmpty(pwdPassword.Password))
-                    UpdateStrengthPanelForPolicy();
-            }
-
-            private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-                if (IsViewOnly) return;
-
-                if (_verifyRevealed)
-                    txtVerifyPlain.Text = pwdVerify.Password;
-
-                TouchRevealTimerIfNeeded();
-
-                btnToggleVerifyReveal.Visibility = string.IsNullOrEmpty(pwdVerify.Password)
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
-
-                if (string.IsNullOrEmpty(pwdVerify.Password))
-                    HideVerifyPassword();
-
-                EvaluateAndDisplayVerifyMismatch();
-            }
-
-            private void ShowMainPassword()
-            {
-                txtPasswordPlain.Text = pwdPassword.Password;
-                txtPasswordPlain.Visibility = Visibility.Visible;
-                pwdPassword.Visibility = Visibility.Collapsed;
-                _mainRevealed = true;
-            }
-
-            private void HideMainPassword()
-            {
-                UICleaner.Clear(txtPasswordPlain);
-                txtPasswordPlain.Visibility = Visibility.Collapsed;
-                pwdPassword.Visibility = Visibility.Visible;
-                _mainRevealed = false;
-            }
-
-            private void ShowVerifyPassword()
-            {
-                txtVerifyPlain.Text = pwdVerify.Password;
-                txtVerifyPlain.Visibility = Visibility.Visible;
-                pwdVerify.Visibility = Visibility.Collapsed;
-                _verifyRevealed = true;
-            }
-
-            private void HideVerifyPassword()
-            {
-                UICleaner.Clear(txtVerifyPlain);
-                txtVerifyPlain.Visibility = Visibility.Collapsed;
-                pwdVerify.Visibility = Visibility.Visible;
-                _verifyRevealed = false;
-            }
-
-            private void SetPassword(string value)
-            {
-                pwdPassword.Password = value;
-
-                if (_mainRevealed)
-                    txtPasswordPlain.Text = value;
-
+                HideStrengthRow();
                 HideVerifyRow();
                 HideVerifyError();
+            }
+            catch
+            {
+                PasswordValidationFailed?.Invoke(this, "Password generator failed.");
+            }
+        }
 
-                UpdateCopyButtonStates();
+        private void BtnCopyPassword_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+            if (chkBookmarkOnly.IsChecked == true) return;
+
+            var pw = pwdPassword.Password;
+            if (string.IsNullOrEmpty(pw)) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(pw, out _, ClipboardTtl, tag: "BASIC.PW");
+        }
+
+        private void BtnCopyUsername_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var user = (txtUsername.Text ?? string.Empty).Trim();
+            if (user.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(user, out _, ClipboardTtl, tag: "BASIC.USER");
+        }
+
+        private void BtnCopyUrl_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var url = (txtUrl.Text ?? string.Empty).Trim();
+            if (url.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(url, out _, ClipboardTtl, tag: "BASIC.URL");
+        }
+
+        private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_mainRevealed) HideMainPassword();
+            else ShowMainPassword();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void BtnToggleVerifyReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(pwdVerify.Password))
+                return;
+
+            if (_verifyRevealed) HideVerifyPassword();
+            else ShowVerifyPassword();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void PwdPassword_PreviewKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (_settingPwProgrammatically) return;
+            if (_isPopulating) return;
+            if (IsViewOnly) { e.Handled = true; return; }
+
+            bool pasteCombo =
+                (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) ||
+                (e.Key == Key.Insert && (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
+
+            if (pasteCombo)
+            {
+                HideVerifyRow();
+                HideVerifyError();
+            }
+        }
+
+        private void pwdPassword_PasswordChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+
+            if (_mainRevealed)
+                txtPasswordPlain.Text = pwdPassword.Password;
+
+            TouchRevealTimerIfNeeded();
+
+            UpdateCopyButtonStates();
+
+            if (IsViewOnly) return;
+
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                HideStrengthRow();
+                HideVerifyRow();
+                HideVerifyError();
+                return;
             }
 
-            private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
+            if (_settingPwProgrammatically) return;
+
+            if (!string.IsNullOrEmpty(pwdPassword.Password))
+                EnsureVerifyRowVisibleForManual();
+            else
             {
-                error = string.Empty;
+                HideVerifyRow();
+                HideVerifyError();
+            }
 
-                if (IsViewOnly)
-                {
-                    error = "View-only mode.";
-                    return false;
-                }
+            EvaluateAndDisplayVerifyMismatch();
+            UpdateStrengthPanelForPolicy();
+        }
 
-                if (isBookmarkOnly)
-                {
-                    HideStrengthRow();
-                    HideVerifyRow();
-                    HideVerifyError();
-                    return true;
-                }
+        private void pwdPassword_GotFocus(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (_settingPwProgrammatically) return;
+            if (IsViewOnly) return;
+            if (chkBookmarkOnly.IsChecked == true) return;
 
-                var pw = pwdPassword.Password ?? string.Empty;
-
-                if (string.IsNullOrEmpty(pw))
-                {
-                    HideStrengthRow();
-                    ShowVerifyError("Password is required.");
-                    return false;
-                }
-
-                if (VerifyRow.Visibility == Visibility.Visible)
-                {
-                    var verify = pwdVerify.Password ?? string.Empty;
-                    if (!string.Equals(pw, verify, StringComparison.Ordinal))
-                    {
-                        error = "Passwords do not match.";
-                        ShowVerifyError(error);
-                        return false;
-                    }
-                }
-
+            if (!string.IsNullOrEmpty(pwdPassword.Password))
                 UpdateStrengthPanelForPolicy();
-                if (!SecurePassword.IsPasswordValid(pw, pw, out _))
+        }
+
+        private void pwdVerify_PasswordChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
+
+            if (_verifyRevealed)
+                txtVerifyPlain.Text = pwdVerify.Password;
+
+            TouchRevealTimerIfNeeded();
+
+            btnToggleVerifyReveal.Visibility = string.IsNullOrEmpty(pwdVerify.Password)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+            if (string.IsNullOrEmpty(pwdVerify.Password))
+                HideVerifyPassword();
+
+            EvaluateAndDisplayVerifyMismatch();
+        }
+
+        private void ShowMainPassword()
+        {
+            txtPasswordPlain.Text = pwdPassword.Password;
+            txtPasswordPlain.Visibility = Visibility.Visible;
+            pwdPassword.Visibility = Visibility.Collapsed;
+            _mainRevealed = true;
+        }
+
+        private void HideMainPassword()
+        {
+            UICleaner.Clear(txtPasswordPlain);
+            txtPasswordPlain.Visibility = Visibility.Collapsed;
+            pwdPassword.Visibility = Visibility.Visible;
+            _mainRevealed = false;
+        }
+
+        private void ShowVerifyPassword()
+        {
+            txtVerifyPlain.Text = pwdVerify.Password;
+            txtVerifyPlain.Visibility = Visibility.Visible;
+            pwdVerify.Visibility = Visibility.Collapsed;
+            _verifyRevealed = true;
+        }
+
+        private void HideVerifyPassword()
+        {
+            UICleaner.Clear(txtVerifyPlain);
+            txtVerifyPlain.Visibility = Visibility.Collapsed;
+            pwdVerify.Visibility = Visibility.Visible;
+            _verifyRevealed = false;
+        }
+
+        private void SetPassword(string value)
+        {
+            pwdPassword.Password = value;
+
+            if (_mainRevealed)
+                txtPasswordPlain.Text = value;
+
+            HideVerifyRow();
+            HideVerifyError();
+
+            UpdateCopyButtonStates();
+        }
+
+        private bool ValidatePasswordForSubmission(bool isBookmarkOnly, out string error)
+        {
+            error = string.Empty;
+
+            if (IsViewOnly)
+            {
+                error = "View-only mode.";
+                return false;
+            }
+
+            if (isBookmarkOnly)
+            {
+                HideStrengthRow();
+                HideVerifyRow();
+                HideVerifyError();
+                return true;
+            }
+
+            var pw = pwdPassword.Password ?? string.Empty;
+
+            if (string.IsNullOrEmpty(pw))
+            {
+                HideStrengthRow();
+                ShowVerifyError("Password is required.");
+                return false;
+            }
+
+            if (VerifyRow.Visibility == Visibility.Visible)
+            {
+                var verify = pwdVerify.Password ?? string.Empty;
+                if (!string.Equals(pw, verify, StringComparison.Ordinal))
                 {
-                    error = "Password does not meet policy requirements.";
+                    error = "Passwords do not match.";
                     ShowVerifyError(error);
                     return false;
                 }
+            }
 
-                HideVerifyError();
+            UpdateStrengthPanelForPolicy();
+            if (!SecurePassword.IsPasswordValid(pw, pw, out _))
+            {
+                error = "Password does not meet policy requirements.";
+                ShowVerifyError(error);
+                return false;
+            }
+
+            HideVerifyError();
+            HideStrengthRow();
+            return true;
+        }
+
+        private void ShowStrengthRow()
+        {
+            if (StrengthPanel.Visibility != Visibility.Visible)
+                StrengthPanel.Visibility = Visibility.Visible;
+        }
+
+        private void HideStrengthRow()
+        {
+            StrengthPanel.Visibility = Visibility.Collapsed;
+            PwStrengthBar.Value = 0;
+            PwStrengthText.Text = string.Empty;
+            PwTipsList.ItemsSource = null;
+        }
+
+        private void UpdateStrengthPanelForPolicy()
+        {
+            var pw = pwdPassword.Password ?? string.Empty;
+
+            if (string.IsNullOrEmpty(pw))
+            {
                 HideStrengthRow();
-                return true;
+                return;
             }
 
-            private void ShowStrengthRow()
+            int classes = 0;
+            if (pw.Any(char.IsLower)) classes++;
+            if (pw.Any(char.IsUpper)) classes++;
+            if (pw.Any(char.IsDigit)) classes++;
+            if (pw.Any(ch => !char.IsLetterOrDigit(ch))) classes++;
+
+            bool lengthOk = pw.Length >= 8;
+            bool policyPass = lengthOk && classes >= 3;
+
+            if (policyPass)
             {
-                if (StrengthPanel.Visibility != Visibility.Visible)
-                    StrengthPanel.Visibility = Visibility.Visible;
+                HideStrengthRow();
+                return;
             }
 
-            private void HideStrengthRow()
+            ShowStrengthRow();
+
+            int score = (lengthOk ? 1 : 0) + classes;
+            if (score > 4) score = 4;
+
+            PwStrengthBar.Value = score / 4.0;
+
+            string label = score switch
             {
-                StrengthPanel.Visibility = Visibility.Collapsed;
-                PwStrengthBar.Value = 0;
-                PwStrengthText.Text = string.Empty;
-                PwTipsList.ItemsSource = null;
-            }
+                0 or 1 => "Very weak",
+                2 => "Weak",
+                3 => "Good",
+                4 => "Strong",
+                _ => "Weak"
+            };
+            PwStrengthText.Text = $"Password strength: {label} ({pw.Length} chars)";
 
-            private void UpdateStrengthPanelForPolicy()
+            var tips = new List<string>();
+            if (!lengthOk) tips.Add("Use at least 8 characters.");
+            if (!pw.Any(char.IsLower)) tips.Add("Add a lowercase letter.");
+            if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
+            if (!pw.Any(char.IsDigit)) tips.Add("Add a digit.");
+            if (!pw.Any(ch => !char.IsLetterOrDigit(ch))) tips.Add("Add a special character.");
+            PwTipsList.ItemsSource = tips;
+        }
+
+        private void EnsureVerifyRowVisibleForManual()
+        {
+            if (VerifyRow.Visibility == Visibility.Visible)
+                return;
+
+            ShowVerifyRow();
+        }
+
+        private void ShowVerifyRow()
+        {
+            VerifyRow.Visibility = Visibility.Visible;
+            lblVerifyPassword.Visibility = Visibility.Visible;
+
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtVerifyPlain);
+
+            HideVerifyPassword();
+            HideVerifyError();
+            btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
+        }
+
+        private void HideVerifyRow()
+        {
+            VerifyRow.Visibility = Visibility.Collapsed;
+            lblVerifyPassword.Visibility = Visibility.Collapsed;
+
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtVerifyPlain);
+
+            HideVerifyPassword();
+            HideVerifyError();
+            btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
+        }
+
+        private void EvaluateAndDisplayVerifyMismatch()
+        {
+            if (chkBookmarkOnly.IsChecked == true)
             {
-                var pw = pwdPassword.Password ?? string.Empty;
-
-                if (string.IsNullOrEmpty(pw))
-                {
-                    HideStrengthRow();
-                    return;
-                }
-
-                int classes = 0;
-                if (pw.Any(char.IsLower)) classes++;
-                if (pw.Any(char.IsUpper)) classes++;
-                if (pw.Any(char.IsDigit)) classes++;
-                if (pw.Any(ch => !char.IsLetterOrDigit(ch))) classes++;
-
-                bool lengthOk = pw.Length >= 8;
-                bool policyPass = lengthOk && classes >= 3;
-
-                if (policyPass)
-                {
-                    HideStrengthRow();
-                    return;
-                }
-
-                ShowStrengthRow();
-
-                int score = (lengthOk ? 1 : 0) + classes;
-                if (score > 4) score = 4;
-
-                PwStrengthBar.Value = score / 4.0;
-
-                string label = score switch
-                {
-                    0 or 1 => "Very weak",
-                    2 => "Weak",
-                    3 => "Good",
-                    4 => "Strong",
-                    _ => "Weak"
-                };
-                PwStrengthText.Text = $"Password strength: {label} ({pw.Length} chars)";
-
-                var tips = new List<string>();
-                if (!lengthOk) tips.Add("Use at least 8 characters.");
-                if (!pw.Any(char.IsLower)) tips.Add("Add a lowercase letter.");
-                if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
-                if (!pw.Any(char.IsDigit)) tips.Add("Add a digit.");
-                if (!pw.Any(ch => !char.IsLetterOrDigit(ch))) tips.Add("Add a special character.");
-                PwTipsList.ItemsSource = tips;
-            }
-
-            private void EnsureVerifyRowVisibleForManual()
-            {
-                if (VerifyRow.Visibility == Visibility.Visible)
-                    return;
-
-                ShowVerifyRow();
-            }
-
-            private void ShowVerifyRow()
-            {
-                VerifyRow.Visibility = Visibility.Visible;
-                lblVerifyPassword.Visibility = Visibility.Visible;
-
-                UICleaner.Clear(pwdVerify);
-                UICleaner.Clear(txtVerifyPlain);
-
-                HideVerifyPassword();
                 HideVerifyError();
-                btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
+                return;
             }
 
-            private void HideVerifyRow()
+            if (VerifyRow.Visibility != Visibility.Visible)
             {
-                VerifyRow.Visibility = Visibility.Collapsed;
-                lblVerifyPassword.Visibility = Visibility.Collapsed;
-
-                UICleaner.Clear(pwdVerify);
-                UICleaner.Clear(txtVerifyPlain);
-
-                HideVerifyPassword();
                 HideVerifyError();
-                btnToggleVerifyReveal.Visibility = Visibility.Collapsed;
+                return;
             }
 
-            private void EvaluateAndDisplayVerifyMismatch()
+            var pw = pwdPassword.Password ?? string.Empty;
+            var verify = pwdVerify.Password ?? string.Empty;
+
+            if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
+                ShowVerifyError("Passwords do not match.");
+            else
+                HideVerifyError();
+        }
+
+        private void ShowVerifyError(string message)
+        {
+            VerifyErrorText.Text = message ?? string.Empty;
+            VerifyErrorPanel.Visibility = Visibility.Visible;
+        }
+
+        private void HideVerifyError()
+        {
+            VerifyErrorText.Text = string.Empty;
+            VerifyErrorPanel.Visibility = Visibility.Collapsed;
+        }
+
+        /* ======================= PIN ======================= */
+
+        private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            if (_isPopulating) { e.Handled = true; return; }
+            if (IsViewOnly) { e.Handled = true; return; }
+
+            if (string.IsNullOrEmpty(e.Text)) { e.Handled = true; return; }
+
+            foreach (char c in e.Text)
             {
-                if (chkBookmarkOnly.IsChecked == true)
-                {
-                    HideVerifyError();
-                    return;
-                }
-
-                if (VerifyRow.Visibility != Visibility.Visible)
-                {
-                    HideVerifyError();
-                    return;
-                }
-
-                var pw = pwdPassword.Password ?? string.Empty;
-                var verify = pwdVerify.Password ?? string.Empty;
-
-                if (!string.IsNullOrEmpty(verify) && !string.Equals(pw, verify, StringComparison.Ordinal))
-                    ShowVerifyError("Passwords do not match.");
-                else
-                    HideVerifyError();
+                if (!char.IsDigit(c)) { e.Handled = true; return; }
             }
 
-            private void ShowVerifyError(string message)
+            if (sender is PasswordBox pb)
             {
-                VerifyErrorText.Text = message ?? string.Empty;
-                VerifyErrorPanel.Visibility = Visibility.Visible;
-            }
-
-            private void HideVerifyError()
-            {
-                VerifyErrorText.Text = string.Empty;
-                VerifyErrorPanel.Visibility = Visibility.Collapsed;
-            }
-
-            /* ======================= PIN ======================= */
-
-            private void Pin_PreviewTextInput(object sender, TextCompositionEventArgs e)
-            {
-                if (_isPopulating) { e.Handled = true; return; }
-                if (IsViewOnly) { e.Handled = true; return; }
-
-                if (string.IsNullOrEmpty(e.Text)) { e.Handled = true; return; }
-
-                foreach (char c in e.Text)
-                {
-                    if (!char.IsDigit(c)) { e.Handled = true; return; }
-                }
-
-                if (sender is PasswordBox pb)
-                {
-                    if ((pb.Password?.Length ?? 0) + e.Text.Length > PinMaxLen)
-                    {
-                        e.Handled = true;
-                        return;
-                    }
-                }
-
-                e.Handled = false;
-            }
-
-            private void Pin_PreviewKeyDown(object sender, KeyEventArgs e)
-            {
-                if (_isPopulating) { e.Handled = true; return; }
-                if (IsViewOnly) { e.Handled = true; return; }
-
-                bool ctrlPaste = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
-                                 (e.Key == Key.V || e.Key == Key.Insert);
-                bool shiftInsert = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
-                                   e.Key == Key.Insert;
-
-                if (ctrlPaste || shiftInsert)
+                if ((pb.Password?.Length ?? 0) + e.Text.Length > PinMaxLen)
                 {
                     e.Handled = true;
                     return;
                 }
             }
 
-            private void Pin_Pasting(object sender, DataObjectPastingEventArgs e)
+            e.Handled = false;
+        }
+
+        private void Pin_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (_isPopulating) { e.Handled = true; return; }
+            if (IsViewOnly) { e.Handled = true; return; }
+
+            bool ctrlPaste = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+                             (e.Key == Key.V || e.Key == Key.Insert);
+            bool shiftInsert = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift &&
+                               e.Key == Key.Insert;
+
+            if (ctrlPaste || shiftInsert)
             {
-                if (_isPopulating) { e.CancelCommand(); return; }
-                if (IsViewOnly) { e.CancelCommand(); return; }
+                e.Handled = true;
+                return;
+            }
+        }
 
-                if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
-                {
-                    e.CancelCommand();
-                    return;
-                }
+        private void Pin_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            if (_isPopulating) { e.CancelCommand(); return; }
+            if (IsViewOnly) { e.CancelCommand(); return; }
 
-                string paste = (e.SourceDataObject.GetData(DataFormats.UnicodeText) as string) ?? "";
-                paste = paste.Trim();
-
-                if (paste.Length == 0) { e.CancelCommand(); return; }
-
-                foreach (char c in paste)
-                {
-                    if (!char.IsDigit(c)) { e.CancelCommand(); return; }
-                }
-
-                if (sender is not PasswordBox pb) { e.CancelCommand(); return; }
-
-                int remaining = PinMaxLen - (pb.Password?.Length ?? 0);
-                if (remaining <= 0) { e.CancelCommand(); return; }
-
-                if (paste.Length > remaining)
-                {
-                    paste = paste.Substring(0, remaining);
-                    e.DataObject = new DataObject(DataFormats.UnicodeText, paste);
-                }
+            if (!e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
+            {
+                e.CancelCommand();
+                return;
             }
 
-            private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
+            string paste = (e.SourceDataObject.GetData(DataFormats.UnicodeText) as string) ?? "";
+            paste = paste.Trim();
+
+            if (paste.Length == 0) { e.CancelCommand(); return; }
+
+            foreach (char c in paste)
             {
-                if (_isPopulating) return;
-                if (IsViewOnly) return;
-
-                if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
-                    pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
-
-                if (_pinRevealed)
-                    txtPinPlain.Text = pwdPin.Password;
-
-                TouchRevealTimerIfNeeded();
-
-                if (string.IsNullOrEmpty(pwdPin.Password))
-                {
-                    HidePin();
-                    ClearPinError();
-                }
-                else
-                {
-                    ValidatePin(forSubmit: false);
-                }
+                if (!char.IsDigit(c)) { e.CancelCommand(); return; }
             }
 
-            private void Pin_ToggleReveal_Click(object? sender, RoutedEventArgs e)
+            if (sender is not PasswordBox pb) { e.CancelCommand(); return; }
+
+            int remaining = PinMaxLen - (pb.Password?.Length ?? 0);
+            if (remaining <= 0) { e.CancelCommand(); return; }
+
+            if (paste.Length > remaining)
             {
-                if (string.IsNullOrEmpty(pwdPin.Password))
-                    return;
-
-                if (_pinRevealed) HidePin();
-                else ShowPin();
-
-                TouchRevealTimerIfNeeded();
+                paste = paste.Substring(0, remaining);
+                e.DataObject = new DataObject(DataFormats.UnicodeText, paste);
             }
+        }
 
-            private void ShowPin()
-            {
+        private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
+
+            if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
+                pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
+
+            if (_pinRevealed)
                 txtPinPlain.Text = pwdPin.Password;
-                txtPinPlain.Visibility = Visibility.Visible;
-                pwdPin.Visibility = Visibility.Collapsed;
-                _pinRevealed = true;
-            }
 
-            private void HidePin()
+            TouchRevealTimerIfNeeded();
+
+            if (string.IsNullOrEmpty(pwdPin.Password))
             {
-                UICleaner.Clear(txtPinPlain);
-                txtPinPlain.Visibility = Visibility.Collapsed;
-                pwdPin.Visibility = Visibility.Visible;
-                _pinRevealed = false;
+                HidePin();
+                ClearPinError();
             }
-
-            private bool ValidatePin(bool forSubmit)
+            else
             {
-                _ = forSubmit;
+                ValidatePin(forSubmit: false);
+            }
+        }
 
-                var raw = pwdPin.Password ?? string.Empty;
+        private void Pin_ToggleReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(pwdPin.Password))
+                return;
 
-                if (raw.Length == 0)
-                {
-                    ClearPinError();
-                    return true;
-                }
+            if (_pinRevealed) HidePin();
+            else ShowPin();
 
-                if (!raw.All(char.IsDigit))
-                {
-                    ShowPinError("PIN must contain digits only (0–9).");
-                    return false;
-                }
+            TouchRevealTimerIfNeeded();
+        }
 
-                if (raw.Length < PinMinLen || raw.Length > PinMaxLen)
-                {
-                    ShowPinError("PIN must be 4–6 digits.");
-                    return false;
-                }
+        private void ShowPin()
+        {
+            txtPinPlain.Text = pwdPin.Password;
+            txtPinPlain.Visibility = Visibility.Visible;
+            pwdPin.Visibility = Visibility.Collapsed;
+            _pinRevealed = true;
+        }
 
+        private void HidePin()
+        {
+            UICleaner.Clear(txtPinPlain);
+            txtPinPlain.Visibility = Visibility.Collapsed;
+            pwdPin.Visibility = Visibility.Visible;
+            _pinRevealed = false;
+        }
+
+        private bool ValidatePin(bool forSubmit)
+        {
+            _ = forSubmit;
+
+            var raw = pwdPin.Password ?? string.Empty;
+
+            if (raw.Length == 0)
+            {
                 ClearPinError();
                 return true;
             }
 
-            private void ShowPinError(string message)
+            if (!raw.All(char.IsDigit))
             {
-                PinErrorText.Text = message ?? string.Empty;
-                PinErrorPanel.Visibility = Visibility.Visible;
-
-                pwdPin.ToolTip = PinErrorText.Text;
-
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                pwdPin.Background = fill;
-            }
-
-            private void ClearPinError()
-            {
-                PinErrorText.Text = string.Empty;
-                PinErrorPanel.Visibility = Visibility.Collapsed;
-
-                pwdPin.ToolTip = null;
-                if (_pinDefaultBackground != null) pwdPin.Background = _pinDefaultBackground;
-                if (_pinDefaultBorderBrush != null) pwdPin.BorderBrush = _pinDefaultBorderBrush;
-            }
-
-            /* ======================= Email ======================= */
-
-            private void pwdEmail_PasswordChanged(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-
-                if (_emailRevealed)
-                    txtEmailPlain.Text = pwdEmail.Password;
-
-                TouchRevealTimerIfNeeded();
-
-                UpdateCopyButtonStates();
-
-                if (IsViewOnly) return;
-
-                if (string.IsNullOrEmpty(pwdEmail.Password))
-                {
-                    _lastEmailChecked = string.Empty;
-                    ClearEmailValidation();
-                    HideEmail();
-                }
-            }
-
-            private void pwdEmail_LostFocus(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-                if (IsViewOnly) return;
-
-                var s = (pwdEmail.Password ?? string.Empty).Trim();
-
-                if (s.Length == 0)
-                {
-                    ClearEmailValidation();
-                    _lastEmailChecked = string.Empty;
-                    return;
-                }
-
-                if (string.Equals(s, _lastEmailChecked, StringComparison.Ordinal))
-                    return;
-
-                _lastEmailChecked = s;
-
-                var result = EmailValidator.IsLikelyEmail(s, out var message);
-                if (result == EmailCheck.Ok)
-                {
-                    MarkEmailValid();
-                    NormalizeUsernameFromEmailIfEmpty();
-                }
-                else
-                {
-                    MarkEmailInvalid(message);
-                }
-            }
-
-            private void BtnCopyEmail_Click(object? sender, RoutedEventArgs e)
-            {
-                if (!IsViewOnly) return;
-
-                var email = (pwdEmail.Password ?? string.Empty).Trim();
-                if (email.Length == 0) return;
-
-                _ = ClipboardHelper.TryCopySensitiveText(email, out _, ClipboardTtl, tag: "BASIC.EMAIL");
-            }
-
-            private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
-            {
-                if (_emailRevealed) HideEmail();
-                else ShowEmail();
-
-                TouchRevealTimerIfNeeded();
-            }
-
-            private void ShowEmail()
-            {
-                txtEmailPlain.Text = pwdEmail.Password;
-                txtEmailPlain.Visibility = Visibility.Visible;
-                pwdEmail.Visibility = Visibility.Collapsed;
-                _emailRevealed = true;
-            }
-
-            private void HideEmail()
-            {
-                UICleaner.Clear(txtEmailPlain);
-                txtEmailPlain.Visibility = Visibility.Collapsed;
-                pwdEmail.Visibility = Visibility.Visible;
-                _emailRevealed = false;
-            }
-
-            private bool ValidateEmailForSubmit()
-            {
-                if (IsViewOnly) return true;
-
-                var s = (pwdEmail.Password ?? string.Empty).Trim();
-
-                if (s.Length == 0)
-                {
-                    ClearEmailValidation();
-                    _lastEmailChecked = string.Empty;
-                    return true;
-                }
-
-                var result = EmailValidator.IsLikelyEmail(s, out var message);
-                if (result == EmailCheck.Ok)
-                {
-                    MarkEmailValid();
-                    _lastEmailChecked = s;
-                    return true;
-                }
-
-                MarkEmailInvalid(message);
-                _lastEmailChecked = s;
+                ShowPinError("PIN must contain digits only (0–9).");
                 return false;
             }
 
-            private void MarkEmailValid()
+            if (raw.Length < PinMinLen || raw.Length > PinMaxLen)
             {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
-
-                pwdEmail.ToolTip = null;
-                if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+                ShowPinError("PIN must be 4–6 digits.");
+                return false;
             }
 
-            private void MarkEmailInvalid(string message)
+            ClearPinError();
+            return true;
+        }
+
+        private void ShowPinError(string message)
+        {
+            PinErrorText.Text = message ?? string.Empty;
+            PinErrorPanel.Visibility = Visibility.Visible;
+
+            pwdPin.ToolTip = PinErrorText.Text;
+
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            pwdPin.Background = fill;
+        }
+
+        private void ClearPinError()
+        {
+            PinErrorText.Text = string.Empty;
+            PinErrorPanel.Visibility = Visibility.Collapsed;
+
+            pwdPin.ToolTip = null;
+            if (_pinDefaultBackground != null) pwdPin.Background = _pinDefaultBackground;
+            if (_pinDefaultBorderBrush != null) pwdPin.BorderBrush = _pinDefaultBorderBrush;
+        }
+
+        /* ======================= Email ======================= */
+
+        private void pwdEmail_PasswordChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+
+            if (_emailRevealed)
+                txtEmailPlain.Text = pwdEmail.Password;
+
+            TouchRevealTimerIfNeeded();
+
+            UpdateCopyButtonStates();
+
+            if (IsViewOnly) return;
+
+            if (string.IsNullOrEmpty(pwdEmail.Password))
             {
-                EmailErrorText.Text = string.IsNullOrWhiteSpace(message)
-                    ? "Please enter a valid email address."
-                    : message;
+                _lastEmailChecked = string.Empty;
+                ClearEmailValidation();
+                HideEmail();
+            }
+        }
 
-                EmailErrorPanel.Visibility = Visibility.Visible;
+        private void pwdEmail_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
 
-                pwdEmail.ToolTip = EmailErrorText.Text;
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
 
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                pwdEmail.Background = fill;
+            if (s.Length == 0)
+            {
+                ClearEmailValidation();
+                _lastEmailChecked = string.Empty;
+                return;
             }
 
-            private void ClearEmailValidation()
-            {
-                EmailErrorText.Text = string.Empty;
-                EmailErrorPanel.Visibility = Visibility.Collapsed;
+            if (string.Equals(s, _lastEmailChecked, StringComparison.Ordinal))
+                return;
 
-                pwdEmail.ToolTip = null;
-                if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
-                if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+            _lastEmailChecked = s;
+
+            var result = EmailValidator.IsLikelyEmail(s, out var message);
+            if (result == EmailCheck.Ok)
+            {
+                MarkEmailValid();
+                NormalizeUsernameFromEmailIfEmpty();
+            }
+            else
+            {
+                MarkEmailInvalid(message);
+            }
+        }
+
+        private void BtnCopyEmail_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var email = (pwdEmail.Password ?? string.Empty).Trim();
+            if (email.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(email, out _, ClipboardTtl, tag: "BASIC.EMAIL");
+        }
+
+        private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_emailRevealed) HideEmail();
+            else ShowEmail();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void ShowEmail()
+        {
+            txtEmailPlain.Text = pwdEmail.Password;
+            txtEmailPlain.Visibility = Visibility.Visible;
+            pwdEmail.Visibility = Visibility.Collapsed;
+            _emailRevealed = true;
+        }
+
+        private void HideEmail()
+        {
+            UICleaner.Clear(txtEmailPlain);
+            txtEmailPlain.Visibility = Visibility.Collapsed;
+            pwdEmail.Visibility = Visibility.Visible;
+            _emailRevealed = false;
+        }
+
+        private bool ValidateEmailForSubmit()
+        {
+            if (IsViewOnly) return true;
+
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
+
+            if (s.Length == 0)
+            {
+                ClearEmailValidation();
+                _lastEmailChecked = string.Empty;
+                return true;
             }
 
-            /* ======================= Phone ======================= */
-
-            private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
+            var result = EmailValidator.IsLikelyEmail(s, out var message);
+            if (result == EmailCheck.Ok)
             {
-                if (_isPopulating) return;
-                if (IsViewOnly) return;
-
-                ValidatePhoneNumber(forSubmit: false);
+                MarkEmailValid();
+                _lastEmailChecked = s;
+                return true;
             }
 
-            private void txtPhone_PasswordChanged(object sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
+            MarkEmailInvalid(message);
+            _lastEmailChecked = s;
+            return false;
+        }
 
-                if (_phoneRevealed)
-                    txtPhonePlain.Text = txtPhone.Password;
+        private void MarkEmailValid()
+        {
+            EmailErrorText.Text = string.Empty;
+            EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-                TouchRevealTimerIfNeeded();
+            pwdEmail.ToolTip = null;
+            if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+        }
 
-                UpdateCopyButtonStates();
+        private void MarkEmailInvalid(string message)
+        {
+            EmailErrorText.Text = string.IsNullOrWhiteSpace(message)
+                ? "Please enter a valid email address."
+                : message;
 
-                if (IsViewOnly) return;
+            EmailErrorPanel.Visibility = Visibility.Visible;
 
-                if (string.IsNullOrEmpty(txtPhone.Password))
-                    ClearPhoneError();
-            }
+            pwdEmail.ToolTip = EmailErrorText.Text;
 
-            private void BtnCopyPhone_Click(object? sender, RoutedEventArgs e)
-            {
-                if (!IsViewOnly) return;
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            pwdEmail.Background = fill;
+        }
 
-                var phone = (txtPhone.Password ?? string.Empty).Trim();
-                if (phone.Length == 0) return;
+        private void ClearEmailValidation()
+        {
+            EmailErrorText.Text = string.Empty;
+            EmailErrorPanel.Visibility = Visibility.Collapsed;
 
-                _ = ClipboardHelper.TryCopySensitiveText(phone, out _, ClipboardTtl, tag: "BASIC.PHONE");
-            }
+            pwdEmail.ToolTip = null;
+            if (_emailDefaultBackground != null) pwdEmail.Background = _emailDefaultBackground;
+            if (_emailDefaultBorderBrush != null) pwdEmail.BorderBrush = _emailDefaultBorderBrush;
+        }
 
-            private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
-            {
-                if (_phoneRevealed) HidePhone();
-                else ShowPhone();
+        /* ======================= Phone ======================= */
 
-                TouchRevealTimerIfNeeded();
-            }
+        private void txtPhone_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
 
-            private void ShowPhone()
-            {
+            ValidatePhoneNumber(forSubmit: false);
+        }
+
+        private void txtPhone_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+
+            if (_phoneRevealed)
                 txtPhonePlain.Text = txtPhone.Password;
-                txtPhonePlain.Visibility = Visibility.Visible;
-                txtPhone.Visibility = Visibility.Collapsed;
-                _phoneRevealed = true;
-            }
 
-            private void HidePhone()
+            TouchRevealTimerIfNeeded();
+
+            UpdateCopyButtonStates();
+
+            if (IsViewOnly) return;
+
+            if (string.IsNullOrEmpty(txtPhone.Password))
+                ClearPhoneError();
+        }
+
+        private void BtnCopyPhone_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var phone = (txtPhone.Password ?? string.Empty).Trim();
+            if (phone.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(phone, out _, ClipboardTtl, tag: "BASIC.PHONE");
+        }
+
+        private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_phoneRevealed) HidePhone();
+            else ShowPhone();
+
+            TouchRevealTimerIfNeeded();
+        }
+
+        private void ShowPhone()
+        {
+            txtPhonePlain.Text = txtPhone.Password;
+            txtPhonePlain.Visibility = Visibility.Visible;
+            txtPhone.Visibility = Visibility.Collapsed;
+            _phoneRevealed = true;
+        }
+
+        private void HidePhone()
+        {
+            UICleaner.Clear(txtPhonePlain);
+            txtPhonePlain.Visibility = Visibility.Collapsed;
+            txtPhone.Visibility = Visibility.Visible;
+            _phoneRevealed = false;
+        }
+
+        private bool ValidatePhoneNumber(bool forSubmit)
+        {
+            if (IsViewOnly) return true;
+
+            _ = forSubmit;
+
+            var raw = txtPhone.Password ?? string.Empty;
+            var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
+            int len = digitsOnly.Length;
+
+            if (len == 0)
             {
-                UICleaner.Clear(txtPhonePlain);
-                txtPhonePlain.Visibility = Visibility.Collapsed;
-                txtPhone.Visibility = Visibility.Visible;
-                _phoneRevealed = false;
-            }
-
-            private bool ValidatePhoneNumber(bool forSubmit)
-            {
-                if (IsViewOnly) return true;
-
-                _ = forSubmit;
-
-                var raw = txtPhone.Password ?? string.Empty;
-                var digitsOnly = new string(raw.Where(char.IsDigit).ToArray());
-                int len = digitsOnly.Length;
-
-                if (len == 0)
-                {
-                    ClearPhoneError();
-                    return true;
-                }
-
-                if (len < 7)
-                {
-                    ShowPhoneError("Phone number appears too short. Please enter at least 7 digits or clear the field.");
-                    return false;
-                }
-
                 ClearPhoneError();
                 return true;
             }
 
-            private void ShowPhoneError(string message)
+            if (len < 7)
             {
-                PhoneErrorText.Text = message ?? string.Empty;
-                PhoneErrorPanel.Visibility = Visibility.Visible;
-
-                txtPhone.ToolTip = PhoneErrorText.Text;
-
-                var fill = TryFindResource("FieldErrorFill") as Brush
-                           ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
-                txtPhone.Background = fill;
+                ShowPhoneError("Phone number appears too short. Please enter at least 7 digits or clear the field.");
+                return false;
             }
 
-            private void ClearPhoneError()
-            {
-                PhoneErrorText.Text = string.Empty;
-                PhoneErrorPanel.Visibility = Visibility.Collapsed;
+            ClearPhoneError();
+            return true;
+        }
 
-                txtPhone.ToolTip = null;
-                if (_phoneDefaultBackground != null) txtPhone.Background = _phoneDefaultBackground;
-                if (_phoneDefaultBorderBrush != null) txtPhone.BorderBrush = _phoneDefaultBorderBrush;
+        private void ShowPhoneError(string message)
+        {
+            PhoneErrorText.Text = message ?? string.Empty;
+            PhoneErrorPanel.Visibility = Visibility.Visible;
+
+            txtPhone.ToolTip = PhoneErrorText.Text;
+
+            var fill = TryFindResource("FieldErrorFill") as Brush
+                       ?? new SolidColorBrush(Color.FromRgb(0xFF, 0xEE, 0xEE));
+            txtPhone.Background = fill;
+        }
+
+        private void ClearPhoneError()
+        {
+            PhoneErrorText.Text = string.Empty;
+            PhoneErrorPanel.Visibility = Visibility.Collapsed;
+
+            txtPhone.ToolTip = null;
+            if (_phoneDefaultBackground != null) txtPhone.Background = _phoneDefaultBackground;
+            if (_phoneDefaultBorderBrush != null) txtPhone.BorderBrush = _phoneDefaultBorderBrush;
+        }
+
+        /* ======================= Plain reveal overlays ======================= */
+
+        private void ClearPlainRevealOverlays()
+        {
+            UICleaner.Clear(txtPasswordPlain);
+            UICleaner.Clear(txtVerifyPlain);
+            UICleaner.Clear(txtPhonePlain);
+            UICleaner.Clear(txtPinPlain);
+            UICleaner.Clear(txtEmailPlain);
+        }
+
+        /* ======================= Default visuals caching ======================= */
+
+        private void CacheDefaultFieldVisualsIfNeeded()
+        {
+            _itemNameDefaultBorderBrush ??= txtItemName.BorderBrush;
+            _itemNameDefaultBackground ??= txtItemName.Background;
+
+            _emailDefaultBorderBrush ??= pwdEmail.BorderBrush;
+            _emailDefaultBackground ??= pwdEmail.Background;
+
+            _phoneDefaultBorderBrush ??= txtPhone.BorderBrush;
+            _phoneDefaultBackground ??= txtPhone.Background;
+
+            _pinDefaultBorderBrush ??= pwdPin.BorderBrush;
+            _pinDefaultBackground ??= pwdPin.Background;
+        }
+
+        /* ======================= UI event hooking ======================= */
+
+        private void HookUiEventsOnce()
+        {
+            if (_uiEventsHooked)
+                return;
+
+            btnEditPill.Click -= btnEditPill_Click;
+            btnEditPill.Click += btnEditPill_Click;
+
+            btnSubmit.Click -= btnSubmit_Click;
+            btnSubmit.Click += btnSubmit_Click;
+
+            btnCancel.Click -= btnCancel_Click;
+            btnCancel.Click += btnCancel_Click;
+
+            txtItemName.TextChanged -= txtItemName_TextChanged;
+            txtItemName.TextChanged += txtItemName_TextChanged;
+
+            // NEW: item name LostFocus triggers duplicate check (but never in view-only)
+            txtItemName.LostFocus -= txtItemName_LostFocus;
+            txtItemName.LostFocus += txtItemName_LostFocus;
+
+            txtUsername.TextChanged -= txtUsername_TextChanged;
+            txtUsername.TextChanged += txtUsername_TextChanged;
+
+            txtUrl.TextChanged -= txtUrl_TextChanged;
+            txtUrl.TextChanged += txtUrl_TextChanged;
+
+            chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked += chkBookmarkOnly_Changed;
+
+            pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
+            pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
+
+            pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
+            pwdPassword.PasswordChanged += pwdPassword_PasswordChanged;
+
+            pwdPassword.GotFocus -= pwdPassword_GotFocus;
+            pwdPassword.GotFocus += pwdPassword_GotFocus;
+
+            pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
+            pwdVerify.PasswordChanged += pwdVerify_PasswordChanged;
+
+            btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
+            btnTogglePasswordReveal.Click += BtnTogglePasswordReveal_Click;
+
+            btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
+            btnToggleVerifyReveal.Click += BtnToggleVerifyReveal_Click;
+
+            btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+            btnGeneratePassword.Click += BtnGeneratePassword_Click;
+
+            btnCopyPassword.Click -= BtnCopyPassword_Click;
+            btnCopyPassword.Click += BtnCopyPassword_Click;
+
+            btnCopyUsername.Click -= BtnCopyUsername_Click;
+            btnCopyUsername.Click += BtnCopyUsername_Click;
+
+            btnCopyUrl.Click -= BtnCopyUrl_Click;
+            btnCopyUrl.Click += BtnCopyUrl_Click;
+
+            pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
+            pwdPin.PreviewTextInput += Pin_PreviewTextInput;
+
+            pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
+            pwdPin.PreviewKeyDown += Pin_PreviewKeyDown;
+
+            pwdPin.PasswordChanged -= Pin_PasswordChanged;
+            pwdPin.PasswordChanged += Pin_PasswordChanged;
+
+            DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
+            DataObject.AddPastingHandler(pwdPin, Pin_Pasting);
+
+            btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
+            btnTogglePinReveal.Click += Pin_ToggleReveal_Click;
+
+            pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
+            pwdEmail.PasswordChanged += pwdEmail_PasswordChanged;
+
+            pwdEmail.LostFocus -= pwdEmail_LostFocus;
+            pwdEmail.LostFocus += pwdEmail_LostFocus;
+
+            btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
+            btnToggleEmailReveal.Click += BtnToggleEmailReveal_Click;
+
+            btnCopyEmail.Click -= BtnCopyEmail_Click;
+            btnCopyEmail.Click += BtnCopyEmail_Click;
+
+            txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
+            txtPhone.PasswordChanged += txtPhone_PasswordChanged;
+
+            txtPhone.LostFocus -= txtPhone_LostFocus;
+            txtPhone.LostFocus += txtPhone_LostFocus;
+
+            btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
+            btnTogglePhoneReveal.Click += BtnTogglePhoneReveal_Click;
+
+            btnCopyPhone.Click -= BtnCopyPhone_Click;
+            btnCopyPhone.Click += BtnCopyPhone_Click;
+
+            _uiEventsHooked = true;
+        }
+
+        private void UnhookUiEvents()
+        {
+            if (!_uiEventsHooked)
+                return;
+
+            btnEditPill.Click -= btnEditPill_Click;
+
+            btnSubmit.Click -= btnSubmit_Click;
+            btnCancel.Click -= btnCancel_Click;
+
+            txtItemName.TextChanged -= txtItemName_TextChanged;
+            txtItemName.LostFocus -= txtItemName_LostFocus;
+
+            txtUsername.TextChanged -= txtUsername_TextChanged;
+            txtUrl.TextChanged -= txtUrl_TextChanged;
+
+            chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
+            chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
+
+            pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
+            pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
+            pwdPassword.GotFocus -= pwdPassword_GotFocus;
+
+            pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
+
+            btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
+            btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
+            btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+            btnCopyPassword.Click -= BtnCopyPassword_Click;
+
+            btnCopyUsername.Click -= BtnCopyUsername_Click;
+            btnCopyUrl.Click -= BtnCopyUrl_Click;
+
+            pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
+            pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
+            pwdPin.PasswordChanged -= Pin_PasswordChanged;
+            DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
+            btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
+
+            pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
+            pwdEmail.LostFocus -= pwdEmail_LostFocus;
+            btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
+            btnCopyEmail.Click -= BtnCopyEmail_Click;
+
+            txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
+            txtPhone.LostFocus -= txtPhone_LostFocus;
+            btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
+            btnCopyPhone.Click -= BtnCopyPhone_Click;
+
+            _uiEventsHooked = false;
+        }
+
+        private void txtItemName_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            // While typing, we clear error only if non-empty.
+            // Duplicate check happens on LostFocus or submit.
+            if (!string.IsNullOrWhiteSpace(txtItemName.Text))
+            {
+                if (ItemNameErrorPanel.Visibility == Visibility.Visible)
+                    ClearItemNameError();
             }
 
-            /* ======================= Plain reveal overlays ======================= */
+            _lastNameChecked = string.Empty;
+        }
 
-            private void ClearPlainRevealOverlays()
-            {
-                UICleaner.Clear(txtPasswordPlain);
-                UICleaner.Clear(txtVerifyPlain);
-                UICleaner.Clear(txtPhonePlain);
-                UICleaner.Clear(txtPinPlain);
-                UICleaner.Clear(txtEmailPlain);
-            }
+        private void txtItemName_LostFocus(object? sender, RoutedEventArgs e)
+        {
+            if (_isPopulating) return;
+            if (IsViewOnly) return;
 
-            /* ======================= Default visuals caching ======================= */
+            _ = ValidateItemName(forSubmit: false);
+        }
 
-            private void CacheDefaultFieldVisualsIfNeeded()
-            {
-                _itemNameDefaultBorderBrush ??= txtItemName.BorderBrush;
-                _itemNameDefaultBackground ??= txtItemName.Background;
-
-                _emailDefaultBorderBrush ??= pwdEmail.BorderBrush;
-                _emailDefaultBackground ??= pwdEmail.Background;
-
-                _phoneDefaultBorderBrush ??= txtPhone.BorderBrush;
-                _phoneDefaultBackground ??= txtPhone.Background;
-
-                _pinDefaultBorderBrush ??= pwdPin.BorderBrush;
-                _pinDefaultBackground ??= pwdPin.Background;
-            }
-
-            /* ======================= UI event hooking ======================= */
-
-            private void HookUiEventsOnce()
-            {
-                if (_uiEventsHooked)
-                    return;
-
-                btnEditPill.Click -= btnEditPill_Click;
-                btnEditPill.Click += btnEditPill_Click;
-
-                btnSubmit.Click -= btnSubmit_Click;
-                btnSubmit.Click += btnSubmit_Click;
-
-                btnCancel.Click -= btnCancel_Click;
-                btnCancel.Click += btnCancel_Click;
-
-                txtItemName.TextChanged -= txtItemName_TextChanged;
-                txtItemName.TextChanged += txtItemName_TextChanged;
-
-                // NEW: item name LostFocus triggers duplicate check (but never in view-only)
-                txtItemName.LostFocus -= txtItemName_LostFocus;
-                txtItemName.LostFocus += txtItemName_LostFocus;
-
-                txtUsername.TextChanged -= txtUsername_TextChanged;
-                txtUsername.TextChanged += txtUsername_TextChanged;
-
-                txtUrl.TextChanged -= txtUrl_TextChanged;
-                txtUrl.TextChanged += txtUrl_TextChanged;
-
-                chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
-                chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
-                chkBookmarkOnly.Checked += chkBookmarkOnly_Changed;
-                chkBookmarkOnly.Unchecked += chkBookmarkOnly_Changed;
-
-                pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
-                pwdPassword.PreviewKeyDown += PwdPassword_PreviewKeyDown;
-
-                pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
-                pwdPassword.PasswordChanged += pwdPassword_PasswordChanged;
-
-                pwdPassword.GotFocus -= pwdPassword_GotFocus;
-                pwdPassword.GotFocus += pwdPassword_GotFocus;
-
-                pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
-                pwdVerify.PasswordChanged += pwdVerify_PasswordChanged;
-
-                btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
-                btnTogglePasswordReveal.Click += BtnTogglePasswordReveal_Click;
-
-                btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
-                btnToggleVerifyReveal.Click += BtnToggleVerifyReveal_Click;
-
-                btnGeneratePassword.Click -= BtnGeneratePassword_Click;
-                btnGeneratePassword.Click += BtnGeneratePassword_Click;
-
-                btnCopyPassword.Click -= BtnCopyPassword_Click;
-                btnCopyPassword.Click += BtnCopyPassword_Click;
-
-                btnCopyUsername.Click -= BtnCopyUsername_Click;
-                btnCopyUsername.Click += BtnCopyUsername_Click;
-
-                btnCopyUrl.Click -= BtnCopyUrl_Click;
-                btnCopyUrl.Click += BtnCopyUrl_Click;
-
-                pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
-                pwdPin.PreviewTextInput += Pin_PreviewTextInput;
-
-                pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
-                pwdPin.PreviewKeyDown += Pin_PreviewKeyDown;
-
-                pwdPin.PasswordChanged -= Pin_PasswordChanged;
-                pwdPin.PasswordChanged += Pin_PasswordChanged;
-
-                DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
-                DataObject.AddPastingHandler(pwdPin, Pin_Pasting);
-
-                btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
-                btnTogglePinReveal.Click += Pin_ToggleReveal_Click;
-
-                pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
-                pwdEmail.PasswordChanged += pwdEmail_PasswordChanged;
-
-                pwdEmail.LostFocus -= pwdEmail_LostFocus;
-                pwdEmail.LostFocus += pwdEmail_LostFocus;
-
-                btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
-                btnToggleEmailReveal.Click += BtnToggleEmailReveal_Click;
-
-                btnCopyEmail.Click -= BtnCopyEmail_Click;
-                btnCopyEmail.Click += BtnCopyEmail_Click;
-
-                txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
-                txtPhone.PasswordChanged += txtPhone_PasswordChanged;
-
-                txtPhone.LostFocus -= txtPhone_LostFocus;
-                txtPhone.LostFocus += txtPhone_LostFocus;
-
-                btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
-                btnTogglePhoneReveal.Click += BtnTogglePhoneReveal_Click;
-
-                btnCopyPhone.Click -= BtnCopyPhone_Click;
-                btnCopyPhone.Click += BtnCopyPhone_Click;
-
-                _uiEventsHooked = true;
-            }
-
-            private void UnhookUiEvents()
-            {
-                if (!_uiEventsHooked)
-                    return;
-
-                btnEditPill.Click -= btnEditPill_Click;
-
-                btnSubmit.Click -= btnSubmit_Click;
-                btnCancel.Click -= btnCancel_Click;
-
-                txtItemName.TextChanged -= txtItemName_TextChanged;
-                txtItemName.LostFocus -= txtItemName_LostFocus;
-
-                txtUsername.TextChanged -= txtUsername_TextChanged;
-                txtUrl.TextChanged -= txtUrl_TextChanged;
-
-                chkBookmarkOnly.Checked -= chkBookmarkOnly_Changed;
-                chkBookmarkOnly.Unchecked -= chkBookmarkOnly_Changed;
-
-                pwdPassword.PreviewKeyDown -= PwdPassword_PreviewKeyDown;
-                pwdPassword.PasswordChanged -= pwdPassword_PasswordChanged;
-                pwdPassword.GotFocus -= pwdPassword_GotFocus;
-
-                pwdVerify.PasswordChanged -= pwdVerify_PasswordChanged;
-
-                btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
-                btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
-                btnGeneratePassword.Click -= BtnGeneratePassword_Click;
-                btnCopyPassword.Click -= BtnCopyPassword_Click;
-
-                btnCopyUsername.Click -= BtnCopyUsername_Click;
-                btnCopyUrl.Click -= BtnCopyUrl_Click;
-
-                pwdPin.PreviewTextInput -= Pin_PreviewTextInput;
-                pwdPin.PreviewKeyDown -= Pin_PreviewKeyDown;
-                pwdPin.PasswordChanged -= Pin_PasswordChanged;
-                DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
-                btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
-
-                pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
-                pwdEmail.LostFocus -= pwdEmail_LostFocus;
-                btnToggleEmailReveal.Click -= BtnToggleEmailReveal_Click;
-                btnCopyEmail.Click -= BtnCopyEmail_Click;
-
-                txtPhone.PasswordChanged -= txtPhone_PasswordChanged;
-                txtPhone.LostFocus -= txtPhone_LostFocus;
-                btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
-                btnCopyPhone.Click -= BtnCopyPhone_Click;
-
-                _uiEventsHooked = false;
-            }
-
-            private void txtItemName_TextChanged(object? sender, TextChangedEventArgs e)
-            {
-                // While typing, we clear error only if non-empty.
-                // Duplicate check happens on LostFocus or submit.
-                if (!string.IsNullOrWhiteSpace(txtItemName.Text))
-                {
-                    if (ItemNameErrorPanel.Visibility == Visibility.Visible)
-                        ClearItemNameError();
-                }
-
-                _lastNameChecked = string.Empty;
-            }
-
-            private void txtItemName_LostFocus(object? sender, RoutedEventArgs e)
-            {
-                if (_isPopulating) return;
-                if (IsViewOnly) return;
-
-                _ = ValidateItemName(forSubmit: false);
-            }
-
-            private void txtUsername_TextChanged(object? sender, TextChangedEventArgs e)
-            {
-                if (IsViewOnly)
-                    UpdateCopyButtonStates();
-            }
-
-            private void txtUrl_TextChanged(object? sender, TextChangedEventArgs e)
-            {
-                if (IsViewOnly)
-                    UpdateCopyButtonStates();
-            }
-
-            private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
-            {
-                if (IsViewOnly)
-                {
-                    UpdateCopyButtonStates();
-                    return;
-                }
-
-                if (chkBookmarkOnly.IsChecked == true)
-                {
-                    HideStrengthRow();
-                    HideVerifyRow();
-                    HideVerifyError();
-                }
-
+        private void txtUsername_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (IsViewOnly)
                 UpdateCopyButtonStates();
+        }
+
+        private void txtUrl_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (IsViewOnly)
+                UpdateCopyButtonStates();
+        }
+
+        private void chkBookmarkOnly_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (IsViewOnly)
+            {
+                UpdateCopyButtonStates();
+                return;
             }
+
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                HideStrengthRow();
+                HideVerifyRow();
+                HideVerifyError();
+            }
+
+            UpdateCopyButtonStates();
         }
     }
+}
