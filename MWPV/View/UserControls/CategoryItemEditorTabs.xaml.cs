@@ -22,12 +22,12 @@
 //    - Accept => retry with allowDuplicate:true
 //    - Cancel => stop, no save
 //
-// NEW (THIS SESSION TASK):
-// - AFTER SIGNATURE CAPTURE AT SAVE-TIME ONLY (NOT on exit)
-//   Email, Phone, PIN:
-//   - Built from CURRENT UI plaintext values
-//   - Stored in SEDS as Base64 under CI.AfterSig.*
-//   - Emits DEBUG lines confirming capture
+// PASSWORD-ONLY FIX (THIS SESSION TASK):
+// - Existing item SaveAndExit:
+//   - Compare BEFORE password fingerprint (from DB, loaded by BasicPanel)
+//     vs AFTER password fingerprint (computed from current UI plaintext)
+//   - If SAME => SKIP duplicate check + SKIP password history insert (bug fix)
+//   - If DIFFERENT => run existing duplicate-password flow as-is (popup logic unchanged)
 // -----------------------------------------------------------------------------
 
 
@@ -43,6 +43,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Security.Cryptography;        // CryptographicOperations.FixedTimeEquals
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -79,7 +80,7 @@ namespace MWPV.View.UserControls
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
 
         // ============================================================
-        // AFTER SIGNATURES (SAVE-TIME ONLY)
+        // AFTER SIGNATURES (Email/Phone/PIN only - existing behavior)
         // ============================================================
 
         // Purposes: domain separation, stable forever
@@ -91,6 +92,11 @@ namespace MWPV.View.UserControls
         private const string SedsKey_AfterSig_Email = "CI.AfterSig.Email";
         private const string SedsKey_AfterSig_Phone = "CI.AfterSig.Phone";
         private const string SedsKey_AfterSig_Pin = "CI.AfterSig.Pin";
+
+        // ============================================================
+        // PASSWORD FINGERPRINT COMPARE (THIS SESSION)
+        // ============================================================
+        private const string Purpose_PwFingerprint = SensitiveValueSignature.DefaultPurpose; // MUST match DB stored sig algorithm
 
         public CategoryItemEditorTabs()
         {
@@ -183,11 +189,6 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /// <summary>
-        /// Save-time ONLY: build AFTER signatures from the current UI plaintext fields.
-        /// No decrypt is needed (we already have the live UI value).
-        /// This is intentionally separate from exit/close wipes: after-sig is for save comparisons.
-        /// </summary>
         private bool TryCaptureAfterSignaturesFromUi(string? emailPlain, string? phonePlain, string? pinPlain)
         {
             try
@@ -209,6 +210,80 @@ namespace MWPV.View.UserControls
                 // Fail-safe: clear keys to avoid stale comparisons
                 ClearAfterSignatureSedsKeys_BestEffort();
                 return false;
+            }
+        }
+
+        /* ======================= PASSWORD COMPARE HELPERS (THIS SESSION) ======================= */
+
+        private static byte[] ComputePasswordFingerprint(string passwordPlain)
+        {
+            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+            try
+            {
+                // MUST match DB stored sig algorithm (HMAC + purpose)
+                return SensitiveValueSignature.Compute(passwordPlain ?? string.Empty, keyBytes, purpose: Purpose_PwFingerprint);
+            }
+            finally
+            {
+                SensitiveDataCleaner.Zero(keyBytes);
+            }
+        }
+
+        private static bool SigEquals(byte[] a, byte[] b)
+        {
+            if (a == null || b == null) return false;
+            if (a.Length != b.Length) return false;
+
+            // Fixed-time compare
+            return CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        /// <summary>
+        /// EXISTING ITEMS ONLY:
+        /// - If password fingerprint has NOT changed => do NOT run duplicate check and do NOT insert PW history.
+        /// - If changed => proceed (duplicate check runs inside service insert).
+        /// </summary>
+        private bool ShouldInsertPasswordHistoryForExistingItem(bool isBookmarkOnly, string? passwordPlain)
+        {
+            if (isBookmarkOnly)
+                return false;
+
+            if (BasicPanel == null)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(passwordPlain))
+                return false;
+
+            // BEFORE comes from DB stored sig loaded by BasicPanel on open.
+            byte[]? before = null;
+            try { before = BasicPanel.GetOriginalPasswordFingerprintCopy(); }
+            catch { before = null; }
+
+            // If we have no BEFORE baseline, treat as "changed" so the normal path runs.
+            if (before == null || before.Length == 0)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][PW-SIG] BEFORE missing => treat as CHANGED (will run dup-check + insert).");
+#endif
+                return true;
+            }
+
+            byte[] after = ComputePasswordFingerprint(passwordPlain!);
+
+            try
+            {
+                bool same = SigEquals(before, after);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][PW-SIG] COMPARE beforeLen={before.Length} afterLen={after.Length} SAME={(same ? "YES" : "NO")}");
+#endif
+                // If SAME => no change => bug fix: skip insert + skip duplicate search
+                return !same;
+            }
+            finally
+            {
+                SensitiveDataCleaner.Zero(before);
+                SensitiveDataCleaner.Zero(after);
             }
         }
 
@@ -246,7 +321,6 @@ namespace MWPV.View.UserControls
 
         public void ConfigureForEdit(int categoryKey, string categoryName, object existingItem)
         {
-            // Existence comes from SEDS, not from this method.
             _categoryKey = categoryKey;
             _categoryName = categoryName;
 
@@ -258,8 +332,6 @@ namespace MWPV.View.UserControls
 #endif
 
             InitializeUiForOpen();
-
-            // Future: load existing item into panels, then force view mode in BasicPanel itself.
         }
 
         private void InitializeUiForOpen()
@@ -281,12 +353,10 @@ namespace MWPV.View.UserControls
 
             if (_hasPersistedId)
             {
-                // Existing item: do NOT clear. Default is "view" handled by BasicPanel itself.
                 try { BasicPanel?.ResetUiState(); } catch { }
             }
             else
             {
-                // New item: clear + reset.
                 try { BasicPanel?.ClearForm(); } catch { }
                 try { BasicPanel?.ResetUiState(); } catch { }
             }
@@ -483,7 +553,10 @@ namespace MWPV.View.UserControls
                     Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK itemId={itemId} (existing) after-signatures captured.");
 #endif
 
+                    // ==========================================================
                     // Password History Insert (EXISTING ITEM) - ONLY ON SAVE
+                    // BUG FIX: only if password fingerprint CHANGED
+                    // ==========================================================
                     if (isBookmarkOnly)
                     {
 #if DEBUG
@@ -498,15 +571,26 @@ namespace MWPV.View.UserControls
                         Debug.WriteLine($"[ITEM-TABS][PW-HIST] Existing SaveAndExit passwordCheck itemId={itemId} pwIsNull={(pw == null)} pwIsWhite={(string.IsNullOrWhiteSpace(pw))}");
 #endif
 
-                        if (!string.IsNullOrWhiteSpace(pw))
+                        // THE FIX:
+                        // - If password fingerprint is unchanged => do NOT run duplicate check, do NOT insert history.
+                        bool shouldInsert = ShouldInsertPasswordHistoryForExistingItem(isBookmarkOnly: false, passwordPlain: pw);
+
+                        if (!shouldInsert)
+                        {
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (unchanged fingerprint) itemId={itemId}");
+#endif
+                        }
+                        else
                         {
                             long pwHistId;
 
                             try
                             {
+                                // Duplicate check happens inside service insert.
                                 pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
                                     itemId: itemId,
-                                    passwordPlain: pw,
+                                    passwordPlain: pw!,
                                     isBookmarkOnly: false,
                                     allowDuplicate: false);
                             }
@@ -531,7 +615,7 @@ namespace MWPV.View.UserControls
 
                                 pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
                                     itemId: itemId,
-                                    passwordPlain: pw,
+                                    passwordPlain: pw!,
                                     isBookmarkOnly: false,
                                     allowDuplicate: true);
                             }
@@ -547,12 +631,6 @@ namespace MWPV.View.UserControls
 
 #if DEBUG
                             Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] OK itemId={itemId} pwHistId={pwHistId}");
-#endif
-                        }
-                        else
-                        {
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (empty/no change) itemId={itemId}");
 #endif
                         }
                     }
@@ -702,7 +780,6 @@ namespace MWPV.View.UserControls
 #endif
 
                 // AFTER signatures: SAVE-TIME ONLY (new item insert)
-                // We capture after signatures immediately after a successful insert.
                 if (trigger == PersistTrigger.SaveAndExit)
                 {
                     if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
@@ -744,15 +821,11 @@ namespace MWPV.View.UserControls
 
         private bool PromptDuplicatePasswordAccept()
         {
-            // Message is intentionally generic (no hints, no item/category/site).
             const string title = "Duplicate Password Warning";
             const string body =
                 "This password is currently used or has been previously used.\n\n" +
                 "Accept to continue.";
 
-            // We show it using Panel.xaml's modal overlay:
-            //   Border x:Name="PopupOverlayHost"
-            //   ContentControl x:Name="PopupOverlayContent"
             try
             {
                 var hostPanel = FindPanelHost();
@@ -771,7 +844,7 @@ namespace MWPV.View.UserControls
                 if (overlayHost == null || overlayContent == null)
                 {
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][POPUP] PopupOverlayHost/PopupOverlayContent not found in Panel. Falling back to MessageBox.");
+                    Debug.WriteLine("[ITEM-TABS][POPUP] PopupOverlayHost/PopupOverlayContent not found. Falling back to MessageBox.");
 #endif
                     var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
                     return r == MessageBoxResult.OK;
@@ -782,7 +855,6 @@ namespace MWPV.View.UserControls
                 var popup = new PopupDialog();
                 popup.ConfigureWarningAcceptCancel(title, body);
 
-                // Modal loop (no Window): nested dispatcher frame
                 var frame = new DispatcherFrame();
 
                 popup.Completed += result =>
@@ -798,7 +870,6 @@ namespace MWPV.View.UserControls
                 overlayContent.Content = popup;
                 overlayHost.Visibility = Visibility.Visible;
 
-                // Focus it (feels "forced")
                 popup.Focus();
                 Keyboard.Focus(popup);
 
@@ -818,8 +889,6 @@ namespace MWPV.View.UserControls
 
         private MWPV.View.UserControls.Panel? FindPanelHost()
         {
-            // Walk up the visual tree to locate our main "Panel" usercontrol host.
-            // This avoids name collision with System.Windows.Controls.Panel by fully qualifying MWPV.View.UserControls.Panel.
             try
             {
                 DependencyObject? cur = this;

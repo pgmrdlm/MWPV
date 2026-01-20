@@ -15,11 +15,12 @@
 //   - For existing items, excludes the current itemId when editing is unlocked.
 //   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
 //
-// SIGNATURE RULES (this file):
-// - ORIGINAL ("before") signatures are built from TEXT immediately after we apply DB values to the UI.
-// - CURRENT ("save") signatures are built from TEXT immediately before SaveRequested fires.
-// - Signature algorithm must match password fingerprint approach (HMAC-based) via SensitiveValueSignature.
-// - Debug output prints ORIGINAL vs CURRENT for each slot (no plaintext).
+// SIGNATURE RULES (PASSWORD ONLY in this file):
+// - ORIGINAL ("before") password fingerprint is loaded from PasswordHistory (DB stored sig).
+// - We DO NOT compute or recalc password fingerprint in this file.
+// - This file only stores the original DB signature into the "before" slot for comparison later.
+// - Current/after signature compare happens in CategoryItemEditorTabs on Save.
+// - Debug output prints ORIGINAL for password only (no plaintext).
 //
 
 using System;
@@ -35,8 +36,6 @@ using MWPV.Services;
 using MWPV.Utilities.Helpers;
 using MWPV.Utilities.UI;
 using MWPV.Utilities.Signatures;
-using Security.Utility.Crypto.Db;          // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
-using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature (HMAC fingerprints)
 using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Validation;
 using Security.Utility.Wiping;
@@ -56,9 +55,6 @@ namespace MWPV.View.UserControls.CategoryItems
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
-
-        // Signature key in SEDS (provisioned from keyset.json)
-        private const string SedsKey_UserSecretsKey = "UserSecretsKey";
 
         private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
 
@@ -110,14 +106,9 @@ namespace MWPV.View.UserControls.CategoryItems
         private const int PinMinLen = 4;
         private const int PinMaxLen = 6;
 
-        // Signature state: ORIGINAL vs CURRENT for masked fields
+        // Signature state: ORIGINAL vs CURRENT
+        // NOTE: PasswordFingerprint ORIGINAL only in this file.
         private readonly CategoryItemSignatureState _sigState = new();
-
-        // Purpose strings (domain separation) - keep stable
-        private const string Purpose_Email = "CI.AccountEmail.V1";
-        private const string Purpose_Phone = "CI.AccountPhoneNumber.V1";
-        private const string Purpose_Pin = "CI.Pin.V1";
-        private const string Purpose_PwFp = SensitiveValueSignature.DefaultPurpose; // "PW.Fingerprint.V1"
 
         public CategoryItemBasicPanel()
         {
@@ -177,6 +168,9 @@ namespace MWPV.View.UserControls.CategoryItems
             _editUnlocked = false; // existing items start locked each time we load/reload
             _lastNameChecked = string.Empty;
 
+            // IMPORTANT: always clear signature state when mode changes
+            _sigState.Clear();
+
             try
             {
                 if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
@@ -200,9 +194,6 @@ namespace MWPV.View.UserControls.CategoryItems
         Done:
 #if DEBUG
             Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
-
-            // Clear signatures anytime mode is reconfigured (fresh state)
-            _sigState.Clear();
 #endif
         }
 
@@ -345,6 +336,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearForm();
                 ResetUiState();
 
+                // always start clean, then capture ORIGINAL after UI has DB values
                 _sigState.Clear();
 
                 var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
@@ -367,8 +359,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 ApplyBasicRowToUi(row, pwPlain);
 
-                // IMPORTANT: Original signatures are computed from TEXT in the UI AFTER load.
-                CaptureOriginalSignaturesFromUi("LOAD/DB->UI");
+                // =========================================================
+                // PASSWORD ONLY: ORIGINAL fingerprint is loaded from DB sig.
+                // NO calculating here.
+                // =========================================================
+                CaptureOriginalPasswordFingerprintFromDb(itemId, tag: "LOAD/DB->BEFORE");
             }
             finally
             {
@@ -516,7 +511,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             UpdateCopyButtonStates();
 
-            // Wipe signature state when we wipe sensitive UI
+            // wiping UI wipes signature state too
             _sigState.Clear();
         }
 
@@ -647,143 +642,78 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
 
-        public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
+        /* ======================= PASSWORD SIGNATURE: ORIGINAL ONLY (DB -> BEFORE) ======================= */
+
+        /// <summary>
+        /// Tab editor needs the original fingerprint to compare against.
+        /// We return a COPY to avoid sharing internal buffers.
+        /// </summary>
+        public byte[]? GetOriginalPasswordFingerprintCopy()
         {
-            DpapiDbPayloadCrypto.ProtectPasswordHistory(
-                password: pwdPassword.Password,
-                isBookmarkOnly: isBookmarkOnly,
-                out pwCipher,
-                out padLen,
-                out pwSig,
-                out _ // sigVersion
-            );
+            try
+            {
+                var orig = _sigState.PasswordFingerprint.OriginalSig;
+                if (orig == null || orig.Length == 0)
+                    return null;
+
+                var copy = new byte[orig.Length];
+                Buffer.BlockCopy(orig, 0, copy, 0, orig.Length);
+                return copy;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
-        /* ======================= SIGNATURES: ORIGINAL vs CURRENT ======================= */
-
-        private void CaptureOriginalSignaturesFromUi(string tag)
+        private void CaptureOriginalPasswordFingerprintFromDb(long itemId, string tag)
         {
-            if (!IsExistingItem)
+            if (itemId <= 0)
             {
+                _sigState.PasswordFingerprint.SetOriginal(null);
 #if DEBUG
-                Debug.WriteLine($"[SIG][{tag}] Skipped (new item)");
+                Debug.WriteLine($"[SIGPW][{tag}] Skipped (invalid itemId)");
 #endif
-                _sigState.Clear();
                 return;
             }
 
-            // We build ORIGINAL signatures from TEXT at load time.
-            // This must match how password fingerprints are computed (HMAC).
-            BuildSignaturesFromUi(
-                setOriginal: true,
-                setCurrent: false,
-                tag: tag);
-        }
+            // If bookmark-only, there should be no active password, and we treat ORIGINAL as null.
+            if (chkBookmarkOnly.IsChecked == true)
+            {
+                _sigState.PasswordFingerprint.SetOriginal(null);
+#if DEBUG
+                Debug.WriteLine($"[SIGPW][{tag}] BookmarkOnly=1 => ORIGINAL=<null>");
+#endif
+                return;
+            }
 
-        private void CaptureCurrentSignaturesFromUi(string tag)
-        {
-            // We build CURRENT signatures from TEXT right before save.
-            BuildSignaturesFromUi(
-                setOriginal: false,
-                setCurrent: true,
-                tag: tag);
-        }
-
-        private void BuildSignaturesFromUi(bool setOriginal, bool setCurrent, string tag)
-        {
-            byte[]? keyBytes = null;
-
+            byte[]? dbSig = null;
             try
             {
-                // Pull the HMAC secret key from SEDS.
-                // This is a sensitive buffer; we wipe it after.
-                keyBytes = SecureEncryptedDataStore.GetBytes(SedsKey_UserSecretsKey);
+                // This MUST come from the DB stored signature in CategoryItemPasswordHistory.
+                // Service should return the most recent signature bytes (PwSig) or null.
+                dbSig = CategoryItemService.LoadMostRecentPasswordHistoryByItemId(itemId)?.PwFp;
 
-                // EMAIL
-                var email = (pwdEmail.Password ?? string.Empty).Trim();
-                var emailSig = email.Length == 0 ? null : SensitiveValueSignature.Compute(email, keyBytes, Purpose_Email);
 
-                // PHONE (stored in PasswordBox)
-                var phone = (txtPhone.Password ?? string.Empty).Trim();
-                var phoneSig = phone.Length == 0 ? null : SensitiveValueSignature.Compute(phone, keyBytes, Purpose_Phone);
-
-                // PIN
-                var pin = (pwdPin.Password ?? string.Empty).Trim();
-                var pinSig = pin.Length == 0 ? null : SensitiveValueSignature.Compute(pin, keyBytes, Purpose_Pin);
-
-                // PASSWORD fingerprint (skip if bookmark-only)
-                byte[]? pwSig = null;
-                if (chkBookmarkOnly.IsChecked != true)
-                {
-                    var pw = pwdPassword.Password ?? string.Empty;
-                    if (pw.Length != 0)
-                        pwSig = SensitiveValueSignature.Compute(pw, keyBytes, Purpose_PwFp);
-                }
-
-                if (setOriginal)
-                {
-                    _sigState.AccountEmail.SetOriginal(emailSig);
-                    _sigState.AccountPhoneNumber.SetOriginal(phoneSig);
-                    _sigState.Pin.SetOriginal(pinSig);
-                    _sigState.PasswordFingerprint.SetOriginal(pwSig);
-                }
-
-                if (setCurrent)
-                {
-                    _sigState.AccountEmail.SetCurrent(emailSig);
-                    _sigState.AccountPhoneNumber.SetCurrent(phoneSig);
-                    _sigState.Pin.SetCurrent(pinSig);
-                    _sigState.PasswordFingerprint.SetCurrent(pwSig);
-                }
+                _sigState.PasswordFingerprint.SetOriginal(dbSig);
 
 #if DEBUG
-                DebugDumpSignatures(tag);
+                Debug.WriteLine($"[SIGPW][{tag}] itemId={itemId} ORIGINAL={(dbSig == null ? "<null>" : Convert.ToHexString(dbSig))}");
 #endif
-                // wipe local sig buffers (slots already store copies)
-                SensitiveDataCleaner.Zero(emailSig);
-                SensitiveDataCleaner.Zero(phoneSig);
-                SensitiveDataCleaner.Zero(pinSig);
-                SensitiveDataCleaner.Zero(pwSig);
             }
             catch (Exception ex)
             {
+                _sigState.PasswordFingerprint.SetOriginal(null);
 #if DEBUG
-                Debug.WriteLine($"[SIG][{tag}] Signature build failed: {ex.GetType().Name} {ex.Message}");
+                Debug.WriteLine($"[SIGPW][{tag}] FAILED to load DB signature: {ex.GetType().Name} {ex.Message}");
 #endif
             }
             finally
             {
-                if (keyBytes != null)
-                    Array.Clear(keyBytes, 0, keyBytes.Length);
+                // dbSig is now held by _sigState; do NOT wipe here.
+                // We want it available for the tab editor compare.
             }
         }
-
-#if DEBUG
-        private void DebugDumpSignatures(string tag)
-        {
-            Debug.WriteLine($"[SIG][{tag}] itemId={_activeEntityId} bookmarkOnly={(chkBookmarkOnly.IsChecked == true ? "1" : "0")}");
-
-            DumpOne(tag, _sigState.AccountEmail);
-            DumpOne(tag, _sigState.AccountPhoneNumber);
-            DumpOne(tag, _sigState.Pin);
-            DumpOne(tag, _sigState.PasswordFingerprint);
-        }
-
-        private static void DumpOne(string tag, SignatureSlot slot)
-        {
-            string orig = SigFmt(slot.OriginalSig);
-            string curr = SigFmt(slot.CurrentSig);
-
-            Debug.WriteLine($"[SIG][{tag}] {slot.FieldKey} ORIG={orig} CURR={curr} CHG={(slot.IsChanged ? "YES" : "NO")}");
-        }
-
-        private static string SigFmt(byte[]? sig)
-        {
-            if (sig is null || sig.Length == 0) return "<null>";
-            // Full hex is fine for debug (32 bytes => 64 chars)
-            return Convert.ToHexString(sig);
-        }
-#endif
 
         /* ======================= Save / Cancel ======================= */
 
@@ -800,9 +730,9 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            // Build CURRENT signatures from TEXT at time of Save click.
-            // Debug output will show LOADED (original) vs SAVING (current).
-            CaptureCurrentSignaturesFromUi("SAVE/CLICK");
+            // IMPORTANT:
+            // We do NOT compute password signatures here.
+            // Tab editor performs compare and decides whether to insert PW history + run duplicate check.
 
             SaveRequested?.Invoke(this, EventArgs.Empty);
         }
