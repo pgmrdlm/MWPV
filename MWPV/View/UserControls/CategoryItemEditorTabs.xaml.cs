@@ -5,7 +5,7 @@
 // Ground rules (kept + extended):
 // 1) SEDS tells us ONLY whether the item exists (PK present).
 //    - If PK present => existing item => open in VIEW by default (panel decides).
-// 2) This file stays out of crypto. Services do AES.
+// 2) This file stays out of AES crypto. Services do AES.
 // 3) Inserts happen only once: new item (no PK) => insert => set SEDS PK.
 // 4) Updates happen only on explicit Save actions (NOT on tab-leave).
 // 5) Never clear form on Loaded if PK exists.
@@ -21,17 +21,23 @@
 //    - UI catches, shows OUR PopupDialog (themed) using Panel.xaml overlay host
 //    - Accept => retry with allowDuplicate:true
 //    - Cancel => stop, no save
-// -----------------------------------------------------------------------------
 //
-// DEBUG additions:
-// - Logs bookmark-only state and which persistence path is used.
+// NEW (THIS SESSION TASK):
+// - AFTER SIGNATURE CAPTURE AT SAVE-TIME ONLY (NOT on exit)
+//   Email, Phone, PIN:
+//   - Built from CURRENT UI plaintext values
+//   - Stored in SEDS as Base64 under CI.AfterSig.*
+//   - Emits DEBUG lines confirming capture
 // -----------------------------------------------------------------------------
 
 
 using MWPV.Services;
 using MWPV.View.UserControls.CategoryItems;
 using MWPV.View.UserControls.Popup;
-using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature (HMAC signature)
+using Security.Utility.Crypto.Fields;      // FieldAesCrypto (SEDS key constant)
+using Security.Utility.Wiping;             // SensitiveDataCleaner (central wiping)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -40,7 +46,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;     // VisualTreeHelper
+using System.Windows.Media;               // VisualTreeHelper
 using System.Windows.Threading;
 
 namespace MWPV.View.UserControls
@@ -72,6 +78,20 @@ namespace MWPV.View.UserControls
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
         private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
 
+        // ============================================================
+        // AFTER SIGNATURES (SAVE-TIME ONLY)
+        // ============================================================
+
+        // Purposes: domain separation, stable forever
+        private const string Purpose_CI_Email_AfterSig = "CI.Email.AfterSig.V1";
+        private const string Purpose_CI_Phone_AfterSig = "CI.Phone.AfterSig.V1";
+        private const string Purpose_CI_Pin_AfterSig = "CI.Pin.AfterSig.V1";
+
+        // SEDS keys for AFTER signatures (Base64 strings)
+        private const string SedsKey_AfterSig_Email = "CI.AfterSig.Email";
+        private const string SedsKey_AfterSig_Phone = "CI.AfterSig.Phone";
+        private const string SedsKey_AfterSig_Pin = "CI.AfterSig.Pin";
+
         public CategoryItemEditorTabs()
         {
             InitializeComponent();
@@ -91,7 +111,7 @@ namespace MWPV.View.UserControls
 
                 string kind;
                 try { kind = Encoding.UTF8.GetString(kindBytes); }
-                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
+                finally { SensitiveDataCleaner.Zero(kindBytes); }
 
                 if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
                     return null;
@@ -119,6 +139,77 @@ namespace MWPV.View.UserControls
         {
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityId); } catch { }
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityKind); } catch { }
+        }
+
+        /* ======================= AFTER SIGNATURE HELPERS ======================= */
+
+        private static void ClearAfterSignatureSedsKeys_BestEffort()
+        {
+            try { SecureEncryptedDataStore.Clear(SedsKey_AfterSig_Email); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_AfterSig_Phone); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_AfterSig_Pin); } catch { }
+        }
+
+        private static void CaptureAfterSignatureToSeds(string sedsKey, string purpose, string? plain)
+        {
+            // Normalize to stable empty string
+            string value = plain ?? string.Empty;
+
+            // Pull secret key bytes from SEDS (must be COPY)
+            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+
+            try
+            {
+                byte[] sig = SensitiveValueSignature.Compute(value, keyBytes, purpose: purpose);
+
+                try
+                {
+                    string b64 = Convert.ToBase64String(sig);
+                    SecureEncryptedDataStore.SetString(sedsKey, b64);
+
+#if DEBUG
+                    bool present = !string.IsNullOrWhiteSpace(value);
+                    Debug.WriteLine($"[CI][AFTER-SIG] CAPTURED sedsKey={sedsKey} purpose={purpose} sigLen={sig.Length} present={present}");
+#endif
+                }
+                finally
+                {
+                    SensitiveDataCleaner.Zero(sig);
+                }
+            }
+            finally
+            {
+                SensitiveDataCleaner.Zero(keyBytes);
+            }
+        }
+
+        /// <summary>
+        /// Save-time ONLY: build AFTER signatures from the current UI plaintext fields.
+        /// No decrypt is needed (we already have the live UI value).
+        /// This is intentionally separate from exit/close wipes: after-sig is for save comparisons.
+        /// </summary>
+        private bool TryCaptureAfterSignaturesFromUi(string? emailPlain, string? phonePlain, string? pinPlain)
+        {
+            try
+            {
+                CaptureAfterSignatureToSeds(SedsKey_AfterSig_Email, Purpose_CI_Email_AfterSig, emailPlain);
+                CaptureAfterSignatureToSeds(SedsKey_AfterSig_Phone, Purpose_CI_Phone_AfterSig, phonePlain);
+                CaptureAfterSignatureToSeds(SedsKey_AfterSig_Pin, Purpose_CI_Pin_AfterSig, pinPlain);
+
+#if DEBUG
+                Debug.WriteLine("[CI][AFTER-SIG] COMPLETE (Email/Phone/PIN) captured into SEDS.");
+#endif
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[CI][AFTER-SIG] FAILED: {ex}");
+#endif
+                // Fail-safe: clear keys to avoid stale comparisons
+                ClearAfterSignatureSedsKeys_BestEffort();
+                return false;
+            }
         }
 
         /* ======================= Public Open API ======================= */
@@ -378,6 +469,20 @@ namespace MWPV.View.UserControls
                     SetSedsContextForCategoryItem(activeId.Value);
                     _hasPersistedId = true;
 
+                    // AFTER signatures: SAVE-TIME ONLY (existing item)
+                    if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
+                    {
+                        SetStatus("Saved, but after-signature capture failed (see debug output).");
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED itemId={itemId} (existing) - aborting save exit.");
+#endif
+                        return false;
+                    }
+
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK itemId={itemId} (existing) after-signatures captured.");
+#endif
+
                     // Password History Insert (EXISTING ITEM) - ONLY ON SAVE
                     if (isBookmarkOnly)
                     {
@@ -595,6 +700,30 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][INSERT] OK newId={newId} bookmarkOnly={isBookmarkOnly} => SEDS set (kind={EntityKind_CategoryItem})");
 #endif
+
+                // AFTER signatures: SAVE-TIME ONLY (new item insert)
+                // We capture after signatures immediately after a successful insert.
+                if (trigger == PersistTrigger.SaveAndExit)
+                {
+                    if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
+                    {
+                        SetStatus("Inserted, but after-signature capture failed (see debug output).");
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED newId={newId} (new) - aborting save exit.");
+#endif
+                        return false;
+                    }
+
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK newId={newId} (new) after-signatures captured.");
+#endif
+                }
+                else
+                {
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][AFTER-SIG] SKIP (trigger=LeaveBasicTab) - after signatures are save-time only.");
+#endif
+                }
 
                 if (trigger == PersistTrigger.LeaveBasicTab)
                     SetStatus("");
