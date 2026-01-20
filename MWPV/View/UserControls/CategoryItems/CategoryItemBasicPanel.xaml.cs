@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿    // File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
     //
     // FULL REWRITE
@@ -31,10 +32,132 @@
     using Security.Utility.Crypto.Db;   // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
     using Security.Utility.Storage;     // SecureEncryptedDataStore (SEDS)
     using Security.Utility.Validation;
+=======
+﻿// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
+//
+// FULL REWRITE
+//
+// Scope (Basic tab ONLY):
+// - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
+// - Existing item opens in VIEW-ONLY mode (read-protected).
+// - In view-only mode, show an "Edit" pill button. Clicking it unlocks fields for editing.
+// - No DB update logic is added here.
+// - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
+// - Save button is disabled in view-only to prevent accidental save behavior.
+// - In view-only, replace Generate button with Copy-to-Clipboard button for password.
+// - In view-only, show Copy-to-Clipboard buttons for: Password, Phone, Email, Username, URL.
+// - NEW: Item Name duplicate check runs across ALL categories (service call), with error shown under name.
+//   - For existing items, excludes the current itemId when editing is unlocked.
+//   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
+//
+// SIGNATURE RULES (this file):
+// - ORIGINAL ("before") signatures are built from TEXT immediately after we apply DB values to the UI.
+// - CURRENT ("save") signatures are built from TEXT immediately before SaveRequested fires.
+// - Signature algorithm must match password fingerprint approach (HMAC-based) via SensitiveValueSignature.
+// - Debug output prints ORIGINAL vs CURRENT for each slot (no plaintext).
+//
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using MWPV.Services;
+using MWPV.Utilities.Helpers;
+using MWPV.Utilities.UI;
+using MWPV.Utilities.Signatures;
+using Security.Utility.Crypto.Db;          // DpapiDbPayloadCrypto (used by BuildPasswordHistoryPayload)
+using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature (HMAC fingerprints)
+using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Validation;
+using Security.Utility.Wiping;
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
     namespace MWPV.View.UserControls.CategoryItems
     {
+<<<<<<< HEAD
         public partial class CategoryItemBasicPanel : UserControl
+=======
+        public event EventHandler? SaveRequested;
+        public event EventHandler? CancelRequested;
+        public event EventHandler<string>? PasswordValidationFailed;
+
+        // CI_SecretStorage is NOT NULL in DB
+        private const int SecretStorage_Default = 0;
+
+        // Mode detection (SEDS)
+        private const string EntityKind_CategoryItem = "CategoryItem";
+        private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
+        private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+
+        // Signature key in SEDS (provisioned from keyset.json)
+        private const string SedsKey_UserSecretsKey = "UserSecretsKey";
+
+        private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
+
+        private int _activeEntityId;
+
+        // Existing item = CurrentEntityId > 0
+        private bool IsExistingItem => _activeEntityId > 0;
+
+        // Existing items start view-only; the Edit pill unlocks editing.
+        private bool _editUnlocked;
+
+        // Central truth: "view-only" means existing item AND not unlocked.
+        private bool IsViewOnly => IsExistingItem && !_editUnlocked;
+
+        // Prevent event stacking
+        private bool _uiEventsHooked;
+
+        // Loading guard (prevents handlers from doing UI side-effects while we populate)
+        private bool _isPopulating;
+
+        // Reveal state
+        private bool _mainRevealed;
+        private bool _verifyRevealed;
+        private bool _phoneRevealed;
+        private bool _pinRevealed;
+        private bool _emailRevealed;
+
+        // Shared reveal auto-hide
+        private readonly AutoHideTimer _revealAutoHide;
+
+        private bool _settingPwProgrammatically;
+
+        // Default visuals
+        private Brush? _emailDefaultBorderBrush;
+        private Brush? _emailDefaultBackground;
+        private Brush? _phoneDefaultBorderBrush;
+        private Brush? _phoneDefaultBackground;
+        private Brush? _itemNameDefaultBorderBrush;
+        private Brush? _itemNameDefaultBackground;
+        private Brush? _pinDefaultBorderBrush;
+        private Brush? _pinDefaultBackground;
+
+        private string _lastEmailChecked = string.Empty;
+
+        // Duplicate-check guard
+        private string _lastNameChecked = string.Empty;
+
+        // PIN rules
+        private const int PinMinLen = 4;
+        private const int PinMaxLen = 6;
+
+        // Signature state: ORIGINAL vs CURRENT for masked fields
+        private readonly CategoryItemSignatureState _sigState = new();
+
+        // Purpose strings (domain separation) - keep stable
+        private const string Purpose_Email = "CI.AccountEmail.V1";
+        private const string Purpose_Phone = "CI.AccountPhoneNumber.V1";
+        private const string Purpose_Pin = "CI.Pin.V1";
+        private const string Purpose_PwFp = SensitiveValueSignature.DefaultPurpose; // "PW.Fingerprint.V1"
+
+        public CategoryItemBasicPanel()
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
         {
             public event EventHandler? SaveRequested;
             public event EventHandler? CancelRequested;
@@ -67,12 +190,20 @@
             // Loading guard (prevents handlers from doing UI side-effects while we populate)
             private bool _isPopulating;
 
+<<<<<<< HEAD
             // Reveal state
             private bool _mainRevealed;
             private bool _verifyRevealed;
             private bool _phoneRevealed;
             private bool _pinRevealed;
             private bool _emailRevealed;
+=======
+            ResetUiState();
+            WipeSensitiveFields();
+
+            _sigState.Clear();
+        }
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
             // Shared reveal auto-hide
             private readonly AutoHideTimer _revealAutoHide;
@@ -111,7 +242,18 @@
                 );
             }
 
+<<<<<<< HEAD
             /* ======================= Lifecycle ======================= */
+=======
+        Done:
+#if DEBUG
+            Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
+
+            // Clear signatures anytime mode is reconfigured (fresh state)
+            _sigState.Clear();
+#endif
+        }
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
             private void CategoryItemBasicPanel_Loaded(object? sender, RoutedEventArgs e)
             {
@@ -124,6 +266,7 @@
                 ClearForm();
                 ResetUiState();
 
+<<<<<<< HEAD
                 ConfigureModeFromSeds();
 
                 // Populate if we are viewing an existing item
@@ -155,6 +298,12 @@
                 _lastNameChecked = string.Empty;
 
                 try
+=======
+                _sigState.Clear();
+
+                var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
+                if (row == null)
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
                 {
                     if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
                         goto Done;
@@ -300,7 +449,20 @@
                     return;
                 }
 
+<<<<<<< HEAD
                 LoadAndApplyByItemId(_activeEntityId);
+=======
+                ApplyBasicRowToUi(row, pwPlain);
+
+                // IMPORTANT: Original signatures are computed from TEXT in the UI AFTER load.
+                CaptureOriginalSignaturesFromUi("LOAD/DB->UI");
+            }
+            finally
+            {
+                _isPopulating = false;
+            }
+        }
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
 
                 ApplyModeProtection();
             }
@@ -417,7 +579,135 @@
                         }
                     }
                 }
+<<<<<<< HEAD
                 finally
+=======
+            }
+            finally
+            {
+                _settingPwProgrammatically = false;
+            }
+
+            HideAllRevealsAndStopTimer();
+            ClearPlainRevealOverlays();
+
+            ClearItemNameError();
+
+            // Reset duplicate-check cache to match loaded name
+            _lastNameChecked = (txtItemName.Text ?? string.Empty).Trim();
+
+            UpdateCopyButtonStates();
+        }
+
+        /* ======================= Host-facing API ======================= */
+
+        public void ClearForm()
+        {
+            WipeSensitiveFields();
+
+            txtItemName.Text = string.Empty;
+            txtUsername.Text = string.Empty;
+            txtUrl.Text = string.Empty;
+            txtDescription.Text = string.Empty;
+
+            _lastEmailChecked = string.Empty;
+            _lastNameChecked = string.Empty;
+
+            ClearItemNameError();
+            ClearEmailValidation();
+            ClearPhoneError();
+            ClearPinError();
+
+            _sigState.Clear();
+        }
+
+        public void ResetUiState()
+        {
+            HideAllRevealsAndStopTimer();
+            HideStrengthRow();
+            HideVerifyRow();
+            HideVerifyError();
+
+            ClearItemNameError();
+            ClearEmailValidation();
+            ClearPhoneError();
+            ClearPinError();
+        }
+
+        public void WipeSensitiveFields()
+        {
+            HideAllRevealsAndStopTimer();
+
+            UICleaner.Clear(pwdPassword);
+            UICleaner.Clear(pwdVerify);
+            UICleaner.Clear(txtPhone);
+            UICleaner.Clear(pwdPin);
+            UICleaner.Clear(pwdEmail);
+
+            ClearPlainRevealOverlays();
+
+            HideStrengthRow();
+            HideVerifyError();
+
+            UpdateCopyButtonStates();
+
+            // Wipe signature state when we wipe sensitive UI
+            _sigState.Clear();
+        }
+
+        public void WipeAllForHostClose()
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] WipeAllForHostClose");
+#endif
+            ResetUiState();
+            WipeSensitiveFields();
+        }
+
+        public void NormalizeUsernameFromEmailIfEmpty()
+        {
+            var user = (txtUsername.Text ?? string.Empty).Trim();
+            if (user.Length != 0)
+                return;
+
+            var email = (pwdEmail.Password ?? string.Empty).Trim();
+            if (email.Length == 0)
+                return;
+
+            var result = EmailValidator.IsLikelyEmail(email, out _);
+            if (result != EmailCheck.Ok)
+                return;
+
+            txtUsername.Text = email;
+        }
+
+        public bool TryValidateAllForSubmit(
+            out bool isBookmarkOnly,
+            out bool okName,
+            out bool okPassword,
+            out bool okPin,
+            out bool okEmail,
+            out bool okPhone)
+        {
+            isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            okName = ValidateItemName(forSubmit: true);
+            okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
+            okPin = ValidatePin(forSubmit: true);
+            okEmail = ValidateEmailForSubmit();
+            okPhone = ValidatePhoneNumber(forSubmit: true);
+
+            return okName && okPassword && okPin && okEmail && okPhone;
+        }
+
+        public void FocusFirstError(bool okName, bool okPassword, bool okPin, bool okEmail, bool okPhone, bool isBookmarkOnly)
+        {
+            if (!okName) { txtItemName.Focus(); return; }
+
+            if (!okPassword)
+            {
+                if (!isBookmarkOnly && VerifyRow.Visibility == Visibility.Visible)
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
                 {
                     _settingPwProgrammatically = false;
                 }
@@ -425,6 +715,277 @@
                 HideAllRevealsAndStopTimer();
                 ClearPlainRevealOverlays();
 
+<<<<<<< HEAD
+=======
+        /* ======================= Safe non-null SecretStorage ======================= */
+
+        public int GetSecretStorageOrDefault() => GetSecretStorageOrDefault(chkBookmarkOnly.IsChecked == true);
+
+        public int GetSecretStorageOrDefault(bool isBookmarkOnly)
+        {
+            _ = isBookmarkOnly;
+            return SecretStorage_Default;
+        }
+
+        /* ======================= Value getters for Service Insert ======================= */
+
+        public string GetItemNameTrim() => (txtItemName.Text ?? string.Empty).Trim();
+
+        public string? GetDescriptionTrimOrNull()
+        {
+            var s = (txtDescription.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetUsernameTrimOrNull()
+        {
+            var s = (txtUsername.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetUrlTrimOrNull()
+        {
+            var s = (txtUrl.Text ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetEmailTrimOrNull()
+        {
+            var s = (pwdEmail.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetPhoneTrimOrNull()
+        {
+            var s = (txtPhone.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetPinTrimOrNull()
+        {
+            var s = (pwdPin.Password ?? string.Empty).Trim();
+            return s.Length == 0 ? null : s;
+        }
+
+        public string? GetPasswordPlainOrNull()
+        {
+            var pw = pwdPassword.Password;
+            return string.IsNullOrEmpty(pw) ? null : pw;
+        }
+
+        public string? GetPasswordTrimOrNull() => GetPasswordPlainOrNull();
+
+        public void BuildPasswordHistoryPayload(bool isBookmarkOnly, out byte[] pwCipher, out int? padLen, out byte[] pwSig)
+        {
+            DpapiDbPayloadCrypto.ProtectPasswordHistory(
+                password: pwdPassword.Password,
+                isBookmarkOnly: isBookmarkOnly,
+                out pwCipher,
+                out padLen,
+                out pwSig,
+                out _ // sigVersion
+            );
+        }
+
+        /* ======================= SIGNATURES: ORIGINAL vs CURRENT ======================= */
+
+        private void CaptureOriginalSignaturesFromUi(string tag)
+        {
+            if (!IsExistingItem)
+            {
+#if DEBUG
+                Debug.WriteLine($"[SIG][{tag}] Skipped (new item)");
+#endif
+                _sigState.Clear();
+                return;
+            }
+
+            // We build ORIGINAL signatures from TEXT at load time.
+            // This must match how password fingerprints are computed (HMAC).
+            BuildSignaturesFromUi(
+                setOriginal: true,
+                setCurrent: false,
+                tag: tag);
+        }
+
+        private void CaptureCurrentSignaturesFromUi(string tag)
+        {
+            // We build CURRENT signatures from TEXT right before save.
+            BuildSignaturesFromUi(
+                setOriginal: false,
+                setCurrent: true,
+                tag: tag);
+        }
+
+        private void BuildSignaturesFromUi(bool setOriginal, bool setCurrent, string tag)
+        {
+            byte[]? keyBytes = null;
+
+            try
+            {
+                // Pull the HMAC secret key from SEDS.
+                // This is a sensitive buffer; we wipe it after.
+                keyBytes = SecureEncryptedDataStore.GetBytes(SedsKey_UserSecretsKey);
+
+                // EMAIL
+                var email = (pwdEmail.Password ?? string.Empty).Trim();
+                var emailSig = email.Length == 0 ? null : SensitiveValueSignature.Compute(email, keyBytes, Purpose_Email);
+
+                // PHONE (stored in PasswordBox)
+                var phone = (txtPhone.Password ?? string.Empty).Trim();
+                var phoneSig = phone.Length == 0 ? null : SensitiveValueSignature.Compute(phone, keyBytes, Purpose_Phone);
+
+                // PIN
+                var pin = (pwdPin.Password ?? string.Empty).Trim();
+                var pinSig = pin.Length == 0 ? null : SensitiveValueSignature.Compute(pin, keyBytes, Purpose_Pin);
+
+                // PASSWORD fingerprint (skip if bookmark-only)
+                byte[]? pwSig = null;
+                if (chkBookmarkOnly.IsChecked != true)
+                {
+                    var pw = pwdPassword.Password ?? string.Empty;
+                    if (pw.Length != 0)
+                        pwSig = SensitiveValueSignature.Compute(pw, keyBytes, Purpose_PwFp);
+                }
+
+                if (setOriginal)
+                {
+                    _sigState.AccountEmail.SetOriginal(emailSig);
+                    _sigState.AccountPhoneNumber.SetOriginal(phoneSig);
+                    _sigState.Pin.SetOriginal(pinSig);
+                    _sigState.PasswordFingerprint.SetOriginal(pwSig);
+                }
+
+                if (setCurrent)
+                {
+                    _sigState.AccountEmail.SetCurrent(emailSig);
+                    _sigState.AccountPhoneNumber.SetCurrent(phoneSig);
+                    _sigState.Pin.SetCurrent(pinSig);
+                    _sigState.PasswordFingerprint.SetCurrent(pwSig);
+                }
+
+#if DEBUG
+                DebugDumpSignatures(tag);
+#endif
+                // wipe local sig buffers (slots already store copies)
+                SensitiveDataCleaner.Zero(emailSig);
+                SensitiveDataCleaner.Zero(phoneSig);
+                SensitiveDataCleaner.Zero(pinSig);
+                SensitiveDataCleaner.Zero(pwSig);
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[SIG][{tag}] Signature build failed: {ex.GetType().Name} {ex.Message}");
+#endif
+            }
+            finally
+            {
+                if (keyBytes != null)
+                    Array.Clear(keyBytes, 0, keyBytes.Length);
+            }
+        }
+
+#if DEBUG
+        private void DebugDumpSignatures(string tag)
+        {
+            Debug.WriteLine($"[SIG][{tag}] itemId={_activeEntityId} bookmarkOnly={(chkBookmarkOnly.IsChecked == true ? "1" : "0")}");
+
+            DumpOne(tag, _sigState.AccountEmail);
+            DumpOne(tag, _sigState.AccountPhoneNumber);
+            DumpOne(tag, _sigState.Pin);
+            DumpOne(tag, _sigState.PasswordFingerprint);
+        }
+
+        private static void DumpOne(string tag, SignatureSlot slot)
+        {
+            string orig = SigFmt(slot.OriginalSig);
+            string curr = SigFmt(slot.CurrentSig);
+
+            Debug.WriteLine($"[SIG][{tag}] {slot.FieldKey} ORIG={orig} CURR={curr} CHG={(slot.IsChanged ? "YES" : "NO")}");
+        }
+
+        private static string SigFmt(byte[]? sig)
+        {
+            if (sig is null || sig.Length == 0) return "<null>";
+            // Full hex is fine for debug (32 bytes => 64 chars)
+            return Convert.ToHexString(sig);
+        }
+#endif
+
+        /* ======================= Save / Cancel ======================= */
+
+        private void btnSubmit_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] Save clicked");
+#endif
+            if (IsViewOnly)
+            {
+#if DEBUG
+                Debug.WriteLine("[BASIC] Save suppressed: view-only mode");
+#endif
+                return;
+            }
+
+            // Build CURRENT signatures from TEXT at time of Save click.
+            // Debug output will show LOADED (original) vs SAVING (current).
+            CaptureCurrentSignaturesFromUi("SAVE/CLICK");
+
+            SaveRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void btnCancel_Click(object? sender, RoutedEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] Cancel clicked");
+#endif
+            CancelRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        /* ======================= Shared reveal auto-hide ======================= */
+
+        private void OnRevealTimeout()
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] Reveal timer elapsed, hiding all reveals");
+#endif
+            HideAllRevealsAndStopTimer();
+            ClearPlainRevealOverlays();
+        }
+
+        private void HideAllRevealsAndStopTimer()
+        {
+            _revealAutoHide.Stop();
+
+            HideMainPassword();
+            HideVerifyPassword();
+            HidePhone();
+            HidePin();
+            HideEmail();
+        }
+
+        private void TouchRevealTimerIfNeeded()
+        {
+            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed || _emailRevealed;
+            _revealAutoHide.Touch(anyRevealed);
+        }
+
+        /* ======================= Item name validation (required + global-duplicate) ======================= */
+
+        private bool ValidateItemName(bool forSubmit)
+        {
+            var name = (txtItemName.Text ?? string.Empty).Trim();
+            if (name.Length == 0)
+            {
+                ShowItemNameError("Item name is required.");
+                return false;
+            }
+
+            // Never do duplicate checks while populating or in view-only.
+            if (_isPopulating || IsViewOnly)
+            {
+>>>>>>> b725738 (compare of before and after sensitive signitures now works for the basic tab.  password not addressed yet)
                 ClearItemNameError();
 
                 // Reset duplicate-check cache to match loaded name
