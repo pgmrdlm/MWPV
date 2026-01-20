@@ -28,6 +28,19 @@
 //     vs AFTER password fingerprint (computed from current UI plaintext)
 //   - If SAME => SKIP duplicate check + SKIP password history insert (bug fix)
 //   - If DIFFERENT => run existing duplicate-password flow as-is (popup logic unchanged)
+//
+// NON-SENSITIVE COMPARES (THIS SESSION TASK):
+// - On EXISTING item SaveAndExit we compute a centralized BasicTab change-set:
+//   - Bookmark flag toggled
+//   - PIN updated
+//   - User name updated
+//   - URL/Location updated
+//   - Phone number updated
+//   - Email updated
+//   - Notes updated (Basic description field)
+//   - Password updated (derived from fingerprint compare, already centralized)
+// - Comparisons use BEFORE baselines pulled from DB row (single call, save-time only).
+//   (We keep it centralized in this file; BasicPanel already holds its own baseline too.)
 // -----------------------------------------------------------------------------
 
 
@@ -287,6 +300,88 @@ namespace MWPV.View.UserControls
             }
         }
 
+        /* ======================= NON-SENSITIVE COMPARES (CENTRALIZED) ======================= */
+
+        private sealed class BasicTabChanges
+        {
+            public bool Any =>
+                PasswordUpdated ||
+                BookmarkToggled ||
+                PinUpdated ||
+                UsernameUpdated ||
+                UrlUpdated ||
+                PhoneUpdated ||
+                EmailUpdated ||
+                NotesUpdated;
+
+            public bool PasswordUpdated { get; init; }
+            public bool BookmarkToggled { get; init; }
+            public bool PinUpdated { get; init; }
+            public bool UsernameUpdated { get; init; }
+            public bool UrlUpdated { get; init; }
+            public bool PhoneUpdated { get; init; }
+            public bool EmailUpdated { get; init; }
+            public bool NotesUpdated { get; init; }
+        }
+
+        private static string N(string? s) => (s ?? string.Empty).Trim();
+
+        private static bool StrEq(string? a, string? b)
+            => string.Equals(N(a), N(b), StringComparison.Ordinal);
+
+        private static bool BoolEqBookmark(int? dbValue, bool isBookmarkOnly)
+        {
+            int ui = isBookmarkOnly ? 1 : 0;
+            int db = dbValue ?? 0;
+            return db == ui;
+        }
+
+        private BasicTabChanges ComputeBasicTabChanges_ExistingItem(
+            CategoryItemService.CategoryItemBasicRow beforeRow,
+            bool isBookmarkOnly,
+            string? afterNotes,
+            string? afterUsername,
+            string? afterUrl,
+            string? afterPhone,
+            string? afterEmail,
+            string? afterPin,
+            bool passwordChangedByFingerprint)
+        {
+            // BEFORE values come from the DB row we load save-time only.
+            // AFTER values are pulled from the UI and already normalized upstream.
+            bool bookmarkSame = BoolEqBookmark(beforeRow.BookMarkOnly, isBookmarkOnly);
+
+            bool pinSame = StrEq(beforeRow.PinPlain, afterPin);
+            bool userSame = StrEq(beforeRow.Username, afterUsername);
+            bool urlSame = StrEq(beforeRow.SignInUrl, afterUrl);
+            bool phoneSame = StrEq(beforeRow.AccountPhonePlain, afterPhone);
+            bool emailSame = StrEq(beforeRow.AccountEmailPlain, afterEmail);
+
+            // Notes (Basic tab description)
+            bool notesSame = StrEq(beforeRow.Description, afterNotes);
+
+            var changes = new BasicTabChanges
+            {
+                PasswordUpdated = passwordChangedByFingerprint,
+                BookmarkToggled = !bookmarkSame,
+                PinUpdated = !pinSame,
+                UsernameUpdated = !userSame,
+                UrlUpdated = !urlSame,
+                PhoneUpdated = !phoneSame,
+                EmailUpdated = !emailSame,
+                NotesUpdated = !notesSame
+            };
+
+#if DEBUG
+            Debug.WriteLine(
+                "[ITEM-TABS][BASIC-CHANGES] " +
+                $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
+                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated}");
+#endif
+
+            return changes;
+        }
+
         /* ======================= Public Open API ======================= */
 
         public void ConfigureForOpen(int categoryKey, string categoryName)
@@ -498,6 +593,18 @@ namespace MWPV.View.UserControls
                     Debug.WriteLine($"[ITEM-TABS][UPDATE] Existing SaveAndExit BEGIN itemId={itemId} bookmarkOnly={isBookmarkOnly}");
 #endif
 
+                    // Pull BEFORE baselines (single call, centralized, save-time only).
+                    CategoryItemService.CategoryItemBasicRow? beforeRow = null;
+                    try { beforeRow = CategoryItemService.LoadCategoryItemBasicById(itemId); }
+                    catch { beforeRow = null; }
+
+                    if (beforeRow == null)
+                    {
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] BEFORE row load failed itemId={itemId} (non-sensitive compares will be skipped)");
+#endif
+                    }
+
                     string name = BasicPanel.GetItemNameTrim();
                     string? desc = BasicPanel.GetDescriptionTrimOrNull();
                     string? username = BasicPanel.GetUsernameTrimOrNull();
@@ -557,6 +664,8 @@ namespace MWPV.View.UserControls
                     // Password History Insert (EXISTING ITEM) - ONLY ON SAVE
                     // BUG FIX: only if password fingerprint CHANGED
                     // ==========================================================
+                    bool passwordChangedByFingerprint = false;
+
                     if (isBookmarkOnly)
                     {
 #if DEBUG
@@ -574,6 +683,7 @@ namespace MWPV.View.UserControls
                         // THE FIX:
                         // - If password fingerprint is unchanged => do NOT run duplicate check, do NOT insert history.
                         bool shouldInsert = ShouldInsertPasswordHistoryForExistingItem(isBookmarkOnly: false, passwordPlain: pw);
+                        passwordChangedByFingerprint = shouldInsert;
 
                         if (!shouldInsert)
                         {
@@ -633,6 +743,39 @@ namespace MWPV.View.UserControls
                             Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] OK itemId={itemId} pwHistId={pwHistId}");
 #endif
                         }
+                    }
+
+                    // ==========================================================
+                    // NON-SENSITIVE COMPARES (save-time, centralized)
+                    // ==========================================================
+                    if (beforeRow != null)
+                    {
+                        var changes = ComputeBasicTabChanges_ExistingItem(
+                            beforeRow: beforeRow,
+                            isBookmarkOnly: isBookmarkOnly,
+                            afterNotes: desc,
+                            afterUsername: username,
+                            afterUrl: url,
+                            afterPhone: phonePlain,
+                            afterEmail: emailPlain,
+                            afterPin: pinPlain,
+                            passwordChangedByFingerprint: passwordChangedByFingerprint);
+
+#if DEBUG
+                        if (!changes.Any)
+                        {
+                            Debug.WriteLine("[ITEM-TABS][BASIC-CHANGES] No non-sensitive changes detected (and password unchanged).");
+                        }
+#endif
+                        // NOTE:
+                        // Actual log record creation is intentionally NOT done here yet (guardrail).
+                        // This compare set is now centralized + ready to plug into logging.
+                    }
+                    else
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][BASIC-CHANGES] Skipped (beforeRow missing).");
+#endif
                     }
 
                     SetStatus("");

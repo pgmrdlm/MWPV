@@ -15,12 +15,14 @@
 //   - For existing items, excludes the current itemId when editing is unlocked.
 //   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
 //
-// SIGNATURE RULES (PASSWORD ONLY in this file):
-// - ORIGINAL ("before") password fingerprint is loaded from PasswordHistory (DB stored sig).
-// - We DO NOT compute or recalc password fingerprint in this file.
-// - This file only stores the original DB signature into the "before" slot for comparison later.
-// - Current/after signature compare happens in CategoryItemEditorTabs on Save.
-// - Debug output prints ORIGINAL for password only (no plaintext).
+// SIGNATURE / BASELINE RULES (THIS FILE):
+// - Sensitive/MASKED fields use signatures (handled elsewhere).
+// - This file loads:
+//   (A) ORIGINAL ("before") password fingerprint from PasswordHistory (DB stored sig).
+//   (B) ORIGINAL ("before") NON-SENSITIVE baseline values from the loaded DB row.
+// - We DO NOT compute any CURRENT/after values in this file.
+// - Current/after compare happens in CategoryItemEditorTabs on Save.
+// - Debug output prints ORIGINAL for password fingerprint only (no plaintext).
 //
 
 using System;
@@ -108,6 +110,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         // Signature state: ORIGINAL vs CURRENT
         // NOTE: PasswordFingerprint ORIGINAL only in this file.
+        // NOTE: Non-sensitive baselines ORIGINAL only in this file.
         private readonly CategoryItemSignatureState _sigState = new();
 
         public CategoryItemBasicPanel()
@@ -360,6 +363,12 @@ namespace MWPV.View.UserControls.CategoryItems
                 ApplyBasicRowToUi(row, pwPlain);
 
                 // =========================================================
+                // NON-SENSITIVE: ORIGINAL "before" baselines from loaded row.
+                // No current/after compare here.
+                // =========================================================
+                CaptureOriginalNonSensitiveBeforeFromRow(row, tag: "LOAD/DB->BEFORE");
+
+                // =========================================================
                 // PASSWORD ONLY: ORIGINAL fingerprint is loaded from DB sig.
                 // NO calculating here.
                 // =========================================================
@@ -457,6 +466,48 @@ namespace MWPV.View.UserControls.CategoryItems
             _lastNameChecked = (txtItemName.Text ?? string.Empty).Trim();
 
             UpdateCopyButtonStates();
+        }
+
+        /* ======================= NON-SENSITIVE BEFORE BASELINES (DB -> BEFORE) ======================= */
+
+        private void CaptureOriginalNonSensitiveBeforeFromRow(CategoryItemService.CategoryItemBasicRow row, string tag)
+        {
+            if (row == null)
+                return;
+
+            try
+            {
+                // NOTE:
+                // These are NON-SENSITIVE columns. We store original "before" values only.
+                // This prepares log-template selection later, but does not write logs here.
+                //
+                // Assumes CategoryItemSignatureState has the non-sensitive slots added (before/current),
+                // and we are ONLY setting the BEFORE slot in this Basic tab.
+
+                _sigState.Name.SetOriginal(row.Name);
+                _sigState.UserName.SetOriginal(row.Username);
+                _sigState.SignInUrl.SetOriginal(row.SignInUrl);
+
+                // Basic tab uses txtDescription as the editable text area.
+                // We baseline both Description + Notes to the same source here to keep future mapping flexible.
+                _sigState.Description.SetOriginal(row.Description);
+                _sigState.Notes.SetOriginal(row.Description);
+
+                _sigState.BookMarkOnly.SetOriginal(row.BookMarkOnly == 1);
+
+#if DEBUG
+                Debug.WriteLine($"[BASIC][BEFORE-NON-SIG][{tag}] Loaded originals: " +
+                                $"NameLen={(row.Name?.Length ?? 0)} UserLen={(row.Username?.Length ?? 0)} UrlLen={(row.SignInUrl?.Length ?? 0)} " +
+                                $"DescLen={(row.Description?.Length ?? 0)} BookmarkOnly={row.BookMarkOnly}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[BASIC][BEFORE-NON-SIG][{tag}] FAILED: {ex.GetType().Name} {ex.Message}");
+#endif
+                // Fail-safe: baseline capture should never break populate.
+            }
         }
 
         /* ======================= Host-facing API ======================= */
@@ -693,7 +744,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 // This MUST come from the DB stored signature in CategoryItemPasswordHistory.
                 // Service should return the most recent signature bytes (PwSig) or null.
                 dbSig = CategoryItemService.LoadMostRecentPasswordHistoryByItemId(itemId)?.PwFp;
-
 
                 _sigState.PasswordFingerprint.SetOriginal(dbSig);
 
