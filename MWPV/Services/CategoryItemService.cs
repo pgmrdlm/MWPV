@@ -22,6 +22,12 @@
 // - The BEFORE signature capture MUST use the SAME decrypt path used for UI display.
 //   That means we call TryDecryptUtf8(...) and capture signatures ONLY on decrypt success.
 //
+// IMPORTANT FIX (EMPTY ENCRYPTED COLUMNS):
+// - We must NOT decrypt NULL/empty blobs.
+// - NULL/empty blob must be treated as a CLEAN SUCCESS (value = empty).
+// - This prevents false decrypt failures for empty DB columns.
+// - This also ensures we still capture a stable "empty before signature" for comparisons.
+//
 // Important SQL expectations:
 // - CategoryItemPasswordHistory insert expects params:
 //      @ItemId, @Version, @PasswordBlob, @PadLen, @PwFp
@@ -188,13 +194,24 @@ namespace MWPV.Services
         /// <summary>
         /// THIS IS THE decrypt path the Basic UI uses for display.
         /// We do not add alternate decrypt logic anywhere else.
+        ///
+        /// IMPORTANT FIX:
+        /// - NULL/empty blobs are NOT decrypted.
+        /// - NULL/empty blobs are treated as a CLEAN SUCCESS (empty value).
+        ///   This prevents false decrypt failures for empty DB columns.
         /// </summary>
         private static bool TryDecryptUtf8(string purpose, byte[]? cipherBlob, out string? plain)
         {
+            // Default: empty/absent fields are just empty.
             plain = null;
 
+            // Empty DB column must NOT be treated as "decrypt failed".
+            // It's simply "no value".
             if (cipherBlob is null || cipherBlob.Length == 0)
-                return false;
+            {
+                // decOk=true with plain=null (normalized to "" by signature capture)
+                return true;
+            }
 
             try
             {
@@ -240,7 +257,7 @@ namespace MWPV.Services
         /// </summary>
         private static void CaptureBeforeSignatureToSeds(string sedsKey, string purpose, string? plain, bool decryptOk)
         {
-            // We ONLY capture if decrypt succeeded. If decrypt fails, clear the key.
+            // We ONLY capture if decrypt succeeded.
             if (!decryptOk)
             {
                 try { SecureEncryptedDataStore.Clear(sedsKey); } catch { }
@@ -300,13 +317,13 @@ namespace MWPV.Services
             // 1) Decrypt using the SAME method used by the Basic UI path
             bool decOk = TryDecryptUtf8(decryptPurpose, cipherBlob, out plain);
 
-            // 2) Capture signature ONLY if decrypt succeeded (same rule as existing)
+            // 2) Capture signature ONLY if decrypt succeeded (includes empty field success)
             try
             {
                 CaptureBeforeSignatureToSeds(sigSedsKey, sigPurpose, plain, decOk);
 
 #if DEBUG
-                Debug.WriteLine($"[CI][BEFORE-SIG] itemId={itemId} field={fieldNameForDebug} decOk={decOk} plainLen={(plain == null ? -1 : plain.Length)}");
+                Debug.WriteLine($"[CI][BEFORE-SIG] itemId={itemId} field={fieldNameForDebug} decOk={decOk} plainLen={(plain == null ? -1 : plain.Length)} cipherLen={(cipherBlob == null ? -1 : cipherBlob.Length)}");
 #endif
             }
             catch (Exception ex)
