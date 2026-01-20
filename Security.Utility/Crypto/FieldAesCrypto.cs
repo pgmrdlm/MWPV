@@ -1,5 +1,7 @@
 ﻿// File: Security.Utility/Crypto/Fields/FieldAesCrypto.cs
 //
+// FULL REWRITE
+//
 // Portable field-level encryption (Layer 2) for DB payloads.
 // - AES-GCM (nonce 12, tag 16)
 // - Master key is loaded from SecureEncryptedDataStore (SEDS) at runtime
@@ -10,6 +12,11 @@
 // - Caller must provide the same "purpose" on decrypt as on encrypt.
 // - Caller MUST wipe returned byte[] / char[] buffers after use.
 // - This class intentionally does NOT touch UI. It belongs in Security.Utility.
+//
+// CHANGE (2026-01-20):
+// - Treat NULL/EMPTY blobs as a VALID "no value stored" state.
+//   TryDecryptBytes/TryDecryptChars will return true with empty output.
+//   Only malformed non-empty blobs will return false.
 
 using System;
 using System.Security.Cryptography;
@@ -98,7 +105,16 @@ namespace Security.Utility.Crypto.Fields
 
             if (string.IsNullOrWhiteSpace(masterKeySedsName)) return false;
             if (string.IsNullOrWhiteSpace(purpose)) return false;
-            if (blob is null || blob.Length < MinBlobLen) return false;
+
+            // IMPORTANT: NULL/EMPTY means "no value stored" (valid, not an error)
+            if (blob is null || blob.Length == 0)
+            {
+                plaintext = Array.Empty<byte>();
+                return true;
+            }
+
+            // Non-empty but too small => malformed/corrupt
+            if (blob.Length < MinBlobLen) return false;
             if (blob[0] != BlobVersionV1) return false;
 
             byte[] master = GetRequiredKeyFromSeds(masterKeySedsName);
@@ -184,6 +200,13 @@ namespace Security.Utility.Crypto.Fields
 
             if (!TryDecryptBytes(masterKeySedsName, purpose, blob, out var plainBytes))
                 return false;
+
+            // IMPORTANT: empty plaintext is a valid "no value stored" state
+            if (plainBytes.Length == 0)
+            {
+                chars = Array.Empty<char>();
+                return true;
+            }
 
             try
             {

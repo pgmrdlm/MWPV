@@ -3,7 +3,7 @@
 // FULL REWRITE (AES-only, portable, keyfile-derived)
 //
 // Password-history “fingerprint” work:
-// - Uses STABLE keyed fingerprint (HMAC-SHA256) via PasswordFingerprint.Compute(...)
+// - Uses STABLE keyed fingerprint (HMAC-SHA256) via SensitiveValueSignature.Compute(...)
 // - Stores fingerprint in CategoryItemPasswordHistory.CIPaH_PwFp
 // - Supports fingerprint version via CIPaH_FpVersion (optional but recommended)
 //
@@ -11,6 +11,16 @@
 // - Check runs inside service immediately BEFORE inserting PasswordHistory row
 // - If match found => throws DuplicatePasswordWarningException
 // - UI must decide: Cancel => stop / Accept => call again with allowDuplicate:true
+//
+// BEFORE SIGNATURE CAPTURE (THIS SESSION TASK):
+// - Anything masked in the Basic UI gets a "before signature" captured here on LOAD:
+//     Email, Phone, PIN
+// - EXCEPT Password (handled separately later)
+// - Signatures stored in SEDS as Base64 (non-sensitive signature bytes), with DEBUG lines.
+//
+// IMPORTANT:
+// - The BEFORE signature capture MUST use the SAME decrypt path used for UI display.
+//   That means we call TryDecryptUtf8(...) and capture signatures ONLY on decrypt success.
 //
 // Important SQL expectations:
 // - CategoryItemPasswordHistory insert expects params:
@@ -40,7 +50,7 @@ using Utilities.Helpers;                 // DatabaseHelper, ErrorHandler
 using Utilities.Sql;                     // SqlCagegory (SQL catalog/loader)
 
 // Helper assumed to exist
-using Security.Utility.Crypto.Signatures;  // Signatures
+using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature
 
 namespace MWPV.Services
 {
@@ -57,7 +67,21 @@ namespace MWPV.Services
         private const string Purpose_CIPaH_PasswordHistory = "CIPaH.PasswordHistory";
         private const string Purpose_CIPaH_PasswordFingerprint = "PW.Fingerprint.V1";
 
+        // BEFORE signatures (masked fields EXCEPT password)
+        private const string Purpose_CI_Email_BeforeSig = "CI.Email.BeforeSig.V1";
+        private const string Purpose_CI_Phone_BeforeSig = "CI.Phone.BeforeSig.V1";
+        private const string Purpose_CI_Pin_BeforeSig = "CI.Pin.BeforeSig.V1";
+
         private const int CurrentFingerprintVersion = 1;
+
+        // ============================================================
+        // SEDS keys for BEFORE signatures (Base64 strings)
+        // ============================================================
+
+        // NOTE: These are non-sensitive signatures, but we still treat them as session-only.
+        private const string SedsKey_BeforeSig_Email = "CI.BeforeSig.Email";
+        private const string SedsKey_BeforeSig_Phone = "CI.BeforeSig.Phone";
+        private const string SedsKey_BeforeSig_Pin = "CI.BeforeSig.Pin";
 
         // ============================================================
         // Duplicate warning exception (service-driven)
@@ -161,6 +185,10 @@ namespace MWPV.Services
             }
         }
 
+        /// <summary>
+        /// THIS IS THE decrypt path the Basic UI uses for display.
+        /// We do not add alternate decrypt logic anywhere else.
+        /// </summary>
         private static bool TryDecryptUtf8(string purpose, byte[]? cipherBlob, out string? plain)
         {
             plain = null;
@@ -193,6 +221,112 @@ namespace MWPV.Services
             {
                 return false;
             }
+        }
+
+        // ============================================================
+        // BEFORE SIGNATURE CAPTURE (masked fields except password)
+        // ============================================================
+
+        private static void ClearBeforeSignatureSedsKeys()
+        {
+            try { SecureEncryptedDataStore.Clear(SedsKey_BeforeSig_Email); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BeforeSig_Phone); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BeforeSig_Pin); } catch { }
+        }
+
+        /// <summary>
+        /// Captures a "before signature" into SEDS ONLY when decrypt succeeds.
+        /// Signature is computed over normalized plaintext (null => "").
+        /// </summary>
+        private static void CaptureBeforeSignatureToSeds(string sedsKey, string purpose, string? plain, bool decryptOk)
+        {
+            // We ONLY capture if decrypt succeeded. If decrypt fails, clear the key.
+            if (!decryptOk)
+            {
+                try { SecureEncryptedDataStore.Clear(sedsKey); } catch { }
+
+#if DEBUG
+                Debug.WriteLine($"[CI][BEFORE-SIG] SKIP (decrypt failed) sedsKey={sedsKey} purpose={purpose}");
+#endif
+                return;
+            }
+
+            // Normalize: null -> empty string (stable signature)
+            string value = plain ?? string.Empty;
+
+            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+
+            try
+            {
+                byte[] sig = SensitiveValueSignature.Compute(value, keyBytes, purpose: purpose);
+
+                try
+                {
+                    // Store as Base64 string (non-sensitive signature bytes)
+                    string b64 = Convert.ToBase64String(sig);
+                    SecureEncryptedDataStore.SetString(sedsKey, b64);
+
+#if DEBUG
+                    bool present = !string.IsNullOrWhiteSpace(value);
+                    Debug.WriteLine($"[CI][BEFORE-SIG] CAPTURED sedsKey={sedsKey} purpose={purpose} sigLen={sig.Length} present={present}");
+#endif
+                }
+                finally
+                {
+                    Array.Clear(sig, 0, sig.Length);
+                }
+            }
+            finally
+            {
+                Array.Clear(keyBytes, 0, keyBytes.Length);
+            }
+        }
+
+        /// <summary>
+        /// SINGLE SOURCE OF TRUTH FOR "decrypt -> before signature" for masked fields.
+        /// Uses the SAME decrypt path used by the UI display.
+        /// </summary>
+        private static bool TryDecryptUtf8AndCaptureBeforeSig(
+            long itemId,
+            string fieldNameForDebug,
+            string decryptPurpose,
+            byte[]? cipherBlob,
+            string sigSedsKey,
+            string sigPurpose,
+            out string? plain)
+        {
+            plain = null;
+
+            // 1) Decrypt using the SAME method used by the Basic UI path
+            bool decOk = TryDecryptUtf8(decryptPurpose, cipherBlob, out plain);
+
+            // 2) Capture signature ONLY if decrypt succeeded (same rule as existing)
+            try
+            {
+                CaptureBeforeSignatureToSeds(sigSedsKey, sigPurpose, plain, decOk);
+
+#if DEBUG
+                Debug.WriteLine($"[CI][BEFORE-SIG] itemId={itemId} field={fieldNameForDebug} decOk={decOk} plainLen={(plain == null ? -1 : plain.Length)}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[CI][BEFORE-SIG] CAPTURE FAILED itemId={itemId} field={fieldNameForDebug}: {ex}");
+#endif
+                // Fail-safe: clear the key to avoid stale/incorrect comparisons
+                try { SecureEncryptedDataStore.Clear(sigSedsKey); } catch { }
+            }
+
+            return decOk;
+        }
+
+        private static void CaptureBeforeSignaturesForBasicMaskedFields_AlreadyCaptured()
+        {
+            // Intentionally empty.
+            // This exists only to stop anyone from reintroducing the old two-pass pattern:
+            // (decrypt in one place, then capture in another).
+            // We capture inside TryDecryptUtf8AndCaptureBeforeSig(...).
         }
 
         // ============================================================
@@ -581,9 +715,40 @@ namespace MWPV.Services
                 string? phonePlain = null;
                 string? pinPlain = null;
 
-                _ = TryDecryptUtf8(Purpose_CI_Email, emailCipher, out emailPlain);
-                _ = TryDecryptUtf8(Purpose_CI_Phone, phoneCipher, out phonePlain);
-                _ = TryDecryptUtf8(Purpose_CI_Pin, pinCipher, out pinPlain);
+                // =======================================================
+                // BEFORE SIGNATURE CAPTURE (SAME decrypt path as UI display)
+                // =======================================================
+
+                bool emailDecOk = TryDecryptUtf8AndCaptureBeforeSig(
+                    itemId: itemId,
+                    fieldNameForDebug: "Email",
+                    decryptPurpose: Purpose_CI_Email,
+                    cipherBlob: emailCipher,
+                    sigSedsKey: SedsKey_BeforeSig_Email,
+                    sigPurpose: Purpose_CI_Email_BeforeSig,
+                    out emailPlain);
+
+                bool phoneDecOk = TryDecryptUtf8AndCaptureBeforeSig(
+                    itemId: itemId,
+                    fieldNameForDebug: "Phone",
+                    decryptPurpose: Purpose_CI_Phone,
+                    cipherBlob: phoneCipher,
+                    sigSedsKey: SedsKey_BeforeSig_Phone,
+                    sigPurpose: Purpose_CI_Phone_BeforeSig,
+                    out phonePlain);
+
+                bool pinDecOk = TryDecryptUtf8AndCaptureBeforeSig(
+                    itemId: itemId,
+                    fieldNameForDebug: "PIN",
+                    decryptPurpose: Purpose_CI_Pin,
+                    cipherBlob: pinCipher,
+                    sigSedsKey: SedsKey_BeforeSig_Pin,
+                    sigPurpose: Purpose_CI_Pin_BeforeSig,
+                    out pinPlain);
+
+#if DEBUG
+                Debug.WriteLine($"[CI][BEFORE-SIG] COMPLETE itemId={itemId} (Email/Phone/PIN) captured into SEDS. decOk: email={emailDecOk} phone={phoneDecOk} pin={pinDecOk}");
+#endif
 
                 return new CategoryItemBasicRow
                 {
