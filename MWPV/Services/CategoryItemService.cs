@@ -40,10 +40,14 @@
 // - This service never reveals which item matched. Warning is generic only.
 // - Bookmark-only does NOT trigger duplicate warning (no password).
 //
+// LOGGING NOTE (IMPORTANT):
+// - Service no longer writes "item created" logs.
+// - Logging is now centralized at the UI layer (CategoryItemEditorTabs) so it can
+//   populate SubjectText/MessageText (template expanded) without duplicate inserts.
+//
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
-using MWPV.Utilities.Json;               // AppJson
 using Security.Utility.Crypto.Fields;    // FieldAesCrypto (AES-GCM portable)
 using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
 using System;
@@ -301,7 +305,7 @@ namespace MWPV.Services
 
         /// <summary>
         /// SINGLE SOURCE OF TRUTH FOR "decrypt -> before signature" for masked fields.
-        /// Uses the SAME decrypt path used by the UI display.
+        /// Uses the SAME decrypt path used by the Basic UI display.
         /// </summary>
         private static bool TryDecryptUtf8AndCaptureBeforeSig(
             long itemId,
@@ -1068,19 +1072,7 @@ namespace MWPV.Services
                     throw;
                 }
 
-                BestEffortLogItemCreated(
-                    itemId: newItemId,
-                    categoryKey: categoryKey,
-                    bookMarkOnly: 1,
-                    namePresent: true,
-                    descriptionPresent: !string.IsNullOrWhiteSpace(description),
-                    usernamePresent: !string.IsNullOrWhiteSpace(username),
-                    urlPresent: !string.IsNullOrWhiteSpace(signInUrl),
-                    emailPresent: accountEmailCipher is { Length: > 0 },
-                    phonePresent: accountPhoneCipher is { Length: > 0 },
-                    pinPresent: pinCipher is { Length: > 0 },
-                    isActive: isActive);
-
+                // NOTE: Logging removed from service (UI now owns created/change logs).
                 return newItemId;
             }
             catch (Exception ex)
@@ -1223,19 +1215,7 @@ namespace MWPV.Services
                     throw;
                 }
 
-                BestEffortLogItemCreated(
-                    itemId: newItemId,
-                    categoryKey: categoryKey,
-                    bookMarkOnly: 0,
-                    namePresent: true,
-                    descriptionPresent: !string.IsNullOrWhiteSpace(description),
-                    usernamePresent: !string.IsNullOrWhiteSpace(username),
-                    urlPresent: !string.IsNullOrWhiteSpace(signInUrl),
-                    emailPresent: accountEmailCipher is { Length: > 0 },
-                    phonePresent: accountPhoneCipher is { Length: > 0 },
-                    pinPresent: pinCipher is { Length: > 0 },
-                    isActive: isActive);
-
+                // NOTE: Logging removed from service (UI now owns created/change logs).
                 return newItemId;
             }
             catch (Exception ex)
@@ -1422,82 +1402,6 @@ namespace MWPV.Services
                 throw new InvalidOperationException("PasswordHistory insert failed (no PwHistId returned)");
 
             return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
-        }
-
-        // ============================================================
-        // Logging (best effort, no secrets)
-        // ============================================================
-
-        private static void BestEffortLogItemCreated(
-            long itemId,
-            int categoryKey,
-            int bookMarkOnly,
-            bool namePresent,
-            bool descriptionPresent,
-            bool usernamePresent,
-            bool urlPresent,
-            bool emailPresent,
-            bool phonePresent,
-            bool pinPresent,
-            int? isActive)
-        {
-            try
-            {
-                var dto = new AppJson.LogPayloadDto
-                {
-                    Message = bookMarkOnly == 1
-                        ? "Category item created (bookmark-only)"
-                        : "Category item created",
-                    Source = "CategoryItemService",
-                    EventCode = bookMarkOnly == 1
-                        ? "CATEGORYITEM_CREATED_BOOKMARK_ONLY"
-                        : "CATEGORYITEM_CREATED",
-                    OccurredUtc = DateTime.UtcNow,
-                    Context = BuildContext(new
-                    {
-                        itemId,
-                        categoryKey,
-                        bookMarkOnly,
-                        fieldsPresent = new
-                        {
-                            name = namePresent,
-                            description = descriptionPresent,
-                            username = usernamePresent,
-                            url = urlPresent,
-                            email = emailPresent,
-                            phone = phonePresent,
-                            pin = pinPresent
-                        },
-                        isActive
-                    })
-                };
-
-                LogCatalogService.AppendJson(
-                    level: "INFO",
-                    source: "CategoryItem",
-                    eventCode: dto.EventCode ?? "CATEGORYITEM_CREATED",
-                    dto: dto,
-                    whenUtc: DateTime.UtcNow,
-                    itemId: itemId);
-            }
-            catch
-            {
-                // never break insert UX
-            }
-        }
-
-        private static System.Text.Json.JsonElement? BuildContext(object obj)
-        {
-            try
-            {
-                var json = AppJson.Serialize(obj, pretty: false);
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                return doc.RootElement.Clone();
-            }
-            catch
-            {
-                return null;
-            }
         }
 
         // ============================================================

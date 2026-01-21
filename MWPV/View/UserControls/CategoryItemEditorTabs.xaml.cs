@@ -42,13 +42,25 @@
 // - Comparisons use BEFORE baselines pulled from DB row (single call, save-time only).
 //   (We keep it centralized in this file; BasicPanel already holds its own baseline too.)
 //
-// NEW ITEM LOGGING (THIS TASK):
+// NEW ITEM LOGGING (DONE):
 // - Immediately after NEW item insert succeeds, write a single log row:
 //   EventCode: CATEGORYITEM_CREATED
 //   Source:   CategoryItem
 //   SubjectText: item name
 //   MessageText: template-expanded message
 // - Log write MUST NOT block the insert if it fails (best-effort).
+//
+// EXISTING ITEM CHANGE LOGGING (NEW TASK):
+// - After EXISTING item update succeeds (SaveAndExit only),
+//   if BasicTabChanges.Any == true => write a single log row:
+//   EventCode: CATEGORYITEM_CHANGED
+//   Source:   CategoryItem
+//   SubjectText: item name
+//   MessageText:
+//     Seq 2: header line (template)
+//     Seq 3-10: bullet lines for each changed flag (template)
+// - Uses LogMessageTemplate rows (UpdateForm='BasicTab').
+// - Log write MUST NOT block the save if it fails (best-effort).
 // -----------------------------------------------------------------------------
 
 
@@ -120,10 +132,13 @@ namespace MWPV.View.UserControls
         private const string Purpose_PwFingerprint = SensitiveValueSignature.DefaultPurpose; // MUST match DB stored sig algorithm
 
         // ============================================================
-        // LOGGING (NEW ITEM ONLY - THIS TASK)
+        // LOGGING
         // ============================================================
-        private const string LogEvent_CategoryItemCreated = "CATEGORYITEM_CREATED";
         private const string LogSource_CategoryItem = "CategoryItem";
+
+        private const string LogEvent_CategoryItemCreated = "CATEGORYITEM_CREATED";
+        private const string LogEvent_CategoryItemChanged = "CATEGORYITEM_CHANGED";
+
         private const string Template_NewItemCreated =
             "Category Item #CategoryItemName# has been created for Category #CategoryName#";
 
@@ -398,7 +413,7 @@ namespace MWPV.View.UserControls
             return changes;
         }
 
-        /* ======================= NEW ITEM LOGGING (THIS TASK) ======================= */
+        /* ======================= LOGGING HELPERS ======================= */
 
         private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
         {
@@ -441,6 +456,123 @@ namespace MWPV.View.UserControls
                 Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] FAILED (best-effort ignored): {ex}");
 #endif
                 // DO NOT BLOCK new item insert because of logging.
+            }
+        }
+
+        private static string ExpandTemplate(string template, string categoryName, string categoryItemName)
+        {
+            // Supports both placeholders (even if template only uses one)
+            return (template ?? string.Empty)
+                .Replace("#CategoryItemName#", categoryItemName ?? string.Empty)
+                .Replace("#CategoryName#", categoryName ?? string.Empty);
+        }
+
+        private static Dictionary<int, string> GetBasicTabTemplateMap_BestEffort()
+        {
+            var dict = new Dictionary<int, string>();
+
+            try
+            {
+                var rows = LogCatalogService.SelectActiveLogMessageTemplates();
+                foreach (var r in rows)
+                {
+                    if (!r.Active) continue;
+                    if (!string.Equals(r.UpdateForm, "BasicTab", StringComparison.Ordinal)) continue;
+
+                    // If duplicates exist, keep the first one encountered
+                    if (!dict.ContainsKey(r.Seq))
+                        dict.Add(r.Seq, r.LogMessage ?? string.Empty);
+                }
+            }
+            catch
+            {
+                // Best-effort only: dict may stay empty.
+            }
+
+            return dict;
+        }
+
+        private void TryWriteExistingItemChangedLog_BestEffort(
+            long itemId,
+            string categoryName,
+            string itemName,
+            BasicTabChanges changes)
+        {
+            if (changes == null || !changes.Any)
+                return;
+
+            try
+            {
+                var tm = GetBasicTabTemplateMap_BestEffort();
+
+                // Templates (BasicTab):
+                // 2  The following updates have been saved for #CategoryItemName#
+                // 3  - Password updated
+                // 4  - Bookmark flag toggled
+                // 5  - PIN updated
+                // 6  - User name updated
+                // 7  - URL/Location updated
+                // 8  - Phone number updated
+                // 9  - Email updated
+                // 10 - Notes updated
+
+                string t2 = tm.TryGetValue(2, out var v2) ? v2 : "The following updates have been saved for #CategoryItemName#";
+                string t3 = tm.TryGetValue(3, out var v3) ? v3 : "- Password updated";
+                string t4 = tm.TryGetValue(4, out var v4) ? v4 : "- Bookmark flag toggled";
+                string t5 = tm.TryGetValue(5, out var v5) ? v5 : "- PIN updated";
+                string t6 = tm.TryGetValue(6, out var v6) ? v6 : "- User name updated";
+                string t7 = tm.TryGetValue(7, out var v7) ? v7 : "- URL/Location updated";
+                string t8 = tm.TryGetValue(8, out var v8) ? v8 : "- Phone number updated";
+                string t9 = tm.TryGetValue(9, out var v9) ? v9 : "- Email updated";
+                string t10 = tm.TryGetValue(10, out var v10) ? v10 : "- Notes updated";
+
+                var lines = new List<string>(capacity: 9)
+                {
+                    ExpandTemplate(t2, categoryName, itemName)
+                };
+
+                // Bullet order matches template seed order
+                if (changes.PasswordUpdated) lines.Add(ExpandTemplate(t3, categoryName, itemName));
+                if (changes.BookmarkToggled) lines.Add(ExpandTemplate(t4, categoryName, itemName));
+                if (changes.PinUpdated) lines.Add(ExpandTemplate(t5, categoryName, itemName));
+                if (changes.UsernameUpdated) lines.Add(ExpandTemplate(t6, categoryName, itemName));
+                if (changes.UrlUpdated) lines.Add(ExpandTemplate(t7, categoryName, itemName));
+                if (changes.PhoneUpdated) lines.Add(ExpandTemplate(t8, categoryName, itemName));
+                if (changes.EmailUpdated) lines.Add(ExpandTemplate(t9, categoryName, itemName));
+                if (changes.NotesUpdated) lines.Add(ExpandTemplate(t10, categoryName, itemName));
+
+                // Safety: if no bullet lines got added, do nothing (should not happen because changes.Any == true)
+                if (lines.Count <= 1)
+                    return;
+
+                string messageText = string.Join(Environment.NewLine, lines);
+
+                var req = new LogCatalogService.RequestV3
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = LogEvent_CategoryItemChanged,
+                    CreatedUtc = DateTime.UtcNow.ToString("o"),
+                    ItemId = itemId,
+
+                    SubjectText = itemName,
+                    MessageText = messageText,
+
+                    KeySetVersion = 1
+                };
+
+                var logId = LogCatalogService.Insert(req);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] Inserted CATEGORYITEM_CHANGED logId={logId} itemId={itemId} subject='{itemName}' lines={lines.Count}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] FAILED (best-effort ignored): {ex}");
+#endif
+                // DO NOT BLOCK save because of logging.
             }
         }
 
@@ -646,7 +778,7 @@ namespace MWPV.View.UserControls
                     return true;
                 }
 
-                // SaveAndExit: UPDATE basic fields, then (optionally) insert password history.
+                // SaveAndExit: UPDATE basic fields, then (optionally) insert password history, then change-log.
                 try
                 {
                     long itemId = activeId!.Value;
@@ -663,7 +795,7 @@ namespace MWPV.View.UserControls
                     if (beforeRow == null)
                     {
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] BEFORE row load failed itemId={itemId} (non-sensitive compares will be skipped)");
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] BEFORE row load failed itemId={itemId} (non-sensitive compares + logging will be skipped)");
 #endif
                     }
 
@@ -809,6 +941,7 @@ namespace MWPV.View.UserControls
 
                     // ==========================================================
                     // NON-SENSITIVE COMPARES (save-time, centralized)
+                    // + EXISTING ITEM CHANGE LOG (NEW TASK)
                     // ==========================================================
                     if (beforeRow != null)
                     {
@@ -829,9 +962,15 @@ namespace MWPV.View.UserControls
                             Debug.WriteLine("[ITEM-TABS][BASIC-CHANGES] No non-sensitive changes detected (and password unchanged).");
                         }
 #endif
-                        // NOTE:
-                        // Actual log record creation is intentionally NOT done here yet (guardrail).
-                        // This compare set is now centralized + ready to plug into logging.
+
+                        if (changes.Any)
+                        {
+                            TryWriteExistingItemChangedLog_BestEffort(
+                                itemId: itemId,
+                                categoryName: _categoryName,
+                                itemName: name,
+                                changes: changes);
+                        }
                     }
                     else
                     {
@@ -985,7 +1124,7 @@ namespace MWPV.View.UserControls
 #endif
 
                 // ==========================================================
-                // NEW ITEM LOG ROW (THIS TASK) - ALWAYS ON INSERT SUCCESS
+                // NEW ITEM LOG ROW (DONE) - ALWAYS ON INSERT SUCCESS
                 // ==========================================================
                 TryWriteNewItemCreatedLog_BestEffort(
                     itemId: newId,

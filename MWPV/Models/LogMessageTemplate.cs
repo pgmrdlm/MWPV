@@ -8,6 +8,7 @@
 // - Driving UI log rendering
 //
 
+
 namespace MWPV.Models
 {
     public sealed class LogMessageTemplate

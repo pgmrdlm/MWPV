@@ -390,15 +390,6 @@ WHERE ct.Code = 'credit_cards'
 
 /* *** log_filters for Logs UI *** */
 
-/* Ensure ComboType: log_filters */
-INSERT INTO ComboType (Code, Description, Active)
-SELECT 'log_filters', 'Filters for the Logs UI', 1
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM ComboType
-    WHERE Code = 'log_filters'
-);
-
 /* Ensure ComboDetail rows for log_filters (idempotent) */
 WITH v(Seq, Code, Description) AS (
     VALUES
@@ -409,14 +400,9 @@ WITH v(Seq, Code, Description) AS (
       ( 4, 'SESSION_START',             'Session started (post-login)'),
       ( 5, 'SESSION_END',               'Session ended'),
 
-      (10, 'CATEGORYITEM_NAME_ADDED',        'Category item created (name set)'),
-      (11, 'CATEGORYITEM_NAME_CHANGED',      'Category item name changed'),
-      (12, 'CATEGORYITEM_PASSWORD_CHANGED',  'Category item password changed'),
-      (13, 'CATEGORYITEM_PIN_CHANGED',       'Category item PIN changed'),
-      (14, 'CATEGORYITEM_EMAIL_CHANGED',     'Category item email changed'),
-      (15, 'CATEGORYITEM_URL_CHANGED',       'Category item URL changed'),
-      (16, 'CATEGORYITEM_PHONE_CHANGED',     'Category item phone number changed'),
-      (17, 'CATEGORYITEM_NOTES_CHANGED',     'Category item notes changed')
+      -- CategoryItem (collapsed)
+      (10, 'CATEGORYITEM_CREATED',      'Category item created'),
+      (11, 'CATEGORYITEM_CHANGED',      'Category item updated (one or more fields)')
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
@@ -434,6 +420,7 @@ WHERE ct.Code = 'log_filters'
       WHERE d.ComboTypeId = ct.ComboTypeId
         AND d.Code        = v.Code
   );
+
 
 
 /* Starter Categories (now independent of ComboDetail / category_types) */
