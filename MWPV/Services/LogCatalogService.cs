@@ -6,6 +6,10 @@
 // - s_LogMessageTemplate_SelectAll.sql
 // - Models.LogMessageTemplate
 //
+// Adds WRITE support for:
+// - Logs.SubjectText
+// - Logs.MessageText
+//
 // Notes:
 // - Templates are non-sensitive and safe to hold in memory.
 // - This service returns the rows; caching strategy is a separate step.
@@ -40,6 +44,11 @@ namespace MWPV.Services
             public string? SessionId { get; set; } = null;
             public long? LoginId { get; set; } = null;
             public long? ItemId { get; set; } = null;
+
+            // NEW: non-sensitive log rendering fields
+            public string? SubjectText { get; set; } = null;
+            public string? MessageText { get; set; } = null;
+
             public string? DeviceMake { get; set; } = null;
             public string? DeviceModel { get; set; } = null;
             public string? OSVersion { get; set; } = null;
@@ -97,6 +106,10 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@SessionId", req.SessionId ?? "");
                 cmd.Parameters.AddWithValue("@LoginId", (object?)req.LoginId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@ItemId", (object?)req.ItemId ?? DBNull.Value);
+
+                // NEW: non-sensitive rendered fields
+                cmd.Parameters.AddWithValue("@SubjectText", (object?)req.SubjectText ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@MessageText", (object?)req.MessageText ?? DBNull.Value);
 
                 cmd.Parameters.AddWithValue("@MachineId", Environment.MachineName ?? "");
                 cmd.Parameters.AddWithValue("@DeviceMake", (object?)req.DeviceMake ?? DBNull.Value);

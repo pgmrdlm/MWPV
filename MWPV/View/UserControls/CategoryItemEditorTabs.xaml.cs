@@ -41,6 +41,14 @@
 //   - Password updated (derived from fingerprint compare, already centralized)
 // - Comparisons use BEFORE baselines pulled from DB row (single call, save-time only).
 //   (We keep it centralized in this file; BasicPanel already holds its own baseline too.)
+//
+// NEW ITEM LOGGING (THIS TASK):
+// - Immediately after NEW item insert succeeds, write a single log row:
+//   EventCode: CATEGORYITEM_CREATED
+//   Source:   CategoryItem
+//   SubjectText: item name
+//   MessageText: template-expanded message
+// - Log write MUST NOT block the insert if it fails (best-effort).
 // -----------------------------------------------------------------------------
 
 
@@ -110,6 +118,14 @@ namespace MWPV.View.UserControls
         // PASSWORD FINGERPRINT COMPARE (THIS SESSION)
         // ============================================================
         private const string Purpose_PwFingerprint = SensitiveValueSignature.DefaultPurpose; // MUST match DB stored sig algorithm
+
+        // ============================================================
+        // LOGGING (NEW ITEM ONLY - THIS TASK)
+        // ============================================================
+        private const string LogEvent_CategoryItemCreated = "CATEGORYITEM_CREATED";
+        private const string LogSource_CategoryItem = "CategoryItem";
+        private const string Template_NewItemCreated =
+            "Category Item #CategoryItemName# has been created for Category #CategoryName#";
 
         public CategoryItemEditorTabs()
         {
@@ -380,6 +396,52 @@ namespace MWPV.View.UserControls
 #endif
 
             return changes;
+        }
+
+        /* ======================= NEW ITEM LOGGING (THIS TASK) ======================= */
+
+        private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
+        {
+            // Exact template seed:
+            // "Category Item #CategoryItemName# has been created for Category #CategoryName#"
+            return Template_NewItemCreated
+                .Replace("#CategoryItemName#", categoryItemName ?? string.Empty)
+                .Replace("#CategoryName#", categoryName ?? string.Empty);
+        }
+
+        private void TryWriteNewItemCreatedLog_BestEffort(long itemId, string categoryName, string itemName)
+        {
+            try
+            {
+                var req = new LogCatalogService.RequestV3
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = LogEvent_CategoryItemCreated,
+                    CreatedUtc = DateTime.UtcNow.ToString("o"),
+                    ItemId = itemId,
+
+                    // NEW columns we just added:
+                    SubjectText = itemName,
+                    MessageText = BuildCategoryItemCreatedMessage(categoryName, itemName),
+
+                    // Keep required SQL param satisfied:
+                    KeySetVersion = 1
+                };
+
+                var logId = LogCatalogService.Insert(req);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] Inserted CATEGORYITEM_CREATED logId={logId} itemId={itemId} subject='{itemName}'");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] FAILED (best-effort ignored): {ex}");
+#endif
+                // DO NOT BLOCK new item insert because of logging.
+            }
         }
 
         /* ======================= Public Open API ======================= */
@@ -921,6 +983,14 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][INSERT] OK newId={newId} bookmarkOnly={isBookmarkOnly} => SEDS set (kind={EntityKind_CategoryItem})");
 #endif
+
+                // ==========================================================
+                // NEW ITEM LOG ROW (THIS TASK) - ALWAYS ON INSERT SUCCESS
+                // ==========================================================
+                TryWriteNewItemCreatedLog_BestEffort(
+                    itemId: newId,
+                    categoryName: _categoryName,
+                    itemName: name);
 
                 // AFTER signatures: SAVE-TIME ONLY (new item insert)
                 if (trigger == PersistTrigger.SaveAndExit)

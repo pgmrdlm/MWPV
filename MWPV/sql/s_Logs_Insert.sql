@@ -1,7 +1,9 @@
 INSERT INTO Logs
 (
   WhenUtc, CreatedUtc, Level, Source, EventCode, SessionId,
-  LoginId, ItemId, MachineId,
+  LoginId, ItemId,
+  SubjectText, MessageText,
+  MachineId,
   DeviceMake, DeviceModel, OSVersion, DeviceIdHash, InstallType,
   AppVersion, IsCrash,
   KeySetVersion, StackHash
@@ -9,7 +11,9 @@ INSERT INTO Logs
 VALUES
 (
   @WhenUtc, @CreatedUtc, @Level, @Source, @EventCode, @SessionId,
-  @LoginId, @ItemId, @MachineId,
+  @LoginId, @ItemId,
+  @SubjectText, @MessageText,
+  @MachineId,
   @DeviceMake, @DeviceModel, @OSVersion, @DeviceIdHash, @InstallType,
   @AppVersion, @IsCrash,
   @KeySetVersion, @StackHash
