@@ -1,4 +1,17 @@
-﻿using System;
+﻿// File: Services/LogCatalogService.cs
+//
+// FULL REWRITE
+//
+// Adds READ support for LogMessageTemplate via:
+// - s_LogMessageTemplate_SelectAll.sql
+// - Models.LogMessageTemplate
+//
+// Notes:
+// - Templates are non-sensitive and safe to hold in memory.
+// - This service returns the rows; caching strategy is a separate step.
+//
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -99,7 +112,6 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@StackHash", req.StackHash ?? "");
                 // KeySetVersion is REQUIRED by s_Logs_Insert.sql
                 cmd.Parameters.AddWithValue("@KeySetVersion", req.KeySetVersion ?? 1);
-
 
                 var affected = cmd.ExecuteNonQuery();
                 if (affected != 1) return -1;
@@ -367,6 +379,49 @@ namespace MWPV.Services
                 Debug.WriteLine($"[LOGS][SelectById][FAIL] {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
+        }
+
+        // =====================================================================
+        // Log Message Templates (LogMessageTemplate)
+        // =====================================================================
+
+        public static IReadOnlyList<global::MWPV.Models.LogMessageTemplate> SelectActiveLogMessageTemplates(
+            Func<SqliteConnection>? openAppConnection = null)
+        {
+            openAppConnection ??= DatabaseHelper.GetAppOpenConnection;
+            var list = new List<global::MWPV.Models.LogMessageTemplate>();
+
+            try
+            {
+                using var cn = openAppConnection();
+                using var cmd = cn.CreateCommand();
+
+                var sql = SqlCagegory.GetSql("s_LogMessageTemplate_SelectAll.sql");
+                if (string.IsNullOrWhiteSpace(sql))
+                    throw new InvalidOperationException("SQL not loaded: s_LogMessageTemplate_SelectAll.sql");
+
+                cmd.CommandText = sql;
+
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var activeInt = SafeGetInt32(r, "Active");
+
+                    list.Add(new global::MWPV.Models.LogMessageTemplate
+                    {
+                        UpdateForm = ReadString(r, "UpdateForm") ?? "",
+                        Seq = SafeGetInt32(r, "Seq"),
+                        LogMessage = ReadString(r, "LogMessage") ?? "",
+                        Active = (activeInt == 1)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[LOGS][SelectActiveLogMessageTemplates][FAIL] {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return list;
         }
 
         // =====================================================================

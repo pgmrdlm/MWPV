@@ -56,6 +56,9 @@ namespace Utilities.Sql
             "s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql",
             "s_CategoryItemPasswordHistory_check_reuse_365days.sql",
 
+            // Log message templates.
+            "s_LogMessageTemplate_SelectAll.sql",
+
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"
         };
