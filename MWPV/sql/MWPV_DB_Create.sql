@@ -410,7 +410,7 @@ WHERE ct.Code = 'credit_cards'
 WITH v(Seq, Code, Description) AS (
     VALUES
       ( 0, 'CATEGORY_DUPLICATE',        'Duplicate category detected'),
-      ( 1, 'CATEGORY_INSERTED',         'Category successfully inserted'),
+      ( 1, 'CATEGORY_CREATED',         'Category successfully inserted'),
       ( 2, 'LOGIN',                     'Login events'),
       ( 3, 'EARLY_FAIL',                'Early-fail events'),
       ( 4, 'SESSION_START',             'Session started (post-login)'),
@@ -523,7 +523,11 @@ JOIN (
     UNION ALL
     SELECT 12, 'EARLY_FAIL',
            'Login failures'
+    UNION ALL
+    SELECT 13, 'CATEGORY_CREATED',
+           'Category successfully added'
 ) AS v
+
 
 WHERE ct.Code = 'basic_change_fields'
   AND NOT EXISTS (
