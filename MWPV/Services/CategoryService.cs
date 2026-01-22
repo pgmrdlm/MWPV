@@ -3,11 +3,9 @@ using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;      // SqlCagegory  (intentional spelling to match existing)
 using Security.Utility;   // InputGuards
-using MWPV.Services;      // LogCatalogService
 
 namespace MWPV.Services
 {
@@ -28,16 +26,6 @@ namespace MWPV.Services
             return sql;
         }
 
-        private static string? TryLoadSql(string assetName)
-        {
-            try
-            {
-                var sql = SqlCagegory.GetSql(assetName);
-                return string.IsNullOrWhiteSpace(sql) ? null : sql;
-            }
-            catch { return null; }
-        }
-
         // ---------------------------- Reads ----------------------------------
 
         /// <summary>
@@ -51,10 +39,6 @@ namespace MWPV.Services
             try
             {
                 var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
-
-//#if DEBUG
-//                try { Debug.WriteLine("[CATEGORIES][SQL] Using asset: s_CategorySelectAll.sql"); } catch { }
-//#endif
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -93,23 +77,6 @@ namespace MWPV.Services
 
                     rows.Add(row);
                 }
-
-//#if DEBUG
-//                try
-//                {
-//                    Debug.WriteLine($"[CATEGORIES][LOAD] rows={rows.Count}");
-//                    int idx = 0;
-//                    foreach (var c in rows)
-//                    {
-//                        Debug.WriteLine(
-//                            $"[CATEGORIES][{idx++}] " +
-//                            $"K1={c.intCategoryKey1?.ToString() ?? "null"} '{c.strCategory1}' | " +
-//                            $"K2={c.intCategoryKey2?.ToString() ?? "null"} '{c.strCategory2}' | " +
-//                            $"K3={c.intCategoryKey3?.ToString() ?? "null"} '{c.strCategory3}'");
-//                    }
-//                }
-//                catch { }
-//#endif
             }
             catch (Exception ex)
             {
@@ -178,20 +145,7 @@ namespace MWPV.Services
             // Duplicate check
             if (DoesCategoryExist(cleanName))
             {
-                try
-                {
-                    LogCatalogService.AppendJson(
-                        level: "WARN",
-                        source: "CategoryService",
-                        eventCode: "CATEGORY_DUPLICATE",
-                        dto: new
-                        {
-                            message = $"Duplicate category '{cleanName}' detected; insert skipped",
-                            occurredUtc = DateTime.UtcNow,
-                            categoryName = cleanName
-                        });
-                }
-                catch { }
+                // Best-effort: do nothing else; caller handles UX message.
                 return;
             }
 
@@ -210,9 +164,6 @@ namespace MWPV.Services
                 cmd.Parameters.AddWithValue("@CategoryName", cleanName);
                 cmd.Parameters.AddWithValue("@Description", desc);
 
-//#if DEBUG
-//                try { Debug.WriteLine($"[CAT][INSERT] name='{cleanName}'"); } catch { }
-//#endif
                 int affected = cmd.ExecuteNonQuery();
                 if (affected == 0)
                     throw new InvalidOperationException("Insert failed (no rows affected).");
@@ -227,21 +178,47 @@ namespace MWPV.Services
 
             tx.Commit();
 
+            // ------------------------------------------------------------
+            // Template-based log (best-effort; must NOT block insert)
+            // Uses common helper: TemplateLogWriter
+            // ------------------------------------------------------------
             try
             {
-                LogCatalogService.AppendJson(
-                    level: "INFO",
-                    source: "CategoryService",
-                    eventCode: "CATEGORY_INSERTED",
-                    dto: new
-                    {
-                        message = $"Category '{cleanName}' inserted",
-                        occurredUtc = DateTime.UtcNow,
-                        categoryId = newId,
-                        categoryName = cleanName
-                    });
+                var tokens = new System.Collections.Generic.Dictionary<string, string?>
+                {
+                    ["CategoryName"] = cleanName
+                };
+
+                // Prefer templates if present:
+                // UpdateForm = "Category"
+                // Seq 1 = e.g. "Category #CategoryName# has been created"
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = "Category",
+                    EventCode = "CATEGORY_CREATED",
+                    ItemId = newId,
+                    SubjectText = cleanName,
+                    KeySetVersion = 1
+                };
+
+                long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: "Category",
+                    seqsInOrder: new[] { 1 },
+                    tokens: tokens,
+                    write: write);
+
+                // Fallback if no template rows exist yet
+                if (logId <= 0)
+                {
+                    write.MessageText = $"Category '{cleanName}' has been created.";
+                    TemplateLogWriter.InsertRendered(write);
+                }
             }
-            catch { }
+            catch
+            {
+                // DO NOT BLOCK insert because of logging.
+            }
         }
 
         // ------------------------- Internal utils ----------------------------

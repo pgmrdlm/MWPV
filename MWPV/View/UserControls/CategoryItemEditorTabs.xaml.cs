@@ -142,6 +142,8 @@ namespace MWPV.View.UserControls
         private const string Template_NewItemCreated =
             "Category Item #CategoryItemName# has been created for Category #CategoryName#";
 
+        private const string TemplateForm_BasicTab = "BasicTab";
+
         public CategoryItemEditorTabs()
         {
             InitializeComponent();
@@ -413,7 +415,17 @@ namespace MWPV.View.UserControls
             return changes;
         }
 
-        /* ======================= LOGGING HELPERS ======================= */
+        /* ======================= LOGGING HELPERS (TemplateLogWriter) ======================= */
+
+        private static IReadOnlyDictionary<string, string?> BuildCommonTokens(string categoryName, string categoryItemName)
+        {
+            // Token keys are WITHOUT surrounding '#'
+            return new Dictionary<string, string?>
+            {
+                ["CategoryName"] = categoryName,
+                ["CategoryItemName"] = categoryItemName
+            };
+        }
 
         private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
         {
@@ -428,23 +440,22 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                var req = new LogCatalogService.RequestV3
+                var write = new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
                     Source = LogSource_CategoryItem,
                     EventCode = LogEvent_CategoryItemCreated,
-                    CreatedUtc = DateTime.UtcNow.ToString("o"),
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
                     ItemId = itemId,
 
-                    // NEW columns we just added:
                     SubjectText = itemName,
                     MessageText = BuildCategoryItemCreatedMessage(categoryName, itemName),
 
-                    // Keep required SQL param satisfied:
                     KeySetVersion = 1
                 };
 
-                var logId = LogCatalogService.Insert(req);
+                var logId = TemplateLogWriter.InsertRendered(write);
 
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] Inserted CATEGORYITEM_CREATED logId={logId} itemId={itemId} subject='{itemName}'");
@@ -459,39 +470,6 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private static string ExpandTemplate(string template, string categoryName, string categoryItemName)
-        {
-            // Supports both placeholders (even if template only uses one)
-            return (template ?? string.Empty)
-                .Replace("#CategoryItemName#", categoryItemName ?? string.Empty)
-                .Replace("#CategoryName#", categoryName ?? string.Empty);
-        }
-
-        private static Dictionary<int, string> GetBasicTabTemplateMap_BestEffort()
-        {
-            var dict = new Dictionary<int, string>();
-
-            try
-            {
-                var rows = LogCatalogService.SelectActiveLogMessageTemplates();
-                foreach (var r in rows)
-                {
-                    if (!r.Active) continue;
-                    if (!string.Equals(r.UpdateForm, "BasicTab", StringComparison.Ordinal)) continue;
-
-                    // If duplicates exist, keep the first one encountered
-                    if (!dict.ContainsKey(r.Seq))
-                        dict.Add(r.Seq, r.LogMessage ?? string.Empty);
-                }
-            }
-            catch
-            {
-                // Best-effort only: dict may stay empty.
-            }
-
-            return dict;
-        }
-
         private void TryWriteExistingItemChangedLog_BestEffort(
             long itemId,
             string categoryName,
@@ -503,8 +481,6 @@ namespace MWPV.View.UserControls
 
             try
             {
-                var tm = GetBasicTabTemplateMap_BestEffort();
-
                 // Templates (BasicTab):
                 // 2  The following updates have been saved for #CategoryItemName#
                 // 3  - Password updated
@@ -515,56 +491,44 @@ namespace MWPV.View.UserControls
                 // 8  - Phone number updated
                 // 9  - Email updated
                 // 10 - Notes updated
+                var seqs = new List<int>(capacity: 9) { 2 };
 
-                string t2 = tm.TryGetValue(2, out var v2) ? v2 : "The following updates have been saved for #CategoryItemName#";
-                string t3 = tm.TryGetValue(3, out var v3) ? v3 : "- Password updated";
-                string t4 = tm.TryGetValue(4, out var v4) ? v4 : "- Bookmark flag toggled";
-                string t5 = tm.TryGetValue(5, out var v5) ? v5 : "- PIN updated";
-                string t6 = tm.TryGetValue(6, out var v6) ? v6 : "- User name updated";
-                string t7 = tm.TryGetValue(7, out var v7) ? v7 : "- URL/Location updated";
-                string t8 = tm.TryGetValue(8, out var v8) ? v8 : "- Phone number updated";
-                string t9 = tm.TryGetValue(9, out var v9) ? v9 : "- Email updated";
-                string t10 = tm.TryGetValue(10, out var v10) ? v10 : "- Notes updated";
+                if (changes.PasswordUpdated) seqs.Add(3);
+                if (changes.BookmarkToggled) seqs.Add(4);
+                if (changes.PinUpdated) seqs.Add(5);
+                if (changes.UsernameUpdated) seqs.Add(6);
+                if (changes.UrlUpdated) seqs.Add(7);
+                if (changes.PhoneUpdated) seqs.Add(8);
+                if (changes.EmailUpdated) seqs.Add(9);
+                if (changes.NotesUpdated) seqs.Add(10);
 
-                var lines = new List<string>(capacity: 9)
-                {
-                    ExpandTemplate(t2, categoryName, itemName)
-                };
-
-                // Bullet order matches template seed order
-                if (changes.PasswordUpdated) lines.Add(ExpandTemplate(t3, categoryName, itemName));
-                if (changes.BookmarkToggled) lines.Add(ExpandTemplate(t4, categoryName, itemName));
-                if (changes.PinUpdated) lines.Add(ExpandTemplate(t5, categoryName, itemName));
-                if (changes.UsernameUpdated) lines.Add(ExpandTemplate(t6, categoryName, itemName));
-                if (changes.UrlUpdated) lines.Add(ExpandTemplate(t7, categoryName, itemName));
-                if (changes.PhoneUpdated) lines.Add(ExpandTemplate(t8, categoryName, itemName));
-                if (changes.EmailUpdated) lines.Add(ExpandTemplate(t9, categoryName, itemName));
-                if (changes.NotesUpdated) lines.Add(ExpandTemplate(t10, categoryName, itemName));
-
-                // Safety: if no bullet lines got added, do nothing (should not happen because changes.Any == true)
-                if (lines.Count <= 1)
+                // Safety: if no bullet seqs, do nothing
+                if (seqs.Count <= 1)
                     return;
 
-                string messageText = string.Join(Environment.NewLine, lines);
-
-                var req = new LogCatalogService.RequestV3
+                var write = new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
                     Source = LogSource_CategoryItem,
                     EventCode = LogEvent_CategoryItemChanged,
-                    CreatedUtc = DateTime.UtcNow.ToString("o"),
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
                     ItemId = itemId,
 
                     SubjectText = itemName,
-                    MessageText = messageText,
-
                     KeySetVersion = 1
                 };
 
-                var logId = LogCatalogService.Insert(req);
+                var tokens = BuildCommonTokens(categoryName, itemName);
+
+                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: TemplateForm_BasicTab,
+                    seqsInOrder: seqs,
+                    tokens: tokens,
+                    write: write);
 
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] Inserted CATEGORYITEM_CHANGED logId={logId} itemId={itemId} subject='{itemName}' lines={lines.Count}");
+                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] Inserted CATEGORYITEM_CHANGED logId={logId} itemId={itemId} subject='{itemName}' seqCount={seqs.Count}");
 #endif
             }
             catch (Exception ex)

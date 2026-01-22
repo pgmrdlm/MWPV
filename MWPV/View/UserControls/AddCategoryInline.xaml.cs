@@ -1,12 +1,15 @@
 ﻿// File: MWPV/View/UserControls/AddCategoryInline.xaml.cs
+//
+// FULL REWRITE
+// - Remove UI-side JSON logging (CategoryService now logs via TemplateLogWriter best-effort).
+// - Keep validation + duplicate check + insert + Submitted event behavior unchanged.
+
 using System;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using MWPV.Services;               // CategoryService
 using Security.Utility;            // InputGuards
-using Utilities.Helpers;           // ErrorHandler
-using MWPV.Utilities.Json;         // AppJson
 
 namespace MWPV.View.UserControls
 {
@@ -41,7 +44,7 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // --- Validate name (only change: max length -> 64)
+                // --- Validate name (max length -> 64)
                 var nameRes = InputGuards.ValidateCategoryName(
                     tbCategoryName?.Text,
                     minLen: MinCategoryNameLength,
@@ -50,7 +53,6 @@ namespace MWPV.View.UserControls
 
                 if (!nameRes.IsValid)
                 {
-                    // If guard didn’t provide a message, show one that reflects the new max
                     FailAndFocus(nameRes.Error ?? $"Category name must be {MaxCategoryNameLength} characters or fewer.");
                     return;
                 }
@@ -92,32 +94,13 @@ namespace MWPV.View.UserControls
                 try
                 {
                     // New world: Category_Type defaults to 0 in the DB; no type code.
+                    // CategoryService is responsible for best-effort template logging.
                     CategoryService.InsertCategory(name, description);
                 }
                 catch (Exception ex)
                 {
                     Fail($"Error inserting category: {ex.Message}");
                     return;
-                }
-
-                // --- Structured log (fire-and-forget)
-                try
-                {
-                    var payload = new AppJson.LogPayloadDto
-                    {
-                        Message = "Category inserted",
-                        Source = "AddCategoryInline",
-                        EventCode = "CATEGORY_INSERTED",
-                        OccurredUtc = DateTime.UtcNow,
-                        Context = BuildContext(new { name, description })
-                    };
-
-                    var json = AppJson.SerializeLogPayload(payload, pretty: false);
-                    ErrorHandler.Info("CategoryService", json);
-                }
-                catch
-                {
-                    // Never let logging side-effects break UX
                 }
 
                 // --- Notify host
@@ -175,16 +158,17 @@ namespace MWPV.View.UserControls
             tbCategoryName?.Focus();
         }
 
-        // -------- JSON helpers --------
+        // -------- JSON helpers (kept; harmless and used nowhere else) --------
 
         /// <summary>
-        /// Wraps an anonymous object as a JsonElement so it fits AppJson.LogPayloadDto.Context.
+        /// Wraps an anonymous object as a JsonElement so it fits other payload shapes if needed.
+        /// Currently unused (UI no longer logs JSON).
         /// </summary>
         private static JsonElement? BuildContext(object obj)
         {
             try
             {
-                var json = AppJson.Serialize(obj, pretty: false);
+                var json = System.Text.Json.JsonSerializer.Serialize(obj);
                 using var doc = JsonDocument.Parse(json);
                 return doc.RootElement.Clone();
             }

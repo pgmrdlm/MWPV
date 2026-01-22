@@ -266,7 +266,23 @@ WHERE NOT EXISTS (
     WHERE t.UpdateForm = v.UpdateForm
       AND t.Seq        = v.Seq
 );
+-- FULL REWRITE
+-- Add ONLY the missing template row for CATEGORY creation.
+-- Does NOT touch existing BasicTab templates (or any existing rows).
 
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
+FROM (
+    SELECT 'CategoryUpdates' AS UpdateForm,
+           1 AS Seq,
+           'Category #CategoryName# has been created' AS LogMessage
+) AS v
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate t
+    WHERE t.UpdateForm = v.UpdateForm
+      AND t.Seq        = v.Seq
+);
 
 CREATE TABLE Logs (
     Id            INTEGER PRIMARY KEY AUTOINCREMENT,
