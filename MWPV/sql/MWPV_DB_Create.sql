@@ -499,16 +499,16 @@ SELECT
     1
 FROM ComboType ct
 JOIN (
-    SELECT 0  AS Seq, 'BASIC_ITEM_NAME'    AS Code, 'Category Item Name changed'     AS Description
-    UNION ALL SELECT 1,  'BASIC_PASSWORD',       'Password changed'
-    UNION ALL SELECT 2,  'BASIC_PIN',            'PIN changed'
-    UNION ALL SELECT 3,  'BASIC_USERNAME',       'User Name changed'
-    UNION ALL SELECT 4,  'BASIC_URL',            'URL or Absolute Location changed'
-    UNION ALL SELECT 5,  'BASIC_PHONE',          'Phone Number changed'
-    UNION ALL SELECT 6,  'BASIC_EMAIL',          'Email changed'
-    UNION ALL SELECT 7,  'BASIC_NOTES',          'Freeform Notes changed'
-    UNION ALL SELECT 8,  'BASIC_BOOKMARK_ONLY',  'Bookmark-only setting changed'
+    SELECT 10 AS Seq, 'CATEGORYITEM_CREATED' AS Code,
+           'Category item created' AS Description
+    UNION ALL
+    SELECT 11, 'CATEGORYITEM_CHANGED',
+           'Category item updated (one or more fields)'
+    UNION ALL
+    SELECT 12, 'EARLY_FAIL',
+           'Login failures'
 ) AS v
+
 WHERE ct.Code = 'basic_change_fields'
   AND NOT EXISTS (
       SELECT 1
