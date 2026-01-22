@@ -25,7 +25,14 @@ namespace MWPV.Models
         public string AppVersion { get; set; } = "";
         public bool IsCrash { get; set; }
 
-        // Optional message column (binds to the DataGrid "Message" column and details pane)
+        // NEW: non-sensitive “who/what this log is about” (Category or CategoryItem etc.)
+        public string? SubjectText { get; set; }
+
+        // NEW: rendered multi-line message built from templates (no payload fields)
+        public string? MessageText { get; set; }
+
+        // Legacy/compat: some parts of UI may still bind to "Message"
+        // Keep it, but prefer MessageText going forward.
         public string? Message { get; set; }
 
         public string? StackHash { get; set; }

@@ -1,4 +1,5 @@
-﻿// File: Services/LogCatalogService.cs
+﻿//
+// File: Services/LogCatalogService.cs
 //
 // FULL REWRITE
 //
@@ -278,7 +279,14 @@ namespace MWPV.Services
                         CreatedUtc = r["CreatedUtc"] as string ?? "",
                         Level = r["Level"] as string ?? "",
                         Source = r["Source"] as string ?? "",
-                        EventCode = r["EventCode"] as string ?? ""
+                        EventCode = r["EventCode"] as string ?? "",
+
+                        // NEW fields for UI details pane / grid binding
+                        SubjectText = r["SubjectText"] as string,
+                        MessageText = r["MessageText"] as string,
+
+                        // Keep legacy binders alive
+                        Message = r["MessageText"] as string
                     });
                 }
             }
@@ -326,7 +334,14 @@ namespace MWPV.Services
                         CreatedUtc = r["CreatedUtc"] as string ?? "",
                         Level = r["Level"] as string ?? "",
                         Source = r["Source"] as string ?? "",
-                        EventCode = r["EventCode"] as string ?? ""
+                        EventCode = r["EventCode"] as string ?? "",
+
+                        // NEW fields for UI details pane / grid binding
+                        SubjectText = r["SubjectText"] as string,
+                        MessageText = r["MessageText"] as string,
+
+                        // Keep legacy binders alive
+                        Message = r["MessageText"] as string
                     });
                 }
             }
@@ -357,6 +372,9 @@ namespace MWPV.Services
             public string Level { get; init; } = "";
             public string Source { get; init; } = "";
             public string EventCode { get; init; } = "";
+
+            public string? SubjectText { get; init; }
+            public string? MessageText { get; init; }
         }
 
         public static LogDetailsRecord? SelectById(long id, Func<SqliteConnection>? openAppConnection = null)
@@ -384,7 +402,10 @@ namespace MWPV.Services
                     CreatedUtc = r["CreatedUtc"] as string ?? "",
                     Level = r["Level"] as string ?? "",
                     Source = r["Source"] as string ?? "",
-                    EventCode = r["EventCode"] as string ?? ""
+                    EventCode = r["EventCode"] as string ?? "",
+
+                    SubjectText = r["SubjectText"] as string,
+                    MessageText = r["MessageText"] as string
                 };
             }
             catch (Exception ex)

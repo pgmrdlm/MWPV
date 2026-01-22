@@ -106,7 +106,7 @@ namespace MWPV.View.UserControls
             _rawCreatedUtc = row.CreatedUtc ?? "";
 
             MetaText = BuildMeta(_rawLevel, _rawSource, _rawEvent);
-            Message = row.Message ?? "";
+            Message = row.MessageText ?? "";
 
             await RefreshMetaByIdAsync(row.Id).ConfigureAwait(false);
 
@@ -204,4 +204,3 @@ namespace MWPV.View.UserControls
         }
     }
 }
-    

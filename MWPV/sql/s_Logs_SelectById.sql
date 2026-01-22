@@ -4,7 +4,9 @@ SELECT
     CreatedUtc,
     Level,
     Source,
-    EventCode
+    EventCode,
+    SubjectText,
+    MessageText
 FROM Logs
 WHERE Id = @id
 LIMIT 1;

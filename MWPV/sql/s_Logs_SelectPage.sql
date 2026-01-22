@@ -13,6 +13,8 @@ SELECT
     IsCrash,
     LoginId,
     ItemId,
+    SubjectText,
+    MessageText,
     DeviceMake,
     DeviceModel,
     OSVersion,
