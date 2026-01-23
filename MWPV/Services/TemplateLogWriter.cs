@@ -1,4 +1,5 @@
-﻿// File: MWPV/Services/TemplateLogWriter.cs
+﻿
+// File: MWPV/Services/TemplateLogWriter.cs
 //
 // NEW FILE
 //

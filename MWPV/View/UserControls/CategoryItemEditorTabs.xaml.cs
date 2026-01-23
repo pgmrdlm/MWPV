@@ -1,12 +1,18 @@
 ﻿// File: View/UserControls/CategoryItemEditorTabs.xaml.cs
 //
-// FULL REWRITE (Guardrails-first; INSERT for new items, UPDATE for existing items)
-// -----------------------------------------------------------------------------
-// Ground rules (kept + extended):
+// FULL REWRITE (Traffic-cop of panels; Guardrails-first; INSERT for new items, UPDATE for existing items)
+// -----------------------------------------------------------------------------------------------
+// This control is the coordinator for all editor panels. It enforces the persistence and navigation
+// contract so downstream panels can remain simple and predictable.
+//
+// Guardrails (authoritative):
 // 1) SEDS tells us ONLY whether the item exists (PK present).
 //    - If PK present => existing item => open in VIEW by default (panel decides).
 // 2) This file stays out of AES crypto. Services do AES.
-// 3) Inserts happen only once: new item (no PK) => insert => set SEDS PK.
+//    - UI may compute HMAC signatures/fingerprints and store into SEDS.
+// 3) Inserts happen only once:
+//    - NEW item (no PK) => insert-on-leave Basic (to obtain PK) OR insert-on-save.
+//    - After insert => set SEDS PK.
 // 4) Updates happen only on explicit Save actions (NOT on tab-leave).
 // 5) Never clear form on Loaded if PK exists.
 // 6) Tab switching:
@@ -22,14 +28,14 @@
 //    - Accept => retry with allowDuplicate:true
 //    - Cancel => stop, no save
 //
-// PASSWORD-ONLY FIX (THIS SESSION TASK):
+// PASSWORD-ONLY FIX (SESSION TASK):
 // - Existing item SaveAndExit:
 //   - Compare BEFORE password fingerprint (from DB, loaded by BasicPanel)
 //     vs AFTER password fingerprint (computed from current UI plaintext)
-//   - If SAME => SKIP duplicate check + SKIP password history insert (bug fix)
+//   - If SAME => SKIP duplicate check + SKIP password history insert
 //   - If DIFFERENT => run existing duplicate-password flow as-is (popup logic unchanged)
 //
-// NON-SENSITIVE COMPARES (THIS SESSION TASK):
+// NON-SENSITIVE COMPARES (SESSION TASK):
 // - On EXISTING item SaveAndExit we compute a centralized BasicTab change-set:
 //   - Bookmark flag toggled
 //   - PIN updated
@@ -40,7 +46,6 @@
 //   - Notes updated (Basic description field)
 //   - Password updated (derived from fingerprint compare, already centralized)
 // - Comparisons use BEFORE baselines pulled from DB row (single call, save-time only).
-//   (We keep it centralized in this file; BasicPanel already holds its own baseline too.)
 //
 // NEW ITEM LOGGING (DONE):
 // - Immediately after NEW item insert succeeds, write a single log row:
@@ -50,7 +55,7 @@
 //   MessageText: template-expanded message
 // - Log write MUST NOT block the insert if it fails (best-effort).
 //
-// EXISTING ITEM CHANGE LOGGING (NEW TASK):
+// EXISTING ITEM CHANGE LOGGING (SESSION TASK):
 // - After EXISTING item update succeeds (SaveAndExit only),
 //   if BasicTabChanges.Any == true => write a single log row:
 //   EventCode: CATEGORYITEM_CHANGED
@@ -61,8 +66,7 @@
 //     Seq 3-10: bullet lines for each changed flag (template)
 // - Uses LogMessageTemplate rows (UpdateForm='BasicTab').
 // - Log write MUST NOT block the save if it fails (best-effort).
-// -----------------------------------------------------------------------------
-
+// -----------------------------------------------------------------------------------------------
 
 using MWPV.Services;
 using MWPV.View.UserControls.CategoryItems;
@@ -101,6 +105,12 @@ namespace MWPV.View.UserControls
         private bool _handlingTabSelection;
         private int _lastTabIndex;
         private bool _isClosing;
+
+        // Tab-switch helper:
+        // When leaving Basic, we temporarily force selection back to Basic while we validate/persist.
+        // Then we programmatically switch to the requested tab. That second selection change should NOT
+        // re-run the leave-basic persistence logic (it already ran).
+        private bool _suppressLeaveBasicOnce;
 
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
@@ -905,7 +915,7 @@ namespace MWPV.View.UserControls
 
                     // ==========================================================
                     // NON-SENSITIVE COMPARES (save-time, centralized)
-                    // + EXISTING ITEM CHANGE LOG (NEW TASK)
+                    // + EXISTING ITEM CHANGE LOG
                     // ==========================================================
                     if (beforeRow != null)
                     {
@@ -1080,6 +1090,7 @@ namespace MWPV.View.UserControls
                     return false;
                 }
 
+                // CRITICAL: store NEW PK in SEDS for downstream tabs
                 SetSedsContextForCategoryItem((int)newId);
                 _hasPersistedId = true;
 
@@ -1399,23 +1410,68 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
-            // Leaving Basic -> must validate, and if NEW, persist insert-on-leave
+            // -----------------------------------------------------------------
+            // Leaving Basic:
+            // - Validate Basic
+            // - If NEW item and valid, INSERT using existing logic, store PK in SEDS
+            // - Only after persist succeeds do we allow the user to land on the new tab
+            //
+            // Implementation detail:
+            // TabControl selection has already moved when SelectionChanged fires.
+            // To ensure downstream tabs never initialize without a PK, we temporarily
+            // force selection back to Basic, then (if ok) programmatically switch to
+            // the requested tab.
+            // -----------------------------------------------------------------
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC => newIndex={newIndex}");
-#endif
-                bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
-                if (!allowLeaveBasic)
+                // If this selection is the programmatic "post-persist" switch, do NOT re-run leave-basic logic.
+                if (_suppressLeaveBasicOnce)
+                {
+                    _suppressLeaveBasicOnce = false;
+                }
+                else
                 {
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][TAB] Leave BASIC BLOCKED -> force back to Basic.");
+                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC => requestedIndex={newIndex}");
 #endif
+                    int requestedIndex = newIndex;
+
+                    // Force back to Basic while we validate/persist (prevents downstream tabs from running without PK)
                     _handlingTabSelection = true;
                     try { ItemTabs.SelectedIndex = TabIndexBasic; }
                     finally { _handlingTabSelection = false; }
 
+                    bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
+                    if (!allowLeaveBasic)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BASIC BLOCKED -> stay on Basic.");
+#endif
+                        _lastTabIndex = TabIndexBasic;
+                        return;
+                    }
+
+                    // Persist OK (and for NEW items, PK is now in SEDS). Now allow the requested switch.
                     _lastTabIndex = TabIndexBasic;
+
+                    _suppressLeaveBasicOnce = true;
+
+                    // Switch after we exit the current SelectionChanged stack.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_isClosing || ItemTabs == null)
+                            return;
+
+                        try
+                        {
+                            ItemTabs.SelectedIndex = requestedIndex;
+                        }
+                        catch
+                        {
+                            // swallow: tab switch must not crash editor
+                        }
+                    }), DispatcherPriority.Background);
+
                     return;
                 }
             }
@@ -1480,6 +1536,7 @@ namespace MWPV.View.UserControls
 #endif
 
             // Leaving Basic should INSERT only for NEW items. Existing items do not write here.
+            // NEW item INSERT stores PK into SEDS (SetSedsContextForCategoryItem).
             if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
             {
 #if DEBUG
