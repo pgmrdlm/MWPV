@@ -162,6 +162,29 @@ namespace MWPV.View.UserControls
             Unloaded += CategoryItemEditorTabs_Unloaded;
         }
 
+        /* ======================= PANEL GRID REFRESH BRIDGE (NEW) ======================= */
+
+        /// <summary>
+        /// Best-effort signal to Panel that the CategoryItemGrid must refresh.
+        /// Panel owns the actual grid refresh call.
+        /// </summary>
+        private void NotifyPanel_RefreshCategoryItemGrid_BestEffort()
+        {
+            try
+            {
+                var hostPanel = FindPanelHost();
+                if (hostPanel == null) return;
+
+                // Panel exposes this (you created it there):
+                // - event/method that Panel handles by refreshing CategoryItemGrid.
+                hostPanel.RequestCategoryItemGridRefresh();
+            }
+            catch
+            {
+                // swallow: refresh request must never break save/tab-switch
+            }
+        }
+
         /* ======================= SEDS helpers ======================= */
 
         private static int? TryGetActiveCategoryItemId()
@@ -1329,6 +1352,9 @@ namespace MWPV.View.UserControls
                 return;
             }
 
+            // NEW: always tell Panel to refresh the grid when Save completes.
+            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+
             WipeAllForHostClose();
             Submitted?.Invoke(this, EventArgs.Empty);
         }
@@ -1450,6 +1476,9 @@ namespace MWPV.View.UserControls
                         _lastTabIndex = TabIndexBasic;
                         return;
                     }
+
+                    // NEW: always tell Panel to refresh the grid when Basic is left (tab switch).
+                    NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
                     // Persist OK (and for NEW items, PK is now in SEDS). Now allow the requested switch.
                     _lastTabIndex = TabIndexBasic;

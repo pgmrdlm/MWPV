@@ -442,10 +442,23 @@ namespace MWPV.View.UserControls
             SetNavigationLocked(false);
         }
 
+        // SPECIFIC CHANGE ONLY:
+        // - Centralize the grid refresh into a single code-callable method on Panel
+        // - This can be invoked by user code (tabs exit) without relying on a button click event.
+        public void RequestCategoryItemGridRefresh()
+        {
+            try
+            {
+                if (_selectedCategoryKey > 0)
+                    CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
+            }
+            catch { }
+        }
+
         private void CategoryItemEdit_Submitted(object? sender, EventArgs e)
         {
             HideAddEditCategoryItem();
-            CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
+            RequestCategoryItemGridRefresh();
         }
 
         private void CategoryItemEdit_Canceled(object? sender, EventArgs e)
@@ -541,23 +554,14 @@ namespace MWPV.View.UserControls
                 PopupOverlayContent.Content = popup;
                 PopupOverlayHost.Visibility = Visibility.Visible;
 
-                // This is "modal": nothing behind can be clicked.
-                // We DO NOT change editor state here.
-                // We also keep left/right nav lock as-is, because popup may show while editor is open.
-
-                // Force focus into the overlay so keyboard can't drive underlying controls.
                 PopupOverlayHost.Focus();
                 Keyboard.Focus(PopupOverlayHost);
-
-                // Let popup grab focus on its Loaded handler too.
-                // (Your PopupDialog already does Focus+Keyboard.Focus)
             }
             catch (Exception ex)
             {
                 //#if DEBUG
                 //                Debug.WriteLine("[PANEL][POPUP][SHOW][ERR] " + ex);
                 //#endif
-                // If showing fails, complete as Abort so caller doesn't continue inserts blindly.
                 ForceClosePopupIfAny(PopupDialog.PopupResult.Abort);
             }
 
