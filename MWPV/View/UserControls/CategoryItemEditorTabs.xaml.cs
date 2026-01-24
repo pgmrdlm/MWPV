@@ -19,6 +19,7 @@
 //    - Leaving Basic requires validation.
 //    - If NEW item, we insert-on-leave (so downstream tabs can rely on PK).
 //    - If EXISTING item, we do NOT write on leave (save is explicit).
+//    - SPECIAL CASE (THIS CHANGE): If EXISTING item AND BasicPanel is VIEW => allow switch with NO validation/no writes.
 // 7) Password history updates for EXISTING items:
 //    - Only occur on explicit Save.
 //    - Uses CategoryItemService.InsertPasswordHistoryForExistingItem(...)
@@ -81,6 +82,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Security.Cryptography;        // CryptographicOperations.FixedTimeEquals
+using System.Reflection;                  // BindingFlags (VIEW MODE REFLECTION FIX)
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -176,7 +178,6 @@ namespace MWPV.View.UserControls
                 if (hostPanel == null) return;
 
                 // Panel exposes this (you created it there):
-                // - event/method that Panel handles by refreshing CategoryItemGrid.
                 hostPanel.RequestCategoryItemGridRefresh();
             }
             catch
@@ -224,6 +225,143 @@ namespace MWPV.View.UserControls
         {
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityId); } catch { }
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityKind); } catch { }
+        }
+
+        /* ======================= EXISTING ITEM VIEW-MODE TAB SWITCH (THIS CHANGE) ======================= */
+
+        /// <summary>
+        /// If the active item exists (PK in SEDS) AND BasicPanel is in VIEW mode,
+        /// we allow switching tabs with NO validation and NO writes.
+        ///
+        /// IMPORTANT:
+        /// We do NOT require BasicPanel to implement a specific interface/property.
+        /// We detect view mode using reflection so this file compiles regardless of BasicPanel API.
+        ///
+        /// FIX (based on your debug log):
+        /// - BasicPanel appears to use EditUnlocked/ViewOnly, but those may be internal/private or fields.
+        /// - So we now inspect BOTH properties and fields using Public + NonPublic binding flags.
+        /// </summary>
+        private bool IsExistingItemAndBasicPanelIsViewMode()
+        {
+            try
+            {
+                if (_isClosing) return false;
+                if (BasicPanel == null) return false;
+
+                // Do NOT rely on _hasPersistedId cache here. Read the truth from SEDS right now.
+                var activeId = TryGetActiveCategoryItemId();
+                bool isExisting = activeId.HasValue && activeId.Value > 0;
+                if (!isExisting) return false;
+
+                var t = BasicPanel.GetType();
+                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                // Helper: read bool from property or field
+                bool TryReadBool(string memberName, out bool value)
+                {
+                    value = false;
+
+                    var p = t.GetProperty(memberName, flags);
+                    if (p != null && p.PropertyType == typeof(bool))
+                    {
+                        value = (bool)p.GetValue(BasicPanel)!;
+                        return true;
+                    }
+
+                    var f = t.GetField(memberName, flags);
+                    if (f != null && f.FieldType == typeof(bool))
+                    {
+                        value = (bool)f.GetValue(BasicPanel)!;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                // Helper: read object (string/enum) from property or field
+                bool TryReadObject(string memberName, out object? value)
+                {
+                    value = null;
+
+                    var p = t.GetProperty(memberName, flags);
+                    if (p != null)
+                    {
+                        value = p.GetValue(BasicPanel);
+                        return true;
+                    }
+
+                    var f = t.GetField(memberName, flags);
+                    if (f != null)
+                    {
+                        value = f.GetValue(BasicPanel);
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                // 1) Preferred: view-only booleans
+                foreach (var name in new[]
+                {
+                    "IsViewMode", "IsInViewMode", "ViewMode",
+                    "ViewOnly", "IsViewOnly",
+                    "IsReadOnly", "ReadOnly"
+                })
+                {
+                    if (TryReadBool(name, out bool view))
+                    {
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}={view} => {(view ? "VIEW" : "NOT-VIEW")}");
+#endif
+                        return view;
+                    }
+                }
+
+                // 2) Edit indicators (invert them)
+                foreach (var name in new[] { "IsEditMode", "IsInEditMode", "EditUnlocked" })
+                {
+                    if (TryReadBool(name, out bool edit))
+                    {
+                        bool view = !edit;
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}={edit} => view={!edit}");
+#endif
+                        return view;
+                    }
+                }
+
+                // 3) Mode enum/string
+                foreach (var name in new[] { "Mode", "PanelMode", "EditorMode" })
+                {
+                    if (TryReadObject(name, out object? v) && v != null)
+                    {
+                        string s = v.ToString() ?? "";
+                        if (string.Equals(s, "View", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(s, "VIEW", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(s, "ViewOnly", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(s, "ReadOnly", StringComparison.OrdinalIgnoreCase))
+                        {
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}='{s}' => VIEW");
+#endif
+                            return true;
+                        }
+
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}='{s}' => NOT-VIEW");
+#endif
+                    }
+                }
+
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][VIEW-DETECT] No matching view/edit members found => NOT bypassing.");
+#endif
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /* ======================= AFTER SIGNATURE HELPERS ======================= */
@@ -1352,7 +1490,7 @@ namespace MWPV.View.UserControls
                 return;
             }
 
-            // NEW: always tell Panel to refresh the grid when Save completes.
+            // always tell Panel to refresh the grid when Save completes.
             NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
             WipeAllForHostClose();
@@ -1438,18 +1576,26 @@ namespace MWPV.View.UserControls
 
             // -----------------------------------------------------------------
             // Leaving Basic:
-            // - Validate Basic
-            // - If NEW item and valid, INSERT using existing logic, store PK in SEDS
-            // - Only after persist succeeds do we allow the user to land on the new tab
+            // - SPECIAL CASE (THIS CHANGE):
+            //   If EXISTING item AND BasicPanel is VIEW => allow switch with NO validation/no writes.
             //
-            // Implementation detail:
-            // TabControl selection has already moved when SelectionChanged fires.
-            // To ensure downstream tabs never initialize without a PK, we temporarily
-            // force selection back to Basic, then (if ok) programmatically switch to
-            // the requested tab.
+            // - Otherwise, original behavior remains:
+            //   Validate Basic
+            //   If NEW item and valid, INSERT using existing logic, store PK in SEDS
+            //   Only after persist succeeds do we allow the user to land on the new tab
             // -----------------------------------------------------------------
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
+                // THIS CHANGE:
+                if (IsExistingItemAndBasicPanelIsViewMode())
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC (EXISTING+VIEW) => allow switch index={newIndex} (no validation/no writes)");
+#endif
+                    _lastTabIndex = newIndex;
+                    return;
+                }
+
                 // If this selection is the programmatic "post-persist" switch, do NOT re-run leave-basic logic.
                 if (_suppressLeaveBasicOnce)
                 {
@@ -1477,7 +1623,7 @@ namespace MWPV.View.UserControls
                         return;
                     }
 
-                    // NEW: always tell Panel to refresh the grid when Basic is left (tab switch).
+                    // always tell Panel to refresh the grid when Basic is left (tab switch).
                     NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
                     // Persist OK (and for NEW items, PK is now in SEDS). Now allow the requested switch.
