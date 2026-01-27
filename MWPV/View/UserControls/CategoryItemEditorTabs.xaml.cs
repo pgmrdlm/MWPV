@@ -1,73 +1,15 @@
 ﻿// File: View/UserControls/CategoryItemEditorTabs.xaml.cs
 //
-// FULL REWRITE (Traffic-cop of panels; Guardrails-first; INSERT for new items, UPDATE for existing items)
-// -----------------------------------------------------------------------------------------------
-// This control is the coordinator for all editor panels. It enforces the persistence and navigation
-// contract so downstream panels can remain simple and predictable.
+// FULL REWRITE (Edit-tabs coordinator only)
+// ----------------------------------------
+// Corrections made here:
+// 1) BasicPanel "Save" must NOT close the editor anymore.
+//    - It persists, refreshes the grid, then forces Basic tab + switches BasicPanel to VIEW-only (best-effort).
+// 2) BankCards "Save & Exit" still closes (existing behavior).
+// 3) Cancel still closes (existing behavior).
+// 4) Leave-Basic tab switching rules stay as previously implemented.
 //
-// Guardrails (authoritative):
-// 1) SEDS tells us ONLY whether the item exists (PK present).
-//    - If PK present => existing item => open in VIEW by default (panel decides).
-// 2) This file stays out of AES crypto. Services do AES.
-//    - UI may compute HMAC signatures/fingerprints and store into SEDS.
-// 3) Inserts happen only once:
-//    - NEW item (no PK) => insert-on-leave Basic (to obtain PK) OR insert-on-save.
-//    - After insert => set SEDS PK.
-// 4) Updates happen only on explicit Save actions (NOT on tab-leave).
-// 5) Never clear form on Loaded if PK exists.
-// 6) Tab switching:
-//    - Leaving Basic requires validation.
-//    - If NEW item, we insert-on-leave (so downstream tabs can rely on PK).
-//    - If EXISTING item, we do NOT write on leave (save is explicit).
-//    - SPECIAL CASE (THIS CHANGE): If EXISTING item AND BasicPanel is VIEW => allow switch with NO validation/no writes.
-// 7) Password history updates for EXISTING items:
-//    - Only occur on explicit Save.
-//    - Uses CategoryItemService.InsertPasswordHistoryForExistingItem(...)
-// 8) Duplicate password warning (GLOBAL):
-//    - Service throws DuplicatePasswordWarningException
-//    - UI catches, shows OUR PopupDialog (themed) using Panel.xaml overlay host
-//    - Accept => retry with allowDuplicate:true
-//    - Cancel => stop, no save
-//
-// PASSWORD-ONLY FIX (SESSION TASK):
-// - Existing item SaveAndExit:
-//   - Compare BEFORE password fingerprint (from DB, loaded by BasicPanel)
-//     vs AFTER password fingerprint (computed from current UI plaintext)
-//   - If SAME => SKIP duplicate check + SKIP password history insert
-//   - If DIFFERENT => run existing duplicate-password flow as-is (popup logic unchanged)
-//
-// NON-SENSITIVE COMPARES (SESSION TASK):
-// - On EXISTING item SaveAndExit we compute a centralized BasicTab change-set:
-//   - Bookmark flag toggled
-//   - PIN updated
-//   - User name updated
-//   - URL/Location updated
-//   - Phone number updated
-//   - Email updated
-//   - Notes updated (Basic description field)
-//   - Password updated (derived from fingerprint compare, already centralized)
-// - Comparisons use BEFORE baselines pulled from DB row (single call, save-time only).
-//
-// NEW ITEM LOGGING (DONE):
-// - Immediately after NEW item insert succeeds, write a single log row:
-//   EventCode: CATEGORYITEM_CREATED
-//   Source:   CategoryItem
-//   SubjectText: item name
-//   MessageText: template-expanded message
-// - Log write MUST NOT block the insert if it fails (best-effort).
-//
-// EXISTING ITEM CHANGE LOGGING (SESSION TASK):
-// - After EXISTING item update succeeds (SaveAndExit only),
-//   if BasicTabChanges.Any == true => write a single log row:
-//   EventCode: CATEGORYITEM_CHANGED
-//   Source:   CategoryItem
-//   SubjectText: item name
-//   MessageText:
-//     Seq 2: header line (template)
-//     Seq 3-10: bullet lines for each changed flag (template)
-// - Uses LogMessageTemplate rows (UpdateForm='BasicTab').
-// - Log write MUST NOT block the save if it fails (best-effort).
-// -----------------------------------------------------------------------------------------------
+// No BasicPanel rewrite included (VIEW switch is best-effort via reflection).
 
 using MWPV.Services;
 using MWPV.View.UserControls.CategoryItems;
@@ -82,7 +24,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Security.Cryptography;        // CryptographicOperations.FixedTimeEquals
-using System.Reflection;                  // BindingFlags (VIEW MODE REFLECTION FIX)
+using System.Reflection;                  // BindingFlags
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -164,7 +106,7 @@ namespace MWPV.View.UserControls
             Unloaded += CategoryItemEditorTabs_Unloaded;
         }
 
-        /* ======================= PANEL GRID REFRESH BRIDGE (NEW) ======================= */
+        /* ======================= PANEL GRID REFRESH BRIDGE ======================= */
 
         /// <summary>
         /// Best-effort signal to Panel that the CategoryItemGrid must refresh.
@@ -177,12 +119,11 @@ namespace MWPV.View.UserControls
                 var hostPanel = FindPanelHost();
                 if (hostPanel == null) return;
 
-                // Panel exposes this (you created it there):
                 hostPanel.RequestCategoryItemGridRefresh();
             }
             catch
             {
-                // swallow: refresh request must never break save/tab-switch
+                // swallow: refresh request must never break save/tab-switch/close
             }
         }
 
@@ -227,19 +168,14 @@ namespace MWPV.View.UserControls
             try { SecureEncryptedDataStore.Clear(SedsKey_EntityKind); } catch { }
         }
 
-        /* ======================= EXISTING ITEM VIEW-MODE TAB SWITCH (THIS CHANGE) ======================= */
+        /* ======================= EXISTING ITEM VIEW-MODE TAB SWITCH ======================= */
 
         /// <summary>
         /// If the active item exists (PK in SEDS) AND BasicPanel is in VIEW mode,
         /// we allow switching tabs with NO validation and NO writes.
         ///
-        /// IMPORTANT:
-        /// We do NOT require BasicPanel to implement a specific interface/property.
-        /// We detect view mode using reflection so this file compiles regardless of BasicPanel API.
-        ///
-        /// FIX (based on your debug log):
-        /// - BasicPanel appears to use EditUnlocked/ViewOnly, but those may be internal/private or fields.
-        /// - So we now inspect BOTH properties and fields using Public + NonPublic binding flags.
+        /// Reflection is used so this file compiles regardless of BasicPanel API.
+        /// It checks properties/fields using Public + NonPublic.
         /// </summary>
         private bool IsExistingItemAndBasicPanelIsViewMode()
         {
@@ -248,7 +184,7 @@ namespace MWPV.View.UserControls
                 if (_isClosing) return false;
                 if (BasicPanel == null) return false;
 
-                // Do NOT rely on _hasPersistedId cache here. Read the truth from SEDS right now.
+                // Truth from SEDS
                 var activeId = TryGetActiveCategoryItemId();
                 bool isExisting = activeId.HasValue && activeId.Value > 0;
                 if (!isExisting) return false;
@@ -256,7 +192,6 @@ namespace MWPV.View.UserControls
                 var t = BasicPanel.GetType();
                 var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // Helper: read bool from property or field
                 bool TryReadBool(string memberName, out bool value)
                 {
                     value = false;
@@ -278,7 +213,6 @@ namespace MWPV.View.UserControls
                     return false;
                 }
 
-                // Helper: read object (string/enum) from property or field
                 bool TryReadObject(string memberName, out object? value)
                 {
                     value = null;
@@ -300,7 +234,6 @@ namespace MWPV.View.UserControls
                     return false;
                 }
 
-                // 1) Preferred: view-only booleans
                 foreach (var name in new[]
                 {
                     "IsViewMode", "IsInViewMode", "ViewMode",
@@ -317,7 +250,6 @@ namespace MWPV.View.UserControls
                     }
                 }
 
-                // 2) Edit indicators (invert them)
                 foreach (var name in new[] { "IsEditMode", "IsInEditMode", "EditUnlocked" })
                 {
                     if (TryReadBool(name, out bool edit))
@@ -330,7 +262,6 @@ namespace MWPV.View.UserControls
                     }
                 }
 
-                // 3) Mode enum/string
                 foreach (var name in new[] { "Mode", "PanelMode", "EditorMode" })
                 {
                     if (TryReadObject(name, out object? v) && v != null)
@@ -364,6 +295,195 @@ namespace MWPV.View.UserControls
             }
         }
 
+        /* ======================= BASIC PANEL: FORCE VIEW MODE (BEST-EFFORT) ======================= */
+
+        /// <summary>
+        /// After a successful Basic "Save" (stay open), we want BasicPanel to switch to VIEW-only.
+        /// We do this best-effort via reflection so we don't require a specific BasicPanel API.
+        /// </summary>
+        private void TrySetBasicPanelToViewMode_BestEffort()
+        {
+            try
+            {
+                if (BasicPanel == null) return;
+
+                var t = BasicPanel.GetType();
+                var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                bool called = false;
+
+                // 1) Try common methods first
+                foreach (var methodName in new[]
+                {
+                    "SwitchToViewMode",
+                    "EnterViewMode",
+                    "SetViewMode",
+                    "GoToViewMode",
+                    "SetReadOnly",
+                    "EnterReadOnlyMode",
+                    "LockForView",
+                    "LockEditing",
+                    "ResetUiState"
+                })
+                {
+                    var m0 = t.GetMethod(methodName, flags, binder: null, types: Type.EmptyTypes, modifiers: null);
+                    if (m0 != null)
+                    {
+                        m0.Invoke(BasicPanel, null);
+                        called = true;
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Called {methodName}()");
+#endif
+                        break;
+                    }
+
+                    // SetReadOnly(bool) / LockEditing(bool) style
+                    var m1 = t.GetMethod(methodName, flags, binder: null, types: new[] { typeof(bool) }, modifiers: null);
+                    if (m1 != null)
+                    {
+                        m1.Invoke(BasicPanel, new object[] { true });
+                        called = true;
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Called {methodName}(true)");
+#endif
+                        break;
+                    }
+                }
+
+                // 2) Try setting common bool properties/fields
+                void TrySetBool(string memberName, bool value)
+                {
+                    var p = t.GetProperty(memberName, flags);
+                    if (p != null && p.PropertyType == typeof(bool) && p.CanWrite)
+                    {
+                        p.SetValue(BasicPanel, value);
+                        called = true;
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={value} (property)");
+#endif
+                        return;
+                    }
+
+                    var f = t.GetField(memberName, flags);
+                    if (f != null && f.FieldType == typeof(bool))
+                    {
+                        f.SetValue(BasicPanel, value);
+                        called = true;
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={value} (field)");
+#endif
+                    }
+                }
+
+                TrySetBool("IsViewMode", true);
+                TrySetBool("IsInViewMode", true);
+                TrySetBool("ViewOnly", true);
+                TrySetBool("IsViewOnly", true);
+                TrySetBool("IsReadOnly", true);
+                TrySetBool("ReadOnly", true);
+
+                TrySetBool("IsEditMode", false);
+                TrySetBool("IsInEditMode", false);
+                TrySetBool("EditUnlocked", false);
+
+                // 3) Try setting Mode-like members to "View"
+                void TrySetModeLike(string memberName)
+                {
+                    var p = t.GetProperty(memberName, flags);
+                    if (p != null && p.CanWrite)
+                    {
+                        var pt = p.PropertyType;
+
+                        if (pt == typeof(string))
+                        {
+                            p.SetValue(BasicPanel, "View");
+                            called = true;
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}='View' (string)");
+#endif
+                            return;
+                        }
+
+                        if (pt.IsEnum)
+                        {
+                            object? viewEnum = null;
+
+                            foreach (var enumName in new[] { "View", "VIEW", "ViewOnly", "ReadOnly" })
+                            {
+                                try
+                                {
+                                    viewEnum = Enum.Parse(pt, enumName, ignoreCase: true);
+                                    break;
+                                }
+                                catch { }
+                            }
+
+                            if (viewEnum != null)
+                            {
+                                p.SetValue(BasicPanel, viewEnum);
+                                called = true;
+#if DEBUG
+                                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={viewEnum} (enum)");
+#endif
+                            }
+                        }
+                    }
+
+                    var f = t.GetField(memberName, flags);
+                    if (f != null)
+                    {
+                        var ft = f.FieldType;
+
+                        if (ft == typeof(string))
+                        {
+                            f.SetValue(BasicPanel, "View");
+                            called = true;
+#if DEBUG
+                            Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}='View' (string field)");
+#endif
+                            return;
+                        }
+
+                        if (ft.IsEnum)
+                        {
+                            object? viewEnum = null;
+
+                            foreach (var enumName in new[] { "View", "VIEW", "ViewOnly", "ReadOnly" })
+                            {
+                                try
+                                {
+                                    viewEnum = Enum.Parse(ft, enumName, ignoreCase: true);
+                                    break;
+                                }
+                                catch { }
+                            }
+
+                            if (viewEnum != null)
+                            {
+                                f.SetValue(BasicPanel, viewEnum);
+                                called = true;
+#if DEBUG
+                                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={viewEnum} (enum field)");
+#endif
+                            }
+                        }
+                    }
+                }
+
+                TrySetModeLike("Mode");
+                TrySetModeLike("PanelMode");
+                TrySetModeLike("EditorMode");
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Completed best-effort, anyAction={called}");
+#endif
+            }
+            catch
+            {
+                // swallow: must never break Save flow
+            }
+        }
+
         /* ======================= AFTER SIGNATURE HELPERS ======================= */
 
         private static void ClearAfterSignatureSedsKeys_BestEffort()
@@ -375,10 +495,8 @@ namespace MWPV.View.UserControls
 
         private static void CaptureAfterSignatureToSeds(string sedsKey, string purpose, string? plain)
         {
-            // Normalize to stable empty string
             string value = plain ?? string.Empty;
 
-            // Pull secret key bytes from SEDS (must be COPY)
             byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
 
             try
@@ -424,20 +542,18 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[CI][AFTER-SIG] FAILED: {ex}");
 #endif
-                // Fail-safe: clear keys to avoid stale comparisons
                 ClearAfterSignatureSedsKeys_BestEffort();
                 return false;
             }
         }
 
-        /* ======================= PASSWORD COMPARE HELPERS (THIS SESSION) ======================= */
+        /* ======================= PASSWORD COMPARE HELPERS ======================= */
 
         private static byte[] ComputePasswordFingerprint(string passwordPlain)
         {
             byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
             try
             {
-                // MUST match DB stored sig algorithm (HMAC + purpose)
                 return SensitiveValueSignature.Compute(passwordPlain ?? string.Empty, keyBytes, purpose: Purpose_PwFingerprint);
             }
             finally
@@ -450,33 +566,19 @@ namespace MWPV.View.UserControls
         {
             if (a == null || b == null) return false;
             if (a.Length != b.Length) return false;
-
-            // Fixed-time compare
             return CryptographicOperations.FixedTimeEquals(a, b);
         }
 
-        /// <summary>
-        /// EXISTING ITEMS ONLY:
-        /// - If password fingerprint has NOT changed => do NOT run duplicate check and do NOT insert PW history.
-        /// - If changed => proceed (duplicate check runs inside service insert).
-        /// </summary>
         private bool ShouldInsertPasswordHistoryForExistingItem(bool isBookmarkOnly, string? passwordPlain)
         {
-            if (isBookmarkOnly)
-                return false;
+            if (isBookmarkOnly) return false;
+            if (BasicPanel == null) return false;
+            if (string.IsNullOrWhiteSpace(passwordPlain)) return false;
 
-            if (BasicPanel == null)
-                return false;
-
-            if (string.IsNullOrWhiteSpace(passwordPlain))
-                return false;
-
-            // BEFORE comes from DB stored sig loaded by BasicPanel on open.
             byte[]? before = null;
             try { before = BasicPanel.GetOriginalPasswordFingerprintCopy(); }
             catch { before = null; }
 
-            // If we have no BEFORE baseline, treat as "changed" so the normal path runs.
             if (before == null || before.Length == 0)
             {
 #if DEBUG
@@ -494,7 +596,6 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][PW-SIG] COMPARE beforeLen={before.Length} afterLen={after.Length} SAME={(same ? "YES" : "NO")}");
 #endif
-                // If SAME => no change => bug fix: skip insert + skip duplicate search
                 return !same;
             }
             finally
@@ -504,7 +605,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= NON-SENSITIVE COMPARES (CENTRALIZED) ======================= */
+        /* ======================= NON-SENSITIVE COMPARES ======================= */
 
         private sealed class BasicTabChanges
         {
@@ -551,8 +652,6 @@ namespace MWPV.View.UserControls
             string? afterPin,
             bool passwordChangedByFingerprint)
         {
-            // BEFORE values come from the DB row we load save-time only.
-            // AFTER values are pulled from the UI and already normalized upstream.
             bool bookmarkSame = BoolEqBookmark(beforeRow.BookMarkOnly, isBookmarkOnly);
 
             bool pinSame = StrEq(beforeRow.PinPlain, afterPin);
@@ -560,8 +659,6 @@ namespace MWPV.View.UserControls
             bool urlSame = StrEq(beforeRow.SignInUrl, afterUrl);
             bool phoneSame = StrEq(beforeRow.AccountPhonePlain, afterPhone);
             bool emailSame = StrEq(beforeRow.AccountEmailPlain, afterEmail);
-
-            // Notes (Basic tab description)
             bool notesSame = StrEq(beforeRow.Description, afterNotes);
 
             var changes = new BasicTabChanges
@@ -586,11 +683,10 @@ namespace MWPV.View.UserControls
             return changes;
         }
 
-        /* ======================= LOGGING HELPERS (TemplateLogWriter) ======================= */
+        /* ======================= LOGGING HELPERS ======================= */
 
         private static IReadOnlyDictionary<string, string?> BuildCommonTokens(string categoryName, string categoryItemName)
         {
-            // Token keys are WITHOUT surrounding '#'
             return new Dictionary<string, string?>
             {
                 ["CategoryName"] = categoryName,
@@ -600,8 +696,6 @@ namespace MWPV.View.UserControls
 
         private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
         {
-            // Exact template seed:
-            // "Category Item #CategoryItemName# has been created for Category #CategoryName#"
             return Template_NewItemCreated
                 .Replace("#CategoryItemName#", categoryItemName ?? string.Empty)
                 .Replace("#CategoryName#", categoryName ?? string.Empty);
@@ -637,7 +731,6 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] FAILED (best-effort ignored): {ex}");
 #endif
-                // DO NOT BLOCK new item insert because of logging.
             }
         }
 
@@ -652,16 +745,6 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // Templates (BasicTab):
-                // 2  The following updates have been saved for #CategoryItemName#
-                // 3  - Password updated
-                // 4  - Bookmark flag toggled
-                // 5  - PIN updated
-                // 6  - User name updated
-                // 7  - URL/Location updated
-                // 8  - Phone number updated
-                // 9  - Email updated
-                // 10 - Notes updated
                 var seqs = new List<int>(capacity: 9) { 2 };
 
                 if (changes.PasswordUpdated) seqs.Add(3);
@@ -673,7 +756,6 @@ namespace MWPV.View.UserControls
                 if (changes.EmailUpdated) seqs.Add(9);
                 if (changes.NotesUpdated) seqs.Add(10);
 
-                // Safety: if no bullet seqs, do nothing
                 if (seqs.Count <= 1)
                     return;
 
@@ -707,7 +789,6 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] FAILED (best-effort ignored): {ex}");
 #endif
-                // DO NOT BLOCK save because of logging.
             }
         }
 
@@ -881,7 +962,7 @@ namespace MWPV.View.UserControls
         private enum PersistTrigger
         {
             LeaveBasicTab,
-            SaveAndExit
+            Save
         }
 
         private bool TryPersistBasicIfNeeded(PersistTrigger trigger, bool isBookmarkOnly)
@@ -904,7 +985,6 @@ namespace MWPV.View.UserControls
             // =========================
             if (isExisting)
             {
-                // Guardrail: NO update on tab leave.
                 if (trigger == PersistTrigger.LeaveBasicTab)
                 {
 #if DEBUG
@@ -913,16 +993,14 @@ namespace MWPV.View.UserControls
                     return true;
                 }
 
-                // SaveAndExit: UPDATE basic fields, then (optionally) insert password history, then change-log.
                 try
                 {
                     long itemId = activeId!.Value;
 
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][UPDATE] Existing SaveAndExit BEGIN itemId={itemId} bookmarkOnly={isBookmarkOnly}");
+                    Debug.WriteLine($"[ITEM-TABS][UPDATE] Existing Save BEGIN itemId={itemId} bookmarkOnly={isBookmarkOnly}");
 #endif
 
-                    // Pull BEFORE baselines (single call, centralized, save-time only).
                     CategoryItemService.CategoryItemBasicRow? beforeRow = null;
                     try { beforeRow = CategoryItemService.LoadCategoryItemBasicById(itemId); }
                     catch { beforeRow = null; }
@@ -971,16 +1049,14 @@ namespace MWPV.View.UserControls
                     Debug.WriteLine($"[ITEM-TABS][UPDATE] OK itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
 #endif
 
-                    // Ensure SEDS stays correct.
                     SetSedsContextForCategoryItem(activeId.Value);
                     _hasPersistedId = true;
 
-                    // AFTER signatures: SAVE-TIME ONLY (existing item)
                     if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
                     {
                         SetStatus("Saved, but after-signature capture failed (see debug output).");
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED itemId={itemId} (existing) - aborting save exit.");
+                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED itemId={itemId} (existing) - treating as save failure.");
 #endif
                         return false;
                     }
@@ -989,10 +1065,6 @@ namespace MWPV.View.UserControls
                     Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK itemId={itemId} (existing) after-signatures captured.");
 #endif
 
-                    // ==========================================================
-                    // Password History Insert (EXISTING ITEM) - ONLY ON SAVE
-                    // BUG FIX: only if password fingerprint CHANGED
-                    // ==========================================================
                     bool passwordChangedByFingerprint = false;
 
                     if (isBookmarkOnly)
@@ -1006,11 +1078,9 @@ namespace MWPV.View.UserControls
                         string? pw = BasicPanel.GetPasswordPlainOrNull();
 
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] Existing SaveAndExit passwordCheck itemId={itemId} pwIsNull={(pw == null)} pwIsWhite={(string.IsNullOrWhiteSpace(pw))}");
+                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] Existing Save passwordCheck itemId={itemId} pwIsNull={(pw == null)} pwIsWhite={(string.IsNullOrWhiteSpace(pw))}");
 #endif
 
-                        // THE FIX:
-                        // - If password fingerprint is unchanged => do NOT run duplicate check, do NOT insert history.
                         bool shouldInsert = ShouldInsertPasswordHistoryForExistingItem(isBookmarkOnly: false, passwordPlain: pw);
                         passwordChangedByFingerprint = shouldInsert;
 
@@ -1026,7 +1096,6 @@ namespace MWPV.View.UserControls
 
                             try
                             {
-                                // Duplicate check happens inside service insert.
                                 pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
                                     itemId: itemId,
                                     passwordPlain: pw!,
@@ -1074,10 +1143,6 @@ namespace MWPV.View.UserControls
                         }
                     }
 
-                    // ==========================================================
-                    // NON-SENSITIVE COMPARES (save-time, centralized)
-                    // + EXISTING ITEM CHANGE LOG
-                    // ==========================================================
                     if (beforeRow != null)
                     {
                         var changes = ComputeBasicTabChanges_ExistingItem(
@@ -1091,13 +1156,6 @@ namespace MWPV.View.UserControls
                             afterPin: pinPlain,
                             passwordChangedByFingerprint: passwordChangedByFingerprint);
 
-#if DEBUG
-                        if (!changes.Any)
-                        {
-                            Debug.WriteLine("[ITEM-TABS][BASIC-CHANGES] No non-sensitive changes detected (and password unchanged).");
-                        }
-#endif
-
                         if (changes.Any)
                         {
                             TryWriteExistingItemChangedLog_BestEffort(
@@ -1106,12 +1164,6 @@ namespace MWPV.View.UserControls
                                 itemName: name,
                                 changes: changes);
                         }
-                    }
-                    else
-                    {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][BASIC-CHANGES] Skipped (beforeRow missing).");
-#endif
                     }
 
                     SetStatus("");
@@ -1251,7 +1303,6 @@ namespace MWPV.View.UserControls
                     return false;
                 }
 
-                // CRITICAL: store NEW PK in SEDS for downstream tabs
                 SetSedsContextForCategoryItem((int)newId);
                 _hasPersistedId = true;
 
@@ -1259,35 +1310,19 @@ namespace MWPV.View.UserControls
                 Debug.WriteLine($"[ITEM-TABS][INSERT] OK newId={newId} bookmarkOnly={isBookmarkOnly} => SEDS set (kind={EntityKind_CategoryItem})");
 #endif
 
-                // ==========================================================
-                // NEW ITEM LOG ROW (DONE) - ALWAYS ON INSERT SUCCESS
-                // ==========================================================
                 TryWriteNewItemCreatedLog_BestEffort(
                     itemId: newId,
                     categoryName: _categoryName,
                     itemName: name);
 
-                // AFTER signatures: SAVE-TIME ONLY (new item insert)
-                if (trigger == PersistTrigger.SaveAndExit)
+                // Save (even if staying open) must capture after-signatures for consistency.
+                if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
                 {
-                    if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
-                    {
-                        SetStatus("Inserted, but after-signature capture failed (see debug output).");
+                    SetStatus("Inserted, but after-signature capture failed (see debug output).");
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED newId={newId} (new) - aborting save exit.");
+                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED newId={newId} (new) - treating as save failure.");
 #endif
-                        return false;
-                    }
-
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK newId={newId} (new) after-signatures captured.");
-#endif
-                }
-                else
-                {
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][AFTER-SIG] SKIP (trigger=LeaveBasicTab) - after signatures are save-time only.");
-#endif
+                    return false;
                 }
 
                 if (trigger == PersistTrigger.LeaveBasicTab)
@@ -1305,7 +1340,7 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= Duplicate Password Popup (OUR themed PopupDialog) ======================= */
+        /* ======================= Duplicate Password Popup ======================= */
 
         private bool PromptDuplicatePasswordAccept()
         {
@@ -1453,6 +1488,25 @@ namespace MWPV.View.UserControls
             PasswordValidationFailed?.Invoke(this, message);
         }
 
+        /* ======================= Selection helper ======================= */
+
+        private void ForceSelectTab(int index)
+        {
+            if (ItemTabs == null) return;
+
+            try
+            {
+                _handlingTabSelection = true;
+                ItemTabs.SelectedIndex = index;
+            }
+            finally
+            {
+                _handlingTabSelection = false;
+            }
+        }
+
+        /* ======================= BasicPanel events ======================= */
+
         private void BasicPanel_SaveRequested(object? sender, EventArgs e)
         {
 #if DEBUG
@@ -1471,30 +1525,34 @@ namespace MWPV.View.UserControls
                 Debug.WriteLine($"[ITEM-TABS][SAVE] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
 #endif
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
-                    ItemTabs.SelectedIndex = TabIndexBasic;
+                    ForceSelectTab(TabIndexBasic);
 
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Fix the highlighted errors before saving.");
                 return;
             }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][SAVE] Validation OK bookmarkOnly={isBookmarkOnly}");
-#endif
-
-            if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
+            // SAVE should persist but NOT close.
+            if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
             {
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
-                    ItemTabs.SelectedIndex = TabIndexBasic;
+                    ForceSelectTab(TabIndexBasic);
 
                 return;
             }
 
-            // always tell Panel to refresh the grid when Save completes.
+            // Refresh grid after successful save
             NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
-            WipeAllForHostClose();
-            Submitted?.Invoke(this, EventArgs.Empty);
+            // Stay on Basic tab
+            ForceSelectTab(TabIndexBasic);
+            _lastTabIndex = TabIndexBasic;
+
+            // After saving: reload Basic to force VIEW mode (resets edit-unlock)
+            // Yes, this costs extra I/O. That's intentional for correctness.
+            BasicPanel.PopulateFromDbForCurrentEntity();
+
+            SetStatus("");
         }
 
         private void BasicPanel_CancelRequested(object? sender, EventArgs e)
@@ -1503,6 +1561,9 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[ITEM-TABS] BasicPanel CancelRequested");
 #endif
             SetStatus("");
+
+            // Refresh no matter what (cancel path)
+            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
             WipeAllForHostClose();
             Canceled?.Invoke(this, EventArgs.Empty);
@@ -1525,28 +1586,25 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANK-SAVE] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
-#endif
                 if (ItemTabs != null)
-                    ItemTabs.SelectedIndex = TabIndexBasic;
+                    ForceSelectTab(TabIndexBasic);
 
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
                 return;
             }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][BANK-SAVE] Validation OK bookmarkOnly={isBookmarkOnly} rowsStaged={BankCardsDraftRows.Count}");
-#endif
-
-            if (!TryPersistBasicIfNeeded(PersistTrigger.SaveAndExit, isBookmarkOnly))
+            // For BankCards Save&Exit, we still persist Basic then close.
+            if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
             {
                 if (ItemTabs != null)
-                    ItemTabs.SelectedIndex = TabIndexBasic;
+                    ForceSelectTab(TabIndexBasic);
 
                 return;
             }
+
+            // Refresh after successful save
+            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
             WipeAllForHostClose();
             Submitted?.Invoke(this, EventArgs.Empty);
@@ -1557,6 +1615,9 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel CancelAndExitRequested");
 #endif
+            // Refresh no matter what (bankcards cancel path)
+            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+
             WipeAllForHostClose();
             Canceled?.Invoke(this, EventArgs.Empty);
         }
@@ -1574,29 +1635,19 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
-            // -----------------------------------------------------------------
-            // Leaving Basic:
-            // - SPECIAL CASE (THIS CHANGE):
-            //   If EXISTING item AND BasicPanel is VIEW => allow switch with NO validation/no writes.
-            //
-            // - Otherwise, original behavior remains:
-            //   Validate Basic
-            //   If NEW item and valid, INSERT using existing logic, store PK in SEDS
-            //   Only after persist succeeds do we allow the user to land on the new tab
-            // -----------------------------------------------------------------
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
-                // THIS CHANGE:
+                // EXISTING+VIEW bypass: no validate/write, but still refresh grid (best-effort)
                 if (IsExistingItemAndBasicPanelIsViewMode())
                 {
 #if DEBUG
                     Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC (EXISTING+VIEW) => allow switch index={newIndex} (no validation/no writes)");
 #endif
+                    NotifyPanel_RefreshCategoryItemGrid_BestEffort();
                     _lastTabIndex = newIndex;
                     return;
                 }
 
-                // If this selection is the programmatic "post-persist" switch, do NOT re-run leave-basic logic.
                 if (_suppressLeaveBasicOnce)
                 {
                     _suppressLeaveBasicOnce = false;
@@ -1608,10 +1659,7 @@ namespace MWPV.View.UserControls
 #endif
                     int requestedIndex = newIndex;
 
-                    // Force back to Basic while we validate/persist (prevents downstream tabs from running without PK)
-                    _handlingTabSelection = true;
-                    try { ItemTabs.SelectedIndex = TabIndexBasic; }
-                    finally { _handlingTabSelection = false; }
+                    ForceSelectTab(TabIndexBasic);
 
                     bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
                     if (!allowLeaveBasic)
@@ -1623,15 +1671,12 @@ namespace MWPV.View.UserControls
                         return;
                     }
 
-                    // always tell Panel to refresh the grid when Basic is left (tab switch).
+                    // Refresh after successful leave-basic
                     NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
-                    // Persist OK (and for NEW items, PK is now in SEDS). Now allow the requested switch.
                     _lastTabIndex = TabIndexBasic;
-
                     _suppressLeaveBasicOnce = true;
 
-                    // Switch after we exit the current SelectionChanged stack.
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         if (_isClosing || ItemTabs == null)
@@ -1643,7 +1688,6 @@ namespace MWPV.View.UserControls
                         }
                         catch
                         {
-                            // swallow: tab switch must not crash editor
                         }
                     }), DispatcherPriority.Background);
 
@@ -1651,7 +1695,6 @@ namespace MWPV.View.UserControls
                 }
             }
 
-            // Leaving BankCards -> let panel auto-commit/wipe draft row state
             if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
             {
 #if DEBUG
@@ -1675,9 +1718,7 @@ namespace MWPV.View.UserControls
 #if DEBUG
                     Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS BLOCKED -> force back to BankCards.");
 #endif
-                    _handlingTabSelection = true;
-                    try { ItemTabs.SelectedIndex = TabIndexBankCards; }
-                    finally { _handlingTabSelection = false; }
+                    ForceSelectTab(TabIndexBankCards);
 
                     _lastTabIndex = TabIndexBankCards;
                     return;
@@ -1706,23 +1747,9 @@ namespace MWPV.View.UserControls
                 return false;
             }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Validation OK bookmarkOnly={isBookmarkOnly} -> persist if needed");
-#endif
-
-            // Leaving Basic should INSERT only for NEW items. Existing items do not write here.
-            // NEW item INSERT stores PK into SEDS (SetSedsContextForCategoryItem).
             if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Persist FAILED bookmarkOnly={isBookmarkOnly}");
-#endif
                 return false;
-            }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Persist OK bookmarkOnly={isBookmarkOnly}");
-#endif
             return true;
         }
 
@@ -1739,7 +1766,6 @@ namespace MWPV.View.UserControls
             }
             catch
             {
-                // swallow (status line must never crash the editor)
             }
         }
     }
