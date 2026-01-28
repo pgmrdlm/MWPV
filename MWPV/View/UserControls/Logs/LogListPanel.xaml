@@ -1,4 +1,5 @@
-﻿<UserControl x:Class="MWPV.View.UserControls.LogListPanel"
+﻿<!-- File: View/UserControls/LogListPanel.xaml -->
+<UserControl x:Class="MWPV.View.UserControls.LogListPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
@@ -64,13 +65,33 @@
     <!-- brand background for the panel -->
     <Grid Background="{DynamicResource Brush.Secondary}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
+            <!-- Pager now lives ABOVE the grid headings -->
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
+
+        <!-- Pager (moved to top) -->
+        <Grid Grid.Row="0" Margin="12,10,12,6">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="◀ Prev 15"
+                        Style="{StaticResource DialogPrimary}"
+                        Padding="12,4"
+                        Margin="0,0,6,0"
+                        Click="_btnPrev_Click"/>
+                <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=StatusText}"
+                           VerticalAlignment="Center"
+                           Margin="6,0"/>
+                <Button Content="Next 15 ▶"
+                        Style="{StaticResource DialogPrimary}"
+                        Padding="12,4"
+                        Margin="6,0,0,0"
+                        Click="_btnNext_Click"/>
+            </StackPanel>
+        </Grid>
 
         <!-- DataGrid (no Detail button column) -->
         <DataGrid x:Name="dgLogs"
-                  Grid.Row="0"
+                  Grid.Row="1"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
                   CanUserAddRows="False"
@@ -131,24 +152,5 @@
                 <!-- Message column removed -->
             </DataGrid.Columns>
         </DataGrid>
-
-        <!-- Pager -->
-        <Grid Grid.Row="1" Margin="12,0,12,10">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Content="◀ Prev 15"
-                        Style="{StaticResource DialogPrimary}"
-                        Padding="12,4"
-                        Margin="0,0,6,0"
-                        Click="_btnPrev_Click"/>
-                <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=StatusText}"
-                           VerticalAlignment="Center"
-                           Margin="6,0"/>
-                <Button Content="Next 15 ▶"
-                        Style="{StaticResource DialogPrimary}"
-                        Padding="12,4"
-                        Margin="6,0,0,0"
-                        Click="_btnNext_Click"/>
-            </StackPanel>
-        </Grid>
     </Grid>
 </UserControl>
