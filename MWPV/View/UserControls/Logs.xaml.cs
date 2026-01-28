@@ -50,6 +50,10 @@ namespace MWPV.View.UserControls
             _loadedOnce = true;
 
             await LoadTypesAsync();
+
+            // ALWAYS default to ALL on entry
+            ForceAllFilter();
+
             await LoadFirstPageAsync();
         }
 
@@ -59,7 +63,12 @@ namespace MWPV.View.UserControls
             ApplyTitleSuffix(isActive: IsVisible);
 
             if (IsVisible && _loadedOnce)
+            {
+                // ALWAYS default to ALL on entry
+                ForceAllFilter();
+
                 await LoadFirstPageAsync(silent: true);
+            }
         }
 
         private void Logs_Unloaded(object? sender, RoutedEventArgs e)
@@ -103,8 +112,6 @@ namespace MWPV.View.UserControls
 
         // --- type filter -----------------------------------------------------
 
-        // --- type filter -----------------------------------------------------
-
         private async Task LoadTypesAsync()
         {
             _types.Clear();
@@ -139,8 +146,8 @@ namespace MWPV.View.UserControls
 
             cmbType.ItemsSource = _types;
             cmbType.SelectedValue = "ALL";
+            _selectedTypeCode = "ALL";
         }
-
 
         private async void Type_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
@@ -149,6 +156,15 @@ namespace MWPV.View.UserControls
                 _selectedTypeCode = code;
                 await LoadFirstPageAsync();
             }
+        }
+
+        private void ForceAllFilter()
+        {
+            _selectedTypeCode = "ALL";
+
+            // keep UI in sync
+            if (cmbType != null)
+                cmbType.SelectedValue = "ALL";
         }
 
         // --- paging ----------------------------------------------------------
