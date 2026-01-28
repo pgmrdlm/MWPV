@@ -194,6 +194,10 @@ namespace MWPV.View.UserControls
         {
             try
             {
+                // BUGFIX: paging changes the data set; clear selection + details immediately.
+                ListPanel.SelectedItem = null;
+                DetailsPanel.Clear();
+
                 var list = await Task.Run(() =>
                     _selectedTypeCode.Equals("ALL", StringComparison.OrdinalIgnoreCase)
                         ? LogCatalogService.SelectPage(offset, limit)
@@ -201,9 +205,6 @@ namespace MWPV.View.UserControls
 
                 _rows.Clear();
                 foreach (var r in list) _rows.Add(r);
-
-                if (_rows.Count == 0)
-                    DetailsPanel.Clear();
             }
             catch (Exception ex)
             {
