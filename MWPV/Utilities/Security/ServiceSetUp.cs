@@ -42,7 +42,8 @@ namespace Utilities.Security
 
         // We keep these paths centralized here so callers don't duplicate them.
         private static string LocalRoot =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV");
+            Path.Combine(AppPaths.LocalAppDataRoot(), "MWPV");
+
 
         private static string SqlFolder => Path.Combine(LocalRoot, "sql");
         private static string DbPath => Path.Combine(LocalRoot, "MWPV.db");

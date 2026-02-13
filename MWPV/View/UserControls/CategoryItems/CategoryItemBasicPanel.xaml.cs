@@ -177,14 +177,14 @@ namespace MWPV.View.UserControls.CategoryItems
             try
             {
                 if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
-                    goto Done;
+                    return;
 
                 string kind;
                 try { kind = Encoding.UTF8.GetString(kindBytes); }
                 finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
 
                 if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
-                    goto Done;
+                    return;
 
                 if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
                     _activeEntityId = id;
@@ -193,11 +193,12 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 _activeEntityId = 0;
             }
-
-        Done:
+            finally
+            {
 #if DEBUG
-            Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
+                Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
 #endif
+            }
         }
 
         private void ApplyModeProtection()
@@ -477,19 +478,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                // NOTE:
-                // These are NON-SENSITIVE columns. We store original "before" values only.
-                // This prepares log-template selection later, but does not write logs here.
-                //
-                // Assumes CategoryItemSignatureState has the non-sensitive slots added (before/current),
-                // and we are ONLY setting the BEFORE slot in this Basic tab.
-
                 _sigState.Name.SetOriginal(row.Name);
                 _sigState.UserName.SetOriginal(row.Username);
                 _sigState.SignInUrl.SetOriginal(row.SignInUrl);
 
-                // Basic tab uses txtDescription as the editable text area.
-                // We baseline both Description + Notes to the same source here to keep future mapping flexible.
                 _sigState.Description.SetOriginal(row.Description);
                 _sigState.Notes.SetOriginal(row.Description);
 
@@ -506,7 +498,6 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
                 Debug.WriteLine($"[BASIC][BEFORE-NON-SIG][{tag}] FAILED: {ex.GetType().Name} {ex.Message}");
 #endif
-                // Fail-safe: baseline capture should never break populate.
             }
         }
 
@@ -695,10 +686,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         /* ======================= PASSWORD SIGNATURE: ORIGINAL ONLY (DB -> BEFORE) ======================= */
 
-        /// <summary>
-        /// Tab editor needs the original fingerprint to compare against.
-        /// We return a COPY to avoid sharing internal buffers.
-        /// </summary>
         public byte[]? GetOriginalPasswordFingerprintCopy()
         {
             try
@@ -728,7 +715,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            // If bookmark-only, there should be no active password, and we treat ORIGINAL as null.
             if (chkBookmarkOnly.IsChecked == true)
             {
                 _sigState.PasswordFingerprint.SetOriginal(null);
@@ -741,8 +727,6 @@ namespace MWPV.View.UserControls.CategoryItems
             byte[]? dbSig = null;
             try
             {
-                // This MUST come from the DB stored signature in CategoryItemPasswordHistory.
-                // Service should return the most recent signature bytes (PwSig) or null.
                 dbSig = CategoryItemService.LoadMostRecentPasswordHistoryByItemId(itemId)?.PwFp;
 
                 _sigState.PasswordFingerprint.SetOriginal(dbSig);
@@ -761,7 +745,6 @@ namespace MWPV.View.UserControls.CategoryItems
             finally
             {
                 // dbSig is now held by _sigState; do NOT wipe here.
-                // We want it available for the tab editor compare.
             }
         }
 
@@ -779,10 +762,6 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
                 return;
             }
-
-            // IMPORTANT:
-            // We do NOT compute password signatures here.
-            // Tab editor performs compare and decides whether to insert PW history + run duplicate check.
 
             SaveRequested?.Invoke(this, EventArgs.Empty);
         }
@@ -841,10 +820,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 return true;
             }
 
-            // We only pay the DB cost:
-            // - on submit OR
-            // - on LostFocus OR
-            // - when the value has changed since last check.
             if (!forSubmit && string.Equals(name, _lastNameChecked, StringComparison.Ordinal))
             {
                 ClearItemNameError();
@@ -857,7 +832,6 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 long? excludeId = (IsExistingItem && _editUnlocked) ? _activeEntityId : (long?)null;
 
-                // Across every category (service handles the SQL)
                 bool exists = CategoryItemService.ItemNameExistsAcrossAllCategories(name, excludeItemId: excludeId);
 
                 if (exists)
@@ -871,7 +845,6 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
                 Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
 #endif
-                // In release we don't block typing if the check throws; submit will still validate.
             }
 
             ClearItemNameError();
