@@ -13,12 +13,11 @@ namespace Utilities.Helpers
         public const string DbPasswordKey = "DB_Password.txt";
 
         public static string GetAppDbPath() =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                         "MWPV", "MWPV.db");
+            Path.Combine(AppPaths.LocalAppDataRoot(), "MWPV", "MWPV.db");
 
         public static string GetSqlFolderPath() =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                         "MWPV", "sql");
+            Path.Combine(AppPaths.LocalAppDataRoot(), "MWPV", "sql");
+
 
         public static void StoreDatabasePassword(char[] password)
         {

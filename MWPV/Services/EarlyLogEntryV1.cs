@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Utilities.Helpers;
+
 // Explicit alias to avoid clash with legacy Security.Utility.Sha256Common
 using HashSha256 = Security.Utility.Crypto.Hash.Sha256Common;
 
@@ -64,10 +66,11 @@ namespace MWPV.Services
         {
             get
             {
-                string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string root = AppPaths.LocalAppDataRoot();
                 return Path.Combine(root, "MWPV", "early");
             }
         }
+
 
         private static string DedupeDir => Path.Combine(EarlyDir, "dedup");
         private static string QuarantineDir => Path.Combine(EarlyDir, "quarantine");

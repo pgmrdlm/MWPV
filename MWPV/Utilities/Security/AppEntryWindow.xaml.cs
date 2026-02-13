@@ -35,10 +35,11 @@ namespace Utilities.Security
 
         // Full path to local encrypted database
         private readonly string _localDbPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            AppPaths.LocalAppDataRoot(),
             "MWPV",
             "MWPV.db"
         );
+
 
         public AppEntryWindow()
         {
@@ -133,11 +134,12 @@ namespace Utilities.Security
                 {
                     Title = "Select your encrypted key archive",
                     Filter = "Archives & All files|*.7z;*.zip;*.*|All files (*.*)|*.*",
-                    InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    InitialDirectory = AppPaths.LocalAppDataRoot(),
                     CheckFileExists = true,
                     CheckPathExists = true,
                     Multiselect = false
                 };
+
 
                 if (openFileDialog.ShowDialog() == true)
                     tbKeyFile.Text = openFileDialog.FileName;

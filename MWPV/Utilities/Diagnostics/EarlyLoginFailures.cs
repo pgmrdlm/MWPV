@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Utilities.Helpers;          // AppPaths
 
 namespace Utilities.Diagnostics
 {
@@ -19,7 +20,8 @@ namespace Utilities.Diagnostics
         public const string FileExt = ".elogp";
 
         public static string StoreDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
+            Path.Combine(AppPaths.LocalAppDataRoot(), "MWPV", "early");
+
 
         public static string QuarantineDir =>
             Path.Combine(StoreDir, "quarantine");

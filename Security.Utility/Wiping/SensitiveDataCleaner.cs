@@ -11,6 +11,7 @@ using System.Threading;
 using Security.Utility.Storage;   // SEDS lives here
 using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
 // optional, file-local aliases:
+using Utilities.Helpers;          // AppPaths
 
 namespace Security.Utility.Wiping;
 
@@ -27,7 +28,8 @@ public static class SensitiveDataCleaner
 {
     // ===== Central paths (align with EarlyLoginFailures) =====
     public static readonly string EarlyDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MWPV", "early");
+     Path.Combine(AppPaths.LocalAppDataRoot(), "MWPV", "early");
+
     public static readonly string QuarantineDir = Path.Combine(EarlyDir, "quarantine");
 
     // ===== Memory wipe registry =====
