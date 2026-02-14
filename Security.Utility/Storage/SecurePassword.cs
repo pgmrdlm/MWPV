@@ -1,15 +1,29 @@
-﻿using System;
+﻿// File: Security.Utility/Storage/SecurePassword.cs
+// FULL REWRITE
+//
+// Changes:
+// - Keep existing Generate() behavior (strong specials set) for backward compatibility.
+// - Add a "Compatible" password generator that uses a conservative special-char set
+//   (more likely to be accepted by picky sites).
+// - Refactor generation into a single internal method that accepts the specials set.
+
+using System;
 using System.Linq;
 using System.Security.Cryptography;
-// File: Crypto/KeyArchiveVerifier.cs (example)
-using Security.Utility.Storage;   // SEDS lives here
-using Security.Utility.Wiping;    // SensitiveDataCleaner lives here
+using Security.Utility.Wiping; // SensitiveDataCleaner lives here (may be used by callers)
 
 namespace Security.Utility.Storage
 {
     public static class SecurePassword
     {
         private const int MinimumLength = 8;
+
+        // Existing (strong) specials set (backward compatible with current behavior)
+        private const string StrongSpecials = "!@#$%^&*()-_=+[]{}:,.?";
+
+        // Conservative specials set for compatibility with picky sites.
+        // (Avoids quotes, slashes, backticks, spaces, braces/brackets, etc.)
+        private const string CompatibleSpecials = "!@#$%&*()-_=+.?";
 
         public static bool IsPasswordValid(string password, string verifyPassword, out string errorMessage)
         {
@@ -47,8 +61,39 @@ namespace Security.Utility.Storage
             return true;
         }
 
-        // Generate a password into target[], meeting >=3/4 categories
+        // Generate a password into target[], meeting >=3/4 categories (strong specials set)
         public static void Generate(ref char[] target, int length)
+        {
+            GenerateInternal(ref target, length, StrongSpecials);
+        }
+
+        // Generate a password into target[], meeting >=3/4 categories (compatible specials set)
+        public static void GenerateCompatible(ref char[] target, int length)
+        {
+            GenerateInternal(ref target, length, CompatibleSpecials);
+        }
+
+        // Optional UI convenience. Avoid if you don’t need it.
+        public static string GenerateAsString(int length)
+        {
+            char[] buf = null!;
+            Generate(ref buf, length);
+            try { return new string(buf); }
+            finally { Array.Clear(buf, 0, buf.Length); }
+        }
+
+        // Optional UI convenience: compatible generator
+        public static string GenerateCompatibleAsString(int length)
+        {
+            char[] buf = null!;
+            GenerateCompatible(ref buf, length);
+            try { return new string(buf); }
+            finally { Array.Clear(buf, 0, buf.Length); }
+        }
+
+        // --- internal implementation ---
+
+        private static void GenerateInternal(ref char[] target, int length, ReadOnlySpan<char> specials)
         {
             if (length < MinimumLength)
                 throw new ArgumentException($"Password length must be at least {MinimumLength} characters.", nameof(length));
@@ -57,14 +102,12 @@ namespace Security.Utility.Storage
             const string lowers = "abcdefghijklmnopqrstuvwxyz";
             const string uppers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
             const string digits = "0123456789";
-            // keep specials printable & filename/URL-safe-ish; adjust if you want broader
-            const string specials = "!@#$%^&*()-_=+[]{}:,.?";
 
             // Convert to arrays once
             var L = lowers.ToCharArray();
             var U = uppers.ToCharArray();
             var D = digits.ToCharArray();
-            var S = specials.ToCharArray();
+            var S = specials.ToArray();
 
             // We'll always include at least three categories; pick which three randomly
             // Categories index map: 0=L,1=U,2=D,3=S
@@ -89,15 +132,6 @@ namespace Security.Utility.Storage
 
             // Final shuffle so required chars are not predictable positions
             Shuffle(target);
-        }
-
-        // Optional UI convenience. Avoid if you don’t need it.
-        public static string GenerateAsString(int length)
-        {
-            char[] buf = null!;
-            Generate(ref buf, length);
-            try { return new string(buf); }
-            finally { Array.Clear(buf, 0, buf.Length); }
         }
 
         // --- helpers ---
