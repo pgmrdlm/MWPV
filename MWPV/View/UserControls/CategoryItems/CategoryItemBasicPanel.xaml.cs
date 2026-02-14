@@ -2,6 +2,9 @@
 //
 // FULL REWRITE
 //
+// Change requested:
+// - Basic tab ONLY: random password generation uses the COMPATIBLE generator instead of STRONG.
+//
 // Scope (Basic tab ONLY):
 // - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
 // - Existing item opens in VIEW-ONLY mode (read-protected).
@@ -38,7 +41,7 @@ using MWPV.Services;
 using MWPV.Utilities.Helpers;
 using MWPV.Utilities.UI;
 using MWPV.Utilities.Signatures;
-using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
+using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS) + SecurePassword
 using Security.Utility.Validation;
 using Security.Utility.Wiping;
 
@@ -197,6 +200,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
 #if DEBUG
                 Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
+
 #endif
             }
         }
@@ -881,7 +885,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                var generated = SecurePassword.GenerateAsString(12);
+                // CHANGED: use COMPATIBLE generator (picky-site friendly)
+                var generated = SecurePassword.GenerateCompatibleAsString(12);
 
                 _settingPwProgrammatically = true;
                 try { SetPassword(generated); }
