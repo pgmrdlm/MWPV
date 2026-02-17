@@ -3,11 +3,13 @@
 
      Purpose:
      - Shows Category Items as 3 “pill” buttons per row (Col1/Col2/Col3).
-     - Each pill collapses if Content is null/empty.
+     - Each pill collapses if its *text content* is null/empty.
+     - Visible text is trimmed (ellipsis) and cropped for display.
+     - Full value is available via ToolTip on mouse-over.
      - Click bubbles to ItemPill_Click in code-behind.
 
      Notes:
-     - This expects a parent style resource named "ItemPill" to exist (app/theme).
+     - Expects a parent style resource named "ItemPill" to exist (app/theme).
      - ItemsSource binds to BoundCategoryItems on this UserControl (DP/property in code-behind).
 -->
 
@@ -16,40 +18,49 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:MWPV.View.UserControls"
              mc:Ignorable="d"
              d:DesignHeight="400"
              d:DesignWidth="600">
 
     <UserControl.Resources>
 
-        <!-- Collapses the pill if Content is null/empty -->
+        <!-- Crops display text (converter already in your codebase per CategoryGrid pattern) -->
+        <local:CategoryCropConverter x:Key="CategoryCrop" />
+
+        <!-- Collapses the pill if the TextBlock inside Content is null/empty; keeps ItemPill look -->
         <Style x:Key="ItemPillWhenNotEmpty"
                TargetType="Button"
                BasedOn="{StaticResource ItemPill}">
+            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
             <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
-                <Trigger Property="Content" Value="{x:Null}">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="{x:Null}">
                     <Setter Property="Visibility" Value="Collapsed"/>
-                </Trigger>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <!-- (Optional) fallback if someone wants to swap styles later.
-             Not referenced by default. -->
+        <!-- Optional fallback if ItemPill is not present -->
         <Style x:Key="ItemPillWhenNotEmpty_Fallback"
                TargetType="Button"
                BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
             <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content}" Value="">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
-                <Trigger Property="Content" Value="{x:Null}">
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
+                             Value="{x:Null}">
                     <Setter Property="Visibility" Value="Collapsed"/>
-                </Trigger>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -71,26 +82,63 @@
                         <!-- Pill 1 -->
                         <Button Grid.Column="0"
                                 Style="{StaticResource ItemPillWhenNotEmpty}"
-                                Content="{Binding strCategoryItem1}"
                                 Tag="{Binding strCategoryItemKey1}"
-                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip1}"
-                                Click="ItemPill_Click"/>
+                                Click="ItemPill_Click"
+                                AutomationProperties.Name="{Binding strCategoryItem1}">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategoryItem1, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategoryItem1}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryItemToolTip1}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
 
                         <!-- Pill 2 -->
                         <Button Grid.Column="2"
                                 Style="{StaticResource ItemPillWhenNotEmpty}"
-                                Content="{Binding strCategoryItem2}"
                                 Tag="{Binding strCategoryItemKey2}"
-                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip2}"
-                                Click="ItemPill_Click"/>
+                                Click="ItemPill_Click"
+                                AutomationProperties.Name="{Binding strCategoryItem2}">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategoryItem2, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategoryItem2}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryItemToolTip2}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
 
                         <!-- Pill 3 -->
                         <Button Grid.Column="4"
                                 Style="{StaticResource ItemPillWhenNotEmpty}"
-                                Content="{Binding strCategoryItem3}"
                                 Tag="{Binding strCategoryItemKey3}"
-                                ToolTipService.ToolTip="{Binding strCategoryItemToolTip3}"
-                                Click="ItemPill_Click"/>
+                                Click="ItemPill_Click"
+                                AutomationProperties.Name="{Binding strCategoryItem3}">
+                            <Button.Content>
+                                <TextBlock Text="{Binding strCategoryItem3, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
+                                           TextTrimming="CharacterEllipsis"
+                                           TextWrapping="NoWrap"
+                                           HorizontalAlignment="Center"/>
+                            </Button.Content>
+                            <Button.ToolTip>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding strCategoryItem3}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding strCategoryItemToolTip3}"/>
+                                </StackPanel>
+                            </Button.ToolTip>
+                        </Button>
+
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
