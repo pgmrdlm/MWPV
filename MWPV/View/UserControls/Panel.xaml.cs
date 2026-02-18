@@ -2,12 +2,10 @@
 //
 // FULL REWRITE
 //
-// Purpose:
-// - Panel is the "bouncer" for the CategoryItem editor overlay.
-// - When overlay is shown, Panel locks left/right navigation.
-// - Shows a clear top-of-panel banner while locked.
-// - Raises an event to MainWindow so it can disable menu/toolbar navigation too.
-// - Hosts a true modal Popup overlay (Accept/Cancel/Abort) that blocks all input behind it.
+// Fix made:
+// - ForceCancelActiveEditor_BestEffort now calls CategoryItemEditorTabs.ForceCancelFromHost() directly
+//   (no reflection, no missing method/property names).
+// - Marshals to UI thread safely before touching UI controls.
 
 using System;
 using System.Diagnostics;
@@ -93,9 +91,6 @@ namespace MWPV.View.UserControls
 
         private void Panel_Loaded(object? sender, RoutedEventArgs e)
         {
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][LOADED]");
-            //#endif
             WireCategoryGridEvents();
             WireCategoryItemGridEvents();
             WireOverlayEvents();
@@ -105,9 +100,6 @@ namespace MWPV.View.UserControls
 
         private void Panel_Unloaded(object? sender, RoutedEventArgs e)
         {
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][UNLOADED]");
-            //#endif
             UnwireCategoryGridEvents();
             UnwireCategoryItemGridEvents();
             UnwireOverlayEvents();
@@ -124,25 +116,61 @@ namespace MWPV.View.UserControls
                 // If popup is active during shutdown, forcibly resolve it as Abort
                 if (IsPopupOverlayActive)
                 {
-                    //#if DEBUG
-                    //                    Debug.WriteLine("[PANEL][HOST-CLOSE] Popup active; forcing Abort.");
-                    //#endif
                     ForceClosePopupIfAny(PopupDialog.PopupResult.Abort);
                 }
 
                 if (IsEditorOverlayActive && AddEditItemOverlayHost.Content is CategoryItemEditorTabs tabs)
                 {
-                    //#if DEBUG
-                    //                    Debug.WriteLine("[PANEL][HOST-CLOSE] Forwarding wipe to CategoryItemEditorTabs.");
-                    //#endif
                     tabs.WipeAllForHostClose();
                 }
             }
             catch (Exception ex)
             {
-                //#if DEBUG
-                //                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
-                //#endif
+#if DEBUG
+                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
+#endif
+            }
+        }
+
+        /* =================== INACTIVITY BRIDGE (Force Cancel, NOT host-close) =================== */
+
+        /// <summary>
+        /// Best-effort "press Cancel" on the active CategoryItem editor.
+        /// This is the path inactivity logic should use (it should NOT call PrepareForHostClose()).
+        ///
+        /// Behavior:
+        /// - If popup modal is active: abort it (best-effort)
+        /// - If editor overlay is active: trigger existing Cancel flow (CancelRequested) via tabs.ForceCancelFromHost()
+        /// </summary>
+        public void ForceCancelActiveEditor_BestEffort()
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(new Action(ForceCancelActiveEditor_BestEffort));
+                    return;
+                }
+
+                if (IsPopupOverlayActive)
+                {
+                    // If a modal popup is blocking, resolve it. Inactivity is a security event.
+                    ForceClosePopupIfAny(PopupDialog.PopupResult.Abort);
+                }
+
+                if (!IsEditorOverlayActive)
+                    return;
+
+                if (AddEditItemOverlayHost?.Content is not CategoryItemEditorTabs tabs)
+                    return;
+
+                // This is the correct, real Cancel path:
+                // CategoryItemEditorTabs.ForceCancelFromHost -> BasicPanel.ForceCancelFromHost -> CancelRequested -> editor closes.
+                tabs.ForceCancelFromHost();
+            }
+            catch
+            {
+                // swallow: inactivity must never crash
             }
         }
 
@@ -163,11 +191,6 @@ namespace MWPV.View.UserControls
             if (btnAddCategoryItem != null) btnAddCategoryItem.IsEnabled = !locked;
 
             UpdateLockdownBanner(locked);
-
-            //#if DEBUG
-            //            Debug.WriteLine($"[PANEL][NAV-LOCK] locked={locked}");
-            //#endif
-
             RaiseNavigationLockChanged(locked);
         }
 
@@ -211,10 +234,6 @@ namespace MWPV.View.UserControls
 
             txtCategoryItemsTitle.Text = "Category Items";
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
-
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events wired.");
-            //#endif
         }
 
         private void UnwireCategoryGridEvents()
@@ -222,37 +241,16 @@ namespace MWPV.View.UserControls
             if (CategoryGrid == null) return;
 
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
-
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][LEFT] CategoryGrid events unwired.");
-            //#endif
         }
 
         private void CategoryGrid_SelectedCategoryChanged(object sender, RoutedEventArgs e)
         {
-            if (_isNavigationLocked)
-            {
-                //#if DEBUG
-                //                Debug.WriteLine("[PANEL][LEFT→RIGHT] Selection ignored (navigation locked).");
-                //#endif
-                return;
-            }
-
-            if (IsPopupOverlayActive)
-            {
-                //#if DEBUG
-                //                Debug.WriteLine("[PANEL][LEFT→RIGHT] Selection ignored (popup modal active).");
-                //#endif
-                return;
-            }
+            if (_isNavigationLocked) return;
+            if (IsPopupOverlayActive) return;
 
             var sel = CategoryGrid.GetSelectedCategory(e);
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
-
-            //#if DEBUG
-            //            Debug.WriteLine($"[PANEL][LEFT→RIGHT] Category selected: key={_selectedCategoryKey}, name='{_selectedCategoryName}'");
-            //#endif
 
             btnAddCategoryItem.Visibility = Visibility.Visible;
             txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
@@ -260,12 +258,7 @@ namespace MWPV.View.UserControls
                 : $"Category Items — {_selectedCategoryName}";
 
             try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
-            catch (Exception ex)
-            {
-                //#if DEBUG
-                //                Debug.WriteLine($"[PANEL][RIGHT][REFRESH][ERR] {ex}");
-                //#endif
-            }
+            catch { }
         }
 
         /* =================== Category Item Grid (pills) =================== */
@@ -276,10 +269,6 @@ namespace MWPV.View.UserControls
 
             CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
             CategoryItemGrid.EditRequested += CategoryItemGrid_EditRequested;
-
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events wired.");
-            //#endif
         }
 
         private void UnwireCategoryItemGridEvents()
@@ -287,10 +276,6 @@ namespace MWPV.View.UserControls
             if (CategoryItemGrid == null) return;
 
             CategoryItemGrid.EditRequested -= CategoryItemGrid_EditRequested;
-
-            //#if DEBUG
-            //            Debug.WriteLine("[PANEL][RIGHT] CategoryItemGrid events unwired.");
-            //#endif
         }
 
         private void CategoryItemGrid_EditRequested(object? sender, int categoryItemId)
@@ -442,9 +427,7 @@ namespace MWPV.View.UserControls
             SetNavigationLocked(false);
         }
 
-        // SPECIFIC CHANGE ONLY:
-        // - Centralize the grid refresh into a single code-callable method on Panel
-        // - This can be invoked by user code (tabs exit) without relying on a button click event.
+        // Centralize the grid refresh into a single code-callable method on Panel
         public void RequestCategoryItemGridRefresh()
         {
             try
@@ -507,9 +490,6 @@ namespace MWPV.View.UserControls
         {
             if (_isNavigationLocked || IsEditorOverlayActive || IsPopupOverlayActive)
             {
-                //#if DEBUG
-                //                Debug.WriteLine("[PANEL][LOGS] Blocked: editor overlay active OR popup modal active.");
-                //#endif
                 UpdateLockdownBanner(true);
                 RaiseNavigationLockChanged(true);
                 return;
@@ -526,13 +506,6 @@ namespace MWPV.View.UserControls
 
         /* ======================= POPUP OVERLAY (MODAL) ======================= */
 
-        /// <summary>
-        /// Shows a true modal popup overlay (blocks all input behind it) and returns the result.
-        /// Caller typically does:
-        /// - Accept => proceed (insert)
-        /// - Cancel => do nothing (no insert)
-        /// - Abort  => terminate flow safely
-        /// </summary>
         public Task<PopupDialog.PopupResult> ShowPopupAsync(PopupDialog popup)
         {
             if (popup == null) throw new ArgumentNullException(nameof(popup));
@@ -557,11 +530,8 @@ namespace MWPV.View.UserControls
                 PopupOverlayHost.Focus();
                 Keyboard.Focus(PopupOverlayHost);
             }
-            catch (Exception ex)
+            catch
             {
-                //#if DEBUG
-                //                Debug.WriteLine("[PANEL][POPUP][SHOW][ERR] " + ex);
-                //#endif
                 ForceClosePopupIfAny(PopupDialog.PopupResult.Abort);
             }
 
@@ -570,18 +540,9 @@ namespace MWPV.View.UserControls
 
         private void Popup_Completed(PopupDialog.PopupResult result)
         {
-            // Close UI first, then complete the Task.
-            try
-            {
-                HidePopupOverlay();
-            }
-            catch { }
+            try { HidePopupOverlay(); } catch { }
 
-            try
-            {
-                _popupTcs?.TrySetResult(result);
-            }
-            catch { }
+            try { _popupTcs?.TrySetResult(result); } catch { }
         }
 
         private void HidePopupOverlay()
@@ -612,17 +573,9 @@ namespace MWPV.View.UserControls
 
         private void ForceClosePopupIfAny(PopupDialog.PopupResult result)
         {
-            try
-            {
-                HidePopupOverlay();
-            }
-            catch { }
+            try { HidePopupOverlay(); } catch { }
 
-            try
-            {
-                _popupTcs?.TrySetResult(result);
-            }
-            catch { }
+            try { _popupTcs?.TrySetResult(result); } catch { }
 
             _popupTcs = null;
         }

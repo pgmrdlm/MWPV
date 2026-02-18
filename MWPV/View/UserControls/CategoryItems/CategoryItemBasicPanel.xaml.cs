@@ -2,31 +2,13 @@
 //
 // FULL REWRITE
 //
-// Change requested:
-// - Basic tab ONLY: random password generation uses the COMPATIBLE generator instead of STRONG.
+// Change requested (THIS STEP ONLY):
+// - Add a host-callable method that forces the existing Cancel path (no new wipe logic).
+//   This will be used by the inactivity timeout flow to "press Cancel" programmatically.
 //
-// Scope (Basic tab ONLY):
-// - Detect whether we are viewing an existing CategoryItem via SEDS (CurrentEntityKind/Id).
-// - Existing item opens in VIEW-ONLY mode (read-protected).
-// - In view-only mode, show an "Edit" pill button. Clicking it unlocks fields for editing.
-// - No DB update logic is added here.
-// - Reveal buttons remain enabled in view-only (view-only blocks edits, not reveal).
-// - Save button is disabled in view-only to prevent accidental save behavior.
-// - In view-only, replace Generate button with Copy-to-Clipboard button for password.
-// - In view-only, show Copy-to-Clipboard buttons for: Password, Phone, Email, Username, URL.
-// - NEW: Item Name duplicate check runs across ALL categories (service call), with error shown under name.
-//   - For existing items, excludes the current itemId when editing is unlocked.
-//   - Runs on submit validation and on ItemName LostFocus (but never in view-only).
-//
-// SIGNATURE / BASELINE RULES (THIS FILE):
-// - Sensitive/MASKED fields use signatures (handled elsewhere).
-// - This file loads:
-//   (A) ORIGINAL ("before") password fingerprint from PasswordHistory (DB stored sig).
-//   (B) ORIGINAL ("before") NON-SENSITIVE baseline values from the loaded DB row.
-// - We DO NOT compute any CURRENT/after values in this file.
-// - Current/after compare happens in CategoryItemEditorTabs on Save.
-// - Debug output prints ORIGINAL for password fingerprint only (no plaintext).
-//
+// Notes:
+// - This method MUST reuse existing logic: it simply raises CancelRequested (same as btnCancel_Click).
+// - No other behavior changes.
 
 using System;
 using System.Collections.Generic;
@@ -568,6 +550,25 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
             ResetUiState();
             WipeSensitiveFields();
+        }
+
+        /// <summary>
+        /// Host-callable "press Cancel" that reuses the existing cancel path.
+        /// No new wipe logic is introduced here.
+        /// </summary>
+        public void ForceCancelFromHost()
+        {
+#if DEBUG
+            Debug.WriteLine("[BASIC] ForceCancelFromHost -> raising CancelRequested");
+#endif
+            try
+            {
+                CancelRequested?.Invoke(this, EventArgs.Empty);
+            }
+            catch
+            {
+                // swallow (host-controlled flow)
+            }
         }
 
         public void NormalizeUsernameFromEmailIfEmpty()
@@ -1938,4 +1939,3 @@ namespace MWPV.View.UserControls.CategoryItems
         }
     }
 }
- 

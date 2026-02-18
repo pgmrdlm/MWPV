@@ -9,9 +9,16 @@
 // 3) Cancel still closes (existing behavior).
 // 4) Leave-Basic tab switching rules stay as previously implemented.
 //
-// No BasicPanel rewrite included (VIEW switch is best-effort via reflection).
+// Change in this rewrite:
+// - Fix compile errors caused by invalid "in[]" syntax (must be "in new[]").
+// - Keep host-callable ForceCancelFromHost() delegating to BasicPanel.ForceCancelFromHost().
+// - IMPORTANT (THIS BUG): Wire AppStatus.IsBasicOpen based on the selected tab index,
+//   so the inactivity timer can detect when Basic is open.
+//
+// NOTE: No other behavior changes.
 
 using MWPV.Services;
+using MWPV.Session;                        // AppStatus (IsBasicOpen)
 using MWPV.View.UserControls.CategoryItems;
 using MWPV.View.UserControls.Popup;
 using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
@@ -104,6 +111,56 @@ namespace MWPV.View.UserControls
 
             Loaded += CategoryItemEditorTabs_Loaded;
             Unloaded += CategoryItemEditorTabs_Unloaded;
+        }
+
+        /* ======================= AppStatus bridge (inactivity timer) ======================= */
+
+        private void UpdateIsBasicOpenFromUi_BestEffort()
+        {
+            try
+            {
+                int idx = ItemTabs?.SelectedIndex ?? -1;
+                bool isBasic = idx == TabIndexBasic;
+                AppStatus.IsBasicOpen = isBasic;
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][APPSTATUS] IsBasicOpen={isBasic} (SelectedIndex={idx})");
+#endif
+            }
+            catch
+            {
+                // swallow: status update must never break tab logic
+            }
+        }
+
+        private void SetIsBasicOpen_BestEffort(bool isBasic)
+        {
+            try
+            {
+                AppStatus.IsBasicOpen = isBasic;
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][APPSTATUS] IsBasicOpen={isBasic} (explicit)");
+#endif
+            }
+            catch
+            {
+                // swallow
+            }
+        }
+
+        private void ClearIsBasicOpen_BestEffort()
+        {
+            try
+            {
+                AppStatus.IsBasicOpen = false;
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][APPSTATUS] IsBasicOpen=false (cleared)");
+#endif
+            }
+            catch
+            {
+            }
         }
 
         /* ======================= PANEL GRID REFRESH BRIDGE ======================= */
@@ -854,6 +911,9 @@ namespace MWPV.View.UserControls
                 _lastTabIndex = ItemTabs.SelectedIndex;
             }
 
+            // IMPORTANT: sync status for inactivity timer
+            UpdateIsBasicOpenFromUi_BestEffort();
+
             _hasPersistedId = HasPersistedIdFromSeds();
 
             if (_hasPersistedId)
@@ -887,6 +947,10 @@ namespace MWPV.View.UserControls
 
             _hasPersistedId = HasPersistedIdFromSeds();
             InitializeUiForOpen();
+
+            // IMPORTANT: sync status for inactivity timer
+            UpdateIsBasicOpenFromUi_BestEffort();
+
             SetStatus("");
         }
 
@@ -908,6 +972,9 @@ namespace MWPV.View.UserControls
             catch { }
 
             try { ClearSedsContext(); } catch { }
+
+            // IMPORTANT: leaving editor means Basic is not open
+            ClearIsBasicOpen_BestEffort();
 
             SetStatus("");
         }
@@ -932,6 +999,10 @@ namespace MWPV.View.UserControls
             finally
             {
                 try { ClearSedsContext(); } catch { }
+
+                // IMPORTANT: host close means Basic is not open
+                ClearIsBasicOpen_BestEffort();
+
 #if DEBUG
                 Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose EXIT");
 #endif
@@ -954,6 +1025,26 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS] BankCardsPanel.WipeAllForHostClose failed: {ex}");
 #endif
+            }
+        }
+
+        /// <summary>
+        /// Host-callable "press Cancel" that reuses the existing cancel path.
+        /// This delegates to BasicPanel.ForceCancelFromHost(), which raises CancelRequested
+        /// (same as clicking Cancel).
+        /// </summary>
+        public void ForceCancelFromHost()
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] ForceCancelFromHost -> delegating to BasicPanel");
+#endif
+            try
+            {
+                BasicPanel?.ForceCancelFromHost();
+            }
+            catch
+            {
+                // swallow (host-controlled flow)
             }
         }
 
@@ -1502,6 +1593,9 @@ namespace MWPV.View.UserControls
             finally
             {
                 _handlingTabSelection = false;
+
+                // IMPORTANT: keep AppStatus in sync even for forced selections
+                UpdateIsBasicOpenFromUi_BestEffort();
             }
         }
 
@@ -1516,6 +1610,9 @@ namespace MWPV.View.UserControls
 
             if (BasicPanel == null)
                 return;
+
+            // Basic is effectively "open" while we're in this editor, but keep it driven by tab index.
+            SetIsBasicOpen_BestEffort(true);
 
             BasicPanel.NormalizeUsernameFromEmailIfEmpty();
 
@@ -1635,6 +1732,9 @@ namespace MWPV.View.UserControls
             int newIndex = ItemTabs.SelectedIndex;
             int oldIndex = _lastTabIndex;
 
+            // IMPORTANT: keep AppStatus in sync for inactivity timer
+            UpdateIsBasicOpenFromUi_BestEffort();
+
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {
                 // EXISTING+VIEW bypass: no validate/write, but still refresh grid (best-effort)
@@ -1668,6 +1768,9 @@ namespace MWPV.View.UserControls
                         Debug.WriteLine("[ITEM-TABS][TAB] Leave BASIC BLOCKED -> stay on Basic.");
 #endif
                         _lastTabIndex = TabIndexBasic;
+
+                        // Ensure status reflects forced Basic
+                        UpdateIsBasicOpenFromUi_BestEffort();
                         return;
                     }
 
@@ -1688,6 +1791,11 @@ namespace MWPV.View.UserControls
                         }
                         catch
                         {
+                        }
+                        finally
+                        {
+                            // IMPORTANT: keep AppStatus in sync for programmatic jump
+                            UpdateIsBasicOpenFromUi_BestEffort();
                         }
                     }), DispatcherPriority.Background);
 
@@ -1711,6 +1819,9 @@ namespace MWPV.View.UserControls
                 finally
                 {
                     _handlingTabSelection = false;
+
+                    // IMPORTANT: status sync after any forced selection inside bankcards
+                    UpdateIsBasicOpenFromUi_BestEffort();
                 }
 
                 if (!allowLeave)

@@ -1,10 +1,12 @@
-﻿// App.xaml.cs — full file (WPF, .NET 8)
+﻿// File: App.xaml.cs — full file (WPF, .NET 8)
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Runtime.InteropServices;
 using System.Windows.Controls;         // ✅ for TextBlock (StatusText)
+using System.Windows.Input;            // ✅ for InputManager + input event args
 using Utilities.Diagnostics;           // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;               // ErrorHandler
 using Utilities.Security;
@@ -23,6 +25,20 @@ namespace MWPV
         private EventWaitHandle? _bringToFrontEvent;
         private Thread? _bringToFrontListener;
         private bool _ownsMutex;
+
+        // ===== Inactivity input hook (app-scoped) =====
+        // Any app component can subscribe and reset its inactivity timer.
+        // This stays generic: App only reports "user activity happened in MWPV".
+        public static event Action? UserActivityDetected;
+
+        private bool _inputHooked;
+
+#if DEBUG
+        private static void Dbg(string msg)
+        {
+            Debug.WriteLine($"[APP][INACTIVITY-HOOK] {DateTime.Now:HH:mm:ss.fff} [T{Thread.CurrentThread.ManagedThreadId}] {msg}");
+        }
+#endif
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -66,9 +82,9 @@ namespace MWPV
                     throw new InvalidOperationException(
                         $"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}. {reason}");
 
-//#if DEBUG
-//                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
-//#endif
+                //#if DEBUG
+                //                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
+                //#endif
             }
             catch (Exception ex)
             {
@@ -87,9 +103,9 @@ namespace MWPV
                 Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
                 // NOTE: We intentionally DO NOT call EarlyLogIngestor.IngestAll() here.
                 // Ingest runs ONLY after a successful key/database login.
-//#if DEBUG
-//                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
-//#endif
+                //#if DEBUG
+                //                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
+                //#endif
             }
             catch (Exception ex)
             {
@@ -170,6 +186,9 @@ namespace MWPV
                     ShutdownMode = ShutdownMode.OnMainWindowClose;  // <-- set ONLY after MainWindow exists
                     main.Show();
 
+                    // ✅ Inactivity input hook: keystrokes + mouse clicks/wheel inside MWPV
+                    HookUserInput();
+
                     // ✅ CHANGE: route through MainWindow helper so it auto-hides & clears on input
                     if (!string.IsNullOrWhiteSpace(startupStatus))
                     {
@@ -207,6 +226,9 @@ namespace MWPV
             }
             catch { /* swallow */ }
 
+            // ✅ Unhook inactivity input hook
+            UnhookUserInput();
+
             // Order matters: stop thread -> signal -> dispose, then mutex
             try { _bringToFrontListener?.Interrupt(); } catch { }     // break WaitOne()
             try { _bringToFrontEvent?.Set(); } catch { }              // nudge if not interrupted
@@ -231,6 +253,109 @@ namespace MWPV
             catch { }
 
             base.OnExit(e);
+        }
+
+        // ===== Inactivity input hook implementation =====
+        private void HookUserInput()
+        {
+            if (_inputHooked) return;
+
+            try
+            {
+                InputManager.Current.PreProcessInput += OnPreProcessInput;
+                _inputHooked = true;
+
+#if DEBUG
+                Dbg("HOOKED InputManager.Current.PreProcessInput");
+#endif
+            }
+            catch
+            {
+                // best-effort: if hooking fails, app still runs
+#if DEBUG
+                Dbg("HOOK FAILED (exception suppressed)");
+#endif
+            }
+        }
+
+        private void UnhookUserInput()
+        {
+            if (!_inputHooked) return;
+
+            try
+            {
+                InputManager.Current.PreProcessInput -= OnPreProcessInput;
+
+#if DEBUG
+                Dbg("UNHOOKED InputManager.Current.PreProcessInput");
+#endif
+            }
+            catch
+            {
+                // swallow
+#if DEBUG
+                Dbg("UNHOOK FAILED (exception suppressed)");
+#endif
+            }
+            finally
+            {
+                _inputHooked = false;
+            }
+        }
+
+        private void OnPreProcessInput(object sender, PreProcessInputEventArgs e)
+        {
+            // We only treat these as "activity":
+            // - Keyboard keydown
+            // - Mouse button down
+            // - Mouse wheel
+            //
+            // (All are inherently app-scoped because they are routed through WPF input for this process.)
+            try
+            {
+                var input = e?.StagingItem?.Input;
+                if (input is null) return;
+
+                if (input is KeyEventArgs keyArgs)
+                {
+                    if (keyArgs.RoutedEvent == Keyboard.KeyDownEvent)
+                    {
+#if DEBUG
+                        Dbg($"ACTIVITY KeyDown key={keyArgs.Key} systemKey={keyArgs.SystemKey} originalSource={keyArgs.OriginalSource?.GetType().Name ?? "<null>"}");
+#endif
+                        UserActivityDetected?.Invoke();
+                    }
+                    return;
+                }
+
+                if (input is MouseButtonEventArgs mouseBtnArgs)
+                {
+                    if (mouseBtnArgs.RoutedEvent == Mouse.MouseDownEvent)
+                    {
+#if DEBUG
+                        Dbg($"ACTIVITY MouseDown button={mouseBtnArgs.ChangedButton} clicks={mouseBtnArgs.ClickCount} originalSource={mouseBtnArgs.OriginalSource?.GetType().Name ?? "<null>"}");
+#endif
+                        UserActivityDetected?.Invoke();
+                    }
+                    return;
+                }
+
+                if (input is MouseWheelEventArgs wheelArgs)
+                {
+#if DEBUG
+                    Dbg($"ACTIVITY MouseWheel delta={wheelArgs.Delta} originalSource={wheelArgs.OriginalSource?.GetType().Name ?? "<null>"}");
+#endif
+                    UserActivityDetected?.Invoke();
+                    return;
+                }
+            }
+            catch
+            {
+                // swallow: never let input hook crash the app
+#if DEBUG
+                Dbg("OnPreProcessInput ERROR (exception suppressed)");
+#endif
+            }
         }
 
         // === Bring-to-front plumbing ===
