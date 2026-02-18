@@ -5,6 +5,7 @@
 // Change made:
 // - In inactivity timeout path, call Panel.ForceCancelActiveEditor_BestEffort() (your “press Cancel” path),
 //   NOT PrepareForHostClose().
+// - After that, TERMINATE THE APPLICATION (Close main window so existing Closing cleanup runs).
 // - Everything else preserved as-is (close cleanup + status + lockdown + logs).
 
 using System;
@@ -55,19 +56,16 @@ namespace MWPV
             Closing += MainWindow_Closing;
 
             // ============================================================
-            // Inactivity timer wiring (FINAL CORRECT VERSION)
+            // Inactivity timer wiring (terminate app on timeout)
             // ============================================================
 
             _inactivity = new InactivityLockService(
                 timeout: TimeSpan.FromMinutes(5),
 
                 // Sensitive context = editor overlay is open (regardless of which tab is selected)
-                // Requirement: after 5 minutes of inactivity, wipe + close the editor (Cancel path).
                 isSensitiveContextOpen: () => Panel != null && Panel.IsEditorOverlayActive,
 
-                // IMPORTANT:
-                // - This must reuse the EXISTING Cancel path (same as user clicking Cancel)
-                // - Not a wipe-only host-close
+                // Reuse the EXISTING Cancel path (same as user clicking Cancel)
                 forceCancelSensitiveContext: () =>
                 {
                     try
@@ -80,12 +78,23 @@ namespace MWPV
                     }
                 },
 
-                // Placeholder until Hello gate UI is wired
+                // Final action: terminate the application (via normal close path)
                 lockAction: () =>
                 {
-                    ShowStartupStatus(
-                        "Locked due to inactivity. (Hello gate not wired yet.)",
-                        autoHide: null);
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            // Prefer Close() so MainWindow_Closing cleanup runs.
+                            Close();
+                        }
+                        catch
+                        {
+                            // Last resort: hard shutdown.
+                            try { Application.Current?.Shutdown(); } catch { }
+                        }
+                    }),
+                    DispatcherPriority.Background);
                 });
 
             _inactivity.Start();
@@ -270,7 +279,7 @@ namespace MWPV
                 _uiLockedDown = false;
                 ClearStatus();
 
-                // Host close still does wipe path (separate from inactivity cancel path)
+                // Host close wipe path (separate from inactivity cancel path)
                 try { Panel?.PrepareForHostClose(); } catch { }
 
                 Content = null;
