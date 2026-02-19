@@ -1,4 +1,23 @@
-﻿<Window x:Class="Utilities.Security.AppEntryWindow"
+﻿<!-- File: Utilities/Security/AppEntryWindow.xaml
+     FULL REWRITE
+
+     Purpose (hotfix/UpperCaseNotify prep):
+     - Adds Caps Lock ON notifications for the two PasswordBox controls only:
+         pbPassword, pbVerifyPassword
+     - Notifications are UI placeholders (TextBlocks) that code-behind will toggle.
+
+     Critical compatibility:
+     - Reintroduces the named RowDefinition: x:Name="VerifyPasswordRow"
+       because AppEntryWindow.xaml.cs uses:
+           VerifyPasswordRow.Height = new GridLength(0);
+
+     Notes:
+     - No CapsLock logic in XAML; code-behind handles:
+         GotKeyboardFocus, LostKeyboardFocus, PreviewKeyDown
+     - Strength meter UI remains as-is, just re-rowed to accommodate the Caps warnings.
+-->
+
+<Window x:Class="Utilities.Security.AppEntryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -17,10 +36,10 @@
 
     <!-- Brushes for password-strength meter -->
     <Window.Resources>
-        <SolidColorBrush x:Key="PwWeak"        Color="#D32F2F"/>
-        <SolidColorBrush x:Key="PwFair"        Color="#FBC02D"/>
-        <SolidColorBrush x:Key="PwStrong"      Color="#388E3C"/>
-        <SolidColorBrush x:Key="PwVeryStrong"  Color="#2E7D32"/>
+        <SolidColorBrush x:Key="PwWeak"       Color="#D32F2F"/>
+        <SolidColorBrush x:Key="PwFair"       Color="#FBC02D"/>
+        <SolidColorBrush x:Key="PwStrong"     Color="#388E3C"/>
+        <SolidColorBrush x:Key="PwVeryStrong" Color="#2E7D32"/>
     </Window.Resources>
 
     <shell:WindowChrome.WindowChrome>
@@ -63,6 +82,7 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Stretch"
                                 Margin="8,0,0,0">
+
                         <!-- Minimize -->
                         <Button Style="{StaticResource TitleButton}"
                                 ToolTip="Minimize"
@@ -103,38 +123,49 @@
             <Border Grid.Row="1"
                     Background="{DynamicResource Brush.Secondary}"
                     Padding="18">
+
                 <!-- 3 columns: labels/button | gutter | inputs -->
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <!-- Password -->
-                        <RowDefinition Height="Auto"/>
-                        <!-- Strength meter -->
-                        <RowDefinition x:Name="VerifyPasswordRow" Height="Auto"/>
-                        <!-- Verify -->
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="Auto"/>
-                        <!-- Key file -->
-                        <RowDefinition Height="20"/>
-                        <RowDefinition Height="Auto"/>
-                        <!-- Submit/Cancel -->
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="Auto"/>
-                        <!-- Error -->
-                        <RowDefinition Height="Auto"/>
-                        <!-- Advisory banner -->
-                        <RowDefinition Height="*"/>
-                        <!-- Filler -->
-                    </Grid.RowDefinitions>
-
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
-                        <!-- labels / key-file button -->
                         <ColumnDefinition Width="12"/>
-                        <!-- gutter -->
                         <ColumnDefinition Width="*"/>
-                        <!-- inputs -->
                     </Grid.ColumnDefinitions>
+
+                    <!-- Rows (structured to add Caps Lock warnings + keep VerifyPasswordRow name) -->
+                    <Grid.RowDefinitions>
+                        <!-- 0: Password input -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 1: Caps warn (Password) -->
+                        <RowDefinition Height="Auto"/>
+
+                        <!-- 2: Strength meter -->
+                        <RowDefinition Height="Auto"/>
+
+                        <!-- 3: Verify input (NAMED for code-behind compatibility) -->
+                        <RowDefinition x:Name="VerifyPasswordRow" Height="Auto"/>
+                        <!-- 4: Caps warn (Verify) -->
+                        <RowDefinition Height="Auto"/>
+
+                        <!-- 5: Spacer -->
+                        <RowDefinition Height="16"/>
+
+                        <!-- 6: Key file -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 7: Spacer -->
+                        <RowDefinition Height="20"/>
+
+                        <!-- 8: Submit/Cancel -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 9: Spacer -->
+                        <RowDefinition Height="10"/>
+
+                        <!-- 10: Error -->
+                        <RowDefinition Height="Auto"/>
+
+                        <!-- 11: Advisory banner -->
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
                     <!-- Enter Password -->
                     <Label Grid.Row="0" Grid.Column="0"
@@ -144,6 +175,7 @@
                            Margin="0,0,10,0"
                            Content="_Enter Password"
                            Target="{Binding ElementName=pbPassword}"/>
+
                     <PasswordBox x:Name="pbPassword"
                                  Grid.Row="0" Grid.Column="2"
                                  Height="30"
@@ -151,13 +183,27 @@
                                  Background="White"
                                  Foreground="Black"
                                  PasswordChar="*"
-                                 Padding="6,2"/>
+                                 Padding="6,2"
+                                 GotKeyboardFocus="PasswordBox_GotKeyboardFocus"
+                                 LostKeyboardFocus="PasswordBox_LostKeyboardFocus"
+                                 PreviewKeyDown="PasswordBox_PreviewKeyDown"/>
+
+                    <!-- Caps Lock warning (Password) -->
+                    <TextBlock x:Name="tbCapsWarnPassword"
+                               Grid.Row="1" Grid.Column="2"
+                               Margin="0,4,0,0"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#B91C1C"
+                               Visibility="Collapsed"
+                               Text="Caps Lock is ON"/>
 
                     <!-- Password strength (advisory only) -->
-                    <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,6,0,0">
+                    <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,6,0,0">
                         <ProgressBar x:Name="PwStrengthBar"
                                      Height="8"
-                                     Minimum="0" Maximum="1"
+                                     Minimum="0"
+                                     Maximum="1"
                                      Value="0"
                                      Background="#22000000"/>
                         <TextBlock x:Name="PwStrengthText"
@@ -169,7 +215,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="• " />
+                                        <TextBlock Text="• "/>
                                         <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </DataTemplate>
@@ -179,25 +225,39 @@
 
                     <!-- Verify Password -->
                     <Label x:Name="lblVerifyPassword"
-                           Grid.Row="2" Grid.Column="0"
+                           Grid.Row="3" Grid.Column="0"
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"
                            FontWeight="Bold"
                            Margin="0,0,10,0"
                            Content="_Verify Password"
                            Target="{Binding ElementName=pbVerifyPassword}"/>
+
                     <PasswordBox x:Name="pbVerifyPassword"
-                                 Grid.Row="2" Grid.Column="2"
+                                 Grid.Row="3" Grid.Column="2"
                                  Height="30"
                                  VerticalAlignment="Center"
                                  Background="White"
                                  Foreground="Black"
                                  PasswordChar="*"
-                                 Padding="6,2"/>
+                                 Padding="6,2"
+                                 GotKeyboardFocus="PasswordBox_GotKeyboardFocus"
+                                 LostKeyboardFocus="PasswordBox_LostKeyboardFocus"
+                                 PreviewKeyDown="PasswordBox_PreviewKeyDown"/>
+
+                    <!-- Caps Lock warning (Verify) -->
+                    <TextBlock x:Name="tbCapsWarnVerify"
+                               Grid.Row="4" Grid.Column="2"
+                               Margin="0,4,0,0"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#B91C1C"
+                               Visibility="Collapsed"
+                               Text="Caps Lock is ON"/>
 
                     <!-- Key file selection -->
                     <Button x:Name="btnCreateKeyFile"
-                            Grid.Row="4" Grid.Column="0"
+                            Grid.Row="6" Grid.Column="0"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Style="{StaticResource DialogPrimary}"
@@ -211,7 +271,7 @@
                     </Button>
 
                     <TextBox x:Name="tbKeyFile"
-                             Grid.Row="4" Grid.Column="2"
+                             Grid.Row="6" Grid.Column="2"
                              Height="30"
                              VerticalAlignment="Center"
                              IsReadOnly="True"
@@ -223,9 +283,10 @@
                              ToolTip="{Binding Text, ElementName=tbKeyFile}"/>
 
                     <!-- Submit / Cancel -->
-                    <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+                    <StackPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Center">
+
                         <Button x:Name="btnSubmit"
                                 Style="{StaticResource DialogPrimary}"
                                 Click="btnSubmit_Click"
@@ -248,7 +309,7 @@
 
                     <!-- Error message -->
                     <TextBox x:Name="tbErrorMessage"
-                             Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+                             Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="3"
                              Visibility="Collapsed"
                              Height="100"
                              Margin="0,6,0,0"
@@ -265,7 +326,7 @@
 
                     <!-- Advisory banner (left as-is) -->
                     <Border x:Name="InfoBanner"
-                            Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+                            Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="3"
                             Visibility="Visible"
                             Margin="0,10,0,0"
                             Padding="10"
