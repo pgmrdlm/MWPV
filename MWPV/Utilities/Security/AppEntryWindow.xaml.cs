@@ -1,8 +1,30 @@
-﻿using System;
+﻿// File: Utilities/Security/AppEntryWindow.xaml.cs
+// FULL REWRITE
+//
+// Hotfix: UpperCaseNotify
+//
+// Purpose:
+// - Adds Caps Lock ON notifications for PASSWORD typing only, on these two PasswordBox controls:
+//     pbPassword, pbVerifyPassword
+// - Uses inline TextBlocks (tbCapsWarnPassword, tbCapsWarnVerify) defined in XAML.
+// - No app-wide wiring; window-local only.
+// - Preserves existing security/memory-hygiene patterns and existing behavior.
+//
+// XAML dependency (already added in your XAML rewrite):
+// - PasswordBoxes wired to these handlers:
+//     PasswordBox_GotKeyboardFocus
+//     PasswordBox_LostKeyboardFocus
+//     PasswordBox_PreviewKeyDown
+// - Inline warning TextBlocks:
+//     tbCapsWarnPassword
+//     tbCapsWarnVerify
+
+using System;
 using System.IO;
 using System.Runtime.InteropServices; // SecureString marshal
 using System.Security;                // SecureString
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;           // Brush for meter coloring
 
@@ -30,8 +52,8 @@ namespace Utilities.Security
     {
         // SecureEncryptedDataStore keys (file/key names in the archive)
         private const string Key_DBPassword = "DB_Password.txt"; // file name inside the archive
-        private const string Key_KeyFile = "KeyFile";         // non-sensitive path
-        private const string Key_KeyPW = "KeyPW";           // sensitive password
+        private const string Key_KeyFile = "KeyFile";            // non-sensitive path
+        private const string Key_KeyPW = "KeyPW";                // sensitive password
 
         // Full path to local encrypted database
         private readonly string _localDbPath = Path.Combine(
@@ -40,6 +62,10 @@ namespace Utilities.Security
             "MWPV.db"
         );
 
+        // ===== CapsLock warning state =====
+        // Avoid thrashing UI updates while typing; track per PasswordBox focus session.
+        private bool _capsWarnShownForPassword;
+        private bool _capsWarnShownForVerify;
 
         public AppEntryWindow()
         {
@@ -60,8 +86,11 @@ namespace Utilities.Security
                 pbVerifyPassword.Visibility = Visibility.Collapsed;
                 InfoBanner.Visibility = Visibility.Collapsed;
 
+                // Hide verify caps warning (if present in XAML)
+                HideCapsWarningFor(pbVerifyPassword);
+
                 // Change button label only (keep the key glyph)
-                try { tbKeyButtonText.Text = "Select Key File"; } catch { /* if not found, ignore */ }
+                try { tbKeyButtonText.Text = "Select Key File"; } catch { /* ignore */ }
 
                 // Hide strength panel completely & detach handlers
                 var strengthPanel = PwStrengthBar?.Parent as FrameworkElement;
@@ -78,6 +107,104 @@ namespace Utilities.Security
                 if (pbPassword != null) pbPassword.PasswordChanged += Password_Changed;
                 if (pbVerifyPassword != null) pbVerifyPassword.PasswordChanged += VerifyPassword_Changed;
             }
+
+            // Ensure warnings start hidden
+            HideCapsWarningFor(pbPassword);
+            HideCapsWarningFor(pbVerifyPassword);
+        }
+
+        // =========================
+        // Caps Lock warning handlers
+        // =========================
+        private void PasswordBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            if (sender is not PasswordBox pb) return;
+
+            ResetCapsWarnSession(pb);
+
+            // Show immediately on focus if CapsLock is already on
+            UpdateCapsWarning(pb);
+        }
+
+        private void PasswordBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            if (sender is not PasswordBox pb) return;
+
+            // Hide on blur
+            HideCapsWarningFor(pb);
+            ResetCapsWarnSession(pb);
+        }
+
+        private void PasswordBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (sender is not PasswordBox pb) return;
+
+            // Update on any key press; especially relevant for CapsLock toggle or first typing.
+            // If the user toggles CapsLock while focused, we reflect it immediately.
+            UpdateCapsWarning(pb);
+        }
+
+        private void ResetCapsWarnSession(PasswordBox pb)
+        {
+            if (pb == pbPassword) _capsWarnShownForPassword = false;
+            else if (pb == pbVerifyPassword) _capsWarnShownForVerify = false;
+        }
+
+        private void UpdateCapsWarning(PasswordBox pb)
+        {
+            // Only for these two password fields; ignore any other PasswordBox that may exist.
+            if (pb != pbPassword && pb != pbVerifyPassword) return;
+
+            bool capsOn = Keyboard.IsKeyToggled(Key.CapsLock);
+            bool hasFocus = pb.IsKeyboardFocusWithin;
+
+            if (!hasFocus || !capsOn)
+            {
+                HideCapsWarningFor(pb);
+                return;
+            }
+
+            // Caps is on and field has focus: show once per focus session (no flicker).
+            if (pb == pbPassword)
+            {
+                if (_capsWarnShownForPassword) return;
+                ShowCapsWarning(tbCapsWarnPassword);
+                _capsWarnShownForPassword = true;
+            }
+            else // pbVerifyPassword
+            {
+                if (_capsWarnShownForVerify) return;
+                ShowCapsWarning(tbCapsWarnVerify);
+                _capsWarnShownForVerify = true;
+            }
+        }
+
+        private void HideCapsWarningFor(PasswordBox? pb)
+        {
+            if (pb == null) return;
+
+            if (pb == pbPassword)
+            {
+                HideCapsWarning(tbCapsWarnPassword);
+                _capsWarnShownForPassword = false;
+            }
+            else if (pb == pbVerifyPassword)
+            {
+                HideCapsWarning(tbCapsWarnVerify);
+                _capsWarnShownForVerify = false;
+            }
+        }
+
+        private static void ShowCapsWarning(TextBlock? tb)
+        {
+            if (tb == null) return;
+            tb.Visibility = Visibility.Visible;
+        }
+
+        private static void HideCapsWarning(TextBlock? tb)
+        {
+            if (tb == null) return;
+            tb.Visibility = Visibility.Collapsed;
         }
 
         // =========================
@@ -115,7 +242,7 @@ namespace Utilities.Security
         {
             try
             {
-                var tb = FindName("TbMaxGlyph") as System.Windows.Controls.TextBlock;
+                var tb = FindName("TbMaxGlyph") as TextBlock;
                 if (tb != null)
                     tb.Text = (WindowState == WindowState.Maximized) ? "\uE923" : "\uE922"; // Restore / Maximize
             }
@@ -139,7 +266,6 @@ namespace Utilities.Security
                     CheckPathExists = true,
                     Multiselect = false
                 };
-
 
                 if (openFileDialog.ShowDialog() == true)
                     tbKeyFile.Text = openFileDialog.FileName;
@@ -291,6 +417,10 @@ namespace Utilities.Security
                 UICleaner.Clear(pbPassword);
                 UICleaner.Clear(pbVerifyPassword);
 
+                // Hide caps warnings after clearing
+                HideCapsWarningFor(pbPassword);
+                HideCapsWarningFor(pbVerifyPassword);
+
                 // ✅ Load keys for this session
                 ServiceSetUp.EnsureKeySetFromArchive();
 
@@ -301,9 +431,6 @@ namespace Utilities.Security
                 var missing = SqlCagegory.GetMissingMustHaves();
                 if (missing.Length > 0)
                 {
-//#if DEBUG
-//                    System.Diagnostics.Debug.WriteLine("[SQLCAT][FATAL] Missing must-have scripts: " + string.Join(", ", missing));
-//#endif
                     SurfaceLoggedError(
                         "Required SQL scripts are missing from the key archive: " +
                         string.Join(", ", missing)
@@ -312,11 +439,9 @@ namespace Utilities.Security
                     return;
                 }
 
-                // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
                 // ✅ Valid login complete, DB open, SQL loaded: write SESSION_START
                 try { LogCatalogService.InsertSessionStart(); } catch { /* best-effort */ }
                 MWPV.AppRunState.DbOpenedThisRun = true;  // <<< ONLY ADDED LINE
-                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                 // ✅ Close the form
                 DialogResult = true;
@@ -338,6 +463,10 @@ namespace Utilities.Security
             UICleaner.Clear(pbPassword);
             UICleaner.Clear(pbVerifyPassword);
             UICleaner.Clear(tbKeyFile);
+
+            HideCapsWarningFor(pbPassword);
+            HideCapsWarningFor(pbVerifyPassword);
+
             Close();
         }
 
@@ -349,6 +478,9 @@ namespace Utilities.Security
                 UICleaner.Clear(pbPassword);
                 UICleaner.Clear(pbVerifyPassword);
                 UICleaner.Clear(tbKeyFile);
+
+                HideCapsWarningFor(pbPassword);
+                HideCapsWarningFor(pbVerifyPassword);
             }
             catch { /* swallow */ }
             base.OnClosed(e);
