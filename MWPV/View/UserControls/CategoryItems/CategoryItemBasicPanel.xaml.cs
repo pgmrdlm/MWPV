@@ -3,11 +3,9 @@
 // FULL REWRITE
 //
 // Change requested (THIS STEP ONLY):
-// - Add a host-callable method that forces the existing Cancel path (no new wipe logic).
-//   This will be used by the inactivity timeout flow to "press Cancel" programmatically.
-//
-// Notes:
-// - This method MUST reuse existing logic: it simply raises CancelRequested (same as btnCancel_Click).
+// - Increase PIN max length from 6 to 12.
+// - Keep PIN numeric-only.
+// - Update validation message text to 4–12 digits.
 // - No other behavior changes.
 
 using System;
@@ -91,7 +89,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         // PIN rules
         private const int PinMinLen = 4;
-        private const int PinMaxLen = 6;
+        private const int PinMaxLen = 12;
 
         // Signature state: ORIGINAL vs CURRENT
         // NOTE: PasswordFingerprint ORIGINAL only in this file.
@@ -182,7 +180,6 @@ namespace MWPV.View.UserControls.CategoryItems
             {
 #if DEBUG
                 Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
-
 #endif
             }
         }
@@ -224,6 +221,7 @@ namespace MWPV.View.UserControls.CategoryItems
             // View-only copy buttons
             btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
             btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyPin.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
 
             // Username / URL copy buttons (view-only only)
             btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
@@ -250,6 +248,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 btnCopyPassword.IsEnabled = false;
                 btnCopyPhone.IsEnabled = false;
                 btnCopyEmail.IsEnabled = false;
+                btnCopyPin.IsEnabled = false;
                 btnCopyUsername.IsEnabled = false;
                 btnCopyUrl.IsEnabled = false;
                 return;
@@ -262,9 +261,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
             bool hasPhone = !string.IsNullOrEmpty(txtPhone.Password);
             bool hasEmail = !string.IsNullOrEmpty(pwdEmail.Password);
+            bool hasPin = !string.IsNullOrEmpty(pwdPin.Password);
 
             btnCopyPhone.IsEnabled = hasPhone;
             btnCopyEmail.IsEnabled = hasEmail;
+            btnCopyPin.IsEnabled = hasPin;
 
             bool hasUser = !string.IsNullOrWhiteSpace(txtUsername.Text);
             btnCopyUsername.IsEnabled = hasUser;
@@ -1345,15 +1346,18 @@ namespace MWPV.View.UserControls.CategoryItems
         private void Pin_PasswordChanged(object? sender, RoutedEventArgs e)
         {
             if (_isPopulating) return;
-            if (IsViewOnly) return;
-
-            if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
-                pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
 
             if (_pinRevealed)
                 txtPinPlain.Text = pwdPin.Password;
 
             TouchRevealTimerIfNeeded();
+
+            UpdateCopyButtonStates();
+
+            if (IsViewOnly) return;
+
+            if (!string.IsNullOrEmpty(pwdPin.Password) && pwdPin.Password.Length > PinMaxLen)
+                pwdPin.Password = pwdPin.Password.Substring(0, PinMaxLen);
 
             if (string.IsNullOrEmpty(pwdPin.Password))
             {
@@ -1375,6 +1379,16 @@ namespace MWPV.View.UserControls.CategoryItems
             else ShowPin();
 
             TouchRevealTimerIfNeeded();
+        }
+
+        private void BtnCopyPin_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!IsViewOnly) return;
+
+            var pin = (pwdPin.Password ?? string.Empty).Trim();
+            if (pin.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(pin, out _, ClipboardTtl, tag: "BASIC.PIN");
         }
 
         private void ShowPin()
@@ -1413,7 +1427,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (raw.Length < PinMinLen || raw.Length > PinMaxLen)
             {
-                ShowPinError("PIN must be 4–6 digits.");
+                ShowPinError("PIN must be 4–12 digits.");
                 return false;
             }
 
@@ -1808,6 +1822,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
             btnTogglePinReveal.Click += Pin_ToggleReveal_Click;
 
+            btnCopyPin.Click -= BtnCopyPin_Click;
+            btnCopyPin.Click += BtnCopyPin_Click;
+
             pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
             pwdEmail.PasswordChanged += pwdEmail_PasswordChanged;
 
@@ -1873,6 +1890,7 @@ namespace MWPV.View.UserControls.CategoryItems
             pwdPin.PasswordChanged -= Pin_PasswordChanged;
             DataObject.RemovePastingHandler(pwdPin, Pin_Pasting);
             btnTogglePinReveal.Click -= Pin_ToggleReveal_Click;
+            btnCopyPin.Click -= BtnCopyPin_Click;
 
             pwdEmail.PasswordChanged -= pwdEmail_PasswordChanged;
             pwdEmail.LostFocus -= pwdEmail_LostFocus;

@@ -1,13 +1,8 @@
 ﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
 <!-- FULL REWRITE
      Changes:
-     - Keep the view-mode "Edit" button using DialogPrimary (GREEN) so it matches Save/Cancel sizing family.
-     - Add view-only clipboard copy buttons for:
-         - User Name
-         - URL or Absolute Location
-       following the same UI pattern as the existing copy buttons (SmallSquarePrimaryButton, copy icon, default Collapsed).
-     Notes:
-     - Copy buttons are expected to be shown/hidden by existing view-mode logic (same as other copy buttons).
+     - Add a view-only clipboard copy button for PIN on the Basic tab.
+     - Follow the existing copy-button pattern used elsewhere in this panel.
      - No other behavioral or layout changes intended. -->
 
 <UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
@@ -392,6 +387,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <Grid Grid.Column="0">
@@ -419,8 +415,24 @@
                          Foreground="Black"/>
             </Grid>
 
-            <Button x:Name="btnTogglePinReveal"
+            <!-- VIEW-ONLY: Copy -->
+            <Button x:Name="btnCopyPin"
                     Grid.Column="1"
+                    Style="{StaticResource SmallSquarePrimaryButton}"
+                    Margin="6,0,0,0"
+                    ToolTip="Copy PIN to clipboard"
+                    Visibility="Collapsed"
+                    Click="BtnCopyPin_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets"
+                           Text="&#xE8C8;"
+                           FontSize="16"
+                           Foreground="Black"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Button>
+
+            <Button x:Name="btnTogglePinReveal"
+                    Grid.Column="2"
                     Style="{StaticResource SmallSquarePrimaryButton}"
                     Margin="6,0,0,0"
                     Visibility="Visible"
