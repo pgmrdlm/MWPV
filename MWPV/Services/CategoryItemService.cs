@@ -51,6 +51,7 @@ using MWPV.Models;
 using Security.Utility.Crypto.Fields;    // FieldAesCrypto (AES-GCM portable)
 using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -73,6 +74,11 @@ namespace MWPV.Services
         private const string Purpose_CI_Email = "CI.Email";
         private const string Purpose_CI_Phone = "CI.Phone";
         private const string Purpose_CI_Pin = "CI.Pin";
+
+        private const string Purpose_BC_Number = "BC.Number";
+        private const string Purpose_BC_CVV = "BC.CVV";
+        private const string Purpose_BC_Pin = "BC.Pin";
+        private const string Purpose_BC_BillingZip = "BC.BillingZip";
 
         private const string Purpose_CIPaH_PasswordHistory = "CIPaH.PasswordHistory";
         private const string Purpose_CIPaH_PasswordFingerprint = "PW.Fingerprint.V1";
@@ -157,6 +163,42 @@ namespace MWPV.Services
 
             // True when stored PwFp matches recomputed PwFp from decrypted plaintext
             public bool FingerprintOk { get; init; }
+        }
+
+        // ============================================================
+
+        // ============================================================
+        // DTO: BankCards row (service contract for BankCards tab)
+        // ============================================================
+
+        public sealed class BankCardRow
+        {
+            public long Id { get; init; }
+            public long ItemId { get; init; }
+
+            public int CardTypeId { get; init; }
+            public string CardTypeDisplay { get; init; } = string.Empty;
+            public string? Cardholder { get; init; }
+
+            // Save-input values (raw/plain)
+            public string CardNumberRaw { get; init; } = string.Empty;
+            public string ExpirationDisplay { get; init; } = string.Empty; // MM/YYYY
+            public int ExpMonth { get; init; }
+            public int ExpYear { get; init; }
+            public string CvvRaw { get; init; } = string.Empty;
+            public string PinRaw { get; init; } = string.Empty;
+            public string? BillingZipRaw { get; init; }
+
+            // Display values (masked)
+            public string CardNumberMasked { get; init; } = string.Empty;
+            public string CvvMasked { get; init; } = string.Empty;
+            public string PinMasked { get; init; } = string.Empty;
+
+            public bool IsPrimary { get; init; }
+            public bool IsActive { get; init; } = true;
+
+            public long CreatedAtUtcSeconds { get; init; }
+            public long UpdatedAtUtcSeconds { get; init; }
         }
 
         // ============================================================
@@ -992,6 +1034,392 @@ namespace MWPV.Services
         }
 
         // ============================================================
+        // ============================================================
+        // BANK CARDS: load/save
+        // ============================================================
+
+        public static IReadOnlyList<BankCardRow> LoadBankCardsByItemId(long itemId)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            var rows = new List<BankCardRow>();
+
+            try
+            {
+                var sql = LoadSqlRequired("s_BankCard_select_by_itemid.sql");
+
+                // Card type lookup is best-effort display enrichment only.
+                var cardTypeDisplayById = new Dictionary<int, string>();
+                try
+                {
+                    foreach (var t in ComboDetailService.GetByTypeId(2))
+                    {
+                        if (!cardTypeDisplayById.ContainsKey(t.ComboDet))
+                        {
+                            cardTypeDisplayById[t.ComboDet] =
+                                string.IsNullOrWhiteSpace(t.Description) ? (t.Code ?? string.Empty) : t.Description;
+                        }
+                    }
+                }
+                catch { }
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                AddInt64(cmd, "@ItemId", itemId);
+
+                using var r = cmd.ExecuteReader();
+
+                int oId = r.GetOrdinal("Id");
+                int oItemId = r.GetOrdinal("ItemId");
+                int oCardTypeId = r.GetOrdinal("CardTypeId");
+                int oCardholder = r.GetOrdinal("Cardholder");
+                int oNumber = r.GetOrdinal("Number");
+                int oExpMonth = r.GetOrdinal("ExpMonth");
+                int oExpYear = r.GetOrdinal("ExpYear");
+                int oCvv = r.GetOrdinal("Cvv");
+                int oPin = r.GetOrdinal("Pin");
+                int oBillingZip = r.GetOrdinal("BillingZip");
+                int oIsPrimary = r.GetOrdinal("IsPrimary");
+                int oIsActive = r.GetOrdinal("IsActive");
+                int oCreated = r.GetOrdinal("CreatedAtUtcSeconds");
+                int oUpdated = r.GetOrdinal("UpdatedAtUtcSeconds");
+
+                while (r.Read())
+                {
+                    long id = SafeGetInt64(r, oId);
+                    long rowItemId = SafeGetInt64(r, oItemId);
+                    int cardTypeId = SafeGetInt32(r, oCardTypeId);
+
+                    string? cardholder = r.IsDBNull(oCardholder) ? null : r.GetString(oCardholder);
+
+                    byte[]? numberCipher = ReadBlobNullable(r, oNumber);
+                    byte[]? cvvCipher = ReadBlobNullable(r, oCvv);
+                    byte[]? pinCipher = ReadBlobNullable(r, oPin);
+                    byte[]? billingZipCipher = ReadBlobNullable(r, oBillingZip);
+
+                    _ = TryDecryptUtf8(Purpose_BC_Number, numberCipher, out string? numberPlain);
+                    _ = TryDecryptUtf8(Purpose_BC_CVV, cvvCipher, out string? cvvPlain);
+                    _ = TryDecryptUtf8(Purpose_BC_Pin, pinCipher, out string? pinPlain);
+                    _ = TryDecryptUtf8(Purpose_BC_BillingZip, billingZipCipher, out _);
+
+                    int expMonth = SafeGetInt32(r, oExpMonth);
+                    int expYear = SafeGetInt32(r, oExpYear);
+
+                    string expDisplay = (expMonth >= 1 && expMonth <= 12 && expYear > 0)
+                        ? $"{expMonth:00}/{expYear:0000}"
+                        : string.Empty;
+
+                    bool isPrimary = !r.IsDBNull(oIsPrimary) && SafeGetInt32(r, oIsPrimary) == 1;
+                    bool isActive = r.IsDBNull(oIsActive) || SafeGetInt32(r, oIsActive) == 1;
+
+                    string cardTypeDisplay = cardTypeDisplayById.TryGetValue(cardTypeId, out var display)
+                        ? display
+                        : string.Empty;
+
+                    rows.Add(new BankCardRow
+                    {
+                        Id = id,
+                        ItemId = rowItemId,
+
+                        CardTypeId = cardTypeId,
+                        CardTypeDisplay = cardTypeDisplay,
+                        Cardholder = cardholder,
+
+                        // Service load does not return plaintext secrets to UI.
+                        CardNumberRaw = string.Empty,
+                        ExpirationDisplay = expDisplay,
+                        ExpMonth = expMonth,
+                        ExpYear = expYear,
+                        CvvRaw = string.Empty,
+                        PinRaw = string.Empty,
+                        BillingZipRaw = null,
+
+                        CardNumberMasked = MaskPanLast4(numberPlain),
+                        CvvMasked = string.IsNullOrWhiteSpace(cvvPlain) ? string.Empty : "***",
+                        PinMasked = string.IsNullOrWhiteSpace(pinPlain) ? string.Empty : "***",
+
+                        IsPrimary = isPrimary,
+                        IsActive = isActive,
+
+                        CreatedAtUtcSeconds = r.IsDBNull(oCreated) ? 0 : SafeGetInt64(r, oCreated),
+                        UpdatedAtUtcSeconds = r.IsDBNull(oUpdated) ? 0 : SafeGetInt64(r, oUpdated)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading BankCards by ItemId");
+            }
+
+            return rows;
+        }
+
+        /// <summary>
+        /// Saves BankCards for the given item.
+        ///
+        /// Policy used for minimal wiring:
+        /// - New rows (Id <= 0): INSERT via s_BankCard_insert.sql.
+        /// - Existing rows (Id > 0): UPDATE only when CardNumberRaw is present
+        ///   (unchanged service-loaded rows carry empty raw fields and are skipped).
+        ///
+        /// DEPENDENCY OUTSIDE THIS FILE:
+        /// - Requires sql/s_BankCard_update.sql to exist and be loaded in SqlCagegory.
+        /// </summary>
+        public static int SaveBankCardsByItemId(long itemId, IReadOnlyList<BankCardRow>? rows)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            var input = rows ?? Array.Empty<BankCardRow>();
+
+            try
+            {
+                var insertSql = LoadSqlRequired("s_BankCard_insert.sql");
+                var updateSql = LoadSqlRequired("s_BankCard_update.sql");
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var tx = conn.BeginTransaction();
+
+                int writes = 0;
+
+                try
+                {
+                    foreach (var row in input)
+                    {
+                        if (row == null)
+                            continue;
+
+                        if (row.ItemId > 0 && row.ItemId != itemId)
+                            throw new InvalidOperationException("BankCard row ItemId does not match active item.");
+
+                        if (row.CardTypeId <= 0)
+                            throw new InvalidOperationException("BankCard CardTypeId is required.");
+
+                        int expMonth = row.ExpMonth;
+                        int expYear = row.ExpYear;
+
+                        if (expMonth <= 0 || expYear <= 0)
+                        {
+                            var expText = (row.ExpirationDisplay ?? string.Empty).Trim();
+                            var parts = expText.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length != 2)
+                                throw new InvalidOperationException("BankCard expiration must be MM/YYYY.");
+
+                            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out expMonth) ||
+                                !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out expYear))
+                                throw new InvalidOperationException("BankCard expiration is invalid.");
+
+                            if (expYear < 100)
+                                expYear += 2000;
+                        }
+
+                        if (expMonth < 1 || expMonth > 12)
+                            throw new InvalidOperationException("BankCard expiration month must be 1-12.");
+
+                        byte[]? numberCipher = EncryptNullableUtf8(Purpose_BC_Number, row.CardNumberRaw);
+                        byte[]? cvvCipher = EncryptNullableUtf8(Purpose_BC_CVV, row.CvvRaw);
+                        byte[]? pinCipher = EncryptNullableUtf8(Purpose_BC_Pin, row.PinRaw);
+                        byte[]? billingZipCipher = EncryptNullableUtf8(Purpose_BC_BillingZip, row.BillingZipRaw);
+
+                        try
+                        {
+                            if (row.Id <= 0)
+                            {
+                                if (numberCipher is null || numberCipher.Length == 0)
+                                    throw new InvalidOperationException("Card number is required for new BankCard rows.");
+
+                                long newId = InsertBankCardCore(
+                                    conn: conn,
+                                    tx: tx,
+                                    sql: insertSql,
+                                    itemId: itemId,
+                                    cardTypeId: row.CardTypeId,
+                                    cardholder: row.Cardholder,
+                                    numberCipher: numberCipher,
+                                    expMonth: expMonth,
+                                    expYear: expYear,
+                                    cvvCipher: cvvCipher,
+                                    pinCipher: pinCipher,
+                                    billingZipCipher: billingZipCipher,
+                                    isPrimary: row.IsPrimary,
+                                    isActive: row.IsActive);
+
+                                if (newId <= 0)
+                                    throw new InvalidOperationException("BankCard insert failed (no Id returned).");
+
+                                writes++;
+                            }
+                            else
+                            {
+                                // Existing rows loaded from service have empty raw values unless user re-entered/editing.
+                                if (string.IsNullOrWhiteSpace(row.CardNumberRaw))
+                                    continue;
+
+                                int affected = UpdateBankCardCore(
+                                    conn: conn,
+                                    tx: tx,
+                                    sql: updateSql,
+                                    id: row.Id,
+                                    itemId: itemId,
+                                    cardTypeId: row.CardTypeId,
+                                    cardholder: row.Cardholder,
+                                    numberCipher: numberCipher,
+                                    expMonth: expMonth,
+                                    expYear: expYear,
+                                    cvvCipher: cvvCipher,
+                                    pinCipher: pinCipher,
+                                    billingZipCipher: billingZipCipher,
+                                    isPrimary: row.IsPrimary,
+                                    isActive: row.IsActive);
+
+                                if (affected > 0)
+                                    writes += affected;
+                            }
+                        }
+                        finally
+                        {
+                            if (numberCipher != null) Array.Clear(numberCipher, 0, numberCipher.Length);
+                            if (cvvCipher != null) Array.Clear(cvvCipher, 0, cvvCipher.Length);
+                            if (pinCipher != null) Array.Clear(pinCipher, 0, pinCipher.Length);
+                            if (billingZipCipher != null) Array.Clear(billingZipCipher, 0, billingZipCipher.Length);
+                        }
+                    }
+
+                    tx.Commit();
+                }
+                catch
+                {
+                    try { tx.Rollback(); } catch { }
+                    throw;
+                }
+
+                return writes;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error saving BankCards by ItemId");
+                return 0;
+            }
+        }
+
+        private static long InsertBankCardCore(
+            SqliteConnection conn,
+            SqliteTransaction tx,
+            string sql,
+            long itemId,
+            int cardTypeId,
+            string? cardholder,
+            byte[] numberCipher,
+            int expMonth,
+            int expYear,
+            byte[]? cvvCipher,
+            byte[]? pinCipher,
+            byte[]? billingZipCipher,
+            bool isPrimary,
+            bool isActive)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+
+            AddInt64(cmd, "@ItemId", itemId);
+            AddInt32(cmd, "@CardTypeId", cardTypeId);
+            AddText(cmd, "@Cardholder", string.IsNullOrWhiteSpace(cardholder) ? null : cardholder);
+            AddBlob(cmd, "@Number", numberCipher);
+            AddInt32(cmd, "@ExpMonth", expMonth);
+            AddInt32(cmd, "@ExpYear", expYear);
+            AddBlob(cmd, "@Cvv", cvvCipher);
+            AddBlob(cmd, "@Pin", pinCipher);
+            AddBlob(cmd, "@BillingZip", billingZipCipher);
+            AddInt32(cmd, "@IsPrimary", isPrimary ? 1 : 0);
+            AddInt32(cmd, "@IsActive", isActive ? 1 : 0);
+
+#if DEBUG
+            DebugDumpParams(cmd, "[BANKCARD][INSERT][PARAMS]");
+#endif
+
+            var scalar = cmd.ExecuteScalar();
+            if (scalar == null || scalar == DBNull.Value)
+                throw new InvalidOperationException("BankCard insert failed (no Id returned)");
+
+            return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
+        }
+
+        private static int UpdateBankCardCore(
+            SqliteConnection conn,
+            SqliteTransaction tx,
+            string sql,
+            long id,
+            long itemId,
+            int cardTypeId,
+            string? cardholder,
+            byte[]? numberCipher,
+            int expMonth,
+            int expYear,
+            byte[]? cvvCipher,
+            byte[]? pinCipher,
+            byte[]? billingZipCipher,
+            bool isPrimary,
+            bool isActive)
+        {
+            if (numberCipher is null || numberCipher.Length == 0)
+                throw new InvalidOperationException("Card number is required for BankCard update.");
+
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+
+            // Minimal SQL compatibility: support either @Id or @BC_Id for row key.
+            if (SqlUses(sql, "@Id"))
+                AddInt64(cmd, "@Id", id);
+            else if (SqlUses(sql, "@BC_Id"))
+                AddInt64(cmd, "@BC_Id", id);
+            else
+                throw new InvalidOperationException("s_BankCard_update.sql must include @Id or @BC_Id parameter.");
+
+            AddInt64IfSqlUses(cmd, sql, "@ItemId", itemId);
+            AddInt32IfSqlUses(cmd, sql, "@CardTypeId", cardTypeId);
+            AddTextIfSqlUses(cmd, sql, "@Cardholder", string.IsNullOrWhiteSpace(cardholder) ? null : cardholder);
+            AddBlobIfSqlUses(cmd, sql, "@Number", numberCipher);
+            AddInt32IfSqlUses(cmd, sql, "@ExpMonth", expMonth);
+            AddInt32IfSqlUses(cmd, sql, "@ExpYear", expYear);
+            AddBlobIfSqlUses(cmd, sql, "@Cvv", cvvCipher);
+            AddBlobIfSqlUses(cmd, sql, "@Pin", pinCipher);
+            AddBlobIfSqlUses(cmd, sql, "@BillingZip", billingZipCipher);
+            AddInt32IfSqlUses(cmd, sql, "@IsPrimary", isPrimary ? 1 : 0);
+            AddInt32IfSqlUses(cmd, sql, "@IsActive", isActive ? 1 : 0);
+
+#if DEBUG
+            DebugDumpParams(cmd, "[BANKCARD][UPDATE][PARAMS]");
+#endif
+
+            return cmd.ExecuteNonQuery();
+        }
+
+        private static string MaskPanLast4(string? panPlain)
+        {
+            if (string.IsNullOrWhiteSpace(panPlain))
+                return string.Empty;
+
+            var digits = new StringBuilder();
+            foreach (char c in panPlain)
+            {
+                if (char.IsDigit(c))
+                    digits.Append(c);
+            }
+
+            if (digits.Length == 0)
+                return string.Empty;
+
+            string d = digits.ToString();
+            string last4 = d.Length <= 4 ? d : d.Substring(d.Length - 4, 4);
+            return $"**** {last4}";
+        }
+
+        // ============================================================
         // INSERT: CategoryItem ONLY (bookmark-only flow)
         // ============================================================
 
@@ -1549,6 +1977,12 @@ namespace MWPV.Services
         {
             if (!SqlUses(sql, name)) return;
             AddInt64Nullable(cmd, name, value);
+        }
+
+        private static void AddInt64IfSqlUses(SqliteCommand cmd, string sql, string name, long value)
+        {
+            if (!SqlUses(sql, name)) return;
+            AddInt64(cmd, name, value);
         }
 
         // ============================================================
