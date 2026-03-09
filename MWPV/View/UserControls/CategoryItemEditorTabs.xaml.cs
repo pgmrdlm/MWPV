@@ -1009,9 +1009,9 @@ namespace MWPV.View.UserControls
             catch { }
 
             try { ClearSedsContext(); } catch { }
-                BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
-                _bankCardsLoaded = false;
-                _bankCardsLoadedItemId = 0;
+            BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+            _bankCardsLoaded = false;
+            _bankCardsLoadedItemId = 0;
 
             // IMPORTANT: leaving editor means Basic is not open
             ClearIsBasicOpen_BestEffort();
@@ -1170,18 +1170,27 @@ namespace MWPV.View.UserControls
                         pinPlain: pinPlain,
                         isActive: isActive);
 
-                    if (rows <= 0)
+                    if (rows < 0)
                     {
-                        SetStatus("Update failed (0 rows affected).");
+                        SetStatus("Update failed.");
 #if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED itemId={itemId} rowsAffected=0 bookmarkOnly={isBookmarkOnly}");
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
 #endif
                         return false;
                     }
 
+                    if (rows == 0)
+                    {
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][UPDATE] OK itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] NO-OP itemId={itemId} rowsAffected=0 bookmarkOnly={isBookmarkOnly} (treated as success)");
 #endif
+                    }
+                    else
+                    {
+#if DEBUG
+                        Debug.WriteLine($"[ITEM-TABS][UPDATE] OK itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
+#endif
+                    }
 
                     SetSedsContextForCategoryItem(activeId.Value);
                     _hasPersistedId = true;
@@ -1720,22 +1729,33 @@ namespace MWPV.View.UserControls
             SetStatus("");
             if (BasicPanel == null)
                 return;
-            BasicPanel.NormalizeUsernameFromEmailIfEmpty();
-            if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+            bool bypassBasicPersist = IsExistingItemAndBasicPanelIsViewMode();
+            bool isBookmarkOnly = false;
+            if (!bypassBasicPersist)
             {
-                if (ItemTabs != null)
-                    ForceSelectTab(TabIndexBasic);
-                BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
-                return;
+                BasicPanel.NormalizeUsernameFromEmailIfEmpty();
+                if (!BasicPanel.TryValidateAllForSubmit(out isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+                    BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
+                    SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
+                    return;
+                }
+                // For BankCards save, persist Basic first using existing orchestration.
+                if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+                    return;
+                }
             }
-            // For BankCards save, persist Basic first using existing orchestration.
-            if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
+#if DEBUG
+            else
             {
-                if (ItemTabs != null)
-                    ForceSelectTab(TabIndexBasic);
-                return;
+                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
             }
+#endif
             var activeId = TryGetActiveCategoryItemId();
             if (!activeId.HasValue || activeId.Value <= 0)
             {
@@ -1821,6 +1841,10 @@ namespace MWPV.View.UserControls
                     Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC (EXISTING+VIEW) => allow switch index={newIndex} (no validation/no writes)");
 #endif
                     NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+                    if (newIndex == TabIndexBankCards)
+                    {
+                        EnsureBankCardsLoadedForActiveItem(forceReload: false);
+                    }
                     _lastTabIndex = newIndex;
                     return;
                 }
