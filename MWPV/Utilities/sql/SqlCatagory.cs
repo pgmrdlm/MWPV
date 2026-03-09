@@ -56,6 +56,10 @@ namespace Utilities.Sql
             "s_CategoryItemPasswordHistory_select_by_item_most_recent_first.sql",
             "s_CategoryItemPasswordHistory_check_reuse_365days.sql",
 
+            // Bank Cards
+            "s_BankCard_insert.sql",
+            "s_BankCard_select_by_itemid.sql",
+
             // Log message templates.
             "s_LogMessageTemplate_SelectAll.sql",
 
