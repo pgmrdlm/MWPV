@@ -58,6 +58,7 @@ namespace Utilities.Sql
 
             // Bank Cards
             "s_BankCard_insert.sql",
+            "s_BankCard_update.sql",
             "s_BankCard_select_by_itemid.sql",
 
             // Log message templates.

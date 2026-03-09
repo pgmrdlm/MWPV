@@ -107,7 +107,7 @@ namespace MWPV.View.UserControls.CategoryItems
         /// <summary>
         /// Host loads rows into this panel (typically from CategoryItemService.LoadBankCardsByItemId).
         /// </summary>
-       /* public void LoadFromHostRows(IEnumerable<CategoryItemService.BankCardRow>? rows)
+        public void LoadFromHostRows(IEnumerable<CategoryItemService.BankCardRow>? rows)
         {
             _suppressDirty = true;
             try
@@ -161,7 +161,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 _suppressDirty = false;
             }
-        } */
+        }
 
         /// <summary>
         /// Call from host close path BEFORE removing the control.
