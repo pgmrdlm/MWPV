@@ -62,6 +62,8 @@ namespace MWPV.View.UserControls
         // Then we programmatically switch to the requested tab. That second selection change should NOT
         // re-run the leave-basic persistence logic (it already ran).
         private bool _suppressLeaveBasicOnce;
+        private bool _bankCardsLoaded;
+        private int _bankCardsLoadedItemId;
 
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
@@ -161,10 +163,7 @@ namespace MWPV.View.UserControls
             catch
             {
             }
-        }
-
-        /* ======================= PANEL GRID REFRESH BRIDGE ======================= */
-
+        }        /* ======================= PANEL GRID REFRESH BRIDGE ======================= */
         /// <summary>
         /// Best-effort signal to Panel that the CategoryItemGrid must refresh.
         /// Panel owns the actual grid refresh call.
@@ -175,7 +174,6 @@ namespace MWPV.View.UserControls
             {
                 var hostPanel = FindPanelHost();
                 if (hostPanel == null) return;
-
                 hostPanel.RequestCategoryItemGridRefresh();
             }
             catch
@@ -183,7 +181,43 @@ namespace MWPV.View.UserControls
                 // swallow: refresh request must never break save/tab-switch/close
             }
         }
-
+        private void EnsureBankCardsLoadedForActiveItem(bool forceReload = false)
+        {
+            if (BankCardsPanel == null)
+                return;
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                _bankCardsLoaded = false;
+                _bankCardsLoadedItemId = 0;
+                return;
+            }
+            int itemId = activeId.Value;
+            if (!forceReload && _bankCardsLoaded && _bankCardsLoadedItemId == itemId)
+                return;
+            try
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
+#endif
+                var rows = CategoryItemService.LoadBankCardsByItemId(itemId);
+                BankCardsPanel.LoadFromHostRows(rows);
+                _bankCardsLoaded = true;
+                _bankCardsLoadedItemId = itemId;
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] OK itemId={itemId} rows={rows.Count}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] FAILED itemId={itemId}: {ex}");
+#endif
+                _bankCardsLoaded = false;
+                _bankCardsLoadedItemId = 0;
+                SetStatus("Unable to load Bank Cards.");
+            }
+        }
         /* ======================= SEDS helpers ======================= */
 
         private static int? TryGetActiveCategoryItemId()
@@ -899,6 +933,9 @@ namespace MWPV.View.UserControls
         private void InitializeUiForOpen()
         {
             HookPanelsOnce();
+            BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+            _bankCardsLoaded = false;
+            _bankCardsLoadedItemId = 0;
 
             if (ItemTabs != null)
             {
@@ -972,6 +1009,9 @@ namespace MWPV.View.UserControls
             catch { }
 
             try { ClearSedsContext(); } catch { }
+                BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+                _bankCardsLoaded = false;
+                _bankCardsLoadedItemId = 0;
 
             // IMPORTANT: leaving editor means Basic is not open
             ClearIsBasicOpen_BestEffort();
@@ -999,6 +1039,9 @@ namespace MWPV.View.UserControls
             finally
             {
                 try { ClearSedsContext(); } catch { }
+                BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+                _bankCardsLoaded = false;
+                _bankCardsLoadedItemId = 0;
 
                 // IMPORTANT: host close means Basic is not open
                 ClearIsBasicOpen_BestEffort();
@@ -1675,38 +1718,72 @@ namespace MWPV.View.UserControls
 #endif
             BankCardsDraftRows = (e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
             SetStatus("");
-
             if (BasicPanel == null)
                 return;
-
             BasicPanel.NormalizeUsernameFromEmailIfEmpty();
-
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
                 if (ItemTabs != null)
                     ForceSelectTab(TabIndexBasic);
-
                 BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                 SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
                 return;
             }
-
-            // For BankCards Save&Exit, we still persist Basic then close.
+            // For BankCards save, persist Basic first using existing orchestration.
             if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
             {
                 if (ItemTabs != null)
                     ForceSelectTab(TabIndexBasic);
-
                 return;
             }
-
-            // Refresh after successful save
-            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
-
-            WipeAllForHostClose();
-            Submitted?.Invoke(this, EventArgs.Empty);
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                SetStatus("Save failed: missing ItemId context.");
+                return;
+            }
+            int itemId = activeId.Value;
+            try
+            {
+                var serviceRows = BankCardsDraftRows
+                    .Select(r => new CategoryItemService.BankCardRow
+                    {
+                        Id = r.Id,
+                        ItemId = itemId,
+                        CardTypeId = r.CardTypeId,
+                        CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                        CardNumberRaw = r.CardNumberRaw ?? string.Empty,
+                        ExpirationDisplay = r.Expiration ?? string.Empty,
+                        ExpMonth = 0,
+                        ExpYear = 0,
+                        CvvRaw = r.CvvRaw ?? string.Empty,
+                        PinRaw = r.PinRaw ?? string.Empty,
+                        BillingZipRaw = null,
+                        CardNumberMasked = r.CardNumberMasked ?? string.Empty,
+                        CvvMasked = r.CvvMasked ?? string.Empty,
+                        PinMasked = r.PinMasked ?? string.Empty,
+                        IsPrimary = false,
+                        IsActive = r.IsActive
+                    })
+                    .ToList();
+                int writes = CategoryItemService.SaveBankCardsByItemId(itemId, serviceRows);
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes}");
+#endif
+                EnsureBankCardsLoadedForActiveItem(forceReload: true);
+                NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+                ForceSelectTab(TabIndexBankCards);
+                _lastTabIndex = TabIndexBankCards;
+                SetStatus("");
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] FAILED itemId={itemId}: {ex}");
+#endif
+                SetStatus("Bank Cards save failed. See debug output.");
+            }
         }
-
         private void BankCardsPanel_CancelAndExitRequested(object? sender, EventArgs e)
         {
 #if DEBUG
@@ -1835,6 +1912,10 @@ namespace MWPV.View.UserControls
                     return;
                 }
             }
+            if (oldIndex != TabIndexBankCards && newIndex == TabIndexBankCards)
+            {
+                EnsureBankCardsLoadedForActiveItem(forceReload: false);
+            }
 
             _lastTabIndex = newIndex;
         }
@@ -1881,3 +1962,6 @@ namespace MWPV.View.UserControls
         }
     }
 }
+
+
+
