@@ -19,12 +19,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using MWPV.Services;
 using MWPV.Utilities.Helpers;   // AutoHideTimer
 using MWPV.Utilities.UI;        // UICleaner
+using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 
 namespace MWPV.View.UserControls.CategoryItems
 {
@@ -80,6 +82,17 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private const int MaxCardNumberChars = 19; // digits + spaces
 
+        private const string EntityKind_CategoryItem = "CategoryItem";
+        private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
+        private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
+
+        private const string SedsKey_BankCardSelectedCardId = "BC.Selected.CardId";
+        private const string SedsKey_BankCardSelectedNumber = "BC.Selected.Number";
+        private const string SedsKey_BankCardSelectedCvv = "BC.Selected.CVV";
+        private const string SedsKey_BankCardSelectedPin = "BC.Selected.Pin";
+        private const string SedsKey_BankCardSelectedBillingZip = "BC.Selected.BillingZip";
+
+        private bool _isSelectedProtectedViewActive;
         // ============================================================
         // Ctor
         // ============================================================
@@ -116,6 +129,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 WipeSensitiveEntryFields();
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
+                ClearSelectedBankCardDetailSedsBestEffort();
+                _isSelectedProtectedViewActive = false;
+
+                if (BankCardGrid != null)
+                    BankCardGrid.SelectedItem = null;
 
                 DetachRowHandlers(_bankCardRows);
                 WipeAndClearBankCardRows();
@@ -174,6 +192,8 @@ namespace MWPV.View.UserControls.CategoryItems
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
             WipeAndClearBankCardRows();
+            ClearSelectedBankCardDetailSedsBestEffort();
+            _isSelectedProtectedViewActive = false;
 
             ClearBankCardError();
             ResetBankCardFieldBackgrounds();
@@ -209,6 +229,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             ClearBankCardError();
             ClearEntryFields();
+            ClearSelectedBankCardDetailSedsBestEffort();
+            _isSelectedProtectedViewActive = false;
             SetErrors(false);
             UpdateTabButtons();
             return true;
@@ -240,6 +262,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
+            ClearSelectedBankCardDetailSedsBestEffort();
+            _isSelectedProtectedViewActive = false;
 
             if (_hostRequestedCloseWipe)
                 WipeAndClearBankCardRows();
@@ -300,6 +324,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateTabButtons()
         {
+            ApplyProtectedViewControlState();
+
             if (BtnTabSave != null)
             {
                 BtnTabSave.IsEnabled =
@@ -483,6 +509,27 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = enabled;
             if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = enabled;
+        }
+
+        private void ApplyProtectedViewControlState()
+        {
+            bool editable = !_entryDisabled && !_isSelectedProtectedViewActive;
+
+            if (CardTypeCombo != null) CardTypeCombo.IsEnabled = editable;
+            if (CardNumberBox != null) CardNumberBox.IsEnabled = editable;
+            if (ExpirationTextBox != null) ExpirationTextBox.IsEnabled = editable;
+            if (CvvBox != null) CvvBox.IsEnabled = editable;
+            if (PinBox != null) PinBox.IsEnabled = editable;
+            if (ChkCardActive != null) ChkCardActive.IsEnabled = editable;
+
+            // Keep reveal/view available in protected view; disable only when entry is globally disabled.
+            bool allowReveal = !_entryDisabled;
+            if (BtnViewCardNumber != null) BtnViewCardNumber.IsEnabled = allowReveal;
+            if (BtnToggleCvvReveal != null) BtnToggleCvvReveal.IsEnabled = allowReveal;
+            if (BtnTogglePinReveal != null) BtnTogglePinReveal.IsEnabled = allowReveal;
+
+            if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = editable;
+            if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = editable;
         }
 
         // ============================================================
@@ -674,6 +721,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnBankCardAddOrUpdateClick(object sender, RoutedEventArgs e)
         {
+            _isSelectedProtectedViewActive = false;
             ClearBankCardError();
 
             if (_entryDisabled)
@@ -767,6 +815,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnBankCardClearRowClick(object sender, RoutedEventArgs e)
         {
+            _isSelectedProtectedViewActive = false;
             ClearBankCardError();
             ClearEntryFields();
             SetErrors(false);
@@ -787,6 +836,159 @@ namespace MWPV.View.UserControls.CategoryItems
             UpdateTabButtons();
         }
 
+        private void BankCardGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressDirty)
+                return;
+
+            if (BankCardGrid?.SelectedItem is not BankCardRow selected || selected.Id <= 0)
+            {
+                ClearSelectedBankCardDetailSedsBestEffort();
+                _isSelectedProtectedViewActive = false;
+                UpdateTabButtons();
+                return;
+            }
+
+            int? activeItemId = TryGetActiveCategoryItemIdFromSeds();
+            if (!activeItemId.HasValue || activeItemId.Value <= 0)
+            {
+                ClearSelectedBankCardDetailSedsBestEffort();
+                _isSelectedProtectedViewActive = false;
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
+#endif
+                return;
+            }
+
+            try
+            {
+                var detail = CategoryItemService.LoadBankCardDetailByItemIdAndCardId(activeItemId.Value, selected.Id);
+                if (detail == null)
+                {
+                    ClearSelectedBankCardDetailSedsBestEffort();
+                    _isSelectedProtectedViewActive = false;
+                    UpdateTabButtons();
+#if DEBUG
+                    Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Detail not found for itemId={activeItemId.Value} cardId={selected.Id}.");
+#endif
+                    return;
+                }
+
+                StoreSelectedBankCardDetailSedsBestEffort(detail);
+                PopulateProtectedViewFromSelectedDetail(detail);
+
+#if DEBUG
+                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Protected view loaded itemId={activeItemId.Value} cardId={selected.Id}.");
+#endif
+            }
+            catch (Exception ex)
+            {
+                ClearSelectedBankCardDetailSedsBestEffort();
+                _isSelectedProtectedViewActive = false;
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Targeted detail load failed itemId={activeItemId.Value} cardId={selected.Id}: {ex}");
+#endif
+            }
+        }
+
+        private void PopulateProtectedViewFromSelectedDetail(CategoryItemService.BankCardRow detail)
+        {
+            _suppressDirty = true;
+            try
+            {
+                _isSelectedProtectedViewActive = true;
+                SetEditingMode(null);
+
+                var cardType = _cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == detail.CardTypeId);
+                if (CardTypeCombo != null)
+                {
+                    if (cardType != null) CardTypeCombo.SelectedItem = cardType;
+                    else CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                }
+
+                if (CardNumberBox != null)
+                    CardNumberBox.Password = TrimToMaxChars(detail.CardNumberRaw ?? string.Empty);
+                HideCardNumber(clearOverlay: true);
+
+                if (ExpirationTextBox != null)
+                {
+                    string exp = detail.ExpirationDisplay ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(exp) && detail.ExpMonth >= 1 && detail.ExpYear > 0)
+                        exp = $"{detail.ExpMonth:00}/{detail.ExpYear:0000}";
+                    ExpirationTextBox.Text = exp;
+                }
+
+                if (CvvBox != null)
+                    CvvBox.Password = detail.CvvRaw ?? string.Empty;
+                HideCvv(clearOverlay: true);
+
+                if (PinBox != null)
+                    PinBox.Password = detail.PinRaw ?? string.Empty;
+                HidePin(clearOverlay: true);
+
+                if (ChkCardActive != null)
+                    ChkCardActive.IsChecked = detail.IsActive;
+
+                ClearBankCardError();
+                ResetBankCardFieldBackgrounds();
+                SetErrors(false);
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
+
+            UpdateTabButtons();
+        }
+
+        private static int? TryGetActiveCategoryItemIdFromSeds()
+        {
+            try
+            {
+                if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
+                    return null;
+
+                string kind;
+                try { kind = Encoding.UTF8.GetString(kindBytes); }
+                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
+
+                if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
+                    return null;
+
+                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
+                    return id;
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void StoreSelectedBankCardDetailSedsBestEffort(CategoryItemService.BankCardRow detail)
+        {
+            ClearSelectedBankCardDetailSedsBestEffort();
+
+            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedCardId, detail.Id.ToString(CultureInfo.InvariantCulture)); } catch { }
+            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedNumber, detail.CardNumberRaw ?? string.Empty); } catch { }
+            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedCvv, detail.CvvRaw ?? string.Empty); } catch { }
+            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedPin, detail.PinRaw ?? string.Empty); } catch { }
+            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedBillingZip, detail.BillingZipRaw ?? string.Empty); } catch { }
+        }
+
+        private static void ClearSelectedBankCardDetailSedsBestEffort()
+        {
+            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedBillingZip); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedPin); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedCvv); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedNumber); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedCardId); } catch { }
+        }
+
+
         // ============================================================
         // Grid strip buttons: Edit/Delete Selected
         // ============================================================
@@ -795,6 +997,8 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (BankCardGrid?.SelectedItem is not BankCardRow row)
                 return;
+
+            _isSelectedProtectedViewActive = false;
 
             _suppressDirty = true;
             try
@@ -908,6 +1112,8 @@ namespace MWPV.View.UserControls.CategoryItems
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
             ResetBankCardFieldBackgrounds();
+            ClearSelectedBankCardDetailSedsBestEffort();
+            _isSelectedProtectedViewActive = false;
 
             CancelAndExitRequested?.Invoke(this, EventArgs.Empty);
         }
@@ -1211,6 +1417,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 if (ChkCardActive != null)
                     ChkCardActive.IsChecked = true;
 
+                _isSelectedProtectedViewActive = false;
                 SetEditingMode(null);
 
                 ClearBankCardError();
@@ -1244,6 +1451,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool EntryLineHasAnyInput()
         {
+            if (_isSelectedProtectedViewActive)
+                return false;
+
             if (CardNumberBox != null && !string.IsNullOrWhiteSpace(CardNumberBox.Password))
                 return true;
 
@@ -1465,3 +1675,4 @@ namespace MWPV.View.UserControls.CategoryItems
         }
     }
 }
+

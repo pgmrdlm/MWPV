@@ -459,6 +459,7 @@
                       Margin="0,6,0,0"
                       AutoGenerateColumns="False"
                       HeadersVisibility="Column"
+                      SelectionChanged="BankCardGrid_SelectionChanged"
                       CanUserAddRows="False"
                       CanUserDeleteRows="False"
                       CanUserResizeRows="False"
@@ -563,3 +564,4 @@
 
     </Grid>
 </UserControl>
+
