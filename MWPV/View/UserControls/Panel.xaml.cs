@@ -132,6 +132,35 @@ namespace MWPV.View.UserControls
             }
         }
 
+        /// <summary>
+        /// Host-close preflight decision bridge.
+        /// Returns true when close may continue; false when close should be canceled.
+        /// </summary>
+        public bool TryHostClosePreflight_BestEffort()
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                    return Dispatcher.Invoke(new Func<bool>(TryHostClosePreflight_BestEffort));
+
+                if (!IsEditorOverlayActive)
+                    return true;
+
+                if (AddEditItemOverlayHost?.Content is not CategoryItemEditorTabs tabs)
+                    return true;
+
+                return tabs.TryHostClosePreflight();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine("[PANEL][HOST-CLOSE][PREFLIGHT][ERR] " + ex);
+#endif
+                // Keep current behavior if preflight bridge fails unexpectedly.
+                return true;
+            }
+        }
+
         /* =================== INACTIVITY BRIDGE (Force Cancel, NOT host-close) =================== */
 
         /// <summary>

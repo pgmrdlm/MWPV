@@ -1091,6 +1091,39 @@ namespace MWPV.View.UserControls
             }
         }
 
+        /// <summary>
+        /// Host-close preflight decision for the active editor session.
+        /// Returns true when close may continue; false when close should be canceled.
+        /// </summary>
+        public bool TryHostClosePreflight()
+        {
+            if (_isClosing)
+                return true;
+
+            if (BasicPanel == null)
+                return true;
+
+            // Existing item in pure view mode can close without prompting/commit.
+            if (IsExistingItemAndBasicPanelIsViewMode())
+                return true;
+
+            // Keep focus on Basic for commit prompt/validation workflow.
+            if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                ForceSelectTab(TabIndexBasic);
+
+            bool allowed = TryValidateAndPersistOnLeaveBasic();
+            if (!allowed)
+            {
+                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                    ForceSelectTab(TabIndexBasic);
+
+                _lastTabIndex = TabIndexBasic;
+                UpdateIsBasicOpenFromUi_BestEffort();
+            }
+
+            return allowed;
+        }
+
         /* ======================= Persistence ======================= */
 
         private enum PersistTrigger
@@ -2060,4 +2093,4 @@ namespace MWPV.View.UserControls
     }
 }
 
-
+ 
