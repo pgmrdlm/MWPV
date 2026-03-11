@@ -1651,6 +1651,43 @@ namespace MWPV.View.UserControls
             }
         }
 
+        private bool TryCommitBasicFromBasicFlow(string validationFailureStatus)
+        {
+            SetStatus("");
+
+            if (BasicPanel == null)
+                return true;
+
+            // Basic is effectively "open" while we're in this editor, but keep it driven by tab index.
+            SetIsBasicOpen_BestEffort(true);
+
+            BasicPanel.NormalizeUsernameFromEmailIfEmpty();
+
+            if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BASIC-COMMIT] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
+#endif
+                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                    ForceSelectTab(TabIndexBasic);
+
+                BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
+                SetStatus(validationFailureStatus);
+                return false;
+            }
+
+            // Basic commits must persist through the explicit Save trigger path.
+            if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
+            {
+                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
+                    ForceSelectTab(TabIndexBasic);
+
+                return false;
+            }
+
+            return true;
+        }
+
         /* ======================= BasicPanel events ======================= */
 
         private void BasicPanel_SaveRequested(object? sender, EventArgs e)
@@ -1663,32 +1700,8 @@ namespace MWPV.View.UserControls
             if (BasicPanel == null)
                 return;
 
-            // Basic is effectively "open" while we're in this editor, but keep it driven by tab index.
-            SetIsBasicOpen_BestEffort(true);
-
-            BasicPanel.NormalizeUsernameFromEmailIfEmpty();
-
-            if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SAVE] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
-#endif
-                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
-                    ForceSelectTab(TabIndexBasic);
-
-                BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                SetStatus("Fix the highlighted errors before saving.");
+            if (!TryCommitBasicFromBasicFlow("Fix the highlighted errors before saving."))
                 return;
-            }
-
-            // SAVE should persist but NOT close.
-            if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
-            {
-                if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
-                    ForceSelectTab(TabIndexBasic);
-
-                return;
-            }
 
             // Refresh grid after successful save
             NotifyPanel_RefreshCategoryItemGrid_BestEffort();
@@ -1951,22 +1964,82 @@ namespace MWPV.View.UserControls
             if (BasicPanel == null)
                 return true;
 
-            BasicPanel.NormalizeUsernameFromEmailIfEmpty();
-
-            if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
-#endif
-                BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                SetStatus("Cannot leave Basic tab, fix highlighted errors first.");
+            bool saveAndContinue = PromptSaveBasicBeforeTabSwitch();
+            if (!saveAndContinue)
                 return false;
-            }
 
-            if (!TryPersistBasicIfNeeded(PersistTrigger.LeaveBasicTab, isBookmarkOnly))
+            if (!TryCommitBasicFromBasicFlow("Cannot leave Basic tab, fix highlighted errors before saving."))
                 return false;
+
+            // Keep Basic mode consistent after commit before switching away.
+            BasicPanel.PopulateFromDbForCurrentEntity();
 
             return true;
+        }
+
+        private bool PromptSaveBasicBeforeTabSwitch()
+        {
+            const string title = "Save Basic Before Leaving?";
+            const string body =
+                "You have uncommitted Basic changes.\n\n" +
+                "Choose Yes to save from Basic now, or No to stay on Basic.";
+
+            try
+            {
+                var hostPanel = FindPanelHost();
+                if (hostPanel == null)
+                {
+                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    return r == MessageBoxResult.Yes;
+                }
+
+                var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
+                var overlayContent = hostPanel.FindName("PopupOverlayContent") as ContentControl;
+
+                if (overlayHost == null || overlayContent == null)
+                {
+                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    return r == MessageBoxResult.Yes;
+                }
+
+                bool accepted = false;
+
+                var popup = new PopupDialog();
+                popup.Configure(
+                    severity: 0,
+                    title: title,
+                    message: body,
+                    showCancel: true,
+                    primaryText: "Yes",
+                    secondaryText: "No");
+
+                var frame = new DispatcherFrame();
+
+                popup.Completed += result =>
+                {
+                    accepted = (result == PopupDialog.PopupResult.Accept);
+
+                    try { overlayContent.Content = null; } catch { }
+                    try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
+
+                    frame.Continue = false;
+                };
+
+                overlayContent.Content = popup;
+                overlayHost.Visibility = Visibility.Visible;
+
+                popup.Focus();
+                Keyboard.Focus(popup);
+
+                Dispatcher.PushFrame(frame);
+
+                return accepted;
+            }
+            catch
+            {
+                var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                return r == MessageBoxResult.Yes;
+            }
         }
 
         /* ======================= Status line ======================= */
@@ -1986,6 +2059,5 @@ namespace MWPV.View.UserControls
         }
     }
 }
-
 
 
