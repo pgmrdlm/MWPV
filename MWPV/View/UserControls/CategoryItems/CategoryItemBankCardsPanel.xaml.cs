@@ -1074,6 +1074,29 @@ namespace MWPV.View.UserControls.CategoryItems
                 return string.Empty;
             }
         }
+
+        private static bool TryReadSelectedProtectedDetailForEdit(long expectedCardId, out string cardNumber, out string cvv, out string pin)
+        {
+            cardNumber = string.Empty;
+            cvv = string.Empty;
+            pin = string.Empty;
+
+            string selectedCardIdRaw = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedCardId);
+            if (!long.TryParse(selectedCardIdRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long selectedCardId))
+                return false;
+
+            if (selectedCardId != expectedCardId)
+                return false;
+
+            cardNumber = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedNumber);
+            if (string.IsNullOrWhiteSpace(cardNumber))
+                return false;
+
+            cvv = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedCvv);
+            pin = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedPin);
+            return true;
+        }
+
         // ============================================================
         // Grid strip buttons: Edit/Delete Selected
         // ============================================================
@@ -1082,6 +1105,21 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (BankCardGrid?.SelectedItem is not BankCardRow row)
                 return;
+
+            string cardNumberForEdit = row.CardNumberRaw ?? string.Empty;
+            string cvvForEdit = row.CvvRaw ?? string.Empty;
+            string pinForEdit = row.PinRaw ?? string.Empty;
+
+            if (row.Id > 0)
+            {
+                if (!TryReadSelectedProtectedDetailForEdit(row.Id, out cardNumberForEdit, out cvvForEdit, out pinForEdit))
+                {
+                    ShowBankCardError("Unable to open edit mode. Reselect the row and try again.");
+                    SetErrors(true);
+                    UpdateTabButtons();
+                    return;
+                }
+            }
 
             _isSelectedProtectedViewActive = false;
 
@@ -1098,21 +1136,18 @@ namespace MWPV.View.UserControls.CategoryItems
                 }
 
                 if (CardNumberBox != null)
-                {
-                    // If row came from service select, raw is empty; edit requires re-entry.
-                    CardNumberBox.Password = TrimToMaxChars(row.CardNumberRaw ?? string.Empty);
-                }
+                    CardNumberBox.Password = TrimToMaxChars(cardNumberForEdit);
                 HideCardNumber(clearOverlay: true);
 
                 if (ExpirationTextBox != null)
                     ExpirationTextBox.Text = row.Expiration ?? string.Empty;
 
                 if (CvvBox != null)
-                    CvvBox.Password = row.CvvRaw ?? string.Empty;
+                    CvvBox.Password = cvvForEdit;
                 HideCvv(clearOverlay: true);
 
                 if (PinBox != null)
-                    PinBox.Password = row.PinRaw ?? string.Empty;
+                    PinBox.Password = pinForEdit;
                 HidePin(clearOverlay: true);
 
                 if (ChkCardActive != null)
