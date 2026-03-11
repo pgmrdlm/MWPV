@@ -193,6 +193,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             // Save must not happen in view-only
             btnSubmit.IsEnabled = !viewOnly;
+            UpdateSubmitButtonCaption();
 
             // Cancel always allowed
             btnCancel.IsEnabled = true;
@@ -239,6 +240,14 @@ namespace MWPV.View.UserControls.CategoryItems
 #if DEBUG
             Debug.WriteLine($"[BASIC][MODE] Applied: IsExisting={IsExistingItem} EditUnlocked={_editUnlocked} => ViewOnly={viewOnly}");
 #endif
+        }
+
+        private void UpdateSubmitButtonCaption()
+        {
+            if (txtSubmitCaption == null)
+                return;
+
+            txtSubmitCaption.Text = IsExistingItem ? "Save" : "Add";
         }
 
         private void UpdateCopyButtonStates()

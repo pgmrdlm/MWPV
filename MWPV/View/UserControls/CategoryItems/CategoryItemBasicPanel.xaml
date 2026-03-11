@@ -728,7 +728,8 @@
                     BorderBrush="{StaticResource InfoBannerBorder}"
                     BorderThickness="1"
                     CornerRadius="6"
-                    VerticalAlignment="Center">
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
                 <TextBlock x:Name="ActionInfoText"
                            Foreground="{StaticResource InfoBannerForeground}"
                            FontSize="13"
@@ -753,7 +754,8 @@
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    Text="&#xE8FB;"
                                    Margin="0,0,8,0"/>
-                        <TextBlock Text="Save"/>
+                        <TextBlock x:Name="txtSubmitCaption"
+                                   Text="Save"/>
                     </StackPanel>
                 </Button>
 
