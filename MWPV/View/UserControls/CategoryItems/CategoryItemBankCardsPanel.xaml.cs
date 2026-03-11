@@ -546,6 +546,15 @@ namespace MWPV.View.UserControls.CategoryItems
                 BtnCopyPin.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
                 BtnCopyPin.IsEnabled = allowCopy;
             }
+
+            bool hasSelectedExistingRow = BankCardGrid?.SelectedItem is BankCardRow selected && selected.Id > 0;
+            bool showEditSelected = !_entryDisabled && _editingRow == null && _isSelectedProtectedViewActive && hasSelectedExistingRow;
+            if (BtnBankCardEditSelected != null)
+            {
+                BtnBankCardEditSelected.Visibility = showEditSelected ? Visibility.Visible : Visibility.Collapsed;
+                BtnBankCardEditSelected.IsEnabled = showEditSelected;
+            }
+
             if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = editable;
             if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = editable;
         }
@@ -785,6 +794,8 @@ namespace MWPV.View.UserControls.CategoryItems
             _isSelectedProtectedViewActive = false;
             ClearBankCardError();
 
+            bool isUpdate = _editingRow != null;
+
             if (_entryDisabled)
             {
                 ShowBankCardError("Bank card entry is disabled for this session.");
@@ -868,7 +879,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 _editingRow.IsActive = isActive;
             }
 
-            ClearEntryFields();
+            if (isUpdate)
+                TeardownAfterSuccessfulUpdate();
+            else
+                ClearEntryFields();
+
             SetErrors(false);
             MarkDirty();
             UpdateTabButtons();
@@ -1549,6 +1564,15 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
+        private void TeardownAfterSuccessfulUpdate()
+        {
+            ClearEntryFields();
+            ClearSelectedBankCardDetailSedsBestEffort();
+            _isSelectedProtectedViewActive = false;
+            if (BankCardGrid != null)
+                BankCardGrid.SelectedItem = null;
+            SetEditingMode(null);
+        }
         private void WipeAndClearBankCardRows()
         {
             foreach (var row in _bankCardRows.ToList())
