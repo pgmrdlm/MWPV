@@ -266,6 +266,14 @@ namespace MWPV
                 return;
             }
 
+            bool allowClose = true;
+            try { allowClose = Panel?.TryHostClosePreflight_BestEffort() ?? true; } catch { }
+            if (!allowClose)
+            {
+                e.Cancel = true;
+                return;
+            }
+
             _closingCleanupInProgress = true;
             e.Cancel = true;
 
