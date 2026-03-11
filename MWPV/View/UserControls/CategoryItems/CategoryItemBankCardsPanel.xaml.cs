@@ -528,6 +528,24 @@ namespace MWPV.View.UserControls.CategoryItems
             if (BtnToggleCvvReveal != null) BtnToggleCvvReveal.IsEnabled = allowReveal;
             if (BtnTogglePinReveal != null) BtnTogglePinReveal.IsEnabled = allowReveal;
 
+            bool allowCopy = !_entryDisabled && _isSelectedProtectedViewActive;
+            if (BtnCopyCardNumber != null)
+            {
+                BtnCopyCardNumber.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
+                BtnCopyCardNumber.IsEnabled = allowCopy;
+            }
+
+            if (BtnCopyCvv != null)
+            {
+                BtnCopyCvv.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
+                BtnCopyCvv.IsEnabled = allowCopy;
+            }
+
+            if (BtnCopyPin != null)
+            {
+                BtnCopyPin.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
+                BtnCopyPin.IsEnabled = allowCopy;
+            }
             if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = editable;
             if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = editable;
         }
@@ -715,6 +733,49 @@ namespace MWPV.View.UserControls.CategoryItems
             else ShowPin();
         }
 
+        // ============================================================
+        // Protected-view copy buttons
+        // ============================================================
+        private void BtnCopyCardNumber_Click(object sender, RoutedEventArgs e)
+        {
+            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedNumber, "No card number is available to copy.");
+        }
+
+        private void BtnCopyCvv_Click(object sender, RoutedEventArgs e)
+        {
+            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedCvv, "No CVV is available to copy.");
+        }
+
+        private void BtnCopyPin_Click(object sender, RoutedEventArgs e)
+        {
+            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedPin, "No card PIN is available to copy.");
+        }
+
+        private void CopySelectedProtectedFieldToClipboard(string sedsKey, string emptyMessage)
+        {
+            if (!_isSelectedProtectedViewActive || _entryDisabled)
+                return;
+
+            string value = ReadSelectedProtectedFieldFromSeds(sedsKey);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                ShowBankCardError(emptyMessage);
+                return;
+            }
+
+            try
+            {
+                Clipboard.SetText(value);
+                ClearBankCardError();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[BANK-CARDS-PANEL][COPY] Clipboard copy failed for key '{sedsKey}': {ex}");
+#endif
+                ShowBankCardError("Unable to copy value to clipboard.");
+            }
+        }
         // ============================================================
         // Row-level: Add/Update + Clear
         // ============================================================
@@ -989,6 +1050,30 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
 
+        // ============================================================
+        // Protected selected-row SEDS read helper
+        // ============================================================
+        private static string ReadSelectedProtectedFieldFromSeds(string sedsKey)
+        {
+            try
+            {
+                if (!SecureEncryptedDataStore.TryGetBytes(sedsKey, out var valueBytes) || valueBytes.Length == 0)
+                    return string.Empty;
+
+                try
+                {
+                    return Encoding.UTF8.GetString(valueBytes);
+                }
+                finally
+                {
+                    Array.Clear(valueBytes, 0, valueBytes.Length);
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
         // ============================================================
         // Grid strip buttons: Edit/Delete Selected
         // ============================================================

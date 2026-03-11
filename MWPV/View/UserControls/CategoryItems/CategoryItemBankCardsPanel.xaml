@@ -183,32 +183,48 @@
                                      Foreground="Black" />
                         </Grid>
 
-                        <Button x:Name="BtnViewCardNumber"
-                                Grid.Column="1"
-                                Style="{StaticResource SmallSquarePrimaryButton}"
-                                ToolTip="Show card number"
-                                Click="BtnViewCardNumber_Click">
-                            <Viewbox Stretch="Uniform">
-                                <Grid Width="20" Height="20">
-                                    <Path Stroke="Black"
-                                          Fill="Transparent"
-                                          StrokeThickness="1.6"
-                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                                    <Ellipse Width="6"
-                                             Height="6"
-                                             Stroke="Black"
-                                             StrokeThickness="1.2"
-                                             Fill="White"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                    <Ellipse Width="3"
-                                             Height="3"
-                                             Fill="Black"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                            </Viewbox>
-                        </Button>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Button x:Name="BtnCopyCardNumber"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Visibility="Collapsed"
+                                    ToolTip="Copy card number to clipboard"
+                                    Click="BtnCopyCardNumber_Click">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           Text="&#xE8C8;"
+                                           FontSize="16"
+                                           Foreground="Black"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="BtnViewCardNumber"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    ToolTip="Show card number"
+                                    Click="BtnViewCardNumber_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black"
+                                              Fill="Transparent"
+                                              StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Stroke="Black"
+                                                 StrokeThickness="1.2"
+                                                 Fill="White"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                        <Ellipse Width="3"
+                                                 Height="3"
+                                                 Fill="Black"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
                     </Grid>
                 </StackPanel>
 
@@ -285,32 +301,48 @@
                                      Foreground="Black" />
                         </Grid>
 
-                        <Button x:Name="BtnToggleCvvReveal"
-                                Grid.Column="1"
-                                Style="{StaticResource SmallSquarePrimaryButton}"
-                                ToolTip="Show CVV"
-                                Click="BtnToggleCvvReveal_Click">
-                            <Viewbox Stretch="Uniform">
-                                <Grid Width="20" Height="20">
-                                    <Path Stroke="Black"
-                                          Fill="Transparent"
-                                          StrokeThickness="1.6"
-                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                                    <Ellipse Width="6"
-                                             Height="6"
-                                             Stroke="Black"
-                                             StrokeThickness="1.2"
-                                             Fill="White"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                    <Ellipse Width="3"
-                                             Height="3"
-                                             Fill="Black"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                            </Viewbox>
-                        </Button>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Button x:Name="BtnCopyCvv"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Visibility="Collapsed"
+                                    ToolTip="Copy CVV to clipboard"
+                                    Click="BtnCopyCvv_Click">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           Text="&#xE8C8;"
+                                           FontSize="16"
+                                           Foreground="Black"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="BtnToggleCvvReveal"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    ToolTip="Show CVV"
+                                    Click="BtnToggleCvvReveal_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black"
+                                              Fill="Transparent"
+                                              StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Stroke="Black"
+                                                 StrokeThickness="1.2"
+                                                 Fill="White"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                        <Ellipse Width="3"
+                                                 Height="3"
+                                                 Fill="Black"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
                     </Grid>
                 </StackPanel>
 
@@ -353,32 +385,48 @@
                                      Foreground="Black" />
                         </Grid>
 
-                        <Button x:Name="BtnTogglePinReveal"
-                                Grid.Column="1"
-                                Style="{StaticResource SmallSquarePrimaryButton}"
-                                ToolTip="Show card PIN"
-                                Click="BtnTogglePinReveal_Click">
-                            <Viewbox Stretch="Uniform">
-                                <Grid Width="20" Height="20">
-                                    <Path Stroke="Black"
-                                          Fill="Transparent"
-                                          StrokeThickness="1.6"
-                                          Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
-                                    <Ellipse Width="6"
-                                             Height="6"
-                                             Stroke="Black"
-                                             StrokeThickness="1.2"
-                                             Fill="White"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                    <Ellipse Width="3"
-                                             Height="3"
-                                             Fill="Black"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-                            </Viewbox>
-                        </Button>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Button x:Name="BtnCopyPin"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Visibility="Collapsed"
+                                    ToolTip="Copy card PIN to clipboard"
+                                    Click="BtnCopyPin_Click">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           Text="&#xE8C8;"
+                                           FontSize="16"
+                                           Foreground="Black"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="BtnTogglePinReveal"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    ToolTip="Show card PIN"
+                                    Click="BtnTogglePinReveal_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black"
+                                              Fill="Transparent"
+                                              StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Stroke="Black"
+                                                 StrokeThickness="1.2"
+                                                 Fill="White"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                        <Ellipse Width="3"
+                                                 Height="3"
+                                                 Fill="Black"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
                     </Grid>
                 </StackPanel>
 
