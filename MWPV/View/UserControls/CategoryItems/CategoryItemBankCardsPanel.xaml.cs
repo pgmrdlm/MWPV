@@ -794,6 +794,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _isSelectedProtectedViewActive = false;
             ClearBankCardError();
 
+            bool isTrueAddMode = _editingRow == null;
             bool isUpdate = _editingRow != null;
             bool isExistingPersistedUpdate = _editingRow != null && _editingRow.Id > 0;
 
@@ -889,7 +890,7 @@ namespace MWPV.View.UserControls.CategoryItems
             MarkDirty();
             UpdateTabButtons();
 
-            if (isExistingPersistedUpdate)
+            if (isExistingPersistedUpdate || isTrueAddMode)
             {
                 // Reuse the same host persistence/reload pipeline used by tab Save.
                 RaiseSaveAndExitRequestOnly();
