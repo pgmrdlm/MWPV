@@ -795,6 +795,7 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearBankCardError();
 
             bool isUpdate = _editingRow != null;
+            bool isExistingPersistedUpdate = _editingRow != null && _editingRow.Id > 0;
 
             if (_entryDisabled)
             {
@@ -887,6 +888,12 @@ namespace MWPV.View.UserControls.CategoryItems
             SetErrors(false);
             MarkDirty();
             UpdateTabButtons();
+
+            if (isExistingPersistedUpdate)
+            {
+                // Reuse the same host persistence/reload pipeline used by tab Save.
+                RaiseSaveAndExitRequestOnly();
+            }
         }
 
         private void OnBankCardClearRowClick(object sender, RoutedEventArgs e)
@@ -1819,4 +1826,5 @@ namespace MWPV.View.UserControls.CategoryItems
         }
     }
 }
+
 
