@@ -915,6 +915,14 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
+            if (!EntryLineHasAnyInput())
+            {
+                ClearBankCardError();
+                SetErrors(false);
+                UpdateTabButtons();
+                return;
+            }
+
             bool ok = ValidateBankCardFields(showErrors: true, out _, out _, out _);
             SetErrors(!ok);
             UpdateTabButtons();
@@ -1827,5 +1835,3 @@ namespace MWPV.View.UserControls.CategoryItems
         }
     }
 }
-
-

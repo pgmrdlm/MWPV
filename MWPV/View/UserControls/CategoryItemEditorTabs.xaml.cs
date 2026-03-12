@@ -62,6 +62,7 @@ namespace MWPV.View.UserControls
         // Then we programmatically switch to the requested tab. That second selection change should NOT
         // re-run the leave-basic persistence logic (it already ran).
         private bool _suppressLeaveBasicOnce;
+        private bool _suppressLeaveBankCardsOnce;
         private bool _bankCardsLoaded;
         private int _bankCardsLoadedItemId;
 
@@ -1955,30 +1956,78 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BANKCARDS => newIndex={newIndex}");
 #endif
-                bool allowLeave = true;
-
-                try
+                if (_suppressLeaveBankCardsOnce)
                 {
-                    _handlingTabSelection = true;
-                    if (BankCardsPanel != null)
-                        allowLeave = BankCardsPanel.TryAutoCommitAndWipe();
+                    _suppressLeaveBankCardsOnce = false;
                 }
-                finally
-                {
-                    _handlingTabSelection = false;
-
-                    // IMPORTANT: status sync after any forced selection inside bankcards
-                    UpdateIsBasicOpenFromUi_BestEffort();
-                }
-
-                if (!allowLeave)
+                else
                 {
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS BLOCKED -> force back to BankCards.");
+                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BANKCARDS => requestedIndex={newIndex}");
 #endif
+                    int requestedIndex = newIndex;
+
                     ForceSelectTab(TabIndexBankCards);
 
+                    bool allowLeaveBankCards = PromptLeaveBankCardsBeforeTabSwitch();
+                    if (!allowLeaveBankCards)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS CANCELED -> stay on BankCards.");
+#endif
+                        _lastTabIndex = TabIndexBankCards;
+
+                        UpdateIsBasicOpenFromUi_BestEffort();
+                        return;
+                    }
+
+                    bool allowLeave = true;
+
+                    try
+                    {
+                        _handlingTabSelection = true;
+                        if (BankCardsPanel != null)
+                            allowLeave = BankCardsPanel.TryAutoCommitAndWipe();
+                    }
+                    finally
+                    {
+                        _handlingTabSelection = false;
+
+                        // IMPORTANT: status sync after any forced selection inside bankcards
+                        UpdateIsBasicOpenFromUi_BestEffort();
+                    }
+
+                    if (!allowLeave)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS BLOCKED -> stay on BankCards.");
+#endif
+                        _lastTabIndex = TabIndexBankCards;
+                        return;
+                    }
+
                     _lastTabIndex = TabIndexBankCards;
+                    _suppressLeaveBankCardsOnce = true;
+
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_isClosing || ItemTabs == null)
+                            return;
+
+                        try
+                        {
+                            ItemTabs.SelectedIndex = requestedIndex;
+                        }
+                        catch
+                        {
+                        }
+                        finally
+                        {
+                            // IMPORTANT: keep AppStatus in sync for programmatic jump
+                            UpdateIsBasicOpenFromUi_BestEffort();
+                        }
+                    }), DispatcherPriority.Background);
+
                     return;
                 }
             }
@@ -2074,7 +2123,70 @@ namespace MWPV.View.UserControls
                 return r == MessageBoxResult.Yes;
             }
         }
+        private bool PromptLeaveBankCardsBeforeTabSwitch()
+        {
+            const string title = "Leave Bank Cards Tab?";
+            const string body =
+                "You have Bank Cards work in this editor session.\n\n" +
+                "Choose Yes to leave Bank Cards now, or No to stay on this tab.";
 
+            try
+            {
+                var hostPanel = FindPanelHost();
+                if (hostPanel == null)
+                {
+                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    return r == MessageBoxResult.Yes;
+                }
+
+                var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
+                var overlayContent = hostPanel.FindName("PopupOverlayContent") as ContentControl;
+
+                if (overlayHost == null || overlayContent == null)
+                {
+                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    return r == MessageBoxResult.Yes;
+                }
+
+                bool accepted = false;
+
+                var popup = new PopupDialog();
+                popup.Configure(
+                    severity: 0,
+                    title: title,
+                    message: body,
+                    showCancel: true,
+                    primaryText: "Yes",
+                    secondaryText: "No");
+
+                var frame = new DispatcherFrame();
+
+                popup.Completed += result =>
+                {
+                    accepted = (result == PopupDialog.PopupResult.Accept);
+
+                    try { overlayContent.Content = null; } catch { }
+                    try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
+
+                    frame.Continue = false;
+                };
+
+                overlayContent.Content = popup;
+                overlayHost.Visibility = Visibility.Visible;
+
+                popup.Focus();
+                Keyboard.Focus(popup);
+
+                Dispatcher.PushFrame(frame);
+
+                return accepted;
+            }
+            catch
+            {
+                var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+                return r == MessageBoxResult.Yes;
+            }
+        }
         /* ======================= Status line ======================= */
 
         private void SetStatus(string text)
@@ -2093,4 +2205,3 @@ namespace MWPV.View.UserControls
     }
 }
 
- 

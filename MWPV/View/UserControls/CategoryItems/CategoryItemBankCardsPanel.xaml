@@ -9,12 +9,6 @@
              d:DesignWidth="900">
 
     <UserControl.Resources>
-
-        <!-- Info strip colors (match CategoryItemEditorTabs Basic tab / AppEntryWindow InfoBanner) -->
-        <SolidColorBrush x:Key="InfoBannerBackground" Color="#1E40AF"/>
-        <SolidColorBrush x:Key="InfoBannerBorder"     Color="#1D4ED8"/>
-        <SolidColorBrush x:Key="InfoBannerForeground" Color="White"/>
-
         <!-- Small square primary button (matches other panels) -->
         <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
             <Setter Property="Width" Value="28" />
@@ -572,27 +566,6 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-
-            <!-- Info block (dark-blue, same as Basic tab) -->
-            <Border Grid.Column="0"
-                    Margin="0,0,12,0"
-                    Padding="10"
-                    Background="{StaticResource InfoBannerBackground}"
-                    BorderBrush="{StaticResource InfoBannerBorder}"
-                    BorderThickness="1"
-                    CornerRadius="6"
-                    VerticalAlignment="Center">
-                <TextBlock Foreground="{StaticResource InfoBannerForeground}"
-                           FontSize="13"
-                           TextWrapping="Wrap">
-                    <Run Text="Tab changes save when there are no errors.  "/>
-                    <Run Text="Save " FontWeight="SemiBold"/>
-                    <Run Text="saves and closes.  "/>
-                    <Run Text="Cancel " FontWeight="SemiBold"/>
-                    <Run Text="exits (no save)."/>
-                </TextBlock>
-            </Border>
-
             <!-- Buttons (kept intact: names, styles, handlers) -->
             <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
@@ -612,4 +585,3 @@
 
     </Grid>
 </UserControl>
-
