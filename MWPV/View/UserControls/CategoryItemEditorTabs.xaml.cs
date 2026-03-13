@@ -1055,7 +1055,13 @@ namespace MWPV.View.UserControls
 
         private void TryPreparePanelsForHostClose()
         {
-            try { BasicPanel?.WipeAllForHostClose(); }
+            try
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Invoking BasicPanel.WipeAllForHostClose()");
+#endif
+                BasicPanel?.WipeAllForHostClose();
+            }
             catch (Exception ex)
             {
 #if DEBUG
@@ -1098,21 +1104,39 @@ namespace MWPV.View.UserControls
         /// </summary>
         public bool TryHostClosePreflight()
         {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] TryHostClosePreflight ENTER");
+#endif
             if (_isClosing)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Already closing -> allowClose=true");
+#endif
                 return true;
+            }
 
             if (BasicPanel == null)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] BasicPanel missing -> allowClose=true");
+#endif
                 return true;
+            }
 
             // Existing item in pure view mode can close without prompting/commit.
             if (IsExistingItemAndBasicPanelIsViewMode())
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Existing item in view mode -> allowClose=true");
+#endif
                 return true;
+            }
 
             // Keep focus on Basic for commit prompt/validation workflow.
             if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                 ForceSelectTab(TabIndexBasic);
 
-            bool allowed = TryValidateAndPersistOnLeaveBasic();
+            bool allowed = TryResolveBasicHostCloseDecision();
             if (!allowed)
             {
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
@@ -1122,6 +1146,9 @@ namespace MWPV.View.UserControls
                 UpdateIsBasicOpenFromUi_BestEffort();
             }
 
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] TryHostClosePreflight EXIT allowClose={allowed}");
+#endif
             return allowed;
         }
 
@@ -1131,6 +1158,13 @@ namespace MWPV.View.UserControls
         {
             LeaveBasicTab,
             Save
+        }
+
+        private enum BasicHostCloseDecision
+        {
+            SaveAndExit,
+            ExitWithoutSave,
+            CancelExit
         }
 
         private bool TryPersistBasicIfNeeded(PersistTrigger trigger, bool isBookmarkOnly)
@@ -1526,65 +1560,19 @@ namespace MWPV.View.UserControls
                 "This password is currently used or has been previously used.\n\n" +
                 "Accept to continue.";
 
-            try
-            {
-                var hostPanel = FindPanelHost();
-                if (hostPanel == null)
-                {
+            var result = ShowCustomPopupDecision(
+                title: title,
+                body: body,
+                primaryText: "Accept",
+                secondaryText: "Cancel",
+                debugContext: "DUPLICATE-PASSWORD",
+                safeFallbackResult: PopupDialog.PopupResult.Cancel);
+
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][POPUP] Host Panel not found. Falling back to MessageBox.");
+            Debug.WriteLine($"[ITEM-TABS][DUPLICATE-PASSWORD] Popup result={result}");
 #endif
-                    var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-                    return r == MessageBoxResult.OK;
-                }
 
-                var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
-                var overlayContent = hostPanel.FindName("PopupOverlayContent") as ContentControl;
-
-                if (overlayHost == null || overlayContent == null)
-                {
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][POPUP] PopupOverlayHost/PopupOverlayContent not found. Falling back to MessageBox.");
-#endif
-                    var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-                    return r == MessageBoxResult.OK;
-                }
-
-                bool accepted = false;
-
-                var popup = new PopupDialog();
-                popup.ConfigureWarningAcceptCancel(title, body);
-
-                var frame = new DispatcherFrame();
-
-                popup.Completed += result =>
-                {
-                    accepted = (result == PopupDialog.PopupResult.Accept);
-
-                    try { overlayContent.Content = null; } catch { }
-                    try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
-
-                    frame.Continue = false;
-                };
-
-                overlayContent.Content = popup;
-                overlayHost.Visibility = Visibility.Visible;
-
-                popup.Focus();
-                Keyboard.Focus(popup);
-
-                Dispatcher.PushFrame(frame);
-
-                return accepted;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][POPUP] Failed to show PopupDialog: {ex}");
-#endif
-                var r = MessageBox.Show(body, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-                return r == MessageBoxResult.OK;
-            }
+            return result == PopupDialog.PopupResult.Accept;
         }
 
         private MWPV.View.UserControls.Panel? FindPanelHost()
@@ -2059,20 +2047,120 @@ namespace MWPV.View.UserControls
             return true;
         }
 
-        private bool PromptSaveBasicBeforeTabSwitch()
+        private bool TryResolveBasicHostCloseDecision()
         {
-            const string title = "Save Basic Before Leaving?";
-            const string body =
-                "You have uncommitted Basic changes.\n\n" +
-                "Choose Yes to save from Basic now, or No to stay on Basic.";
+            SetStatus("");
 
+            if (BasicPanel == null)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Decision path: BasicPanel missing -> allowClose=true");
+#endif
+                return true;
+            }
+
+            var decision = PromptBasicHostCloseDecision();
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Prompt result={decision}");
+#endif
+
+            switch (decision)
+            {
+                case BasicHostCloseDecision.SaveAndExit:
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=SaveAndExit");
+#endif
+                    if (!TryCommitBasicFromBasicFlow("Cannot close window, fix highlighted errors before saving."))
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] SaveAndExit failed -> allowClose=false");
+#endif
+                        return false;
+                    }
+
+                    // Keep Basic mode consistent after commit before host-close cleanup runs.
+                    BasicPanel.PopulateFromDbForCurrentEntity();
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] SaveAndExit succeeded -> allowClose=true");
+#endif
+                    return true;
+
+                case BasicHostCloseDecision.ExitWithoutSave:
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=ExitWithoutSave -> allowClose=true");
+#endif
+                    return true;
+
+                default:
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=CancelExit -> allowClose=false");
+#endif
+                    return false;
+            }
+        }
+
+        private BasicHostCloseDecision PromptBasicHostCloseDecision()
+        {
+            const string title1 = "Save Basic Before Exiting?";
+            const string body1 =
+                "You have uncommitted Basic changes.\n\n" +
+                "Choose Save & Exit to save your Basic changes and close the window.\n" +
+                "Choose More Options to continue without saving or cancel exit.";
+
+            const string title2 = "Exit Without Saving?";
+            const string body2 =
+                "Your Basic changes will be discarded.\n\n" +
+                "Choose Exit Without Saving to close the window now.\n" +
+                "Choose Cancel to remain on Basic.";
+
+            var first = ShowCustomPopupDecision(
+                title: title1,
+                body: body1,
+                primaryText: "Save & Exit",
+                secondaryText: "More Options");
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Popup step1 result={first}");
+#endif
+
+            if (first == PopupDialog.PopupResult.Accept)
+                return BasicHostCloseDecision.SaveAndExit;
+
+            var second = ShowCustomPopupDecision(
+                title: title2,
+                body: body2,
+                primaryText: "Exit Without Saving",
+                secondaryText: "Cancel");
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Popup step2 result={second}");
+#endif
+
+            if (second == PopupDialog.PopupResult.Accept)
+                return BasicHostCloseDecision.ExitWithoutSave;
+
+            return BasicHostCloseDecision.CancelExit;
+        }
+
+        private PopupDialog.PopupResult ShowCustomPopupDecision(
+            string title,
+            string body,
+            string primaryText,
+            string secondaryText,
+            string debugContext = "POPUP",
+            PopupDialog.PopupResult safeFallbackResult = PopupDialog.PopupResult.Cancel)
+        {
             try
             {
                 var hostPanel = FindPanelHost();
                 if (hostPanel == null)
                 {
-                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    return r == MessageBoxResult.Yes;
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup host not found -> safe fallback {safeFallbackResult}");
+#endif
+                    return safeFallbackResult;
                 }
 
                 var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
@@ -2080,11 +2168,13 @@ namespace MWPV.View.UserControls
 
                 if (overlayHost == null || overlayContent == null)
                 {
-                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    return r == MessageBoxResult.Yes;
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup overlay not found -> safe fallback {safeFallbackResult}");
+#endif
+                    return safeFallbackResult;
                 }
 
-                bool accepted = false;
+                var result = safeFallbackResult;
 
                 var popup = new PopupDialog();
                 popup.Configure(
@@ -2092,14 +2182,14 @@ namespace MWPV.View.UserControls
                     title: title,
                     message: body,
                     showCancel: true,
-                    primaryText: "Yes",
-                    secondaryText: "No");
+                    primaryText: primaryText,
+                    secondaryText: secondaryText);
 
                 var frame = new DispatcherFrame();
 
-                popup.Completed += result =>
+                popup.Completed += popupResult =>
                 {
-                    accepted = (result == PopupDialog.PopupResult.Accept);
+                    result = popupResult;
 
                     try { overlayContent.Content = null; } catch { }
                     try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
@@ -2115,13 +2205,40 @@ namespace MWPV.View.UserControls
 
                 Dispatcher.PushFrame(frame);
 
-                return accepted;
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup completed result={result}");
+#endif
+                return result;
             }
-            catch
+            catch (Exception ex)
             {
-                var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                return r == MessageBoxResult.Yes;
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup failed -> safe fallback {safeFallbackResult}: {ex}");
+#endif
+                return safeFallbackResult;
             }
+        }
+
+        private bool PromptSaveBasicBeforeTabSwitch()
+        {
+            const string title = "Save Basic Before Leaving?";
+            const string body =
+                "You have uncommitted Basic changes.\n\n" +
+                "Choose Yes to save from Basic now, or No to stay on Basic.";
+
+            var result = ShowCustomPopupDecision(
+                title: title,
+                body: body,
+                primaryText: "Yes",
+                secondaryText: "No",
+                debugContext: "LEAVE-BASIC",
+                safeFallbackResult: PopupDialog.PopupResult.Cancel);
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Popup result={result}");
+#endif
+
+            return result == PopupDialog.PopupResult.Accept;
         }
         private bool PromptLeaveBankCardsBeforeTabSwitch()
         {
@@ -2130,62 +2247,19 @@ namespace MWPV.View.UserControls
                 "You have Bank Cards work in this editor session.\n\n" +
                 "Choose Yes to leave Bank Cards now, or No to stay on this tab.";
 
-            try
-            {
-                var hostPanel = FindPanelHost();
-                if (hostPanel == null)
-                {
-                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    return r == MessageBoxResult.Yes;
-                }
+            var result = ShowCustomPopupDecision(
+                title: title,
+                body: body,
+                primaryText: "Yes",
+                secondaryText: "No",
+                debugContext: "LEAVE-BANKCARDS",
+                safeFallbackResult: PopupDialog.PopupResult.Cancel);
 
-                var overlayHost = hostPanel.FindName("PopupOverlayHost") as Border;
-                var overlayContent = hostPanel.FindName("PopupOverlayContent") as ContentControl;
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][LEAVE-BANKCARDS] Popup result={result}");
+#endif
 
-                if (overlayHost == null || overlayContent == null)
-                {
-                    var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    return r == MessageBoxResult.Yes;
-                }
-
-                bool accepted = false;
-
-                var popup = new PopupDialog();
-                popup.Configure(
-                    severity: 0,
-                    title: title,
-                    message: body,
-                    showCancel: true,
-                    primaryText: "Yes",
-                    secondaryText: "No");
-
-                var frame = new DispatcherFrame();
-
-                popup.Completed += result =>
-                {
-                    accepted = (result == PopupDialog.PopupResult.Accept);
-
-                    try { overlayContent.Content = null; } catch { }
-                    try { overlayHost.Visibility = Visibility.Collapsed; } catch { }
-
-                    frame.Continue = false;
-                };
-
-                overlayContent.Content = popup;
-                overlayHost.Visibility = Visibility.Visible;
-
-                popup.Focus();
-                Keyboard.Focus(popup);
-
-                Dispatcher.PushFrame(frame);
-
-                return accepted;
-            }
-            catch
-            {
-                var r = MessageBox.Show(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
-                return r == MessageBoxResult.Yes;
-            }
+            return result == PopupDialog.PopupResult.Accept;
         }
         /* ======================= Status line ======================= */
 
