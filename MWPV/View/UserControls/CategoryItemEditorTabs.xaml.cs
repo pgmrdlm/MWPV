@@ -1776,13 +1776,7 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BasicPanel CancelRequested");
 #endif
-            SetStatus("");
-
-            // Refresh no matter what (cancel path)
-            NotifyPanel_RefreshCategoryItemGrid_BestEffort();
-
-            WipeAllForHostClose();
-            Canceled?.Invoke(this, EventArgs.Empty);
+            HandleCancelAndExitRequest();
         }
 
         /* ======================= Bank Cards integration ======================= */
@@ -1801,7 +1795,14 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel CancelAndExitRequested");
 #endif
-            // Refresh no matter what (bankcards cancel path)
+            HandleCancelAndExitRequest();
+        }
+
+        private void HandleCancelAndExitRequest()
+        {
+            SetStatus("");
+
+            // Refresh no matter what (cancel path)
             NotifyPanel_RefreshCategoryItemGrid_BestEffort();
 
             WipeAllForHostClose();
@@ -2253,6 +2254,53 @@ namespace MWPV.View.UserControls
             }
         }
 
+        private enum TwoStepHostClosePopupDecision
+        {
+            SaveAndExit,
+            ExitWithoutSave,
+            CancelExit
+        }
+
+        private TwoStepHostClosePopupDecision PromptTwoStepHostClosePopupDecision(
+            string step1Title,
+            string step1Body,
+            string step2Title,
+            string step2Body,
+            string resultDebugPrefix,
+            string step1DebugContext = "POPUP",
+            string step2DebugContext = "POPUP")
+        {
+            var first = ShowCustomPopupDecision(
+                title: step1Title,
+                body: step1Body,
+                primaryText: "Save & Exit",
+                secondaryText: "More Options",
+                debugContext: step1DebugContext);
+
+#if DEBUG
+            Debug.WriteLine($"{resultDebugPrefix} Popup step1 result={first}");
+#endif
+
+            if (first == PopupDialog.PopupResult.Accept)
+                return TwoStepHostClosePopupDecision.SaveAndExit;
+
+            var second = ShowCustomPopupDecision(
+                title: step2Title,
+                body: step2Body,
+                primaryText: "Exit Without Saving",
+                secondaryText: "Cancel",
+                debugContext: step2DebugContext);
+
+#if DEBUG
+            Debug.WriteLine($"{resultDebugPrefix} Popup step2 result={second}");
+#endif
+
+            if (second == PopupDialog.PopupResult.Accept)
+                return TwoStepHostClosePopupDecision.ExitWithoutSave;
+
+            return TwoStepHostClosePopupDecision.CancelExit;
+        }
+
         private BankCardsHostCloseDecision PromptBankCardsHostCloseDecision()
         {
             const string title1 = "Save Bank Cards Before Exiting?";
@@ -2267,35 +2315,20 @@ namespace MWPV.View.UserControls
                 "Choose Exit Without Saving to close the window now.\n" +
                 "Choose Cancel to remain in the editor.";
 
-            var first = ShowCustomPopupDecision(
-                title: title1,
-                body: body1,
-                primaryText: "Save & Exit",
-                secondaryText: "More Options",
-                debugContext: "HOST-CLOSE-BANKCARDS-STEP1");
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Popup step1 result={first}");
-#endif
-
-            if (first == PopupDialog.PopupResult.Accept)
-                return BankCardsHostCloseDecision.SaveAndExit;
-
-            var second = ShowCustomPopupDecision(
-                title: title2,
-                body: body2,
-                primaryText: "Exit Without Saving",
-                secondaryText: "Cancel",
-                debugContext: "HOST-CLOSE-BANKCARDS-STEP2");
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Popup step2 result={second}");
-#endif
-
-            if (second == PopupDialog.PopupResult.Accept)
-                return BankCardsHostCloseDecision.ExitWithoutSave;
-
-            return BankCardsHostCloseDecision.CancelExit;
+            return PromptTwoStepHostClosePopupDecision(
+                step1Title: title1,
+                step1Body: body1,
+                step2Title: title2,
+                step2Body: body2,
+                resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BANKCARDS]",
+                step1DebugContext: "HOST-CLOSE-BANKCARDS-STEP1",
+                step2DebugContext: "HOST-CLOSE-BANKCARDS-STEP2")
+                switch
+            {
+                TwoStepHostClosePopupDecision.SaveAndExit => BankCardsHostCloseDecision.SaveAndExit,
+                TwoStepHostClosePopupDecision.ExitWithoutSave => BankCardsHostCloseDecision.ExitWithoutSave,
+                _ => BankCardsHostCloseDecision.CancelExit
+            };
         }
 
         private BasicHostCloseDecision PromptBasicHostCloseDecision()
@@ -2312,33 +2345,18 @@ namespace MWPV.View.UserControls
                 "Choose Exit Without Saving to close the window now.\n" +
                 "Choose Cancel to remain on Basic.";
 
-            var first = ShowCustomPopupDecision(
-                title: title1,
-                body: body1,
-                primaryText: "Save & Exit",
-                secondaryText: "More Options");
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Popup step1 result={first}");
-#endif
-
-            if (first == PopupDialog.PopupResult.Accept)
-                return BasicHostCloseDecision.SaveAndExit;
-
-            var second = ShowCustomPopupDecision(
-                title: title2,
-                body: body2,
-                primaryText: "Exit Without Saving",
-                secondaryText: "Cancel");
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Popup step2 result={second}");
-#endif
-
-            if (second == PopupDialog.PopupResult.Accept)
-                return BasicHostCloseDecision.ExitWithoutSave;
-
-            return BasicHostCloseDecision.CancelExit;
+            return PromptTwoStepHostClosePopupDecision(
+                step1Title: title1,
+                step1Body: body1,
+                step2Title: title2,
+                step2Body: body2,
+                resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]")
+                switch
+            {
+                TwoStepHostClosePopupDecision.SaveAndExit => BasicHostCloseDecision.SaveAndExit,
+                TwoStepHostClosePopupDecision.ExitWithoutSave => BasicHostCloseDecision.ExitWithoutSave,
+                _ => BasicHostCloseDecision.CancelExit
+            };
         }
 
         private PopupDialog.PopupResult ShowCustomPopupDecision(
