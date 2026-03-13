@@ -1123,6 +1123,31 @@ namespace MWPV.View.UserControls
                 return true;
             }
 
+            bool bankCardsHasHostCloseSessionWork = false;
+            try { bankCardsHasHostCloseSessionWork = BankCardsPanel?.HasHostCloseSessionWork() ?? false; } catch { }
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] SessionWorkDetected={bankCardsHasHostCloseSessionWork}");
+#endif
+
+            if (bankCardsHasHostCloseSessionWork)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Entering BankCards host-close branch");
+#endif
+                bool bankCardsAllowed = TryResolveBankCardsHostCloseDecision();
+                if (!bankCardsAllowed)
+                {
+                    _lastTabIndex = ItemTabs?.SelectedIndex ?? _lastTabIndex;
+                    UpdateIsBasicOpenFromUi_BestEffort();
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] TryHostClosePreflight EXIT allowClose=false");
+#endif
+                    return false;
+                }
+            }
+
             // Existing item in pure view mode can close without prompting/commit.
             if (IsExistingItemAndBasicPanelIsViewMode())
             {
@@ -1161,6 +1186,13 @@ namespace MWPV.View.UserControls
         }
 
         private enum BasicHostCloseDecision
+        {
+            SaveAndExit,
+            ExitWithoutSave,
+            CancelExit
+        }
+
+        private enum BankCardsHostCloseDecision
         {
             SaveAndExit,
             ExitWithoutSave,
@@ -1760,84 +1792,9 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel SaveAndExitRequested");
 #endif
-            BankCardsDraftRows = (e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
-            SetStatus("");
-            if (BasicPanel == null)
-                return;
-            bool bypassBasicPersist = IsExistingItemAndBasicPanelIsViewMode();
-            bool isBookmarkOnly = false;
-            if (!bypassBasicPersist)
-            {
-                BasicPanel.NormalizeUsernameFromEmailIfEmpty();
-                if (!BasicPanel.TryValidateAllForSubmit(out isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
-                {
-                    if (ItemTabs != null)
-                        ForceSelectTab(TabIndexBasic);
-                    BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
-                    SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
-                    return;
-                }
-                // For BankCards save, persist Basic first using existing orchestration.
-                if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
-                {
-                    if (ItemTabs != null)
-                        ForceSelectTab(TabIndexBasic);
-                    return;
-                }
-            }
-#if DEBUG
-            else
-            {
-                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
-            }
-#endif
-            var activeId = TryGetActiveCategoryItemId();
-            if (!activeId.HasValue || activeId.Value <= 0)
-            {
-                SetStatus("Save failed: missing ItemId context.");
-                return;
-            }
-            int itemId = activeId.Value;
-            try
-            {
-                var serviceRows = BankCardsDraftRows
-                    .Select(r => new CategoryItemService.BankCardRow
-                    {
-                        Id = r.Id,
-                        ItemId = itemId,
-                        CardTypeId = r.CardTypeId,
-                        CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
-                        CardNumberRaw = r.CardNumberRaw ?? string.Empty,
-                        ExpirationDisplay = r.Expiration ?? string.Empty,
-                        ExpMonth = 0,
-                        ExpYear = 0,
-                        CvvRaw = r.CvvRaw ?? string.Empty,
-                        PinRaw = r.PinRaw ?? string.Empty,
-                        BillingZipRaw = null,
-                        CardNumberMasked = r.CardNumberMasked ?? string.Empty,
-                        CvvMasked = r.CvvMasked ?? string.Empty,
-                        PinMasked = r.PinMasked ?? string.Empty,
-                        IsPrimary = false,
-                        IsActive = r.IsActive
-                    })
-                    .ToList();
-                int writes = CategoryItemService.SaveBankCardsByItemId(itemId, serviceRows);
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes}");
-#endif
-                EnsureBankCardsLoadedForActiveItem(forceReload: true);
-                NotifyPanel_RefreshCategoryItemGrid_BestEffort();
-                ForceSelectTab(TabIndexBankCards);
-                _lastTabIndex = TabIndexBankCards;
-                SetStatus("");
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] FAILED itemId={itemId}: {ex}");
-#endif
-                SetStatus("Bank Cards save failed. See debug output.");
-            }
+            TryPersistBankCardsRows(
+                rows: e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>(),
+                selectBankCardsOnSuccess: true);
         }
         private void BankCardsPanel_CancelAndExitRequested(object? sender, EventArgs e)
         {
@@ -2099,6 +2056,246 @@ namespace MWPV.View.UserControls
 #endif
                     return false;
             }
+        }
+
+        private bool TryResolveBankCardsHostCloseDecision()
+        {
+            SetStatus("");
+
+            if (BankCardsPanel == null)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Panel missing -> allowClose=true");
+#endif
+                return true;
+            }
+
+            var decision = PromptBankCardsHostCloseDecision();
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Prompt result={decision}");
+#endif
+
+            switch (decision)
+            {
+                case BankCardsHostCloseDecision.SaveAndExit:
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=SaveAndExit");
+#endif
+                    if (!TryCommitBankCardsFromHostClose())
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] SaveAndExit failed -> allowClose=false");
+#endif
+                        return false;
+                    }
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] SaveAndExit succeeded -> allowClose=true");
+#endif
+                    return true;
+
+                case BankCardsHostCloseDecision.ExitWithoutSave:
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=ExitWithoutSave");
+#endif
+                    if (!(BankCardsPanel?.TryPrepareHostCloseDiscard() ?? true))
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Discard preparation failed -> allowClose=false");
+#endif
+                        return false;
+                    }
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] ExitWithoutSave -> allowClose=true");
+#endif
+                    return true;
+
+                default:
+                    if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
+                        ForceSelectTab(TabIndexBankCards);
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=CancelExit -> allowClose=false");
+#endif
+                    return false;
+            }
+        }
+
+        private bool TryCommitBankCardsFromHostClose()
+        {
+            if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
+                ForceSelectTab(TabIndexBankCards);
+
+            if (BankCardsPanel == null)
+                return true;
+
+            if (!BankCardsPanel.TryBuildHostCloseSavePayload(out var rows))
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Host-close save payload not available -> allowClose=false");
+#endif
+                return false;
+            }
+
+            return TryPersistBankCardsRows(rows, selectBankCardsOnSuccess: false);
+        }
+
+        private bool TryPersistBankCardsRows(
+            IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> rows,
+            bool selectBankCardsOnSuccess)
+        {
+            BankCardsDraftRows = (rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>()).ToList();
+            SetStatus("");
+
+            if (BasicPanel == null)
+                return true;
+
+            bool bypassBasicPersist = IsExistingItemAndBasicPanelIsViewMode();
+            bool isBookmarkOnly = false;
+
+            if (!bypassBasicPersist)
+            {
+                BasicPanel.NormalizeUsernameFromEmailIfEmpty();
+                if (!BasicPanel.TryValidateAllForSubmit(out isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+
+                    BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
+                    SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Blocked by Basic validation.");
+#endif
+                    return false;
+                }
+
+                if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Blocked by Basic persistence failure.");
+#endif
+                    return false;
+                }
+            }
+#if DEBUG
+            else
+            {
+                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
+            }
+#endif
+
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                SetStatus("Save failed: missing ItemId context.");
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Missing ItemId context.");
+#endif
+                return false;
+            }
+
+            int itemId = activeId.Value;
+
+            try
+            {
+                var serviceRows = BankCardsDraftRows
+                    .Select(r => new CategoryItemService.BankCardRow
+                    {
+                        Id = r.Id,
+                        ItemId = itemId,
+                        CardTypeId = r.CardTypeId,
+                        CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                        CardNumberRaw = r.CardNumberRaw ?? string.Empty,
+                        ExpirationDisplay = r.Expiration ?? string.Empty,
+                        ExpMonth = 0,
+                        ExpYear = 0,
+                        CvvRaw = r.CvvRaw ?? string.Empty,
+                        PinRaw = r.PinRaw ?? string.Empty,
+                        BillingZipRaw = null,
+                        CardNumberMasked = r.CardNumberMasked ?? string.Empty,
+                        CvvMasked = r.CvvMasked ?? string.Empty,
+                        PinMasked = r.PinMasked ?? string.Empty,
+                        IsPrimary = false,
+                        IsActive = r.IsActive
+                    })
+                    .ToList();
+
+                int writes = CategoryItemService.SaveBankCardsByItemId(itemId, serviceRows);
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes}");
+#endif
+
+                EnsureBankCardsLoadedForActiveItem(forceReload: true);
+                NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+
+                if (selectBankCardsOnSuccess)
+                {
+                    ForceSelectTab(TabIndexBankCards);
+                    _lastTabIndex = TabIndexBankCards;
+                }
+
+                SetStatus("");
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] FAILED itemId={itemId}: {ex}");
+#endif
+                SetStatus("Bank Cards save failed. See debug output.");
+                return false;
+            }
+        }
+
+        private BankCardsHostCloseDecision PromptBankCardsHostCloseDecision()
+        {
+            const string title1 = "Save Bank Cards Before Exiting?";
+            const string body1 =
+                "You have Bank Cards work in this session.\n\n" +
+                "Choose Save & Exit to save your Bank Cards changes and close the window.\n" +
+                "Choose More Options to continue without saving or cancel exit.";
+
+            const string title2 = "Exit Bank Cards Without Saving?";
+            const string body2 =
+                "Your Bank Cards session work will be discarded.\n\n" +
+                "Choose Exit Without Saving to close the window now.\n" +
+                "Choose Cancel to remain in the editor.";
+
+            var first = ShowCustomPopupDecision(
+                title: title1,
+                body: body1,
+                primaryText: "Save & Exit",
+                secondaryText: "More Options",
+                debugContext: "HOST-CLOSE-BANKCARDS-STEP1");
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Popup step1 result={first}");
+#endif
+
+            if (first == PopupDialog.PopupResult.Accept)
+                return BankCardsHostCloseDecision.SaveAndExit;
+
+            var second = ShowCustomPopupDecision(
+                title: title2,
+                body: body2,
+                primaryText: "Exit Without Saving",
+                secondaryText: "Cancel",
+                debugContext: "HOST-CLOSE-BANKCARDS-STEP2");
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Popup step2 result={second}");
+#endif
+
+            if (second == PopupDialog.PopupResult.Accept)
+                return BankCardsHostCloseDecision.ExitWithoutSave;
+
+            return BankCardsHostCloseDecision.CancelExit;
         }
 
         private BasicHostCloseDecision PromptBasicHostCloseDecision()

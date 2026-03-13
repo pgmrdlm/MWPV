@@ -59,6 +59,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool _hasChanges;
         private bool _hasErrors;
+        private bool _newCardSessionStarted;
 
         public bool HasChanges => _hasChanges;
         public bool HasErrors => _hasErrors;
@@ -125,6 +126,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
+                ClearNewCardSessionTracking("LoadFromHostRows");
                 HideRevealsAndStopTimer(clearRevealOverlays: true);
                 WipeSensitiveEntryFields();
                 ClearBankCardError();
@@ -188,6 +190,7 @@ namespace MWPV.View.UserControls.CategoryItems
         public void WipeAllForHostClose()
         {
             _hostRequestedCloseWipe = true;
+            ClearNewCardSessionTracking("WipeAllForHostClose");
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
@@ -228,12 +231,127 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             ClearBankCardError();
+            ClearNewCardSessionTracking("TryAutoCommitAndWipe");
             ClearEntryFields();
             ClearSelectedBankCardDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
             SetErrors(false);
             UpdateTabButtons();
             return true;
+        }
+
+        /// <summary>
+        /// HOST-CLOSE behavior ONLY:
+        /// Returns true when BankCards currently has meaningful session work that should
+        /// drive an explicit host-close decision before the window is allowed to close.
+        /// </summary>
+        public bool HasHostCloseSessionWork()
+        {
+            bool hasWork =
+                _newCardSessionStarted ||
+                _hasChanges ||
+                EntryLineHasAnyInput() ||
+                _editingRow != null;
+
+#if DEBUG
+            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] HasHostCloseSessionWork={hasWork} newCardSession={_newCardSessionStarted} hasChanges={_hasChanges} entryLine={EntryLineHasAnyInput()} editingRow={(_editingRow != null)}");
+#endif
+
+            return hasWork;
+        }
+
+        /// <summary>
+        /// HOST-CLOSE behavior ONLY:
+        /// Validates whether a save can proceed right now and, on success, returns the payload
+        /// the host coordinator should persist using the existing save pipeline.
+        /// </summary>
+        public bool TryBuildHostCloseSavePayload(out IReadOnlyList<BankCardRow> rows)
+        {
+            rows = Array.Empty<BankCardRow>();
+
+            ClearBankCardError();
+
+            if (_entryDisabled)
+            {
+                ShowBankCardError("Bank card entry is disabled for this session.");
+                SetErrors(true);
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry disabled.");
+#endif
+                return false;
+            }
+
+            if (EntryLineHasAnyInput())
+            {
+                ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                SetErrors(true);
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry line still has input.");
+#endif
+                return false;
+            }
+
+            if (HasPendingBlankAddAttempt())
+            {
+                ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                SetErrors(true);
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: blank add session is still pending.");
+#endif
+                return false;
+            }
+
+            if (!ValidateTabStateOnly(showErrors: true))
+            {
+                SetErrors(true);
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: tab validation failed.");
+#endif
+                return false;
+            }
+
+            ClearBankCardError();
+            SetErrors(false);
+            UpdateTabButtons();
+
+            rows = _bankCardRows.Select(CloneRow).ToList();
+
+#if DEBUG
+            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Save payload ready rows={rows.Count}");
+#endif
+            return true;
+        }
+
+        /// <summary>
+        /// HOST-CLOSE behavior ONLY:
+        /// Best-effort discard preparation before the real host-close wipe path runs.
+        /// This intentionally does not perform the final wipe; host-close cleanup still owns that.
+        /// </summary>
+        public bool TryPrepareHostCloseDiscard()
+        {
+            try
+            {
+                ClearNewCardSessionTracking("TryPrepareHostCloseDiscard");
+                ClearBankCardError();
+                SetErrors(false);
+                UpdateTabButtons();
+
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation completed.");
+#endif
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation failed: {ex}");
+#endif
+                return false;
+            }
         }
 
         // ============================================================
@@ -355,6 +473,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
+                ClearNewCardSessionTracking("RestoreBaseline");
                 HideRevealsAndStopTimer(clearRevealOverlays: true);
                 WipeSensitiveEntryFields();
                 ClearBankCardError();
@@ -798,6 +917,14 @@ namespace MWPV.View.UserControls.CategoryItems
             bool isUpdate = _editingRow != null;
             bool isExistingPersistedUpdate = _editingRow != null && _editingRow.Id > 0;
 
+            if (isTrueAddMode)
+            {
+#if DEBUG
+                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Add-new trigger fired handler=OnBankCardAddOrUpdateClick mode=Add");
+#endif
+                BeginAddNewCardSession();
+            }
+
             if (_entryDisabled)
             {
                 ShowBankCardError("Bank card entry is disabled for this session.");
@@ -899,6 +1026,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnBankCardClearRowClick(object sender, RoutedEventArgs e)
         {
+            ClearNewCardSessionTracking("OnBankCardClearRowClick");
             _isSelectedProtectedViewActive = false;
             ClearBankCardError();
             ClearEntryFields();
@@ -1258,6 +1386,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnTabCancelClick(object sender, RoutedEventArgs e)
         {
+            ClearNewCardSessionTracking("OnTabCancelClick");
             ClearBankCardError();
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
@@ -1645,6 +1774,41 @@ namespace MWPV.View.UserControls.CategoryItems
         private string GetCurrentPin()
         {
             return PinBox?.Password ?? string.Empty;
+        }
+
+        public void BeginAddNewCardSession()
+        {
+            if (_entryDisabled || _isSelectedProtectedViewActive || _editingRow != null)
+                return;
+
+            if (_newCardSessionStarted)
+                return;
+
+            _newCardSessionStarted = true;
+
+#if DEBUG
+            Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] New-card session started source=AddNewCommand");
+#endif
+        }
+
+        private bool HasPendingBlankAddAttempt()
+        {
+            return _newCardSessionStarted &&
+                   !_hasChanges &&
+                   !EntryLineHasAnyInput() &&
+                   _editingRow == null;
+        }
+
+        private void ClearNewCardSessionTracking(string source)
+        {
+            if (!_newCardSessionStarted)
+                return;
+
+            _newCardSessionStarted = false;
+
+#if DEBUG
+            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] New-card session cleared source={source}");
+#endif
         }
 
         private static string TrimToMaxChars(string? value)
