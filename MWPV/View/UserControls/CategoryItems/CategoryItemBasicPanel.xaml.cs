@@ -37,10 +37,6 @@ namespace MWPV.View.UserControls.CategoryItems
         private const int SecretStorage_Default = 0;
 
         // Mode detection (SEDS)
-        private const string EntityKind_CategoryItem = "CategoryItem";
-        private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
-        private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
-
         private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
 
         private int _activeEntityId;
@@ -159,22 +155,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
-                    return;
-
-                string kind;
-                try { kind = Encoding.UTF8.GetString(kindBytes); }
-                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
-
-                if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
-                    return;
-
-                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
-                    _activeEntityId = id;
-            }
-            catch
-            {
-                _activeEntityId = 0;
+                _activeEntityId = CategoryItemSedsContextHelper.TryGetCurrentCategoryItemId() ?? 0;
             }
             finally
             {
@@ -1048,33 +1029,27 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ShowMainPassword()
         {
-            txtPasswordPlain.Text = pwdPassword.Password;
-            txtPasswordPlain.Visibility = Visibility.Visible;
-            pwdPassword.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(pwdPassword, txtPasswordPlain, pwdPassword.Password);
             _mainRevealed = true;
         }
 
         private void HideMainPassword()
         {
             UICleaner.Clear(txtPasswordPlain);
-            txtPasswordPlain.Visibility = Visibility.Collapsed;
-            pwdPassword.Visibility = Visibility.Visible;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(pwdPassword, txtPasswordPlain);
             _mainRevealed = false;
         }
 
         private void ShowVerifyPassword()
         {
-            txtVerifyPlain.Text = pwdVerify.Password;
-            txtVerifyPlain.Visibility = Visibility.Visible;
-            pwdVerify.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(pwdVerify, txtVerifyPlain, pwdVerify.Password);
             _verifyRevealed = true;
         }
 
         private void HideVerifyPassword()
         {
             UICleaner.Clear(txtVerifyPlain);
-            txtVerifyPlain.Visibility = Visibility.Collapsed;
-            pwdVerify.Visibility = Visibility.Visible;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(pwdVerify, txtVerifyPlain);
             _verifyRevealed = false;
         }
 
@@ -1402,17 +1377,14 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ShowPin()
         {
-            txtPinPlain.Text = pwdPin.Password;
-            txtPinPlain.Visibility = Visibility.Visible;
-            pwdPin.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(pwdPin, txtPinPlain, pwdPin.Password);
             _pinRevealed = true;
         }
 
         private void HidePin()
         {
             UICleaner.Clear(txtPinPlain);
-            txtPinPlain.Visibility = Visibility.Collapsed;
-            pwdPin.Visibility = Visibility.Visible;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(pwdPin, txtPinPlain);
             _pinRevealed = false;
         }
 
@@ -1540,17 +1512,14 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ShowEmail()
         {
-            txtEmailPlain.Text = pwdEmail.Password;
-            txtEmailPlain.Visibility = Visibility.Visible;
-            pwdEmail.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(pwdEmail, txtEmailPlain, pwdEmail.Password);
             _emailRevealed = true;
         }
 
         private void HideEmail()
         {
             UICleaner.Clear(txtEmailPlain);
-            txtEmailPlain.Visibility = Visibility.Collapsed;
-            pwdEmail.Visibility = Visibility.Visible;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(pwdEmail, txtEmailPlain);
             _emailRevealed = false;
         }
 
@@ -1662,17 +1631,14 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ShowPhone()
         {
-            txtPhonePlain.Text = txtPhone.Password;
-            txtPhonePlain.Visibility = Visibility.Visible;
-            txtPhone.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(txtPhone, txtPhonePlain, txtPhone.Password);
             _phoneRevealed = true;
         }
 
         private void HidePhone()
         {
             UICleaner.Clear(txtPhonePlain);
-            txtPhonePlain.Visibility = Visibility.Collapsed;
-            txtPhone.Visibility = Visibility.Visible;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(txtPhone, txtPhonePlain);
             _phoneRevealed = false;
         }
 

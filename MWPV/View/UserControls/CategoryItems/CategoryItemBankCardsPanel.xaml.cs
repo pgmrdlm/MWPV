@@ -83,10 +83,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private const int MaxCardNumberChars = 19; // digits + spaces
 
-        private const string EntityKind_CategoryItem = "CategoryItem";
-        private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
-        private static readonly string SedsKey_EntityId = SecureEncryptedDataStore.ContextKeys.CurrentEntityId;
-
         private const string SedsKey_BankCardSelectedCardId = "BC.Selected.CardId";
         private const string SedsKey_BankCardSelectedNumber = "BC.Selected.Number";
         private const string SedsKey_BankCardSelectedCvv = "BC.Selected.CVV";
@@ -693,10 +689,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!string.Equals(trimmed, CardNumberBox.Password, StringComparison.Ordinal))
                 CardNumberBox.Password = trimmed;
 
-            CardNumberPlainTextBox.Text = trimmed;
-            CardNumberPlainTextBox.Visibility = Visibility.Visible;
-
-            CardNumberBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(CardNumberBox, CardNumberPlainTextBox, trimmed);
 
             BtnViewCardNumber.ToolTip = "Hide card number";
 
@@ -718,7 +711,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (clearOverlay)
                 ClearRevealOverlayTextOnly(CardNumberPlainTextBox);
 
-            CardNumberPlainTextBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(CardNumberBox, CardNumberPlainTextBox);
 
             BtnViewCardNumber.ToolTip = "Show card number";
             TouchRevealTimerIfNeeded();
@@ -731,10 +724,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _isCvvRevealed = true;
 
-            CvvPlainTextBox.Text = CvvBox.Password ?? string.Empty;
-            CvvPlainTextBox.Visibility = Visibility.Visible;
-
-            CvvBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(CvvBox, CvvPlainTextBox, CvvBox.Password);
 
             BtnToggleCvvReveal.ToolTip = "Hide CVV";
             TouchRevealTimerIfNeeded();
@@ -755,7 +745,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (clearOverlay)
                 ClearRevealOverlayTextOnly(CvvPlainTextBox);
 
-            CvvPlainTextBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(CvvBox, CvvPlainTextBox);
 
             BtnToggleCvvReveal.ToolTip = "Show CVV";
             TouchRevealTimerIfNeeded();
@@ -768,10 +758,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _isPinRevealed = true;
 
-            PinPlainTextBox.Text = PinBox.Password ?? string.Empty;
-            PinPlainTextBox.Visibility = Visibility.Visible;
-
-            PinBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.ShowPlainOverlay(PinBox, PinPlainTextBox, PinBox.Password);
 
             BtnTogglePinReveal.ToolTip = "Hide card PIN";
             TouchRevealTimerIfNeeded();
@@ -792,7 +779,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (clearOverlay)
                 ClearRevealOverlayTextOnly(PinPlainTextBox);
 
-            PinPlainTextBox.Visibility = Visibility.Collapsed;
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(PinBox, PinPlainTextBox);
 
             BtnTogglePinReveal.ToolTip = "Show card PIN";
             TouchRevealTimerIfNeeded();
@@ -1165,27 +1152,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private static int? TryGetActiveCategoryItemIdFromSeds()
         {
-            try
-            {
-                if (!SecureEncryptedDataStore.TryGetBytes(SedsKey_EntityKind, out var kindBytes) || kindBytes.Length == 0)
-                    return null;
-
-                string kind;
-                try { kind = Encoding.UTF8.GetString(kindBytes); }
-                finally { Array.Clear(kindBytes, 0, kindBytes.Length); }
-
-                if (!string.Equals(kind, EntityKind_CategoryItem, StringComparison.Ordinal))
-                    return null;
-
-                if (SecureEncryptedDataStore.TryGetInt32(SedsKey_EntityId, out int id) && id > 0)
-                    return id;
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
+            return CategoryItemSedsContextHelper.TryGetCurrentCategoryItemId();
         }
 
         private static void StoreSelectedBankCardDetailSedsBestEffort(CategoryItemService.BankCardRow detail)
