@@ -1,17 +1,17 @@
 ﻿// File: App.xaml.cs — full file (WPF, .NET 8)
+using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
+using Security.Utility.Archives;       // ✅ SevenZipCore
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
-using System.Runtime.InteropServices;
 using System.Windows.Controls;         // ✅ for TextBlock (StatusText)
 using System.Windows.Input;            // ✅ for InputManager + input event args
 using Utilities.Diagnostics;           // EarlyLoginFailures, EarlyLogIngestor
 using Utilities.Helpers;               // ErrorHandler
 using Utilities.Security;
-using Security.Utility.Archives;       // ✅ SevenZipCore
-using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
 
 namespace MWPV
 {
@@ -114,7 +114,7 @@ namespace MWPV
 
             // ===== Abnormal-exit hooks (best-effort) =====
             // Only log SESSION_END if a valid login occurred this run.
-            AppDomain.CurrentDomain.UnhandledException += (_, __) =>
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             {
                 try
                 {
@@ -125,9 +125,22 @@ namespace MWPV
                     }
                 }
                 catch { /* swallow */ }
+
+                try
+                {
+                    var fatalException = args.ExceptionObject as Exception;
+                    FatalErrorPopupHelper.ShowFatalAsync(
+                        "MWPV encountered a fatal error and must close.",
+                        fatalException,
+                        "An unhandled application exception reached the global boundary.").GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    ForceFatalShutdown();
+                }
             };
 
-            this.DispatcherUnhandledException += (_, __) =>
+            this.DispatcherUnhandledException += async (_, args) =>
             {
                 try
                 {
@@ -138,6 +151,19 @@ namespace MWPV
                     }
                 }
                 catch { /* swallow */ }
+
+                try
+                {
+                    args.Handled = true;
+                    await FatalErrorPopupHelper.ShowFatalAsync(
+                        "MWPV encountered a fatal error and must close.",
+                        args.Exception,
+                        "An unhandled UI exception reached the application dispatcher.");
+                }
+                catch
+                {
+                    ForceFatalShutdown();
+                }
             };
             // =============================================
 
@@ -203,7 +229,10 @@ namespace MWPV
             catch (Exception ex)
             {
                 try { EarlyLoginFailures.Write("App", "Failed to show initial window(s)", ex: ex); } catch { }
-                Shutdown(-1);
+                _ = FatalErrorPopupHelper.ShowFatalAsync(
+                    "MWPV could not finish starting and must close.",
+                    ex,
+                    "Startup failed while showing the entry window or main window.");
                 return;
             }
             // NOTE: No 'finally' that touches ShutdownMode — avoids the crash when app is already shutting down.
@@ -415,6 +444,24 @@ namespace MWPV
                 }
             }
             catch { /* ignore */ }
+        }
+
+        private static void ForceFatalShutdown()
+        {
+            try
+            {
+                if (Current?.Dispatcher != null && !Current.Dispatcher.CheckAccess())
+                {
+                    Current.Dispatcher.Invoke(() => Current.Shutdown(-1));
+                    return;
+                }
+
+                Current?.Shutdown(-1);
+            }
+            catch
+            {
+                Environment.Exit(-1);
+            }
         }
 
         // Win32 helpers

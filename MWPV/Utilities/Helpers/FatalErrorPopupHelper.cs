@@ -2,11 +2,12 @@ using System;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
-using MWPV.View.UserControls;
+using Utilities.Helpers;
 using MWPV.View.UserControls.Popup;
 
-namespace MWPV.Utilities.Helpers
+namespace Utilities.Helpers
 {
     public static class FatalErrorPopupHelper
     {
@@ -38,13 +39,6 @@ namespace MWPV.Utilities.Helpers
 
         private static async Task ShowFatalCoreAsync(string displayMessage, string copyPayload)
         {
-            var popupHost = TryGetPopupHost();
-            if (popupHost == null)
-            {
-                TerminateApplication();
-                return;
-            }
-
             var popup = new PopupDialog
             {
                 IsFatalError = true
@@ -58,38 +52,82 @@ namespace MWPV.Utilities.Helpers
                 primaryText: PrimaryExitText,
                 secondaryText: SecondaryCopyExitText);
 
-            PopupDialog.PopupResult result;
+            var hostWindow = CreateHostWindow(popup);
+            PopupDialog.PopupResult result = PopupDialog.PopupResult.Abort;
+
             try
             {
-                result = await popupHost.ShowPopupAsync(popup);
+                popup.Completed += OnCompleted;
+                hostWindow.ShowDialog();
             }
             catch
             {
                 TerminateApplication();
                 return;
             }
+            finally
+            {
+                popup.Completed -= OnCompleted;
+                try
+                {
+                    if (hostWindow.IsVisible)
+                        hostWindow.Close();
+                }
+                catch
+                {
+                    // Best-effort close only.
+                }
+            }
 
             if (result == PopupDialog.PopupResult.Cancel)
                 TryCopyToClipboard(copyPayload);
 
             TerminateApplication();
+
+            void OnCompleted(PopupDialog.PopupResult popupResult)
+            {
+                result = popupResult;
+                try
+                {
+                    hostWindow.DialogResult = false;
+                }
+                catch
+                {
+                    try { hostWindow.Close(); } catch { }
+                }
+            }
         }
 
-        private static Panel? TryGetPopupHost()
+        private static Window CreateHostWindow(PopupDialog popup)
         {
-            if (Application.Current?.MainWindow is MainWindow mainWindow && mainWindow.Panel != null)
-                return mainWindow.Panel;
+            return new Window
+            {
+                Title = "MWPV Fatal Error",
+                Content = popup,
+                Owner = TryGetOwnerWindow(),
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.None,
+                ShowInTaskbar = false,
+                Topmost = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                AllowsTransparency = true
+            };
+        }
 
+        private static Window? TryGetOwnerWindow()
+        {
             if (Application.Current == null)
                 return null;
 
             foreach (Window window in Application.Current.Windows)
             {
-                if (window is MainWindow candidate && candidate.Panel != null)
-                    return candidate.Panel;
+                if (window.IsActive)
+                    return window;
             }
 
-            return null;
+            return Application.Current.MainWindow;
         }
 
         private static string BuildDisplayMessage(string message)
