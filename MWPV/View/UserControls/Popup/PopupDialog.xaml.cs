@@ -69,6 +69,10 @@ namespace MWPV.View.UserControls.Popup
             DependencyProperty.Register(nameof(IsSecondaryVisible), typeof(bool), typeof(PopupDialog),
                 new PropertyMetadata(true, OnSecondaryVisibilityChanged));
 
+        public static readonly DependencyProperty IsFatalErrorProperty =
+            DependencyProperty.Register(nameof(IsFatalError), typeof(bool), typeof(PopupDialog),
+                new PropertyMetadata(false, OnFatalErrorChanged));
+
         public int Severity
         {
             get => (int)GetValue(SeverityProperty);
@@ -105,6 +109,12 @@ namespace MWPV.View.UserControls.Popup
             set => SetValue(IsSecondaryVisibleProperty, value);
         }
 
+        public bool IsFatalError
+        {
+            get => (bool)GetValue(IsFatalErrorProperty);
+            set => SetValue(IsFatalErrorProperty, value);
+        }
+
         // =========================
         // Ctor
         // =========================
@@ -116,6 +126,7 @@ namespace MWPV.View.UserControls.Popup
             // Default visuals
             ApplySeverityVisuals();
             ApplySecondaryVisibility();
+            ApplyFatalState();
 
             // Keyboard: make sure it feels "forced"
             Loaded += (_, __) =>
@@ -147,6 +158,7 @@ namespace MWPV.View.UserControls.Popup
 
             ApplySeverityVisuals();
             ApplySecondaryVisibility();
+            ApplyFatalState();
         }
 
         // Convenience helpers that match our expected usage:
@@ -186,6 +198,18 @@ namespace MWPV.View.UserControls.Popup
         private void ApplySecondaryVisibility()
         {
             btnSecondary.Visibility = IsSecondaryVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static void OnFatalErrorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is PopupDialog p)
+                p.ApplyFatalState();
+        }
+
+        private void ApplyFatalState()
+        {
+            if (FatalHeaderHost != null)
+                FatalHeaderHost.Visibility = IsFatalError ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // =========================

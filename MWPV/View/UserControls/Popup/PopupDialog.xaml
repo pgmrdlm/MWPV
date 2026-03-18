@@ -29,6 +29,8 @@
         <!-- yellow -->
         <SolidColorBrush x:Key="PopupAbortBrush" Color="#DC2626"/>
         <!-- red -->
+        <SolidColorBrush x:Key="PopupFatalBannerBrush" Color="#991B1B"/>
+        <SolidColorBrush x:Key="PopupFatalBannerBorderBrush" Color="#7F1D1D"/>
 
         <!-- Overlay + card -->
         <SolidColorBrush x:Key="PopupOverlayBrush" Color="#80000000"/>
@@ -70,6 +72,9 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <!-- fatal header -->
+                    <RowDefinition Height="12"/>
+                    <RowDefinition Height="Auto"/>
                     <!-- header -->
                     <RowDefinition Height="12"/>
                     <RowDefinition Height="Auto"/>
@@ -79,8 +84,24 @@
                     <!-- buttons -->
                 </Grid.RowDefinitions>
 
+                <Border x:Name="FatalHeaderHost"
+                        Grid.Row="0"
+                        Visibility="Collapsed"
+                        Background="{StaticResource PopupFatalBannerBrush}"
+                        BorderBrush="{StaticResource PopupFatalBannerBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="10,8">
+                    <TextBlock Text="FATAL APPLICATION ERROR"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                </Border>
+
                 <!-- ================= HEADER ================= -->
-                <Grid Grid.Row="0">
+                <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="40"/>
                         <ColumnDefinition Width="12"/>
@@ -133,7 +154,7 @@
                 </Grid>
 
                 <!-- ================= MESSAGE (scrollable) ================= -->
-                <Border Grid.Row="2"
+                <Border Grid.Row="4"
                         Background="#08FFFFFF"
                         BorderBrush="{DynamicResource ShadowStroke}"
                         BorderThickness="1"
@@ -151,7 +172,7 @@
                 </Border>
 
                 <!-- ================= BUTTONS ================= -->
-                <Grid Grid.Row="4">
+                <Grid Grid.Row="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
