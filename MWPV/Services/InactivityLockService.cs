@@ -13,6 +13,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Windows.Threading;
+using Utilities.Helpers;
 
 namespace MWPV.Services
 {
@@ -169,7 +170,10 @@ namespace MWPV.Services
 #if DEBUG
                 Log("TICK ERROR during lockAction: " + ex.GetType().Name + " " + ex.Message);
 #endif
-                // swallow
+                _ = FatalErrorPopupHelper.ShowFatalAsync(
+                    "MWPV encountered a fatal error while handling inactivity timeout and must close.",
+                    ex,
+                    "The inactivity lock action failed after timeout handling reached the final shutdown/lock stage.");
             }
 
 #if DEBUG
