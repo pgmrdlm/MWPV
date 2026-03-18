@@ -1185,14 +1185,7 @@ namespace MWPV.View.UserControls
             Save
         }
 
-        private enum BasicHostCloseDecision
-        {
-            SaveAndExit,
-            ExitWithoutSave,
-            CancelExit
-        }
-
-        private enum BankCardsHostCloseDecision
+        private enum HostCloseDecision
         {
             SaveAndExit,
             ExitWithoutSave,
@@ -2017,46 +2010,19 @@ namespace MWPV.View.UserControls
                 return true;
             }
 
-            var decision = PromptBasicHostCloseDecision();
-
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] Prompt result={decision}");
-#endif
-
-            switch (decision)
-            {
-                case BasicHostCloseDecision.SaveAndExit:
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=SaveAndExit");
-#endif
+            return RunHostCloseDecision(
+                debugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]",
+                getDecision: PromptBasicHostCloseDecision,
+                saveAndExit: () =>
+                {
                     if (!TryCommitBasicFromBasicFlow("Cannot close window, fix highlighted errors before saving."))
-                    {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] SaveAndExit failed -> allowClose=false");
-#endif
                         return false;
-                    }
 
                     // Keep Basic mode consistent after commit before host-close cleanup runs.
                     BasicPanel.PopulateFromDbForCurrentEntity();
-
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] SaveAndExit succeeded -> allowClose=true");
-#endif
                     return true;
-
-                case BasicHostCloseDecision.ExitWithoutSave:
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=ExitWithoutSave -> allowClose=true");
-#endif
-                    return true;
-
-                default:
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Branch=CancelExit -> allowClose=false");
-#endif
-                    return false;
-            }
+                },
+                exitWithoutSave: () => true);
         }
 
         private bool TryResolveBankCardsHostCloseDecision()
@@ -2071,54 +2037,72 @@ namespace MWPV.View.UserControls
                 return true;
             }
 
-            var decision = PromptBankCardsHostCloseDecision();
+            return RunHostCloseDecision(
+                debugPrefix: "[ITEM-TABS][HOST-CLOSE][BANKCARDS]",
+                getDecision: PromptBankCardsHostCloseDecision,
+                saveAndExit: TryCommitBankCardsFromHostClose,
+                exitWithoutSave: () => BankCardsPanel?.TryPrepareHostCloseDiscard() ?? true,
+                onCancelExit: () =>
+                {
+                    if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
+                        ForceSelectTab(TabIndexBankCards);
+                });
+        }
+
+        private bool RunHostCloseDecision(
+            string debugPrefix,
+            Func<HostCloseDecision> getDecision,
+            Func<bool> saveAndExit,
+            Func<bool> exitWithoutSave,
+            Action? onCancelExit = null)
+        {
+            var decision = getDecision();
 
 #if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] Prompt result={decision}");
+            Debug.WriteLine($"{debugPrefix} Prompt result={decision}");
 #endif
 
             switch (decision)
             {
-                case BankCardsHostCloseDecision.SaveAndExit:
+                case HostCloseDecision.SaveAndExit:
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=SaveAndExit");
+                    Debug.WriteLine($"{debugPrefix} Branch=SaveAndExit");
 #endif
-                    if (!TryCommitBankCardsFromHostClose())
+                    if (!saveAndExit())
                     {
 #if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] SaveAndExit failed -> allowClose=false");
+                        Debug.WriteLine($"{debugPrefix} SaveAndExit failed -> allowClose=false");
 #endif
                         return false;
                     }
 
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] SaveAndExit succeeded -> allowClose=true");
+                    Debug.WriteLine($"{debugPrefix} SaveAndExit succeeded -> allowClose=true");
 #endif
                     return true;
 
-                case BankCardsHostCloseDecision.ExitWithoutSave:
+                case HostCloseDecision.ExitWithoutSave:
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=ExitWithoutSave");
+                    Debug.WriteLine($"{debugPrefix} Branch=ExitWithoutSave");
 #endif
-                    if (!(BankCardsPanel?.TryPrepareHostCloseDiscard() ?? true))
+                    if (!exitWithoutSave())
                     {
 #if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Discard preparation failed -> allowClose=false");
+                        Debug.WriteLine($"{debugPrefix} ExitWithoutSave failed -> allowClose=false");
 #endif
                         return false;
                     }
 
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] ExitWithoutSave -> allowClose=true");
+                    Debug.WriteLine($"{debugPrefix} ExitWithoutSave -> allowClose=true");
 #endif
                     return true;
 
                 default:
-                    if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
-                        ForceSelectTab(TabIndexBankCards);
+                    onCancelExit?.Invoke();
 
 #if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Branch=CancelExit -> allowClose=false");
+                    Debug.WriteLine($"{debugPrefix} Branch=CancelExit -> allowClose=false");
 #endif
                     return false;
             }
@@ -2301,7 +2285,7 @@ namespace MWPV.View.UserControls
             return TwoStepHostClosePopupDecision.CancelExit;
         }
 
-        private BankCardsHostCloseDecision PromptBankCardsHostCloseDecision()
+        private HostCloseDecision PromptBankCardsHostCloseDecision()
         {
             const string title1 = "Save Bank Cards Before Exiting?";
             const string body1 =
@@ -2325,13 +2309,13 @@ namespace MWPV.View.UserControls
                 step2DebugContext: "HOST-CLOSE-BANKCARDS-STEP2")
                 switch
             {
-                TwoStepHostClosePopupDecision.SaveAndExit => BankCardsHostCloseDecision.SaveAndExit,
-                TwoStepHostClosePopupDecision.ExitWithoutSave => BankCardsHostCloseDecision.ExitWithoutSave,
-                _ => BankCardsHostCloseDecision.CancelExit
+                TwoStepHostClosePopupDecision.SaveAndExit => HostCloseDecision.SaveAndExit,
+                TwoStepHostClosePopupDecision.ExitWithoutSave => HostCloseDecision.ExitWithoutSave,
+                _ => HostCloseDecision.CancelExit
             };
         }
 
-        private BasicHostCloseDecision PromptBasicHostCloseDecision()
+        private HostCloseDecision PromptBasicHostCloseDecision()
         {
             const string title1 = "Save Basic Before Exiting?";
             const string body1 =
@@ -2353,9 +2337,9 @@ namespace MWPV.View.UserControls
                 resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]")
                 switch
             {
-                TwoStepHostClosePopupDecision.SaveAndExit => BasicHostCloseDecision.SaveAndExit,
-                TwoStepHostClosePopupDecision.ExitWithoutSave => BasicHostCloseDecision.ExitWithoutSave,
-                _ => BasicHostCloseDecision.CancelExit
+                TwoStepHostClosePopupDecision.SaveAndExit => HostCloseDecision.SaveAndExit,
+                TwoStepHostClosePopupDecision.ExitWithoutSave => HostCloseDecision.ExitWithoutSave,
+                _ => HostCloseDecision.CancelExit
             };
         }
 
