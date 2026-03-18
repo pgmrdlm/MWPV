@@ -15,6 +15,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
 using MWPV.View.UserControls.Popup;
+using Utilities.Helpers;
 
 namespace MWPV.View.UserControls
 {
@@ -129,6 +130,10 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
 #endif
+                _ = FatalErrorPopupHelper.ShowFatalAsync(
+                    "MWPV encountered a fatal error while closing and must close.",
+                    ex,
+                    "Panel shutdown cleanup failed while preparing the host window to close.");
             }
         }
 
@@ -156,8 +161,11 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine("[PANEL][HOST-CLOSE][PREFLIGHT][ERR] " + ex);
 #endif
-                // Keep current behavior if preflight bridge fails unexpectedly.
-                return true;
+                _ = FatalErrorPopupHelper.ShowFatalAsync(
+                    "MWPV encountered a fatal error while closing and must close.",
+                    ex,
+                    "Panel host-close preflight failed before shutdown could complete.");
+                return false;
             }
         }
 
