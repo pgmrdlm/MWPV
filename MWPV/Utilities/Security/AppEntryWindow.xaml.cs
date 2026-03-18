@@ -405,9 +405,9 @@ namespace Utilities.Security
 
                     if (!jsonOk)
                     {
-                        // Hard fail per policy (no popup)
-                        SurfaceLoggedError("Corrupt key file detected: invalid keyset.json. The application will now exit.");
-                        Application.Current?.Shutdown(); // terminate app
+                        _ = FatalErrorPopupHelper.ShowFatalAsync(
+                            "The selected key file is corrupt and the application must close.",
+                            details: "Read-only keyset validation failed for keyset.json after archive verification.");
                         return;
                     }
                 }
@@ -422,10 +422,32 @@ namespace Utilities.Security
                 HideCapsWarningFor(pbVerifyPassword);
 
                 // ✅ Load keys for this session
-                ServiceSetUp.EnsureKeySetFromArchive();
+                try
+                {
+                    ServiceSetUp.EnsureKeySetFromArchive();
+                }
+                catch (Exception ex)
+                {
+                    _ = FatalErrorPopupHelper.ShowFatalAsync(
+                        "MWPV could not load the required encryption keys and must close.",
+                        ex,
+                        "Session key material could not be loaded from the verified key archive.");
+                    return;
+                }
 
                 // 📦 Load additional SQL logic from key archive
-                SqlCagegory.EnsureKeysAndLoadAll();
+                try
+                {
+                    SqlCagegory.EnsureKeysAndLoadAll();
+                }
+                catch (Exception ex)
+                {
+                    _ = FatalErrorPopupHelper.ShowFatalAsync(
+                        "MWPV could not load the required SQL resources and must close.",
+                        ex,
+                        "Required SQL content could not be loaded after successful login.");
+                    return;
+                }
 
                 // 🚨 Guard: must-have scripts check
                 var missing = SqlCagegory.GetMissingMustHaves();
