@@ -16,6 +16,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MWPV.Services;          // InactivityLockService
+using Utilities.Helpers;
 
 namespace MWPV
 {
@@ -88,10 +89,19 @@ namespace MWPV
                             // Prefer Close() so MainWindow_Closing cleanup runs.
                             Close();
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            // Last resort: hard shutdown.
-                            try { Application.Current?.Shutdown(); } catch { }
+                            try
+                            {
+                                _ = FatalErrorPopupHelper.ShowFatalAsync(
+                                    "MWPV encountered a fatal error while closing after inactivity timeout and must close.",
+                                    ex,
+                                    "Main window close failed during the inactivity shutdown path.");
+                            }
+                            catch
+                            {
+                                try { Application.Current?.Shutdown(); } catch { }
+                            }
                         }
                     }),
                     DispatcherPriority.Background);
@@ -299,9 +309,19 @@ namespace MWPV
                         _allowCloseAfterCleanup = true;
                         Close();
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        try { Application.Current.Shutdown(); } catch { }
+                        try
+                        {
+                            _ = FatalErrorPopupHelper.ShowFatalAsync(
+                                "MWPV encountered a fatal error while closing and must close.",
+                                ex,
+                                "Main window close failed after shutdown cleanup.");
+                        }
+                        catch
+                        {
+                            try { Application.Current.Shutdown(); } catch { }
+                        }
                     }
                     finally
                     {
@@ -310,16 +330,26 @@ namespace MWPV
                 }),
                 DispatcherPriority.ApplicationIdle);
             }
-            catch
+            catch (Exception ex)
             {
                 _allowCloseAfterCleanup = true;
                 _closingCleanupInProgress = false;
 
-                Dispatcher.BeginInvoke(new Action(() =>
+                try
                 {
-                    try { Close(); } catch { }
-                }),
-                DispatcherPriority.Background);
+                    _ = FatalErrorPopupHelper.ShowFatalAsync(
+                        "MWPV encountered a fatal error while closing and must close.",
+                        ex,
+                        "An exception occurred during main window shutdown cleanup.");
+                }
+                catch
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { Close(); } catch { }
+                    }),
+                    DispatcherPriority.Background);
+                }
             }
         }
     }
