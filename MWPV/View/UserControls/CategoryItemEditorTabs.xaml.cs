@@ -1009,14 +1009,7 @@ namespace MWPV.View.UserControls
             }
             catch { }
 
-            try { ClearSedsContext(); } catch { }
-            BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
-            _bankCardsLoaded = false;
-            _bankCardsLoadedItemId = 0;
-
-            // IMPORTANT: leaving editor means Basic is not open
-            ClearIsBasicOpen_BestEffort();
-
+            ResetStateForCloseCleanup();
             SetStatus("");
         }
 
@@ -1039,18 +1032,22 @@ namespace MWPV.View.UserControls
             }
             finally
             {
-                try { ClearSedsContext(); } catch { }
-                BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
-                _bankCardsLoaded = false;
-                _bankCardsLoadedItemId = 0;
-
-                // IMPORTANT: host close means Basic is not open
-                ClearIsBasicOpen_BestEffort();
-
+                ResetStateForCloseCleanup();
 #if DEBUG
                 Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose EXIT");
 #endif
             }
+        }
+
+        private void ResetStateForCloseCleanup()
+        {
+            try { ClearSedsContext(); } catch { }
+            BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+            _bankCardsLoaded = false;
+            _bankCardsLoadedItemId = 0;
+
+            // IMPORTANT: leaving editor means Basic is not open
+            ClearIsBasicOpen_BestEffort();
         }
 
         private void TryPreparePanelsForHostClose()
@@ -2000,17 +1997,9 @@ namespace MWPV.View.UserControls
 
         private bool TryResolveBasicHostCloseDecision()
         {
-            SetStatus("");
-
-            if (BasicPanel == null)
-            {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Decision path: BasicPanel missing -> allowClose=true");
-#endif
-                return true;
-            }
-
-            return RunHostCloseDecision(
+            return TryResolveHostCloseDecision(
+                hasPanel: BasicPanel != null,
+                panelMissingDebugMessage: "[ITEM-TABS][HOST-CLOSE][BASIC] Decision path: BasicPanel missing -> allowClose=true",
                 debugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]",
                 getDecision: PromptBasicHostCloseDecision,
                 saveAndExit: () =>
@@ -2027,17 +2016,9 @@ namespace MWPV.View.UserControls
 
         private bool TryResolveBankCardsHostCloseDecision()
         {
-            SetStatus("");
-
-            if (BankCardsPanel == null)
-            {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Panel missing -> allowClose=true");
-#endif
-                return true;
-            }
-
-            return RunHostCloseDecision(
+            return TryResolveHostCloseDecision(
+                hasPanel: BankCardsPanel != null,
+                panelMissingDebugMessage: "[ITEM-TABS][HOST-CLOSE][BANKCARDS] Panel missing -> allowClose=true",
                 debugPrefix: "[ITEM-TABS][HOST-CLOSE][BANKCARDS]",
                 getDecision: PromptBankCardsHostCloseDecision,
                 saveAndExit: TryCommitBankCardsFromHostClose,
@@ -2047,6 +2028,33 @@ namespace MWPV.View.UserControls
                     if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
                         ForceSelectTab(TabIndexBankCards);
                 });
+        }
+
+        private bool TryResolveHostCloseDecision(
+            bool hasPanel,
+            string panelMissingDebugMessage,
+            string debugPrefix,
+            Func<HostCloseDecision> getDecision,
+            Func<bool> saveAndExit,
+            Func<bool> exitWithoutSave,
+            Action? onCancelExit = null)
+        {
+            SetStatus("");
+
+            if (!hasPanel)
+            {
+#if DEBUG
+                Debug.WriteLine(panelMissingDebugMessage);
+#endif
+                return true;
+            }
+
+            return RunHostCloseDecision(
+                debugPrefix: debugPrefix,
+                getDecision: getDecision,
+                saveAndExit: saveAndExit,
+                exitWithoutSave: exitWithoutSave,
+                onCancelExit: onCancelExit);
         }
 
         private bool RunHostCloseDecision(
@@ -2287,54 +2295,55 @@ namespace MWPV.View.UserControls
 
         private HostCloseDecision PromptBankCardsHostCloseDecision()
         {
-            const string title1 = "Save Bank Cards Before Exiting?";
-            const string body1 =
-                "You have Bank Cards work in this session.\n\n" +
-                "Choose Save & Exit to save your Bank Cards changes and close the window.\n" +
-                "Choose More Options to continue without saving or cancel exit.";
-
-            const string title2 = "Exit Bank Cards Without Saving?";
-            const string body2 =
-                "Your Bank Cards session work will be discarded.\n\n" +
-                "Choose Exit Without Saving to close the window now.\n" +
-                "Choose Cancel to remain in the editor.";
-
-            return PromptTwoStepHostClosePopupDecision(
-                step1Title: title1,
-                step1Body: body1,
-                step2Title: title2,
-                step2Body: body2,
+            return PromptHostCloseDecision(
+                step1Title: "Save Bank Cards Before Exiting?",
+                step1Body:
+                    "You have Bank Cards work in this session.\n\n" +
+                    "Choose Save & Exit to save your Bank Cards changes and close the window.\n" +
+                    "Choose More Options to continue without saving or cancel exit.",
+                step2Title: "Exit Bank Cards Without Saving?",
+                step2Body:
+                    "Your Bank Cards session work will be discarded.\n\n" +
+                    "Choose Exit Without Saving to close the window now.\n" +
+                    "Choose Cancel to remain in the editor.",
                 resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BANKCARDS]",
                 step1DebugContext: "HOST-CLOSE-BANKCARDS-STEP1",
-                step2DebugContext: "HOST-CLOSE-BANKCARDS-STEP2")
-                switch
-            {
-                TwoStepHostClosePopupDecision.SaveAndExit => HostCloseDecision.SaveAndExit,
-                TwoStepHostClosePopupDecision.ExitWithoutSave => HostCloseDecision.ExitWithoutSave,
-                _ => HostCloseDecision.CancelExit
-            };
+                step2DebugContext: "HOST-CLOSE-BANKCARDS-STEP2");
         }
 
         private HostCloseDecision PromptBasicHostCloseDecision()
         {
-            const string title1 = "Save Basic Before Exiting?";
-            const string body1 =
-                "You have uncommitted Basic changes.\n\n" +
-                "Choose Save & Exit to save your Basic changes and close the window.\n" +
-                "Choose More Options to continue without saving or cancel exit.";
+            return PromptHostCloseDecision(
+                step1Title: "Save Basic Before Exiting?",
+                step1Body:
+                    "You have uncommitted Basic changes.\n\n" +
+                    "Choose Save & Exit to save your Basic changes and close the window.\n" +
+                    "Choose More Options to continue without saving or cancel exit.",
+                step2Title: "Exit Without Saving?",
+                step2Body:
+                    "Your Basic changes will be discarded.\n\n" +
+                    "Choose Exit Without Saving to close the window now.\n" +
+                    "Choose Cancel to remain on Basic.",
+                resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]");
+        }
 
-            const string title2 = "Exit Without Saving?";
-            const string body2 =
-                "Your Basic changes will be discarded.\n\n" +
-                "Choose Exit Without Saving to close the window now.\n" +
-                "Choose Cancel to remain on Basic.";
-
+        private HostCloseDecision PromptHostCloseDecision(
+            string step1Title,
+            string step1Body,
+            string step2Title,
+            string step2Body,
+            string resultDebugPrefix,
+            string step1DebugContext = "POPUP",
+            string step2DebugContext = "POPUP")
+        {
             return PromptTwoStepHostClosePopupDecision(
-                step1Title: title1,
-                step1Body: body1,
-                step2Title: title2,
-                step2Body: body2,
-                resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][BASIC]")
+                step1Title: step1Title,
+                step1Body: step1Body,
+                step2Title: step2Title,
+                step2Body: step2Body,
+                resultDebugPrefix: resultDebugPrefix,
+                step1DebugContext: step1DebugContext,
+                step2DebugContext: step2DebugContext)
                 switch
             {
                 TwoStepHostClosePopupDecision.SaveAndExit => HostCloseDecision.SaveAndExit,
