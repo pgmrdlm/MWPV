@@ -1,16 +1,14 @@
 /* ============================================================================
-   MWPV - MASTER DDL (FULL REWRITE WITH SEEDS)  -- v2025-10-16b
-   Fix: seed inserts now use UNION ALL SELECT blocks (no VALUES(...) alias).
-   Change in this revision: add back ComboType 'log_filters' + ComboDetail rows.
-   This edition: REMOVED CREATE TABLE for CategoryItemSecurityQuestions, BankCards, CategoryItemAccounts.********** after we do the ddl and scripts., we need a view on the phone number.  ***** script names should be built with following naming standards_s_<tablename>_<description>.sql
-   2025-11-24 edit: Category_Type no longer FK to ComboDetail; defaults to 0.
-                    Removed category_types ComboType/ComboDetail seeding and
-                    rewrote starter categories to use Category_Type = 0.
+   MWPV - 01.00 FRESH CREATE SCRIPT DRAFT
 
-   2025-12-23 edit (per current discussion):
-   - CategoryItem: removed CI_MFAType, CI_MFABackupCodes, CI_NbrSecurityQuestions
-   - CategoryItemPasswordHistory: CIPaH_CreatedAt now defaults to now (epoch seconds)
-   - Added supporting index for "most recent first" access
+   Purpose:
+   - Create a fresh database at schema version 01.00
+   - Seed reference data required by the current schema
+   - Stamp the database version immediately on fresh install
+
+   01.00 changes reflected here:
+   - KeyArchiveIntegrity removed
+   - CategoryItemAccounts uses the lean 01.00 structure
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -18,10 +16,7 @@ PRAGMA foreign_keys = OFF;
 
 BEGIN TRANSACTION;
 
--- Drops
-DROP VIEW  IF EXISTS vw_CurrentPassword;
-DROP VIEW  IF EXISTS vw_CurrentPin;
-
+-- Drops for objects created by this script
 DROP TABLE IF EXISTS ComboDetail;
 DROP TABLE IF EXISTS ComboType;
 DROP TABLE IF EXISTS CategoryItemPasswordHistory;
@@ -30,41 +25,35 @@ DROP TABLE IF EXISTS CategoryItemAccounts;
 DROP TABLE IF EXISTS BankCards;
 DROP TABLE IF EXISTS CategoryItem;
 DROP TABLE IF EXISTS Category;
-DROP TABLE IF EXISTS KeyArchiveIntegrity;
 DROP TABLE IF EXISTS DbVersion;
 DROP TABLE IF EXISTS Logs;
-/* =========================
-   NEW TABLE: LogMessageTemplate
-   (Add this ONE drop line into your Drops section)
-   ========================= */
 DROP TABLE IF EXISTS LogMessageTemplate;
 
-DROP TABLE IF EXISTS CategoryItemPinHistory;
-
 COMMIT;
+
 PRAGMA foreign_keys = ON;
 
 BEGIN TRANSACTION;
 
--- Lookups
+-- Lookup tables
 CREATE TABLE ComboType (
-    ComboTypeId   INTEGER  PRIMARY KEY AUTOINCREMENT,
-    Code          TEXT     NOT NULL UNIQUE,
-    Description   TEXT     NOT NULL,
-    Active        INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
-    CreatedUtc    TEXT     NOT NULL DEFAULT (datetime('now')),
-    UpdatedUtc    TEXT     NOT NULL DEFAULT (datetime('now'))
+    ComboTypeId   INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code          TEXT    NOT NULL UNIQUE,
+    Description   TEXT    NOT NULL,
+    Active        INTEGER NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
+    CreatedUtc    TEXT    NOT NULL DEFAULT (datetime('now')),
+    UpdatedUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE ComboDetail (
-    ComboDetailId   INTEGER  PRIMARY KEY AUTOINCREMENT,
-    ComboTypeId     INTEGER  NOT NULL REFERENCES ComboType (ComboTypeId) ON DELETE CASCADE,
-    Seq             INTEGER  NOT NULL,
-    Code            TEXT     NOT NULL,
-    Description     TEXT     NOT NULL,
-    Active          INTEGER  NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
-    CreatedUtc      TEXT     NOT NULL DEFAULT (datetime('now')),
-    UpdatedUtc      TEXT     NOT NULL DEFAULT (datetime('now'))
+    ComboDetailId INTEGER PRIMARY KEY AUTOINCREMENT,
+    ComboTypeId   INTEGER NOT NULL REFERENCES ComboType (ComboTypeId) ON DELETE CASCADE,
+    Seq           INTEGER NOT NULL,
+    Code          TEXT    NOT NULL,
+    Description   TEXT    NOT NULL,
+    Active        INTEGER NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
+    CreatedUtc    TEXT    NOT NULL DEFAULT (datetime('now')),
+    UpdatedUtc    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Categories
@@ -73,140 +62,89 @@ CREATE TABLE Category (
     Category_Name        TEXT    NOT NULL UNIQUE,
     Category_Description TEXT,
     Category_Type        INTEGER NOT NULL DEFAULT 0,
-    CreatedUtc           TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
+    CreatedUtc           TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     IsActive             INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- CategoryItem (Basic tab only; masked fields stored encrypted as BLOBs)
+-- Category items
 CREATE TABLE CategoryItem (
-    ItemId                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    Category_Key             INTEGER NOT NULL REFERENCES Category (Category_Key) ON DELETE CASCADE,
-
-    CI_Name                  TEXT    NOT NULL,
-    CI_Description           TEXT,
-    CI_Username              TEXT,
-    CI_SignInUrl             TEXT,
-
-    CI_BookMarkOnly          INTEGER NOT NULL DEFAULT 0 CHECK (CI_BookMarkOnly IN (0,1)),
-
-    -- Masked/sensitive (store ciphertext bytes)
-    CI_AccountEmail          BLOB,
-    CI_AccountPhoneNumber    BLOB,
-    CI_Pin                   BLOB,
-
-    CI_CreateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    CI_UpdateUTC             INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    IsActive                 INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
-
+    ItemId                INTEGER PRIMARY KEY AUTOINCREMENT,
+    Category_Key          INTEGER NOT NULL REFERENCES Category (Category_Key) ON DELETE CASCADE,
+    CI_Name               TEXT    NOT NULL,
+    CI_Description        TEXT,
+    CI_Username           TEXT,
+    CI_SignInUrl          TEXT,
+    CI_BookMarkOnly       INTEGER NOT NULL DEFAULT 0 CHECK (CI_BookMarkOnly IN (0,1)),
+    CI_AccountEmail       BLOB,
+    CI_AccountPhoneNumber BLOB,
+    CI_Pin                BLOB,
+    CI_CreateUTC          INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    CI_UpdateUTC          INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    IsActive              INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1)),
     CHECK (length(trim(CI_Name)) > 0),
     UNIQUE (Category_Key, CI_Name COLLATE NOCASE)
 );
 
-
--- Encrypted detail siblings
--- REPLACE: CategoryItemPasswordHistory (fingerprint-based reuse detection)
--- Change:
---   CIPaH_PwSig      -> CIPaH_PwFp        (stable keyed fingerprint, 32-byte HMAC-SHA256)
---   CIPaH_SigVersion -> CIPaH_FpVersion   (fingerprint version, default 1)
-
--- Table: CategoryItemPasswordHistory
---
--- Rules:
--- - Passwords are NEVER updated in place.
--- - Every password save creates a NEW row in this table.
--- - CIPaH_Password is encrypted (AES) and therefore changes each time (randomized nonce).
--- - CIPaH_PwFp is a stable secret-keyed fingerprint used for duplicate checks across ALL history.
-
-CREATE TABLE IF NOT EXISTS CategoryItemPasswordHistory
-(
-    CIPaH_PwHistId    INTEGER PRIMARY KEY AUTOINCREMENT,
-    CIPaH_ItemId      INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIPaH_CreatedAt   REAL    NOT NULL DEFAULT (julianday('now')),
-    CIPaH_Version     INTEGER NOT NULL DEFAULT 1,
-    CIPaH_Password    BLOB    NOT NULL,
-    CIPaH_PadLen      INTEGER,
-
-    -- Stable fingerprint for global equality checks (keyed; NOT plaintext; NOT ciphertext-hash)
-    CIPaH_PwFp        BLOB    NOT NULL,
-    CIPaH_FpVersion   INTEGER NOT NULL DEFAULT 1
+-- Password history
+CREATE TABLE CategoryItemPasswordHistory (
+    CIPaH_PwHistId  INTEGER PRIMARY KEY AUTOINCREMENT,
+    CIPaH_ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    CIPaH_CreatedAt REAL    NOT NULL DEFAULT (julianday('now')),
+    CIPaH_Version   INTEGER NOT NULL DEFAULT 1,
+    CIPaH_Password  BLOB    NOT NULL,
+    CIPaH_PadLen    INTEGER,
+    CIPaH_PwFp      BLOB    NOT NULL,
+    CIPaH_FpVersion INTEGER NOT NULL DEFAULT 1
 );
 
--- Fast "most recent password per item" ordering support
 CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_Item_CreatedAt
 ON CategoryItemPasswordHistory (CIPaH_ItemId, CIPaH_CreatedAt, CIPaH_PwHistId);
 
--- Fast GLOBAL duplicate-password detection support
 CREATE INDEX IF NOT EXISTS IX_CategoryItemPasswordHistory_PwFp
 ON CategoryItemPasswordHistory (CIPaH_PwFp);
 
-
-/* =========================
-   CategoryItemSecurityQuestions
-   ========================= */
+-- Security questions
 CREATE TABLE CategoryItemSecurityQuestions (
     CISQ_Id        INTEGER PRIMARY KEY AUTOINCREMENT,
     CISQ_ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CISQ_Seq       INTEGER NOT NULL,           -- display/order index
-    CISQ_Question  BLOB    NOT NULL,           -- encrypted question text
-    CISQ_Answer    BLOB    NOT NULL,           -- encrypted answer
+    CISQ_Seq       INTEGER NOT NULL,
+    CISQ_Question  BLOB    NOT NULL,
+    CISQ_Answer    BLOB    NOT NULL,
     CISQ_CreatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     CISQ_UpdatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     UNIQUE (CISQ_ItemId, CISQ_Seq)
 );
 
-/* =========================
-   BankCards
-   (Card type points to ComboDetail; seed the card-type ComboDetail separately)
-   ========================= */
+-- Bank cards
 CREATE TABLE BankCards (
-    BC_Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    BC_ItemId        INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    BC_CardType      INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId), -- e.g., CREDIT/DEBIT/STORE/etc.
-    BC_Cardholder    TEXT,                  -- optional display name (non-secret)
-    BC_Number        BLOB    NOT NULL,      -- encrypted PAN (digits only; Luhn-validated in app)
-    BC_ExpMonth      INTEGER NOT NULL CHECK (BC_ExpMonth BETWEEN 1 AND 12),
-    BC_ExpYear       INTEGER NOT NULL,      -- 4-digit year (range validated in app)
-    BC_CVV           BLOB,                  -- encrypted
-    BC_Pin           BLOB,                  -- encrypted (if applicable)
-    BC_BillingZip    BLOB,                  -- encrypted (if applicable)
-    BC_IsPrimary     INTEGER NOT NULL DEFAULT 0 CHECK (BC_IsPrimary IN (0,1)),
-    BC_IsActive      INTEGER NOT NULL DEFAULT 1 CHECK (BC_IsActive IN (0,1)),
-    BC_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    BC_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+    BC_Id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    BC_ItemId     INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    BC_CardType   INTEGER NOT NULL REFERENCES ComboDetail (ComboDetailId),
+    BC_Cardholder TEXT,
+    BC_Number     BLOB    NOT NULL,
+    BC_ExpMonth   INTEGER NOT NULL CHECK (BC_ExpMonth BETWEEN 1 AND 12),
+    BC_ExpYear    INTEGER NOT NULL,
+    BC_CVV        BLOB,
+    BC_Pin        BLOB,
+    BC_BillingZip BLOB,
+    BC_IsPrimary  INTEGER NOT NULL DEFAULT 0 CHECK (BC_IsPrimary IN (0,1)),
+    BC_IsActive   INTEGER NOT NULL DEFAULT 1 CHECK (BC_IsActive IN (0,1)),
+    BC_CreatedAt  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    BC_UpdatedAt  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
-
-/* =========================
-   CategoryItemAccounts
-   (General account numbers separate from cards)
-   ========================= */
+-- Category item accounts (lean 01.00 structure)
 CREATE TABLE CategoryItemAccounts (
-    CIA_Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    CIA_ItemId        INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    CIA_AccountLabel  TEXT,                 -- friendly label (non-secret)
-    CIA_AccountNumber BLOB    NOT NULL,     -- encrypted (normalize/validate in app)
-    CIA_RoutingNumber BLOB,                 -- encrypted (US ABA) - optional
-    CIA_IBAN          BLOB,                 -- encrypted - optional
-    CIA_SWIFT         BLOB,                 -- encrypted - optional
-    CIA_Meta          BLOB,                 -- encrypted misc (e.g., branch, notes)
-
-    -- NEW: optional type from combo, same principle as BankCards
-    CIA_AccountType      INTEGER REFERENCES ComboDetail (ComboDetailId),  -- from ComboType='account_types'
-    CIA_AccountTypeOther TEXT,                 -- user freeform when type = OTHER
-
-    CIA_IsPrimary     INTEGER NOT NULL DEFAULT 0 CHECK (CIA_IsPrimary IN (0,1)),
-    CIA_CreatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    CIA_UpdatedAt     INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+    Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    Label     TEXT,
+    Number    BLOB    NOT NULL,
+    CreatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    UpdatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    IsActive  INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
--- Integrity / versions / logs
-CREATE TABLE KeyArchiveIntegrity (
-    Kai_Id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    Kai_SizeBytes    INTEGER NOT NULL,
-    Kai_Sha256Hex    TEXT    NOT NULL,
-    Kai_RecordedUtc  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
-
+-- Database version history
 CREATE TABLE DbVersion (
     Id          INTEGER PRIMARY KEY AUTOINCREMENT,
     Version     TEXT    NOT NULL,
@@ -215,38 +153,56 @@ CREATE TABLE DbVersion (
     IsCurrent   INTEGER NOT NULL CHECK (IsCurrent IN (0, 1))
 );
 
-/* =========================
-   NEW TABLE: LogMessageTemplate
-   (Add this CREATE TABLE block in your CREATE TABLE area)
-   ========================= */
+-- Log message templates
 CREATE TABLE LogMessageTemplate (
     LMT_Id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    UpdateForm  TEXT    NOT NULL,   -- e.g., 'BasicTab'
-    Seq         INTEGER NOT NULL,   -- display/order index
-    LogMessage  TEXT    NOT NULL,   -- template text with tokens like #CategoryItemName#
+    UpdateForm  TEXT    NOT NULL,
+    Seq         INTEGER NOT NULL,
+    LogMessage  TEXT    NOT NULL,
     Active      INTEGER NOT NULL DEFAULT 1 CHECK (Active IN (0,1)),
     CreatedUtc  TEXT    NOT NULL DEFAULT (datetime('now')),
     UpdatedUtc  TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE (UpdateForm, Seq)
 );
 
--- Optional but sensible: quick lookup by form, ordered by Seq
 CREATE INDEX IF NOT EXISTS IX_LogMessageTemplate_Form_Seq
 ON LogMessageTemplate (UpdateForm, Seq);
 
-/* =========================
-   SEED: LogMessageTemplate (idempotent)
-   (Add this in your SEEDS transaction)
-   ========================= */
--- Seed / upsert BasicTab templates (no tabs/newlines stored in DB; formatting happens in code)
+-- Application logs
+CREATE TABLE Logs (
+    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    CreatedUtc    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    Level         TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','WARNING','ERROR','FATAL')),
+    Source        TEXT,
+    EventCode     TEXT,
+    SessionId     TEXT    NOT NULL DEFAULT '',
+    LoginId       TEXT,
+    ItemId        INTEGER,
+    SubjectText   TEXT,
+    MessageText   TEXT,
+    MachineId     TEXT,
+    DeviceMake    TEXT,
+    DeviceModel   TEXT,
+    OSVersion     TEXT,
+    DeviceIdHash  TEXT,
+    InstallType   TEXT,
+    AppVersion    TEXT    NOT NULL DEFAULT '',
+    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
+    KeySetVersion INTEGER NOT NULL DEFAULT 1,
+    StackHash     TEXT
+);
+
+COMMIT;
+
+BEGIN TRANSACTION;
+
+-- Log message template seeds
 INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
 SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
-    -- NEW ITEM ONLY
     SELECT 'BasicTab' AS UpdateForm, 1 AS Seq,
            'Category Item #CategoryItemName# has been created for Category #CategoryName#' AS LogMessage
-
-    -- EDIT EXISTING ITEM (saved changes; value-blind; no special chars stored)
     UNION ALL SELECT 'BasicTab', 2,  'The following updates have been saved for #CategoryItemName#'
     UNION ALL SELECT 'BasicTab', 3,  '- Password updated'
     UNION ALL SELECT 'BasicTab', 4,  '- Bookmark flag toggled'
@@ -256,8 +212,6 @@ FROM (
     UNION ALL SELECT 'BasicTab', 8,  '- Phone number updated'
     UNION ALL SELECT 'BasicTab', 9,  '- Email updated'
     UNION ALL SELECT 'BasicTab', 10, '- Notes updated'
-
-    -- OPTIONAL: explicit discard/revert path (only if we wire a "Discard" action)
     UNION ALL SELECT 'BasicTab', 11, 'Edits were discarded for #CategoryItemName# (no changes saved)'
 ) AS v
 WHERE NOT EXISTS (
@@ -266,9 +220,6 @@ WHERE NOT EXISTS (
     WHERE t.UpdateForm = v.UpdateForm
       AND t.Seq        = v.Seq
 );
--- FULL REWRITE
--- Add ONLY the missing template row for CATEGORY creation.
--- Does NOT touch existing BasicTab templates (or any existing rows).
 
 INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
 SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
@@ -284,90 +235,7 @@ WHERE NOT EXISTS (
       AND t.Seq        = v.Seq
 );
 
-CREATE TABLE Logs (
-    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    WhenUtc       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    CreatedUtc    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    Level         TEXT    NOT NULL CHECK (UPPER(Level) IN ('TRACE','DEBUG','INFO','WARN','WARNING','ERROR','FATAL')),
-    Source        TEXT,
-    EventCode     TEXT,
-    SessionId     TEXT    NOT NULL DEFAULT '',
-    LoginId       TEXT,
-    ItemId        INTEGER,
-
-    -- NEW: non-sensitive “who/what this log is about” (Category or CategoryItem name)
-    SubjectText   TEXT,
-
-    -- NEW: rendered multi-line message built from templates (no payload)
-    MessageText   TEXT,
-
-    MachineId     TEXT,
-    DeviceMake    TEXT,
-    DeviceModel   TEXT,
-    OSVersion     TEXT,
-    DeviceIdHash  TEXT,
-    InstallType   TEXT,
-    AppVersion    TEXT    NOT NULL DEFAULT '',
-    IsCrash       INTEGER NOT NULL DEFAULT 0 CHECK (IsCrash IN (0,1)),
-    KeySetVersion INTEGER NOT NULL DEFAULT 1,
-    StackHash     TEXT
-);
-
-
-COMMIT;
-
--- =========================
--- SEEDS (idempotent)
--- =========================
-BEGIN TRANSACTION;
-
-/* =========================================================
-   Combo: account_types  (bucket for common account kinds)
-   Used by CategoryItemAccounts.CIA_AccountType (optional)
-   ========================================================= */
-
-/* Ensure ComboType: account_types */
-INSERT INTO ComboType (Code, Description, Active)
-SELECT 'account_types', 'Common financial account types', 1
-WHERE NOT EXISTS (SELECT 1 FROM ComboType WHERE Code = 'account_types');
-
-/* Ensure ComboType: account_types */
-INSERT INTO ComboType (Code, Description, Active)
-SELECT 'account_types', 'Common financial account types', 1
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM ComboType
-    WHERE Code = 'account_types'
-);
-/* Ensure ComboDetail rows for account_types (includes Primary account) */
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT
-    ct.ComboTypeId,
-    v.Seq,
-    v.Code,
-    v.Description,
-    1
-FROM ComboType ct
-JOIN (
-    SELECT 0 AS Seq, 'PRIMARY'       AS Code, 'Primary account'        AS Description
-    UNION ALL SELECT 1, 'CHECKING',      'Checking'
-    UNION ALL SELECT 2, 'SAVINGS',       'Savings'
-    UNION ALL SELECT 3, 'CHRISTMAS',     'Christmas Club'
-    UNION ALL SELECT 4, 'MONEY_MARKET',  'Money Market'
-    UNION ALL SELECT 5, 'IRA',           'IRA'
-    UNION ALL SELECT 6, 'RETIREMENT',    'Retirement'
-    UNION ALL SELECT 7, '401K',          '401(k)'
-    UNION ALL SELECT 8, 'OTHER',         'Other (freeform)'
-) AS v
-WHERE ct.Code = 'account_types'
-  AND NOT EXISTS (
-      SELECT 1
-      FROM ComboDetail cd
-      WHERE cd.ComboTypeId = ct.ComboTypeId
-        AND cd.Code        = v.Code
-  );
-
-/* ComboType: credit_cards (mixed: types + brands) */
+-- Reference ComboType seeds
 INSERT INTO ComboType (Code, Description, Active)
 SELECT 'credit_cards', 'Credit/Bank card options (mixed)', 1
 WHERE NOT EXISTS (
@@ -376,7 +244,23 @@ WHERE NOT EXISTS (
     WHERE Code = 'credit_cards'
 );
 
-/* Ensure ComboDetail rows for credit_cards */
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'log_filters', 'Log filter values for the Logs UI', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'log_filters'
+);
+
+INSERT INTO ComboType (Code, Description, Active)
+SELECT 'basic_change_fields', 'Basic tab: changed field descriptors', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM ComboType
+    WHERE Code = 'basic_change_fields'
+);
+
+-- Credit card reference values
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
     ct.ComboTypeId,
@@ -386,13 +270,13 @@ SELECT
     1
 FROM ComboType ct
 JOIN (
-    SELECT 0 AS Seq, 'DEBIT_CARD'     AS Code, 'Debit card'                    AS Description
-    UNION ALL SELECT 1, 'MASTERCARD',      'Mastercard'
-    UNION ALL SELECT 2, 'VISA',            'Visa'
-    UNION ALL SELECT 3, 'AMERICAN_EXPRESS','American Express'
-    UNION ALL SELECT 4, 'DISCOVER',        'Discover'
-    UNION ALL SELECT 5, 'STORE_CARD',      'Store card (private label)'
-    UNION ALL SELECT 6, 'VIRTUAL_CARD',    'Virtual card'
+    SELECT 0 AS Seq, 'DEBIT_CARD' AS Code, 'Debit card' AS Description
+    UNION ALL SELECT 1, 'MASTERCARD', 'Mastercard'
+    UNION ALL SELECT 2, 'VISA', 'Visa'
+    UNION ALL SELECT 3, 'AMERICAN_EXPRESS', 'American Express'
+    UNION ALL SELECT 4, 'DISCOVER', 'Discover'
+    UNION ALL SELECT 5, 'STORE_CARD', 'Store card (private label)'
+    UNION ALL SELECT 6, 'VIRTUAL_CARD', 'Virtual card'
 ) AS v
 WHERE ct.Code = 'credit_cards'
   AND NOT EXISTS (
@@ -402,23 +286,17 @@ WHERE ct.Code = 'credit_cards'
         AND cd.Code        = v.Code
   );
 
-/* NOTE: category_types removed – Category_Type now default 0 with no FK */
-
-/* *** log_filters for Logs UI *** */
-
-/* Ensure ComboDetail rows for log_filters (idempotent) */
+-- Log filter values
 WITH v(Seq, Code, Description) AS (
     VALUES
-      ( 0, 'CATEGORY_DUPLICATE',        'Duplicate category detected'),
-      ( 1, 'CATEGORY_CREATED',         'Category successfully inserted'),
-      ( 2, 'LOGIN',                     'Login events'),
-      ( 3, 'EARLY_FAIL',                'Early-fail events'),
-      ( 4, 'SESSION_START',             'Session started (post-login)'),
-      ( 5, 'SESSION_END',               'Session ended'),
-
-      -- CategoryItem (collapsed)
-      (10, 'CATEGORYITEM_CREATED',      'Category item created'),
-      (11, 'CATEGORYITEM_CHANGED',      'Category item updated (one or more fields)')
+      (0,  'CATEGORY_DUPLICATE',   'Duplicate category detected'),
+      (1,  'CATEGORY_CREATED',     'Category successfully inserted'),
+      (2,  'LOGIN',                'Login events'),
+      (3,  'EARLY_FAIL',           'Early-fail events'),
+      (4,  'SESSION_START',        'Session started (post-login)'),
+      (5,  'SESSION_END',          'Session ended'),
+      (10, 'CATEGORYITEM_CREATED', 'Category item created'),
+      (11, 'CATEGORYITEM_CHANGED', 'Category item updated (one or more fields)')
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
@@ -437,9 +315,7 @@ WHERE ct.Code = 'log_filters'
         AND d.Code        = v.Code
   );
 
-
-
-/* Starter Categories (now independent of ComboDetail / category_types) */
+-- Starter categories
 INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActive)
 SELECT 'Utilities', 'Bills and essential services', 0, 1
 WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Utilities');
@@ -496,16 +372,7 @@ INSERT INTO Category (Category_Name, Category_Description, Category_Type, IsActi
 SELECT 'Misc', 'Everything else', 0, 1
 WHERE NOT EXISTS (SELECT 1 FROM Category WHERE Category_Name = 'Misc');
 
-/* ComboType: basic_change_fields (Basic tab field-change descriptors) */
-INSERT INTO ComboType (Code, Description, Active)
-SELECT 'basic_change_fields', 'Basic tab: changed field descriptors', 1
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM ComboType
-    WHERE Code = 'basic_change_fields'
-);
-
-/* Ensure ComboDetail rows for basic_change_fields */
+-- Basic tab change descriptors
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
     ct.ComboTypeId,
@@ -515,20 +382,11 @@ SELECT
     1
 FROM ComboType ct
 JOIN (
-    SELECT 10 AS Seq, 'CATEGORYITEM_CREATED' AS Code,
-           'Category item created' AS Description
-    UNION ALL
-    SELECT 11, 'CATEGORYITEM_CHANGED',
-           'Category item updated (one or more fields)'
-    UNION ALL
-    SELECT 12, 'EARLY_FAIL',
-           'Login failures'
-    UNION ALL
-    SELECT 13, 'CATEGORY_CREATED',
-           'Category successfully added'
+    SELECT 10 AS Seq, 'CATEGORYITEM_CREATED' AS Code, 'Category item created' AS Description
+    UNION ALL SELECT 11, 'CATEGORYITEM_CHANGED', 'Category item updated (one or more fields)'
+    UNION ALL SELECT 12, 'EARLY_FAIL', 'Login failures'
+    UNION ALL SELECT 13, 'CATEGORY_CREATED', 'Category successfully added'
 ) AS v
-
-
 WHERE ct.Code = 'basic_change_fields'
   AND NOT EXISTS (
       SELECT 1
@@ -537,5 +395,13 @@ WHERE ct.Code = 'basic_change_fields'
         AND cd.Code        = v.Code
   );
 
+-- Fresh install database version stamp
+INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
+SELECT
+    '01.00',
+    strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+    'Fresh database created at version 01.00',
+    1
+WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
 COMMIT;
