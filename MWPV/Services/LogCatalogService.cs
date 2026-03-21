@@ -194,56 +194,6 @@ namespace MWPV.Services
         // ---------------------------------------------------------------------
         // Kept ONLY to satisfy existing callers. We accept the dto but do not store it.
         // When we implement edit/change logs later, we’ll replace this with the new logic.
-        public static long AppendJson(
-            string level,
-            string source,
-            string eventCode,
-            object dto,
-            DateTime? whenUtc = null,
-            string? sessionId = null,
-            long? loginId = null,
-            long? itemId = null,
-            int payloadVer = 1,
-            int? keySetVersion = null,
-            bool isCrash = false,
-            Func<SqliteConnection>? openAppConnection = null)
-        {
-            var req = new RequestV3
-            {
-                Level = level ?? "INFO",
-                Source = source ?? "",
-                EventCode = eventCode ?? "",
-                AppVersion = AppVersion(),
-                CreatedUtc = DateTime.UtcNow.ToString("o"),
-                WhenUtc = (whenUtc ?? DateTime.UtcNow).ToUniversalTime().ToString("o"),
-                SessionId = sessionId,
-                LoginId = loginId,
-                ItemId = itemId,
-                IsCrash = isCrash ? 1 : 0,
-
-                // no-op stubs (kept so callers compiling against payload fields don’t break)
-                PayloadVer = payloadVer,
-                KeySetVersion = keySetVersion
-            };
-
-            return Insert(req, openAppConnection);
-        }
-
-        // Overload kept for older typed DTO usage
-        public static long AppendJson(
-            string level,
-            string source,
-            string eventCode,
-            MWPV.Utilities.Json.AppJson.LogPayloadDto dto,
-            DateTime? whenUtc = null,
-            string? sessionId = null,
-            long? loginId = null,
-            long? itemId = null,
-            int payloadVer = 1,
-            int? keySetVersion = null,
-            bool isCrash = false,
-            Func<SqliteConnection>? openAppConnection = null)
-            => AppendJson(level, source, eventCode, (object)dto, whenUtc, sessionId, loginId, itemId, payloadVer, keySetVersion, isCrash, openAppConnection);
 
         // =====================================================================
         // READ
