@@ -29,6 +29,16 @@ namespace MWPV.Models
         public byte[] Number { get; set; } = Array.Empty<byte>();
 
         /// <summary>
+        /// Optional combo detail reference for the account type (AccountTypeId).
+        /// </summary>
+        public int? AccountTypeId { get; set; }
+
+        /// <summary>
+        /// Optional freeform account type text when the Freeform option is selected (AccountTypeFreeform).
+        /// </summary>
+        public string? AccountTypeFreeform { get; set; }
+
+        /// <summary>
         /// Soft-delete / active flag (IsActive).
         /// </summary>
         public bool IsActive { get; set; } = true;
