@@ -159,24 +159,6 @@ namespace MWPV.View.UserControls
         }
 
         // -------- JSON helpers (kept; harmless and used nowhere else) --------
-
-        /// <summary>
-        /// Wraps an anonymous object as a JsonElement so it fits other payload shapes if needed.
-        /// Currently unused (UI no longer logs JSON).
-        /// </summary>
-        private static JsonElement? BuildContext(object obj)
-        {
-            try
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(obj);
-                using var doc = JsonDocument.Parse(json);
-                return doc.RootElement.Clone();
-            }
-            catch
-            {
-                return null;
-            }
-        }
     }
 
     public sealed class CategorySubmittedEventArgs : EventArgs
