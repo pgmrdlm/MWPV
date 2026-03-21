@@ -1,16 +1,14 @@
-
 /* ============================================================================
-   MWPV - 01.01 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.00 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.01
+   - Create a fresh database at schema version 01.00
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
 
-   01.01 changes reflected here:
+   01.00 changes reflected here:
    - KeyArchiveIntegrity removed
-   - CategoryItemAccounts uses the lean 01.01 structure with account type persistence
-   - Restored account_types combo seeds with business-value sequences
+   - CategoryItemAccounts uses the lean 01.00 structure
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -135,17 +133,15 @@ CREATE TABLE BankCards (
     BC_UpdatedAt  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
--- Category item accounts (lean 01.01 structure)
+-- Category item accounts (lean 01.00 structure)
 CREATE TABLE CategoryItemAccounts (
-    Id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemId              INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
-    Label               TEXT,
-    Number              BLOB    NOT NULL,
-    AccountTypeId       INTEGER REFERENCES ComboDetail (ComboDetailId),
-    AccountTypeFreeform TEXT,
-    CreatedAt           INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    UpdatedAt           INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    IsActive            INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
+    Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ItemId    INTEGER NOT NULL REFERENCES CategoryItem (ItemId) ON DELETE CASCADE,
+    Label     TEXT,
+    Number    BLOB    NOT NULL,
+    CreatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    UpdatedAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    IsActive  INTEGER NOT NULL DEFAULT 1 CHECK (IsActive IN (0,1))
 );
 
 -- Database version history
@@ -241,14 +237,6 @@ WHERE NOT EXISTS (
 
 -- Reference ComboType seeds
 INSERT INTO ComboType (Code, Description, Active)
-SELECT 'account_types', 'Common financial account types', 1
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM ComboType
-    WHERE Code = 'account_types'
-);
-
-INSERT INTO ComboType (Code, Description, Active)
 SELECT 'credit_cards', 'Credit/Bank card options (mixed)', 1
 WHERE NOT EXISTS (
     SELECT 1
@@ -271,33 +259,6 @@ WHERE NOT EXISTS (
     FROM ComboType
     WHERE Code = 'basic_change_fields'
 );
-
--- Account type reference values
-INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
-SELECT
-    ct.ComboTypeId,
-    v.Seq,
-    v.Code,
-    v.Description,
-    1
-FROM ComboType ct
-JOIN (
-    SELECT 0  AS Seq, 'PRIMARY'            AS Code, 'Primary'            AS Description
-    UNION ALL SELECT 1,  'CHECKING',           'Checking'
-    UNION ALL SELECT 2,  'SAVINGS',            'Savings'
-    UNION ALL SELECT 3,  'CHRISTMAS_SAVINGS',  'Christmas Savings'
-    UNION ALL SELECT 4,  'IRA',                'IRA'
-    UNION ALL SELECT 5,  'LOAN',               'Loan'
-    UNION ALL SELECT 6,  'MORTGAGE',           'Mortgage'
-    UNION ALL SELECT 99, 'FREEFORM',           'Freeform'
-) AS v
-WHERE ct.Code = 'account_types'
-  AND NOT EXISTS (
-      SELECT 1
-      FROM ComboDetail cd
-      WHERE cd.ComboTypeId = ct.ComboTypeId
-        AND cd.Code        = v.Code
-  );
 
 -- Credit card reference values
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -437,9 +398,9 @@ WHERE ct.Code = 'basic_change_fields'
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.01',
+    '01.00',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.01',
+    'Fresh database created at version 01.00',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
