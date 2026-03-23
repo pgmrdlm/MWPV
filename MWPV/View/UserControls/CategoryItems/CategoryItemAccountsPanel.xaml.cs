@@ -361,7 +361,9 @@ namespace MWPV.View.UserControls.CategoryItems
             if (CardNumberBox != null)
                 CardNumberBox.MaxLength = MaxCardNumberChars;
 
-            LoadBankCardTypes();
+            // REVIEW-ONLY:
+            // Old BankCard combo backend call isolated in the tmp Accounts panel copy.
+            // LoadBankCardTypes();
 
             CaptureBaselineFromCurrent();
             SetDirty(false);
@@ -1068,38 +1070,20 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            try
-            {
-                var detail = CategoryItemService.LoadBankCardDetailByItemIdAndCardId(activeItemId.Value, selected.Id);
-                if (detail == null)
-                {
-                    ClearSelectedBankCardDetailSedsBestEffort();
-                    _isSelectedProtectedViewActive = false;
-                    UpdateTabButtons();
+            // REVIEW-ONLY:
+            // Old targeted BankCard reread isolated in the tmp Accounts panel copy.
+            // This removes the direct dependency on:
+            // - CategoryItemService.LoadBankCardDetailByItemIdAndCardId(...)
+            // - BC.Selected.* protected-detail persistence
+            // - PopulateProtectedViewFromSelectedDetail(CategoryItemService.BankCardRow)
+            _isSelectedProtectedViewActive = false;
+            UpdateTabButtons();
 #if DEBUG
-                    Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Detail not found for itemId={activeItemId.Value} cardId={selected.Id}.");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][REVIEW] Targeted BankCard detail reread isolated itemId={activeItemId.Value} rowId={selected.Id}.");
 #endif
-                    return;
-                }
-
-                StoreSelectedBankCardDetailSedsBestEffort(detail);
-                PopulateProtectedViewFromSelectedDetail(detail);
-
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Protected view loaded itemId={activeItemId.Value} cardId={selected.Id}.");
-#endif
-            }
-            catch (Exception ex)
-            {
-                ClearSelectedBankCardDetailSedsBestEffort();
-                _isSelectedProtectedViewActive = false;
-                UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Targeted detail load failed itemId={activeItemId.Value} cardId={selected.Id}: {ex}");
-#endif
-            }
         }
 
+        /*
         private void PopulateProtectedViewFromSelectedDetail(CategoryItemService.BankCardRow detail)
         {
             _suppressDirty = true;
@@ -1149,12 +1133,14 @@ namespace MWPV.View.UserControls.CategoryItems
 
             UpdateTabButtons();
         }
+        */
 
         private static int? TryGetActiveCategoryItemIdFromSeds()
         {
             return CategoryItemSedsContextHelper.TryGetCurrentCategoryItemId();
         }
 
+        /*
         private static void StoreSelectedBankCardDetailSedsBestEffort(CategoryItemService.BankCardRow detail)
         {
             ClearSelectedBankCardDetailSedsBestEffort();
@@ -1165,7 +1151,7 @@ namespace MWPV.View.UserControls.CategoryItems
             try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedPin, detail.PinRaw ?? string.Empty); } catch { }
             try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedBillingZip, detail.BillingZipRaw ?? string.Empty); } catch { }
         }
-
+        */
         private static void ClearSelectedBankCardDetailSedsBestEffort()
         {
             try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedBillingZip); } catch { }
