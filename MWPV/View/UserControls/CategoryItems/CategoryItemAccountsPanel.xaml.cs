@@ -1,14 +1,14 @@
-﻿// File: View/UserControls/CategoryItems/CategoryItemBankCardsPanel.xaml.cs
+﻿// File: View/UserControls/CategoryItems/tmp_CategoryItemAccountsPanel.xaml.cs
 //
 // FULL REWRITE (match current XAML exactly)
 //
 // Notes:
-// - XAML has NO Primary/BillingZip/Cardholder controls, so this code does NOT reference them.
+// - XAML keeps only account type, account number, and active controls in this review copy.
 // - Grid edit/delete are "selected row" buttons (no per-row Tag buttons).
-// - Grid bindings expect: CardTypeDisplay, CardNumberMasked, Expiration, CvvMasked, PinMasked, IsActive.
-// - This panel maintains its own UI row DTO (BankCardRow) with Raw + Masked fields.
-// - Host can load rows (from service select) via LoadFromHostRows(...).
-// - Save raises SaveAndExitRequested with payload rows (raw values included).
+// - Grid bindings expect: AccountTypeDisplay, AccountNumberMasked, IsActive.
+// - This panel maintains its own UI row DTO (AccountRow) with raw + masked account-number fields.
+// - Host can load rows from the current service row shape via LoadFromHostRows(...).
+// - Save raises SaveAndExitRequested with payload rows (raw account number included).
 // - No delete in service => existing rows (Id != 0) are not deletable here (same policy as before).
 
 using System;
@@ -43,23 +43,23 @@ namespace MWPV.View.UserControls.CategoryItems
         // Collections (binding)
         // ============================================================
 
-        private readonly ObservableCollection<BankCardRow> _bankCardRows = new();
-        private readonly ObservableCollection<CardTypeItem> _cardTypeItems = new();
+        private readonly ObservableCollection<AccountRow> _accountRows = new();
+        private readonly ObservableCollection<AccountTypeItem> _accountTypeItems = new();
 
-        public ObservableCollection<BankCardRow> BankCardRows => _bankCardRows;
-        public ObservableCollection<CardTypeItem> CardTypeItems => _cardTypeItems;
+        public ObservableCollection<AccountRow> AccountRows => _accountRows;
+        public ObservableCollection<AccountTypeItem> AccountTypeItems => _accountTypeItems;
 
-        private BankCardRow? _editingRow;
+        private AccountRow? _editingRow;
 
         // ============================================================
         // Tab state
         // ============================================================
 
-        private readonly List<BankCardRow> _baselineRows = new();
+        private readonly List<AccountRow> _baselineRows = new();
 
         private bool _hasChanges;
         private bool _hasErrors;
-        private bool _newCardSessionStarted;
+        private bool _newAccountSessionStarted;
 
         public bool HasChanges => _hasChanges;
         public bool HasErrors => _hasErrors;
@@ -71,9 +71,7 @@ namespace MWPV.View.UserControls.CategoryItems
         // Reveal state + timer (read-only overlays)
         // ============================================================
 
-        private bool _isCardNumberRevealed;
-        private bool _isCvvRevealed;
-        private bool _isPinRevealed;
+        private bool _isAccountNumberRevealed;
 
         private readonly AutoHideTimer _revealAutoHide;
         private bool _uiEventsHooked;
@@ -81,13 +79,10 @@ namespace MWPV.View.UserControls.CategoryItems
         // Host-close guard
         private bool _hostRequestedCloseWipe;
 
-        private const int MaxCardNumberChars = 19; // digits + spaces
+        private const int MaxAccountNumberChars = 19; // digits + spaces
 
-        private const string SedsKey_BankCardSelectedCardId = "BC.Selected.CardId";
-        private const string SedsKey_BankCardSelectedNumber = "BC.Selected.Number";
-        private const string SedsKey_BankCardSelectedCvv = "BC.Selected.CVV";
-        private const string SedsKey_BankCardSelectedPin = "BC.Selected.Pin";
-        private const string SedsKey_BankCardSelectedBillingZip = "BC.Selected.BillingZip";
+        private const string SedsKey_AccountSelectedRowId = "BC.Selected.CardId";
+        private const string SedsKey_AccountSelectedNumber = "BC.Selected.Number";
 
         private bool _isSelectedProtectedViewActive;
         // ============================================================
@@ -107,7 +102,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 interval: TimeSpan.FromSeconds(20),
                 onTimeout: OnRevealTimeout);
 
-            _bankCardRows.CollectionChanged += BankCardRows_CollectionChanged;
+            _accountRows.CollectionChanged += AccountRows_CollectionChanged;
         }
 
         // ============================================================
@@ -115,55 +110,48 @@ namespace MWPV.View.UserControls.CategoryItems
         // ============================================================
 
         /// <summary>
-        /// Host loads rows into this panel (typically from CategoryItemService.LoadBankCardsByItemId).
+        /// Host loads rows into this panel from the current service row shape.
         /// </summary>
         public void LoadFromHostRows(IEnumerable<CategoryItemService.BankCardRow>? rows)
         {
             _suppressDirty = true;
             try
             {
-                ClearNewCardSessionTracking("LoadFromHostRows");
+                ClearNewAccountSessionTracking("LoadFromHostRows");
                 HideRevealsAndStopTimer(clearRevealOverlays: true);
                 WipeSensitiveEntryFields();
-                ClearBankCardError();
-                ResetBankCardFieldBackgrounds();
-                ClearSelectedBankCardDetailSedsBestEffort();
+                ClearAccountError();
+                ResetAccountFieldBackgrounds();
+                ClearSelectedAccountDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
 
-                if (BankCardGrid != null)
-                    BankCardGrid.SelectedItem = null;
+                if (AccountGrid != null)
+                    AccountGrid.SelectedItem = null;
 
-                DetachRowHandlers(_bankCardRows);
-                WipeAndClearBankCardRows();
+                DetachRowHandlers(_accountRows);
+                WipeAndClearAccountRows();
 
                 if (rows != null)
                 {
                     foreach (var r in rows)
                     {
-                        var ui = new BankCardRow
+                        var ui = new AccountRow
                         {
                             Id = r.Id,
-                            CardTypeId = r.CardTypeId,
-                            CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                            AccountTypeId = r.CardTypeId,
+                            AccountTypeDisplay = r.CardTypeDisplay ?? string.Empty,
 
                             // Service never returns plaintext. Keep raw empty.
-                            CardNumberRaw = string.Empty,
-                            CvvRaw = string.Empty,
-                            PinRaw = string.Empty,
-
-                            // Service provides display
-                            Expiration = r.ExpirationDisplay ?? string.Empty,
+                            AccountNumberRaw = string.Empty,
 
                             IsActive = r.IsActive,
 
                             // For display
-                            CardNumberMasked = r.CardNumberMasked ?? string.Empty,
-                            CvvMasked = r.CvvMasked ?? string.Empty,
-                            PinMasked = r.PinMasked ?? string.Empty
+                            AccountNumberMasked = r.CardNumberMasked ?? string.Empty
                         };
 
                         AttachRowHandlers(ui);
-                        _bankCardRows.Add(ui);
+                        _accountRows.Add(ui);
                     }
                 }
 
@@ -186,16 +174,16 @@ namespace MWPV.View.UserControls.CategoryItems
         public void WipeAllForHostClose()
         {
             _hostRequestedCloseWipe = true;
-            ClearNewCardSessionTracking("WipeAllForHostClose");
+            ClearNewAccountSessionTracking("WipeAllForHostClose");
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
-            WipeAndClearBankCardRows();
-            ClearSelectedBankCardDetailSedsBestEffort();
+            WipeAndClearAccountRows();
+            ClearSelectedAccountDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
 
-            ClearBankCardError();
-            ResetBankCardFieldBackgrounds();
+            ClearAccountError();
+            ResetAccountFieldBackgrounds();
 
             _editingRow = null;
             SetDirty(false);
@@ -213,7 +201,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (EntryLineHasAnyInput())
             {
-                ShowBankCardError("Finish Add/Update or Clear Row before leaving this tab.");
+                ShowAccountError("Finish Add/Update or Clear Row before leaving this tab.");
                 SetErrors(true);
                 UpdateTabButtons();
                 return false;
@@ -226,10 +214,10 @@ namespace MWPV.View.UserControls.CategoryItems
                 return false;
             }
 
-            ClearBankCardError();
-            ClearNewCardSessionTracking("TryAutoCommitAndWipe");
+            ClearAccountError();
+            ClearNewAccountSessionTracking("TryAutoCommitAndWipe");
             ClearEntryFields();
-            ClearSelectedBankCardDetailSedsBestEffort();
+            ClearSelectedAccountDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
             SetErrors(false);
             UpdateTabButtons();
@@ -238,19 +226,19 @@ namespace MWPV.View.UserControls.CategoryItems
 
         /// <summary>
         /// HOST-CLOSE behavior ONLY:
-        /// Returns true when BankCards currently has meaningful session work that should
+        /// Returns true when Accounts currently has meaningful session work that should
         /// drive an explicit host-close decision before the window is allowed to close.
         /// </summary>
         public bool HasHostCloseSessionWork()
         {
             bool hasWork =
-                _newCardSessionStarted ||
+                _newAccountSessionStarted ||
                 _hasChanges ||
                 EntryLineHasAnyInput() ||
                 _editingRow != null;
 
 #if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] HasHostCloseSessionWork={hasWork} newCardSession={_newCardSessionStarted} hasChanges={_hasChanges} entryLine={EntryLineHasAnyInput()} editingRow={(_editingRow != null)}");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] HasHostCloseSessionWork={hasWork} newAccountSession={_newAccountSessionStarted} hasChanges={_hasChanges} entryLine={EntryLineHasAnyInput()} editingRow={(_editingRow != null)}");
 #endif
 
             return hasWork;
@@ -261,41 +249,41 @@ namespace MWPV.View.UserControls.CategoryItems
         /// Validates whether a save can proceed right now and, on success, returns the payload
         /// the host coordinator should persist using the existing save pipeline.
         /// </summary>
-        public bool TryBuildHostCloseSavePayload(out IReadOnlyList<BankCardRow> rows)
+        public bool TryBuildHostCloseSavePayload(out IReadOnlyList<AccountRow> rows)
         {
-            rows = Array.Empty<BankCardRow>();
+            rows = Array.Empty<AccountRow>();
 
-            ClearBankCardError();
+            ClearAccountError();
 
             if (_entryDisabled)
             {
-                ShowBankCardError("Bank card entry is disabled for this session.");
+                ShowAccountError("Account entry is disabled for this session.");
                 SetErrors(true);
                 UpdateTabButtons();
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry disabled.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: entry disabled.");
 #endif
                 return false;
             }
 
             if (EntryLineHasAnyInput())
             {
-                ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry line still has input.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: entry line still has input.");
 #endif
                 return false;
             }
 
             if (HasPendingBlankAddAttempt())
             {
-                ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: blank add session is still pending.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: blank add session is still pending.");
 #endif
                 return false;
             }
@@ -305,19 +293,19 @@ namespace MWPV.View.UserControls.CategoryItems
                 SetErrors(true);
                 UpdateTabButtons();
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: tab validation failed.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: tab validation failed.");
 #endif
                 return false;
             }
 
-            ClearBankCardError();
+            ClearAccountError();
             SetErrors(false);
             UpdateTabButtons();
 
-            rows = _bankCardRows.Select(CloneRow).ToList();
+            rows = _accountRows.Select(CloneRow).ToList();
 
 #if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Save payload ready rows={rows.Count}");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] Save payload ready rows={rows.Count}");
 #endif
             return true;
         }
@@ -331,20 +319,20 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             try
             {
-                ClearNewCardSessionTracking("TryPrepareHostCloseDiscard");
-                ClearBankCardError();
+                ClearNewAccountSessionTracking("TryPrepareHostCloseDiscard");
+                ClearAccountError();
                 SetErrors(false);
                 UpdateTabButtons();
 
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation completed.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Discard preparation completed.");
 #endif
                 return true;
             }
             catch (Exception ex)
             {
 #if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation failed: {ex}");
+                Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] Discard preparation failed: {ex}");
 #endif
                 return false;
             }
@@ -358,12 +346,12 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             HookUiEventsOnce();
 
-            if (CardNumberBox != null)
-                CardNumberBox.MaxLength = MaxCardNumberChars;
+            if (AccountNumberBox != null)
+                AccountNumberBox.MaxLength = MaxAccountNumberChars;
 
             // REVIEW-ONLY:
-            // Old BankCard combo backend call isolated in the tmp Accounts panel copy.
-            // LoadBankCardTypes();
+            // Use the existing numeric ComboTypeId active-row loader for Accounts.
+            LoadAccountTypes();
 
             CaptureBaselineFromCurrent();
             SetDirty(false);
@@ -378,42 +366,42 @@ namespace MWPV.View.UserControls.CategoryItems
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
-            ClearSelectedBankCardDetailSedsBestEffort();
+            ClearSelectedAccountDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
 
             if (_hostRequestedCloseWipe)
-                WipeAndClearBankCardRows();
+                WipeAndClearAccountRows();
         }
 
         // ============================================================
         // Dirty tracking
         // ============================================================
 
-        private void BankCardRows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        private void AccountRows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.OldItems != null)
-                foreach (BankCardRow r in e.OldItems)
+                foreach (AccountRow r in e.OldItems)
                     DetachRowHandlers(r);
 
             if (e.NewItems != null)
-                foreach (BankCardRow r in e.NewItems)
+                foreach (AccountRow r in e.NewItems)
                     AttachRowHandlers(r);
 
             MarkDirty();
         }
 
-        private void AttachRowHandlers(BankCardRow row)
+        private void AttachRowHandlers(AccountRow row)
         {
             row.PropertyChanged -= Row_PropertyChanged;
             row.PropertyChanged += Row_PropertyChanged;
         }
 
-        private void DetachRowHandlers(BankCardRow row)
+        private void DetachRowHandlers(AccountRow row)
         {
             row.PropertyChanged -= Row_PropertyChanged;
         }
 
-        private void DetachRowHandlers(IEnumerable<BankCardRow> rows)
+        private void DetachRowHandlers(IEnumerable<AccountRow> rows)
         {
             foreach (var r in rows)
                 DetachRowHandlers(r);
@@ -462,7 +450,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void CaptureBaselineFromCurrent()
         {
             _baselineRows.Clear();
-            foreach (var r in _bankCardRows)
+            foreach (var r in _accountRows)
                 _baselineRows.Add(CloneRow(r));
         }
 
@@ -471,20 +459,20 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
-                ClearNewCardSessionTracking("RestoreBaseline");
+                ClearNewAccountSessionTracking("RestoreBaseline");
                 HideRevealsAndStopTimer(clearRevealOverlays: true);
                 WipeSensitiveEntryFields();
-                ClearBankCardError();
-                ResetBankCardFieldBackgrounds();
+                ClearAccountError();
+                ResetAccountFieldBackgrounds();
 
-                DetachRowHandlers(_bankCardRows);
-                WipeAndClearBankCardRows();
+                DetachRowHandlers(_accountRows);
+                WipeAndClearAccountRows();
 
                 foreach (var baseRow in _baselineRows)
                 {
                     var clone = CloneRow(baseRow);
                     AttachRowHandlers(clone);
-                    _bankCardRows.Add(clone);
+                    _accountRows.Add(clone);
                 }
 
                 SetEditingMode(null);
@@ -499,24 +487,16 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
-        private static BankCardRow CloneRow(BankCardRow r)
+        private static AccountRow CloneRow(AccountRow r)
         {
-            return new BankCardRow
+            return new AccountRow
             {
                 Id = r.Id,
-                CardTypeId = r.CardTypeId,
-                CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
-
-                CardNumberRaw = r.CardNumberRaw ?? string.Empty,
-                Expiration = r.Expiration ?? string.Empty,
-                CvvRaw = r.CvvRaw ?? string.Empty,
-                PinRaw = r.PinRaw ?? string.Empty,
-
+                AccountTypeId = r.AccountTypeId,
+                AccountTypeDisplay = r.AccountTypeDisplay ?? string.Empty,
+                AccountNumberRaw = r.AccountNumberRaw ?? string.Empty,
                 IsActive = r.IsActive,
-
-                CardNumberMasked = r.CardNumberMasked ?? string.Empty,
-                CvvMasked = r.CvvMasked ?? string.Empty,
-                PinMasked = r.PinMasked ?? string.Empty
+                AccountNumberMasked = r.AccountNumberMasked ?? string.Empty
             };
         }
 
@@ -527,7 +507,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void OnRevealTimeout()
         {
 #if DEBUG
-            Debug.WriteLine("[BANK-CARDS-PANEL] Reveal timer elapsed – hiding reveals");
+            Debug.WriteLine("[ACCOUNTS-PANEL] Reveal timer elapsed; hiding reveals");
 #endif
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             UpdateTabButtons();
@@ -535,16 +515,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void TouchRevealTimerIfNeeded()
         {
-            bool anyRevealed = _isCardNumberRevealed || _isCvvRevealed || _isPinRevealed;
-            _revealAutoHide.Touch(anyRevealed);
+            _revealAutoHide.Touch(_isAccountNumberRevealed);
         }
 
         private void HideRevealsAndStopTimer(bool clearRevealOverlays)
         {
             _revealAutoHide.Stop();
-            HideCardNumber(clearOverlay: clearRevealOverlays);
-            HideCvv(clearOverlay: clearRevealOverlays);
-            HidePin(clearOverlay: clearRevealOverlays);
+            HideAccountNumber(clearOverlay: clearRevealOverlays);
         }
 
         private static void ClearRevealOverlayTextOnly(TextBox? tb)
@@ -557,12 +534,12 @@ namespace MWPV.View.UserControls.CategoryItems
         // Combos
         // ============================================================
 
-        private void LoadBankCardTypes()
+        private void LoadAccountTypes()
         {
             try
             {
-                const int comboTypeId = 2; // bank card types
-                _cardTypeItems.Clear();
+                const int comboTypeId = 1; // current DB: account_types
+                _accountTypeItems.Clear();
 
                 var dbTypes = ComboDetailService.GetByTypeId(comboTypeId);
 
@@ -571,7 +548,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     if (string.IsNullOrWhiteSpace(t.Code))
                         continue;
 
-                    _cardTypeItems.Add(new CardTypeItem
+                    _accountTypeItems.Add(new AccountTypeItem
                     {
                         ComboDetailId = t.ComboDet,
                         Code = t.Code,
@@ -579,30 +556,26 @@ namespace MWPV.View.UserControls.CategoryItems
                     });
                 }
 
-                if (CardTypeCombo != null)
+                if (AccountTypeCombo != null)
                 {
-                    CardTypeCombo.IsEnabled = true;
-                    if (_cardTypeItems.Count > 0 && CardTypeCombo.SelectedIndex < 0)
-                        CardTypeCombo.SelectedIndex = 0;
+                    AccountTypeCombo.IsEnabled = true;
+                    if (_accountTypeItems.Count > 0 && AccountTypeCombo.SelectedIndex < 0)
+                        AccountTypeCombo.SelectedIndex = 0;
                 }
 
                 _entryDisabled = false;
                 EnableEntryControls(true);
-
                 SetErrors(false);
                 UpdateTabButtons();
             }
             catch (Exception ex)
             {
 #if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][ERROR] LoadBankCardTypes failed: {ex}");
+                Debug.WriteLine($"[ACCOUNTS-PANEL][ERROR] LoadAccountTypes failed: {ex}");
 #endif
                 _entryDisabled = true;
-
-                ShowBankCardError("Unable to load card types. Bank card entry is disabled for this session.");
-
+                ShowAccountError("Unable to load account types. Account entry is disabled for this session.");
                 EnableEntryControls(false);
-
                 SetErrors(true);
                 UpdateTabButtons();
             }
@@ -610,180 +583,80 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void EnableEntryControls(bool enabled)
         {
-            if (CardTypeCombo != null) CardTypeCombo.IsEnabled = enabled;
-            if (CardNumberBox != null) CardNumberBox.IsEnabled = enabled;
-            if (BtnViewCardNumber != null) BtnViewCardNumber.IsEnabled = enabled;
-
-            if (ExpirationTextBox != null) ExpirationTextBox.IsEnabled = enabled;
-
-            if (CvvBox != null) CvvBox.IsEnabled = enabled;
-            if (BtnToggleCvvReveal != null) BtnToggleCvvReveal.IsEnabled = enabled;
-
-            if (PinBox != null) PinBox.IsEnabled = enabled;
-            if (BtnTogglePinReveal != null) BtnTogglePinReveal.IsEnabled = enabled;
-
-            if (ChkCardActive != null) ChkCardActive.IsEnabled = enabled;
-
-            if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = enabled;
-            if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = enabled;
+            if (AccountTypeCombo != null) AccountTypeCombo.IsEnabled = enabled;
+            if (AccountNumberBox != null) AccountNumberBox.IsEnabled = enabled;
+            if (BtnViewAccountNumber != null) BtnViewAccountNumber.IsEnabled = enabled;
+            if (ChkAccountActive != null) ChkAccountActive.IsEnabled = enabled;
+            if (BtnAccountAddOrUpdate != null) BtnAccountAddOrUpdate.IsEnabled = enabled;
+            if (BtnAccountClearRow != null) BtnAccountClearRow.IsEnabled = enabled;
         }
 
         private void ApplyProtectedViewControlState()
         {
             bool editable = !_entryDisabled && !_isSelectedProtectedViewActive;
 
-            if (CardTypeCombo != null) CardTypeCombo.IsEnabled = editable;
-            if (CardNumberBox != null) CardNumberBox.IsEnabled = editable;
-            if (ExpirationTextBox != null) ExpirationTextBox.IsEnabled = editable;
-            if (CvvBox != null) CvvBox.IsEnabled = editable;
-            if (PinBox != null) PinBox.IsEnabled = editable;
-            if (ChkCardActive != null) ChkCardActive.IsEnabled = editable;
+            if (AccountTypeCombo != null) AccountTypeCombo.IsEnabled = editable;
+            if (AccountNumberBox != null) AccountNumberBox.IsEnabled = editable;
+            if (ChkAccountActive != null) ChkAccountActive.IsEnabled = editable;
 
-            // Keep reveal/view available in protected view; disable only when entry is globally disabled.
             bool allowReveal = !_entryDisabled;
-            if (BtnViewCardNumber != null) BtnViewCardNumber.IsEnabled = allowReveal;
-            if (BtnToggleCvvReveal != null) BtnToggleCvvReveal.IsEnabled = allowReveal;
-            if (BtnTogglePinReveal != null) BtnTogglePinReveal.IsEnabled = allowReveal;
+            if (BtnViewAccountNumber != null) BtnViewAccountNumber.IsEnabled = allowReveal;
 
             bool allowCopy = !_entryDisabled && _isSelectedProtectedViewActive;
-            if (BtnCopyCardNumber != null)
+            if (BtnCopyAccountNumber != null)
             {
-                BtnCopyCardNumber.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
-                BtnCopyCardNumber.IsEnabled = allowCopy;
+                BtnCopyAccountNumber.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
+                BtnCopyAccountNumber.IsEnabled = allowCopy;
             }
 
-            if (BtnCopyCvv != null)
-            {
-                BtnCopyCvv.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
-                BtnCopyCvv.IsEnabled = allowCopy;
-            }
-
-            if (BtnCopyPin != null)
-            {
-                BtnCopyPin.Visibility = allowCopy ? Visibility.Visible : Visibility.Collapsed;
-                BtnCopyPin.IsEnabled = allowCopy;
-            }
-
-            bool hasSelectedExistingRow = BankCardGrid?.SelectedItem is BankCardRow selected && selected.Id > 0;
+            bool hasSelectedExistingRow = AccountGrid?.SelectedItem is AccountRow selected && selected.Id > 0;
             bool showEditSelected = !_entryDisabled && _editingRow == null && _isSelectedProtectedViewActive && hasSelectedExistingRow;
-            if (BtnBankCardEditSelected != null)
+            if (BtnAccountEditSelected != null)
             {
-                BtnBankCardEditSelected.Visibility = showEditSelected ? Visibility.Visible : Visibility.Collapsed;
-                BtnBankCardEditSelected.IsEnabled = showEditSelected;
+                BtnAccountEditSelected.Visibility = showEditSelected ? Visibility.Visible : Visibility.Collapsed;
+                BtnAccountEditSelected.IsEnabled = showEditSelected;
             }
 
-            if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = editable;
-            if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = editable;
+            if (BtnAccountAddOrUpdate != null) BtnAccountAddOrUpdate.IsEnabled = editable;
+            if (BtnAccountClearRow != null) BtnAccountClearRow.IsEnabled = editable;
         }
 
         // ============================================================
         // Reveal helpers (read-only overlays; no editing in overlay)
         // ============================================================
 
-        private void ShowCardNumber()
+        private void ShowAccountNumber()
         {
-            if (CardNumberBox == null || CardNumberPlainTextBox == null || BtnViewCardNumber == null)
+            if (AccountNumberBox == null || AccountNumberPlainTextBox == null || BtnViewAccountNumber == null)
                 return;
 
-            _isCardNumberRevealed = true;
+            _isAccountNumberRevealed = true;
 
-            string trimmed = TrimToMaxChars(CardNumberBox.Password);
-            if (!string.Equals(trimmed, CardNumberBox.Password, StringComparison.Ordinal))
-                CardNumberBox.Password = trimmed;
+            string trimmed = TrimToMaxChars(AccountNumberBox.Password);
+            if (!string.Equals(trimmed, AccountNumberBox.Password, StringComparison.Ordinal))
+                AccountNumberBox.Password = trimmed;
 
-            MaskedRevealOverlayHelper.ShowPlainOverlay(CardNumberBox, CardNumberPlainTextBox, trimmed);
-
-            BtnViewCardNumber.ToolTip = "Hide card number";
-
+            MaskedRevealOverlayHelper.ShowPlainOverlay(AccountNumberBox, AccountNumberPlainTextBox, trimmed);
+            BtnViewAccountNumber.ToolTip = "Hide account number";
             TouchRevealTimerIfNeeded();
         }
 
-        private void HideCardNumber(bool clearOverlay)
+        private void HideAccountNumber(bool clearOverlay)
         {
-            if (CardNumberBox == null || CardNumberPlainTextBox == null || BtnViewCardNumber == null)
+            if (AccountNumberBox == null || AccountNumberPlainTextBox == null || BtnViewAccountNumber == null)
                 return;
 
-            if (!_isCardNumberRevealed && CardNumberBox.Visibility == Visibility.Visible)
+            if (!_isAccountNumberRevealed && AccountNumberBox.Visibility == Visibility.Visible)
                 return;
 
-            _isCardNumberRevealed = false;
-
-            CardNumberBox.Visibility = Visibility.Visible;
+            _isAccountNumberRevealed = false;
+            AccountNumberBox.Visibility = Visibility.Visible;
 
             if (clearOverlay)
-                ClearRevealOverlayTextOnly(CardNumberPlainTextBox);
+                ClearRevealOverlayTextOnly(AccountNumberPlainTextBox);
 
-            MaskedRevealOverlayHelper.RestoreMaskedOverlay(CardNumberBox, CardNumberPlainTextBox);
-
-            BtnViewCardNumber.ToolTip = "Show card number";
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void ShowCvv()
-        {
-            if (CvvBox == null || CvvPlainTextBox == null || BtnToggleCvvReveal == null)
-                return;
-
-            _isCvvRevealed = true;
-
-            MaskedRevealOverlayHelper.ShowPlainOverlay(CvvBox, CvvPlainTextBox, CvvBox.Password);
-
-            BtnToggleCvvReveal.ToolTip = "Hide CVV";
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void HideCvv(bool clearOverlay)
-        {
-            if (CvvBox == null || CvvPlainTextBox == null || BtnToggleCvvReveal == null)
-                return;
-
-            if (!_isCvvRevealed && CvvBox.Visibility == Visibility.Visible)
-                return;
-
-            _isCvvRevealed = false;
-
-            CvvBox.Visibility = Visibility.Visible;
-
-            if (clearOverlay)
-                ClearRevealOverlayTextOnly(CvvPlainTextBox);
-
-            MaskedRevealOverlayHelper.RestoreMaskedOverlay(CvvBox, CvvPlainTextBox);
-
-            BtnToggleCvvReveal.ToolTip = "Show CVV";
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void ShowPin()
-        {
-            if (PinBox == null || PinPlainTextBox == null || BtnTogglePinReveal == null)
-                return;
-
-            _isPinRevealed = true;
-
-            MaskedRevealOverlayHelper.ShowPlainOverlay(PinBox, PinPlainTextBox, PinBox.Password);
-
-            BtnTogglePinReveal.ToolTip = "Hide card PIN";
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void HidePin(bool clearOverlay)
-        {
-            if (PinBox == null || PinPlainTextBox == null || BtnTogglePinReveal == null)
-                return;
-
-            if (!_isPinRevealed && PinBox.Visibility == Visibility.Visible)
-                return;
-
-            _isPinRevealed = false;
-
-            PinBox.Visibility = Visibility.Visible;
-
-            if (clearOverlay)
-                ClearRevealOverlayTextOnly(PinPlainTextBox);
-
-            MaskedRevealOverlayHelper.RestoreMaskedOverlay(PinBox, PinPlainTextBox);
-
-            BtnTogglePinReveal.ToolTip = "Show card PIN";
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(AccountNumberBox, AccountNumberPlainTextBox);
+            BtnViewAccountNumber.ToolTip = "Show account number";
             TouchRevealTimerIfNeeded();
         }
 
@@ -791,35 +664,17 @@ namespace MWPV.View.UserControls.CategoryItems
         // Entry change handlers (dirty + timer)
         // ============================================================
 
-        private void CardNumberBox_PasswordChanged(object sender, RoutedEventArgs e)
+        private void AccountNumberBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            if (CardNumberBox == null)
+            if (AccountNumberBox == null)
                 return;
 
-            string trimmed = TrimToMaxChars(CardNumberBox.Password);
-            if (!string.Equals(trimmed, CardNumberBox.Password, StringComparison.Ordinal))
-                CardNumberBox.Password = trimmed;
+            string trimmed = TrimToMaxChars(AccountNumberBox.Password);
+            if (!string.Equals(trimmed, AccountNumberBox.Password, StringComparison.Ordinal))
+                AccountNumberBox.Password = trimmed;
 
-            if (_isCardNumberRevealed && CardNumberPlainTextBox != null)
-                CardNumberPlainTextBox.Text = trimmed;
-
-            MarkDirty();
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void CvvBox_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (_isCvvRevealed && CvvPlainTextBox != null)
-                CvvPlainTextBox.Text = CvvBox?.Password ?? string.Empty;
-
-            MarkDirty();
-            TouchRevealTimerIfNeeded();
-        }
-
-        private void PinBox_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (_isPinRevealed && PinPlainTextBox != null)
-                PinPlainTextBox.Text = PinBox?.Password ?? string.Empty;
+            if (_isAccountNumberRevealed && AccountNumberPlainTextBox != null)
+                AccountNumberPlainTextBox.Text = trimmed;
 
             MarkDirty();
             TouchRevealTimerIfNeeded();
@@ -829,43 +684,22 @@ namespace MWPV.View.UserControls.CategoryItems
         // Reveal button handlers
         // ============================================================
 
-        private void BtnViewCardNumber_Click(object sender, RoutedEventArgs e)
+        private void BtnViewAccountNumber_Click(object sender, RoutedEventArgs e)
         {
-            ClearBankCardError();
-            ResetBankCardFieldBackgrounds();
+            ClearAccountError();
+            ResetAccountFieldBackgrounds();
 
-            if (_isCardNumberRevealed) HideCardNumber(clearOverlay: true);
-            else ShowCardNumber();
-        }
-
-        private void BtnToggleCvvReveal_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isCvvRevealed) HideCvv(clearOverlay: true);
-            else ShowCvv();
-        }
-
-        private void BtnTogglePinReveal_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isPinRevealed) HidePin(clearOverlay: true);
-            else ShowPin();
+            if (_isAccountNumberRevealed) HideAccountNumber(clearOverlay: true);
+            else ShowAccountNumber();
         }
 
         // ============================================================
         // Protected-view copy buttons
         // ============================================================
-        private void BtnCopyCardNumber_Click(object sender, RoutedEventArgs e)
-        {
-            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedNumber, "No card number is available to copy.");
-        }
 
-        private void BtnCopyCvv_Click(object sender, RoutedEventArgs e)
+        private void BtnCopyAccountNumber_Click(object sender, RoutedEventArgs e)
         {
-            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedCvv, "No CVV is available to copy.");
-        }
-
-        private void BtnCopyPin_Click(object sender, RoutedEventArgs e)
-        {
-            CopySelectedProtectedFieldToClipboard(SedsKey_BankCardSelectedPin, "No card PIN is available to copy.");
+            CopySelectedProtectedFieldToClipboard(SedsKey_AccountSelectedNumber, "No account number is available to copy.");
         }
 
         private void CopySelectedProtectedFieldToClipboard(string sedsKey, string emptyMessage)
@@ -876,31 +710,31 @@ namespace MWPV.View.UserControls.CategoryItems
             string value = ReadSelectedProtectedFieldFromSeds(sedsKey);
             if (string.IsNullOrWhiteSpace(value))
             {
-                ShowBankCardError(emptyMessage);
+                ShowAccountError(emptyMessage);
                 return;
             }
 
             try
             {
                 Clipboard.SetText(value);
-                ClearBankCardError();
+                ClearAccountError();
             }
             catch (Exception ex)
             {
 #if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][COPY] Clipboard copy failed for key '{sedsKey}': {ex}");
+                Debug.WriteLine($"[ACCOUNTS-PANEL][COPY] Clipboard copy failed for key '{sedsKey}': {ex}");
 #endif
-                ShowBankCardError("Unable to copy value to clipboard.");
+                ShowAccountError("Unable to copy value to clipboard.");
             }
         }
         // ============================================================
         // Row-level: Add/Update + Clear
         // ============================================================
 
-        private void OnBankCardAddOrUpdateClick(object sender, RoutedEventArgs e)
+        private void OnAccountAddOrUpdateClick(object sender, RoutedEventArgs e)
         {
             _isSelectedProtectedViewActive = false;
-            ClearBankCardError();
+            ClearAccountError();
 
             bool isTrueAddMode = _editingRow == null;
             bool isUpdate = _editingRow != null;
@@ -909,91 +743,72 @@ namespace MWPV.View.UserControls.CategoryItems
             if (isTrueAddMode)
             {
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Add-new trigger fired handler=OnBankCardAddOrUpdateClick mode=Add");
+                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Add-new trigger fired handler=OnAccountAddOrUpdateClick mode=Add");
 #endif
-                BeginAddNewCardSession();
+                BeginAddNewAccountSession();
             }
 
             if (_entryDisabled)
             {
-                ShowBankCardError("Bank card entry is disabled for this session.");
+                ShowAccountError("Account entry is disabled for this session.");
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
             }
 
-            if (!ValidateBankCardFields(showErrors: true, out var expMonth, out var expYear, out var expNormalized))
+            if (!ValidateAccountFields(showErrors: true))
             {
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
             }
 
-            var selection = CardTypeCombo?.SelectedItem as CardTypeItem;
+            var selection = AccountTypeCombo?.SelectedItem as AccountTypeItem;
             if (selection == null)
             {
-                ShowBankCardError("Please choose a card type.", CardTypeCombo);
+                ShowAccountError("Please choose an account type.", AccountTypeCombo);
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
             }
 
-            string cardNumber = GetCurrentCardNumber();
-            string cvv = GetCurrentCvv();
-            string pin = GetCurrentPin();
-            bool isActive = ChkCardActive?.IsChecked == true;
+            string accountNumber = GetCurrentAccountNumber();
+            bool isActive = ChkAccountActive?.IsChecked == true;
 
-            // one card per type (except when updating the same row)
-            bool duplicateType = _bankCardRows.Any(r =>
-                r.CardTypeId == selection.ComboDetailId &&
+            bool duplicateType = _accountRows.Any(r =>
+                r.AccountTypeId == selection.ComboDetailId &&
                 !ReferenceEquals(r, _editingRow));
 
             if (duplicateType)
             {
-                ShowBankCardError("Only one card of each type is allowed.", CardTypeCombo);
+                ShowAccountError("Only one account of each type is allowed.", AccountTypeCombo);
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
             }
 
-            string masked = MaskPanLast4(new string(cardNumber.Where(char.IsDigit).ToArray()));
+            string masked = MaskPanLast4(new string(accountNumber.Where(char.IsDigit).ToArray()));
 
             if (_editingRow == null)
             {
-                var row = new BankCardRow
+                var row = new AccountRow
                 {
                     Id = 0,
-                    CardTypeId = selection.ComboDetailId,
-                    CardTypeDisplay = selection.DisplayText,
-
-                    CardNumberRaw = cardNumber,
-                    Expiration = expNormalized,
-                    CvvRaw = cvv,
-                    PinRaw = pin,
-
-                    CardNumberMasked = masked,
-                    CvvMasked = string.IsNullOrWhiteSpace(cvv) ? string.Empty : "•••",
-                    PinMasked = string.IsNullOrWhiteSpace(pin) ? string.Empty : "•••",
-
+                    AccountTypeId = selection.ComboDetailId,
+                    AccountTypeDisplay = selection.DisplayText,
+                    AccountNumberRaw = accountNumber,
+                    AccountNumberMasked = masked,
                     IsActive = isActive
                 };
 
-                _bankCardRows.Add(row);
+                _accountRows.Add(row);
             }
             else
             {
-                _editingRow.CardTypeId = selection.ComboDetailId;
-                _editingRow.CardTypeDisplay = selection.DisplayText;
-
-                _editingRow.CardNumberRaw = cardNumber;
-                _editingRow.Expiration = expNormalized;
-                _editingRow.CvvRaw = cvv;
-                _editingRow.PinRaw = pin;
-
-                _editingRow.CardNumberMasked = masked;
-                _editingRow.CvvMasked = string.IsNullOrWhiteSpace(cvv) ? string.Empty : "•••";
-                _editingRow.PinMasked = string.IsNullOrWhiteSpace(pin) ? string.Empty : "•••";
-
+                _editingRow.AccountTypeId = selection.ComboDetailId;
+                _editingRow.AccountTypeDisplay = selection.DisplayText;
+                _editingRow.AccountNumberRaw = accountNumber;
+                _editingRow.AccountNumberMasked = masked;
                 _editingRow.IsActive = isActive;
             }
 
@@ -1007,23 +822,20 @@ namespace MWPV.View.UserControls.CategoryItems
             UpdateTabButtons();
 
             if (isExistingPersistedUpdate || isTrueAddMode)
-            {
-                // Reuse the same host persistence/reload pipeline used by tab Save.
                 RaiseSaveAndExitRequestOnly();
-            }
         }
 
-        private void OnBankCardClearRowClick(object sender, RoutedEventArgs e)
+        private void OnAccountClearRowClick(object sender, RoutedEventArgs e)
         {
-            ClearNewCardSessionTracking("OnBankCardClearRowClick");
+            ClearNewAccountSessionTracking("OnAccountClearRowClick");
             _isSelectedProtectedViewActive = false;
-            ClearBankCardError();
+            ClearAccountError();
             ClearEntryFields();
             SetErrors(false);
             UpdateTabButtons();
         }
 
-        private void OnBankCardFieldLostFocus(object sender, RoutedEventArgs e)
+        private void OnAccountFieldLostFocus(object sender, RoutedEventArgs e)
         {
             if (_entryDisabled)
             {
@@ -1034,25 +846,25 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (!EntryLineHasAnyInput())
             {
-                ClearBankCardError();
+                ClearAccountError();
                 SetErrors(false);
                 UpdateTabButtons();
                 return;
             }
 
-            bool ok = ValidateBankCardFields(showErrors: true, out _, out _, out _);
+            bool ok = ValidateAccountFields(showErrors: true);
             SetErrors(!ok);
             UpdateTabButtons();
         }
 
-        private void BankCardGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void AccountGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDirty)
                 return;
 
-            if (BankCardGrid?.SelectedItem is not BankCardRow selected || selected.Id <= 0)
+            if (AccountGrid?.SelectedItem is not AccountRow selected || selected.Id <= 0)
             {
-                ClearSelectedBankCardDetailSedsBestEffort();
+                ClearSelectedAccountDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
                 return;
@@ -1061,106 +873,32 @@ namespace MWPV.View.UserControls.CategoryItems
             int? activeItemId = TryGetActiveCategoryItemIdFromSeds();
             if (!activeItemId.HasValue || activeItemId.Value <= 0)
             {
-                ClearSelectedBankCardDetailSedsBestEffort();
+                ClearSelectedAccountDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
 #if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
+                Debug.WriteLine("[ACCOUNTS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
 #endif
                 return;
             }
 
-            // REVIEW-ONLY:
-            // Old targeted BankCard reread isolated in the tmp Accounts panel copy.
-            // This removes the direct dependency on:
-            // - CategoryItemService.LoadBankCardDetailByItemIdAndCardId(...)
-            // - BC.Selected.* protected-detail persistence
-            // - PopulateProtectedViewFromSelectedDetail(CategoryItemService.BankCardRow)
             _isSelectedProtectedViewActive = false;
             UpdateTabButtons();
 #if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][REVIEW] Targeted BankCard detail reread isolated itemId={activeItemId.Value} rowId={selected.Id}.");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][REVIEW] Targeted legacy detail reread isolated itemId={activeItemId.Value} rowId={selected.Id}.");
 #endif
         }
-
-        /*
-        private void PopulateProtectedViewFromSelectedDetail(CategoryItemService.BankCardRow detail)
-        {
-            _suppressDirty = true;
-            try
-            {
-                _isSelectedProtectedViewActive = true;
-                SetEditingMode(null);
-
-                var cardType = _cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == detail.CardTypeId);
-                if (CardTypeCombo != null)
-                {
-                    if (cardType != null) CardTypeCombo.SelectedItem = cardType;
-                    else CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
-                }
-
-                if (CardNumberBox != null)
-                    CardNumberBox.Password = TrimToMaxChars(detail.CardNumberRaw ?? string.Empty);
-                HideCardNumber(clearOverlay: true);
-
-                if (ExpirationTextBox != null)
-                {
-                    string exp = detail.ExpirationDisplay ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(exp) && detail.ExpMonth >= 1 && detail.ExpYear > 0)
-                        exp = $"{detail.ExpMonth:00}/{detail.ExpYear:0000}";
-                    ExpirationTextBox.Text = exp;
-                }
-
-                if (CvvBox != null)
-                    CvvBox.Password = detail.CvvRaw ?? string.Empty;
-                HideCvv(clearOverlay: true);
-
-                if (PinBox != null)
-                    PinBox.Password = detail.PinRaw ?? string.Empty;
-                HidePin(clearOverlay: true);
-
-                if (ChkCardActive != null)
-                    ChkCardActive.IsChecked = detail.IsActive;
-
-                ClearBankCardError();
-                ResetBankCardFieldBackgrounds();
-                SetErrors(false);
-            }
-            finally
-            {
-                _suppressDirty = false;
-            }
-
-            UpdateTabButtons();
-        }
-        */
 
         private static int? TryGetActiveCategoryItemIdFromSeds()
         {
             return CategoryItemSedsContextHelper.TryGetCurrentCategoryItemId();
         }
 
-        /*
-        private static void StoreSelectedBankCardDetailSedsBestEffort(CategoryItemService.BankCardRow detail)
+        private static void ClearSelectedAccountDetailSedsBestEffort()
         {
-            ClearSelectedBankCardDetailSedsBestEffort();
-
-            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedCardId, detail.Id.ToString(CultureInfo.InvariantCulture)); } catch { }
-            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedNumber, detail.CardNumberRaw ?? string.Empty); } catch { }
-            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedCvv, detail.CvvRaw ?? string.Empty); } catch { }
-            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedPin, detail.PinRaw ?? string.Empty); } catch { }
-            try { SecureEncryptedDataStore.SetString(SedsKey_BankCardSelectedBillingZip, detail.BillingZipRaw ?? string.Empty); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_AccountSelectedNumber); } catch { }
+            try { SecureEncryptedDataStore.Clear(SedsKey_AccountSelectedRowId); } catch { }
         }
-        */
-        private static void ClearSelectedBankCardDetailSedsBestEffort()
-        {
-            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedBillingZip); } catch { }
-            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedPin); } catch { }
-            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedCvv); } catch { }
-            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedNumber); } catch { }
-            try { SecureEncryptedDataStore.Clear(SedsKey_BankCardSelectedCardId); } catch { }
-        }
-
 
         // ============================================================
         // Protected selected-row SEDS read helper
@@ -1187,46 +925,37 @@ namespace MWPV.View.UserControls.CategoryItems
             }
         }
 
-        private static bool TryReadSelectedProtectedDetailForEdit(long expectedCardId, out string cardNumber, out string cvv, out string pin)
+        private static bool TryReadSelectedProtectedAccountNumberForEdit(long expectedRowId, out string accountNumber)
         {
-            cardNumber = string.Empty;
-            cvv = string.Empty;
-            pin = string.Empty;
+            accountNumber = string.Empty;
 
-            string selectedCardIdRaw = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedCardId);
-            if (!long.TryParse(selectedCardIdRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long selectedCardId))
+            string selectedRowIdRaw = ReadSelectedProtectedFieldFromSeds(SedsKey_AccountSelectedRowId);
+            if (!long.TryParse(selectedRowIdRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long selectedRowId))
                 return false;
 
-            if (selectedCardId != expectedCardId)
+            if (selectedRowId != expectedRowId)
                 return false;
 
-            cardNumber = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedNumber);
-            if (string.IsNullOrWhiteSpace(cardNumber))
-                return false;
-
-            cvv = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedCvv);
-            pin = ReadSelectedProtectedFieldFromSeds(SedsKey_BankCardSelectedPin);
-            return true;
+            accountNumber = ReadSelectedProtectedFieldFromSeds(SedsKey_AccountSelectedNumber);
+            return !string.IsNullOrWhiteSpace(accountNumber);
         }
 
         // ============================================================
         // Grid strip buttons: Edit/Delete Selected
         // ============================================================
 
-        private void OnBankCardEditClick(object sender, RoutedEventArgs e)
+        private void OnAccountEditClick(object sender, RoutedEventArgs e)
         {
-            if (BankCardGrid?.SelectedItem is not BankCardRow row)
+            if (AccountGrid?.SelectedItem is not AccountRow row)
                 return;
 
-            string cardNumberForEdit = row.CardNumberRaw ?? string.Empty;
-            string cvvForEdit = row.CvvRaw ?? string.Empty;
-            string pinForEdit = row.PinRaw ?? string.Empty;
+            string accountNumberForEdit = row.AccountNumberRaw ?? string.Empty;
 
             if (row.Id > 0)
             {
-                if (!TryReadSelectedProtectedDetailForEdit(row.Id, out cardNumberForEdit, out cvvForEdit, out pinForEdit))
+                if (!TryReadSelectedProtectedAccountNumberForEdit(row.Id, out accountNumberForEdit))
                 {
-                    ShowBankCardError("Unable to open edit mode. Reselect the row and try again.");
+                    ShowAccountError("Unable to open edit mode. Reselect the row and try again.");
                     SetErrors(true);
                     UpdateTabButtons();
                     return;
@@ -1240,33 +969,22 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 SetEditingMode(row);
 
-                var cardType = _cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == row.CardTypeId);
-                if (CardTypeCombo != null)
+                var accountType = _accountTypeItems.FirstOrDefault(ct => ct.ComboDetailId == row.AccountTypeId);
+                if (AccountTypeCombo != null)
                 {
-                    if (cardType != null) CardTypeCombo.SelectedItem = cardType;
-                    else CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                    if (accountType != null) AccountTypeCombo.SelectedItem = accountType;
+                    else AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
                 }
 
-                if (CardNumberBox != null)
-                    CardNumberBox.Password = TrimToMaxChars(cardNumberForEdit);
-                HideCardNumber(clearOverlay: true);
+                if (AccountNumberBox != null)
+                    AccountNumberBox.Password = TrimToMaxChars(accountNumberForEdit);
+                HideAccountNumber(clearOverlay: true);
 
-                if (ExpirationTextBox != null)
-                    ExpirationTextBox.Text = row.Expiration ?? string.Empty;
+                if (ChkAccountActive != null)
+                    ChkAccountActive.IsChecked = row.IsActive;
 
-                if (CvvBox != null)
-                    CvvBox.Password = cvvForEdit;
-                HideCvv(clearOverlay: true);
-
-                if (PinBox != null)
-                    PinBox.Password = pinForEdit;
-                HidePin(clearOverlay: true);
-
-                if (ChkCardActive != null)
-                    ChkCardActive.IsChecked = row.IsActive;
-
-                ClearBankCardError();
-                ResetBankCardFieldBackgrounds();
+                ClearAccountError();
+                ResetAccountFieldBackgrounds();
                 SetErrors(false);
             }
             finally
@@ -1277,16 +995,16 @@ namespace MWPV.View.UserControls.CategoryItems
             UpdateTabButtons();
         }
 
-        private void OnBankCardDeleteClick(object sender, RoutedEventArgs e)
+        private void OnAccountDeleteClick(object sender, RoutedEventArgs e)
         {
-            if (BankCardGrid?.SelectedItem is not BankCardRow row)
+            if (AccountGrid?.SelectedItem is not AccountRow row)
                 return;
 
-            ClearBankCardError();
+            ClearAccountError();
 
             if (row.Id != 0)
             {
-                ShowBankCardError("Existing cards can't be deleted here. Edit the card or mark it inactive instead.");
+                ShowAccountError("Existing accounts can't be deleted here. Edit the account or mark it inactive instead.");
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
@@ -1296,7 +1014,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearEntryFields();
 
             row.Wipe();
-            _bankCardRows.Remove(row);
+            _accountRows.Remove(row);
 
             SetErrors(false);
             MarkDirty();
@@ -1309,11 +1027,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnTabSaveClick(object sender, RoutedEventArgs e)
         {
-            ClearBankCardError();
+            ClearAccountError();
 
             if (_entryDisabled)
             {
-                ShowBankCardError("Bank card entry is disabled for this session.");
+                ShowAccountError("Account entry is disabled for this session.");
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
@@ -1321,7 +1039,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (EntryLineHasAnyInput())
             {
-                ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
                 return;
@@ -1339,13 +1057,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnTabCancelClick(object sender, RoutedEventArgs e)
         {
-            ClearNewCardSessionTracking("OnTabCancelClick");
-            ClearBankCardError();
+            ClearNewAccountSessionTracking("OnTabCancelClick");
+            ClearAccountError();
 
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             WipeSensitiveEntryFields();
-            ResetBankCardFieldBackgrounds();
-            ClearSelectedBankCardDetailSedsBestEffort();
+            ResetAccountFieldBackgrounds();
+            ClearSelectedAccountDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
 
             CancelAndExitRequested?.Invoke(this, EventArgs.Empty);
@@ -1353,7 +1071,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void RaiseSaveAndExitRequestOnly()
         {
-            var payload = _bankCardRows.Select(CloneRow).ToList();
+            var payload = _accountRows.Select(CloneRow).ToList();
             SaveAndExitRequested?.Invoke(this, new AccountsCommitEventArgs(payload));
         }
 
@@ -1365,118 +1083,70 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (EntryLineHasAnyInput())
             {
-                if (showErrors) ShowBankCardError("Finish Add/Update or Clear Row before saving.");
+                if (showErrors) ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 return false;
             }
 
-            foreach (var row in _bankCardRows)
+            foreach (var row in _accountRows)
             {
-                // For service-loaded rows, raw values are empty. That is OK at panel-level.
-                // Panel validation focuses on format of user-entered rows (Id==0) and updates.
                 if (row.Id == 0)
                 {
-                    if (!TryValidateCardNumber(row.CardNumberRaw ?? string.Empty, out var cardErr))
+                    if (!TryValidateAccountNumber(row.AccountNumberRaw ?? string.Empty, out var accountError))
                     {
-                        if (showErrors) ShowBankCardError($"Invalid card number in grid: {cardErr}");
+                        if (showErrors) ShowAccountError($"Invalid account number in grid: {accountError}");
                         return false;
                     }
                 }
-
-                if (!TryValidateExpiration(row.Expiration ?? string.Empty, out _, out _, out var expErr))
-                {
-                    if (showErrors) ShowBankCardError($"Invalid expiration in grid: {expErr}");
-                    return false;
-                }
-
-                if (!TryValidateCvv(row.CvvRaw ?? string.Empty, out var cvvErr))
-                {
-                    if (showErrors) ShowBankCardError($"Invalid CVV in grid: {cvvErr}");
-                    return false;
-                }
-
-                if (!TryValidateCardPin(row.PinRaw ?? string.Empty, out var pinErr))
-                {
-                    if (showErrors) ShowBankCardError($"Invalid PIN in grid: {pinErr}");
-                    return false;
-                }
             }
 
             return true;
         }
 
-        private bool ValidateBankCardFields(bool showErrors, out int expMonth, out int expYear, out string expNormalized)
+        private bool ValidateAccountFields(bool showErrors)
         {
-            expMonth = 0;
-            expYear = 0;
-            expNormalized = string.Empty;
-
             if (showErrors)
-                ResetBankCardFieldBackgrounds();
+                ResetAccountFieldBackgrounds();
 
-            var selection = CardTypeCombo?.SelectedItem as CardTypeItem;
-            string cardNumber = GetCurrentCardNumber();
-            string expiration = (ExpirationTextBox?.Text ?? "").Trim();
-
-            string cvv = GetCurrentCvv();
-            string pin = GetCurrentPin();
+            var selection = AccountTypeCombo?.SelectedItem as AccountTypeItem;
+            string accountNumber = GetCurrentAccountNumber();
 
             if (selection == null)
             {
-                if (showErrors) ShowBankCardError("Please choose a card type.", CardTypeCombo);
+                if (showErrors) ShowAccountError("Please choose an account type.", AccountTypeCombo);
                 return false;
             }
 
-            if (!TryValidateCardNumber(cardNumber, out string cardError))
+            if (!TryValidateAccountNumber(accountNumber, out string accountError))
             {
-                if (showErrors) ShowBankCardError(cardError, CardNumberBox);
-                return false;
-            }
-
-            if (!TryValidateExpiration(expiration, out expMonth, out expYear, out string expError))
-            {
-                if (showErrors) ShowBankCardError(expError, ExpirationTextBox);
-                return false;
-            }
-
-            expNormalized = $"{expMonth:00}/{expYear:0000}";
-
-            if (!TryValidateCvv(cvv, out string cvvError))
-            {
-                if (showErrors) ShowBankCardError(cvvError, CvvBox);
-                return false;
-            }
-
-            if (!TryValidateCardPin(pin, out string pinError))
-            {
-                if (showErrors) ShowBankCardError(pinError, PinBox);
+                if (showErrors) ShowAccountError(accountError, AccountNumberBox);
                 return false;
             }
 
             if (showErrors)
-                ClearBankCardError();
+                ClearAccountError();
 
             return true;
         }
 
-        private static bool TryValidateCardNumber(string cardNumber, out string errorMessage)
+        private static bool TryValidateAccountNumber(string accountNumber, out string errorMessage)
         {
-            if (string.IsNullOrWhiteSpace(cardNumber))
+            if (string.IsNullOrWhiteSpace(accountNumber))
             {
-                errorMessage = "Card number is required.";
+                errorMessage = "Account number is required.";
                 return false;
             }
 
-            var digitsAndSpaces = new string(cardNumber.Where(c => char.IsDigit(c) || c == ' ').ToArray());
-            if (!string.Equals(cardNumber, digitsAndSpaces, StringComparison.Ordinal))
+            var digitsAndSpaces = new string(accountNumber.Where(c => char.IsDigit(c) || c == ' ').ToArray());
+            if (!string.Equals(accountNumber, digitsAndSpaces, StringComparison.Ordinal))
             {
-                errorMessage = "Card number must contain digits and spaces only.";
+                errorMessage = "Account number must contain digits and spaces only.";
                 return false;
             }
 
-            var onlyDigits = new string(cardNumber.Where(char.IsDigit).ToArray());
-            if (onlyDigits.Length < 12 || onlyDigits.Length > 19)
+            var onlyDigits = new string(accountNumber.Where(char.IsDigit).ToArray());
+            if (onlyDigits.Length < 4 || onlyDigits.Length > 19)
             {
-                errorMessage = "Card number must be between 12 and 19 digits.";
+                errorMessage = "Account number must be between 4 and 19 digits.";
                 return false;
             }
 
@@ -1484,129 +1154,28 @@ namespace MWPV.View.UserControls.CategoryItems
             return true;
         }
 
-        private static bool TryValidateCvv(string cvv, out string errorMessage)
+        private void ShowAccountError(string message, Control? field = null)
         {
-            if (string.IsNullOrWhiteSpace(cvv))
-            {
-                errorMessage = string.Empty; // optional
-                return true;
-            }
-
-            if (!cvv.All(char.IsDigit) || cvv.Length < 3 || cvv.Length > 4)
-            {
-                errorMessage = "CVV must be 3–4 digits.";
-                return false;
-            }
-
-            errorMessage = string.Empty;
-            return true;
-        }
-
-        private static bool TryValidateCardPin(string pin, out string errorMessage)
-        {
-            if (string.IsNullOrWhiteSpace(pin))
-            {
-                errorMessage = string.Empty; // optional
-                return true;
-            }
-
-            if (!pin.All(char.IsDigit) || pin.Length < 4 || pin.Length > 6)
-            {
-                errorMessage = "PIN must be 4–6 digits.";
-                return false;
-            }
-
-            errorMessage = string.Empty;
-            return true;
-        }
-
-        private static bool TryValidateExpiration(string input, out int month, out int year, out string errorMessage)
-        {
-            month = 0;
-            year = 0;
-            errorMessage = string.Empty;
-
-            input = (input ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(input))
-            {
-                errorMessage = "Expiration date is required.";
-                return false;
-            }
-
-            string[] parts = input.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 2)
-            {
-                errorMessage = "Expiration must be in MM/YY or MM/YYYY format.";
-                return false;
-            }
-
-            if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out month) || month < 1 || month > 12)
-            {
-                errorMessage = "Expiration month must be between 01 and 12.";
-                return false;
-            }
-
-            if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out year))
-            {
-                errorMessage = "Expiration year is invalid.";
-                return false;
-            }
-
-            if (year < 100)
-                year += 2000;
-
-            int currentYear = DateTime.Today.Year;
-            int maxYear = currentYear + 5;
-
-            if (year > maxYear)
-            {
-                errorMessage = $"Expiration year cannot be more than 5 years from now ({currentYear}–{maxYear}).";
-                return false;
-            }
-
-            int lastDay = DateTime.DaysInMonth(year, month);
-            var expDate = new DateTime(year, month, lastDay);
-
-            if (expDate < DateTime.Today)
-            {
-                errorMessage = "Expiration date must be this month or later.";
-                return false;
-            }
-
-            return true;
-        }
-
-        private void ShowBankCardError(string message, Control? field = null)
-        {
-            if (BankCardErrorTextBlock != null)
-                BankCardErrorTextBlock.Text = message ?? string.Empty;
+            if (AccountErrorTextBlock != null)
+                AccountErrorTextBlock.Text = message ?? string.Empty;
 
             if (field != null)
                 field.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x99));
         }
 
-        private void ClearBankCardError()
+        private void ClearAccountError()
         {
-            if (BankCardErrorTextBlock != null)
-                BankCardErrorTextBlock.Text = string.Empty;
+            if (AccountErrorTextBlock != null)
+                AccountErrorTextBlock.Text = string.Empty;
 
-            ResetBankCardFieldBackgrounds();
+            ResetAccountFieldBackgrounds();
         }
 
-        private void ResetBankCardFieldBackgrounds()
+        private void ResetAccountFieldBackgrounds()
         {
-            CardTypeCombo?.ClearValue(BackgroundProperty);
-
-            CardNumberBox?.ClearValue(BackgroundProperty);
-            CardNumberPlainTextBox?.ClearValue(BackgroundProperty);
-
-            ExpirationTextBox?.ClearValue(BackgroundProperty);
-
-            CvvBox?.ClearValue(BackgroundProperty);
-            CvvPlainTextBox?.ClearValue(BackgroundProperty);
-
-            PinBox?.ClearValue(BackgroundProperty);
-            PinPlainTextBox?.ClearValue(BackgroundProperty);
+            AccountTypeCombo?.ClearValue(BackgroundProperty);
+            AccountNumberBox?.ClearValue(BackgroundProperty);
+            AccountNumberPlainTextBox?.ClearValue(BackgroundProperty);
         }
 
         // ============================================================
@@ -1617,15 +1186,8 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             HideRevealsAndStopTimer(clearRevealOverlays: true);
 
-            if (CardNumberBox != null) UICleaner.Clear(CardNumberBox);
-            if (CvvBox != null) UICleaner.Clear(CvvBox);
-            if (PinBox != null) UICleaner.Clear(PinBox);
-
-            ClearRevealOverlayTextOnly(CardNumberPlainTextBox);
-            ClearRevealOverlayTextOnly(CvvPlainTextBox);
-            ClearRevealOverlayTextOnly(PinPlainTextBox);
-
-            if (ExpirationTextBox != null) UICleaner.Clear(ExpirationTextBox);
+            if (AccountNumberBox != null) UICleaner.Clear(AccountNumberBox);
+            ClearRevealOverlayTextOnly(AccountNumberPlainTextBox);
         }
 
         private void ClearEntryFields()
@@ -1633,28 +1195,20 @@ namespace MWPV.View.UserControls.CategoryItems
             _suppressDirty = true;
             try
             {
-                if (CardTypeCombo != null)
-                    CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
+                if (AccountTypeCombo != null)
+                    AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
 
-                if (CardNumberBox != null) UICleaner.Clear(CardNumberBox);
-                HideCardNumber(clearOverlay: true);
+                if (AccountNumberBox != null) UICleaner.Clear(AccountNumberBox);
+                HideAccountNumber(clearOverlay: true);
 
-                if (ExpirationTextBox != null) UICleaner.Clear(ExpirationTextBox);
-
-                if (CvvBox != null) UICleaner.Clear(CvvBox);
-                HideCvv(clearOverlay: true);
-
-                if (PinBox != null) UICleaner.Clear(PinBox);
-                HidePin(clearOverlay: true);
-
-                if (ChkCardActive != null)
-                    ChkCardActive.IsChecked = true;
+                if (ChkAccountActive != null)
+                    ChkAccountActive.IsChecked = true;
 
                 _isSelectedProtectedViewActive = false;
                 SetEditingMode(null);
 
-                ClearBankCardError();
-                ResetBankCardFieldBackgrounds();
+                ClearAccountError();
+                ResetAccountFieldBackgrounds();
             }
             finally
             {
@@ -1665,30 +1219,31 @@ namespace MWPV.View.UserControls.CategoryItems
         private void TeardownAfterSuccessfulUpdate()
         {
             ClearEntryFields();
-            ClearSelectedBankCardDetailSedsBestEffort();
+            ClearSelectedAccountDetailSedsBestEffort();
             _isSelectedProtectedViewActive = false;
-            if (BankCardGrid != null)
-                BankCardGrid.SelectedItem = null;
+            if (AccountGrid != null)
+                AccountGrid.SelectedItem = null;
             SetEditingMode(null);
         }
-        private void WipeAndClearBankCardRows()
+
+        private void WipeAndClearAccountRows()
         {
-            foreach (var row in _bankCardRows.ToList())
+            foreach (var row in _accountRows.ToList())
                 row.Wipe();
 
-            _bankCardRows.Clear();
+            _accountRows.Clear();
         }
 
         // ============================================================
         // Helpers
         // ============================================================
 
-        private void SetEditingMode(BankCardRow? row)
+        private void SetEditingMode(AccountRow? row)
         {
             _editingRow = row;
 
-            if (BtnBankCardAddOrUpdate != null)
-                BtnBankCardAddOrUpdate.Content = (_editingRow == null) ? "Add" : "Update";
+            if (BtnAccountAddOrUpdate != null)
+                BtnAccountAddOrUpdate.Content = (_editingRow == null) ? "Add" : "Update";
         }
 
         private bool EntryLineHasAnyInput()
@@ -1696,78 +1251,56 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_isSelectedProtectedViewActive)
                 return false;
 
-            if (CardNumberBox != null && !string.IsNullOrWhiteSpace(CardNumberBox.Password))
-                return true;
-
-            if (ExpirationTextBox != null && !string.IsNullOrWhiteSpace(ExpirationTextBox.Text))
-                return true;
-
-            if (CvvBox != null && !string.IsNullOrWhiteSpace(CvvBox.Password))
-                return true;
-
-            if (PinBox != null && !string.IsNullOrWhiteSpace(PinBox.Password))
-                return true;
-
-            return false;
+            return AccountNumberBox != null && !string.IsNullOrWhiteSpace(AccountNumberBox.Password);
         }
 
-        private string GetCurrentCardNumber()
+        private string GetCurrentAccountNumber()
         {
-            if (CardNumberBox == null)
+            if (AccountNumberBox == null)
                 return string.Empty;
 
-            return TrimToMaxChars(CardNumberBox.Password).Trim();
+            return TrimToMaxChars(AccountNumberBox.Password).Trim();
         }
 
-        private string GetCurrentCvv()
-        {
-            return CvvBox?.Password ?? string.Empty;
-        }
-
-        private string GetCurrentPin()
-        {
-            return PinBox?.Password ?? string.Empty;
-        }
-
-        public void BeginAddNewCardSession()
+        public void BeginAddNewAccountSession()
         {
             if (_entryDisabled || _isSelectedProtectedViewActive || _editingRow != null)
                 return;
 
-            if (_newCardSessionStarted)
+            if (_newAccountSessionStarted)
                 return;
 
-            _newCardSessionStarted = true;
+            _newAccountSessionStarted = true;
 
 #if DEBUG
-            Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] New-card session started source=AddNewCommand");
+            Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] New-account session started source=AddNewCommand");
 #endif
         }
 
         private bool HasPendingBlankAddAttempt()
         {
-            return _newCardSessionStarted &&
+            return _newAccountSessionStarted &&
                    !_hasChanges &&
                    !EntryLineHasAnyInput() &&
                    _editingRow == null;
         }
 
-        private void ClearNewCardSessionTracking(string source)
+        private void ClearNewAccountSessionTracking(string source)
         {
-            if (!_newCardSessionStarted)
+            if (!_newAccountSessionStarted)
                 return;
 
-            _newCardSessionStarted = false;
+            _newAccountSessionStarted = false;
 
 #if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] New-card session cleared source={source}");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] New-account session cleared source={source}");
 #endif
         }
 
         private static string TrimToMaxChars(string? value)
         {
             var s = value ?? string.Empty;
-            return s.Length <= MaxCardNumberChars ? s : s.Substring(0, MaxCardNumberChars);
+            return s.Length <= MaxAccountNumberChars ? s : s.Substring(0, MaxAccountNumberChars);
         }
 
         private static string MaskPanLast4(string digits)
@@ -1777,10 +1310,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
             var d = digits.Trim();
             if (d.Length <= 4)
-                return $"•••• {d}";
+                return $"**** {d}";
 
             string last4 = d.Substring(d.Length - 4, 4);
-            return $"•••• {last4}";
+            return $"**** {last4}";
         }
 
         // ============================================================
@@ -1792,22 +1325,10 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_uiEventsHooked)
                 return;
 
-            if (CardNumberBox != null)
+            if (AccountNumberBox != null)
             {
-                CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
-                CardNumberBox.PasswordChanged += CardNumberBox_PasswordChanged;
-            }
-
-            if (CvvBox != null)
-            {
-                CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
-                CvvBox.PasswordChanged += CvvBox_PasswordChanged;
-            }
-
-            if (PinBox != null)
-            {
-                PinBox.PasswordChanged -= PinBox_PasswordChanged;
-                PinBox.PasswordChanged += PinBox_PasswordChanged;
+                AccountNumberBox.PasswordChanged -= AccountNumberBox_PasswordChanged;
+                AccountNumberBox.PasswordChanged += AccountNumberBox_PasswordChanged;
             }
 
             _uiEventsHooked = true;
@@ -1818,14 +1339,8 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!_uiEventsHooked)
                 return;
 
-            if (CardNumberBox != null)
-                CardNumberBox.PasswordChanged -= CardNumberBox_PasswordChanged;
-
-            if (CvvBox != null)
-                CvvBox.PasswordChanged -= CvvBox_PasswordChanged;
-
-            if (PinBox != null)
-                PinBox.PasswordChanged -= PinBox_PasswordChanged;
+            if (AccountNumberBox != null)
+                AccountNumberBox.PasswordChanged -= AccountNumberBox_PasswordChanged;
 
             _uiEventsHooked = false;
         }
@@ -1836,11 +1351,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public sealed class AccountsCommitEventArgs : EventArgs
         {
-            public AccountsCommitEventArgs(IReadOnlyList<BankCardRow> rows) => Rows = rows;
-            public IReadOnlyList<BankCardRow> Rows { get; }
+            public AccountsCommitEventArgs(IReadOnlyList<AccountRow> rows) => Rows = rows;
+            public IReadOnlyList<AccountRow> Rows { get; }
         }
 
-        public sealed class CardTypeItem
+        public sealed class AccountTypeItem
         {
             public int ComboDetailId { get; set; }
             public string Code { get; set; } = string.Empty;
@@ -1849,57 +1364,36 @@ namespace MWPV.View.UserControls.CategoryItems
             public string DisplayText => string.IsNullOrWhiteSpace(Description) ? Code : Description;
         }
 
-        public sealed class BankCardRow : INotifyPropertyChanged
+        public sealed class AccountRow : INotifyPropertyChanged
         {
             public long Id { get; set; }
 
-            private int _cardTypeId;
-            public int CardTypeId
+            private int _accountTypeId;
+            public int AccountTypeId
             {
-                get => _cardTypeId;
-                set { if (_cardTypeId != value) { _cardTypeId = value; OnPropertyChanged(nameof(CardTypeId)); } }
+                get => _accountTypeId;
+                set { if (_accountTypeId != value) { _accountTypeId = value; OnPropertyChanged(nameof(AccountTypeId)); } }
             }
 
-            private string _cardTypeDisplay = string.Empty;
-            public string CardTypeDisplay
+            private string _accountTypeDisplay = string.Empty;
+            public string AccountTypeDisplay
             {
-                get => _cardTypeDisplay;
-                set { if (_cardTypeDisplay != value) { _cardTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(CardTypeDisplay)); } }
+                get => _accountTypeDisplay;
+                set { if (_accountTypeDisplay != value) { _accountTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(AccountTypeDisplay)); } }
             }
 
-            private string _cardNumberRaw = string.Empty;
-            public string CardNumberRaw
+            private string _accountNumberRaw = string.Empty;
+            public string AccountNumberRaw
             {
-                get => _cardNumberRaw;
+                get => _accountNumberRaw;
                 set
                 {
-                    if (_cardNumberRaw != value)
+                    if (_accountNumberRaw != value)
                     {
-                        _cardNumberRaw = value ?? string.Empty;
-                        OnPropertyChanged(nameof(CardNumberRaw));
+                        _accountNumberRaw = value ?? string.Empty;
+                        OnPropertyChanged(nameof(AccountNumberRaw));
                     }
                 }
-            }
-
-            private string _expiration = string.Empty;
-            public string Expiration
-            {
-                get => _expiration;
-                set { if (_expiration != value) { _expiration = value ?? string.Empty; OnPropertyChanged(nameof(Expiration)); } }
-            }
-
-            private string _cvvRaw = string.Empty;
-            public string CvvRaw
-            {
-                get => _cvvRaw;
-                set { if (_cvvRaw != value) { _cvvRaw = value ?? string.Empty; OnPropertyChanged(nameof(CvvRaw)); } }
-            }
-
-            private string _pinRaw = string.Empty;
-            public string PinRaw
-            {
-                get => _pinRaw;
-                set { if (_pinRaw != value) { _pinRaw = value ?? string.Empty; OnPropertyChanged(nameof(PinRaw)); } }
             }
 
             private bool _isActive = true;
@@ -1909,40 +1403,19 @@ namespace MWPV.View.UserControls.CategoryItems
                 set { if (_isActive != value) { _isActive = value; OnPropertyChanged(nameof(IsActive)); } }
             }
 
-            private string _cardNumberMasked = string.Empty;
-            public string CardNumberMasked
+            private string _accountNumberMasked = string.Empty;
+            public string AccountNumberMasked
             {
-                get => _cardNumberMasked;
-                set { if (_cardNumberMasked != value) { _cardNumberMasked = value ?? string.Empty; OnPropertyChanged(nameof(CardNumberMasked)); } }
-            }
-
-            private string _cvvMasked = string.Empty;
-            public string CvvMasked
-            {
-                get => _cvvMasked;
-                set { if (_cvvMasked != value) { _cvvMasked = value ?? string.Empty; OnPropertyChanged(nameof(CvvMasked)); } }
-            }
-
-            private string _pinMasked = string.Empty;
-            public string PinMasked
-            {
-                get => _pinMasked;
-                set { if (_pinMasked != value) { _pinMasked = value ?? string.Empty; OnPropertyChanged(nameof(PinMasked)); } }
+                get => _accountNumberMasked;
+                set { if (_accountNumberMasked != value) { _accountNumberMasked = value ?? string.Empty; OnPropertyChanged(nameof(AccountNumberMasked)); } }
             }
 
             public void Wipe()
             {
-                CardTypeDisplay = string.Empty;
-                CardTypeId = 0;
-                CardNumberRaw = string.Empty;
-                Expiration = string.Empty;
-                CvvRaw = string.Empty;
-                PinRaw = string.Empty;
-
-                CardNumberMasked = string.Empty;
-                CvvMasked = string.Empty;
-                PinMasked = string.Empty;
-
+                AccountTypeDisplay = string.Empty;
+                AccountTypeId = 0;
+                AccountNumberRaw = string.Empty;
+                AccountNumberMasked = string.Empty;
                 IsActive = false;
             }
 
