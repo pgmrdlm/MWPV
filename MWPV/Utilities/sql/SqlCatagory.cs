@@ -49,6 +49,12 @@ namespace Utilities.Sql
             "s_Combo_DetailByTypeId.sql",
             "s_CategoryItem_select_by_category.sql",
 
+            // Category Item Accounts
+            "s_CategoryItemAccounts_select_by_itemid.sql",
+            "s_CategoryItemAccounts_select_primary_by_itemid.sql",
+            "s_CategoryItemAccounts_insert.sql",
+            "s_CategoryItemAccounts_update.sql",
+
             // Category Item Password history
             "s_CategoryItem_exists_by_name.sql",
             "s_CategoryItemPasswordHistory_insert.sql",
