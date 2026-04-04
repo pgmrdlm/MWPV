@@ -889,8 +889,23 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            _isSelectedProtectedViewActive = false;
-            UpdateTabButtons();
+            string? accountNumberForEdit = tmp_CategoryItemAccountsService.LoadAccountNumberPlainByItemIdAndAccountId(
+                activeItemId.Value,
+                selected.Id);
+
+            if (string.IsNullOrWhiteSpace(accountNumberForEdit))
+            {
+                ClearSelectedAccountDetailSedsBestEffort();
+                _isSelectedProtectedViewActive = false;
+                UpdateTabButtons();
+#if DEBUG
+                Debug.WriteLine($"[ACCOUNTS-PANEL][SELECT] Detail not found for itemId={activeItemId.Value} rowId={selected.Id}.");
+#endif
+                return;
+            }
+
+            StoreSelectedAccountDetailSedsBestEffort(selected.Id, accountNumberForEdit);
+            TryPopulateEditorForEdit(selected);
 #if DEBUG
             Debug.WriteLine($"[ACCOUNTS-PANEL][REVIEW] Targeted legacy detail reread isolated itemId={activeItemId.Value} rowId={selected.Id}.");
 #endif
@@ -905,6 +920,14 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             try { SecureEncryptedDataStore.Clear(SedsKey_AccountSelectedNumber); } catch { }
             try { SecureEncryptedDataStore.Clear(SedsKey_AccountSelectedRowId); } catch { }
+        }
+
+        private static void StoreSelectedAccountDetailSedsBestEffort(long rowId, string accountNumber)
+        {
+            ClearSelectedAccountDetailSedsBestEffort();
+
+            try { SecureEncryptedDataStore.SetString(SedsKey_AccountSelectedRowId, rowId.ToString(CultureInfo.InvariantCulture)); } catch { }
+            try { SecureEncryptedDataStore.SetString(SedsKey_AccountSelectedNumber, accountNumber ?? string.Empty); } catch { }
         }
 
         // ============================================================
@@ -951,11 +974,8 @@ namespace MWPV.View.UserControls.CategoryItems
         // Grid strip buttons: Edit/Delete Selected
         // ============================================================
 
-        private void OnAccountEditClick(object sender, RoutedEventArgs e)
+        private bool TryPopulateEditorForEdit(AccountRow row)
         {
-            if (AccountGrid?.SelectedItem is not AccountRow row)
-                return;
-
             string accountNumberForEdit = row.AccountNumberRaw ?? string.Empty;
 
             if (row.Id > 0)
@@ -965,7 +985,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     ShowAccountError("Unable to open edit mode. Reselect the row and try again.");
                     SetErrors(true);
                     UpdateTabButtons();
-                    return;
+                    return false;
                 }
             }
 
@@ -1000,6 +1020,14 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             UpdateTabButtons();
+            return true;
+        }
+
+        private void OnAccountEditClick(object sender, RoutedEventArgs e)
+        {
+            if (AccountGrid?.SelectedItem is not AccountRow row)
+                return;
+            TryPopulateEditorForEdit(row);
         }
 
         private void OnAccountDeleteClick(object sender, RoutedEventArgs e)

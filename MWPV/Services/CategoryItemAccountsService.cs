@@ -98,6 +98,36 @@ namespace MWPV.Services
                 errorContext: "Error loading CategoryItemAccounts by ItemId");
         }
 
+        public static string? LoadAccountNumberPlainByItemIdAndAccountId(long itemId, long accountId)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+            if (accountId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(accountId), "accountId must be > 0.");
+
+            try
+            {
+                var row = LoadCategoryItemAccountsByItemId(itemId)
+                    .FirstOrDefault(r => r.Id == accountId);
+
+                if (row == null || row.Number == null || row.Number.Length == 0)
+                    return null;
+
+                if (!TryDecryptUtf8(Purpose_CIA_Number, row.Number, out string? accountNumberPlain) ||
+                    string.IsNullOrWhiteSpace(accountNumberPlain))
+                {
+                    return null;
+                }
+
+                return accountNumberPlain;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading CategoryItemAccount detail for edit");
+                return null;
+            }
+        }
+
         public static CategoryItemAccountLean? LoadPrimaryCategoryItemAccountByItemId(long itemId)
         {
             if (itemId <= 0)
