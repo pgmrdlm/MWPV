@@ -69,6 +69,9 @@ namespace MWPV.View.UserControls
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
 
+        public IReadOnlyList<CategoryItemAccountsPanel.AccountRow> AccountsDraftRows { get; private set; }
+            = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
+
         private const int TabIndexBasic = 0;
         private const int TabIndexBankCards = 1;
 
@@ -935,6 +938,7 @@ namespace MWPV.View.UserControls
         {
             HookPanelsOnce();
             BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+            AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
 
@@ -1006,6 +1010,7 @@ namespace MWPV.View.UserControls
             {
                 BasicPanel?.WipeAllForHostClose();
                 BankCardsPanel?.WipeAllForHostClose();
+                AccountsPanel?.WipeAllForHostClose();
             }
             catch { }
 
@@ -1043,6 +1048,7 @@ namespace MWPV.View.UserControls
         {
             try { ClearSedsContext(); } catch { }
             BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
+            AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
 
@@ -1071,6 +1077,14 @@ namespace MWPV.View.UserControls
             {
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS] BankCardsPanel.WipeAllForHostClose failed: {ex}");
+#endif
+            }
+
+            try { AccountsPanel?.WipeAllForHostClose(); }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS] AccountsPanel.WipeAllForHostClose failed: {ex}");
 #endif
             }
         }
@@ -1646,6 +1660,15 @@ namespace MWPV.View.UserControls
                 BankCardsPanel.CancelAndExitRequested += BankCardsPanel_CancelAndExitRequested;
             }
 
+            if (AccountsPanel != null)
+            {
+                AccountsPanel.SaveAndExitRequested -= AccountsPanel_SaveAndExitRequested;
+                AccountsPanel.CancelAndExitRequested -= AccountsPanel_CancelAndExitRequested;
+
+                AccountsPanel.SaveAndExitRequested += AccountsPanel_SaveAndExitRequested;
+                AccountsPanel.CancelAndExitRequested += AccountsPanel_CancelAndExitRequested;
+            }
+
             _panelsHooked = true;
         }
 
@@ -1665,6 +1688,12 @@ namespace MWPV.View.UserControls
             {
                 BankCardsPanel.SaveAndExitRequested -= BankCardsPanel_SaveAndExitRequested;
                 BankCardsPanel.CancelAndExitRequested -= BankCardsPanel_CancelAndExitRequested;
+            }
+
+            if (AccountsPanel != null)
+            {
+                AccountsPanel.SaveAndExitRequested -= AccountsPanel_SaveAndExitRequested;
+                AccountsPanel.CancelAndExitRequested -= AccountsPanel_CancelAndExitRequested;
             }
 
             _panelsHooked = false;
@@ -1784,6 +1813,27 @@ namespace MWPV.View.UserControls
         {
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] BankCardsPanel CancelAndExitRequested");
+#endif
+            HandleCancelAndExitRequest();
+        }
+
+        /* ======================= Accounts integration ======================= */
+
+        private void AccountsPanel_SaveAndExitRequested(object? sender, CategoryItemAccountsPanel.AccountsCommitEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] AccountsPanel SaveAndExitRequested");
+#endif
+            // Host-wiring placeholder only: stage rows so later Accounts persistence
+            // can attach to the same coordinator without adding I/O in this step.
+            AccountsDraftRows = (e.Rows ?? Array.Empty<CategoryItemAccountsPanel.AccountRow>()).ToList();
+            SetStatus("");
+        }
+
+        private void AccountsPanel_CancelAndExitRequested(object? sender, EventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] AccountsPanel CancelAndExitRequested");
 #endif
             HandleCancelAndExitRequest();
         }
