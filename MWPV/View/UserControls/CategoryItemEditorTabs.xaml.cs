@@ -77,6 +77,7 @@ namespace MWPV.View.UserControls
         private const int TabIndexBasic = 0;
         private const int TabIndexBankCards = 1;
         private const int TabIndexAccounts = 2;
+        private const string DuplicateAccountNumberMessage = "Duplicate account number is not allowed for this item.";
 
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
@@ -1924,7 +1925,35 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][SAVE] FAILED itemId={itemId}: {ex}");
 #endif
-                SetStatus("Accounts save failed. See debug output.");
+                bool isDuplicateAccountNumber =
+                    ex is InvalidOperationException &&
+                    string.Equals(ex.Message, DuplicateAccountNumberMessage, StringComparison.Ordinal);
+
+                try
+                {
+                    var reloadedRows = tmp_CategoryItemAccountsService.LoadAccountListRowsByItemId(itemId);
+                    if (AccountsPanel != null)
+                        AccountsPanel.LoadFromHostRows(reloadedRows);
+
+                    AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
+                }
+                catch (Exception reloadEx)
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][SAVE] RELOAD-AFTER-FAIL FAILED itemId={itemId}: {reloadEx}");
+#endif
+                }
+
+                if (isDuplicateAccountNumber)
+                {
+                    AccountsPanel?.ShowPersistenceError(DuplicateAccountNumberMessage);
+                    SetStatus("");
+                }
+                else
+                {
+                    SetStatus("Accounts save failed. See debug output.");
+                }
+
                 return false;
             }
         }

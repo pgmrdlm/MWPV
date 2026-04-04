@@ -14,7 +14,7 @@ namespace Utilities.Sql
     /// </summary>
     public static class SqlCagegory
     {
-        // 📦 Master catalog — update here and nowhere else.
+        // Master catalog - update here and nowhere else.
         // Includes SQL scripts + the DB password entry (secret).
         private static readonly string[] RequiredArtifacts =
         {
@@ -51,6 +51,7 @@ namespace Utilities.Sql
 
             // Category Item Accounts
             "s_CategoryItemAccounts_select_by_itemid.sql",
+            "s_CategoryItemAccounts_select_all_by_itemid.sql",
             "s_CategoryItemAccounts_select_primary_by_itemid.sql",
             "s_CategoryItemAccounts_insert.sql",
             "s_CategoryItemAccounts_update.sql",
@@ -110,7 +111,7 @@ namespace Utilities.Sql
 
             foreach (var key in RequiredArtifacts)
             {
-                // Secret: database password — verify presence only (do not load).
+                // Secret: database password - verify presence only (do not load).
                 if (string.Equals(key, DatabaseHelper.DbPasswordKey, StringComparison.OrdinalIgnoreCase))
                 {
                     if (SecureEncryptedDataStore.HasKey(key))

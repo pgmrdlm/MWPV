@@ -19,6 +19,8 @@ namespace MWPV.Services
     public static class tmp_CategoryItemAccountsService
     {
         private const string Purpose_CIA_Number = "CIA.Number";
+        private const string Sql_AccountsByItemId_ActiveOnly = "s_CategoryItemAccounts_select_by_itemid.sql";
+        private const string Sql_AccountsByItemId_AllRows = "s_CategoryItemAccounts_select_all_by_itemid.sql";
 
         public sealed class AccountListRow
         {
@@ -90,49 +92,10 @@ namespace MWPV.Services
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
 
-            var rows = new List<CategoryItemAccountLean>();
-
-            try
-            {
-                var sql = LoadSqlRequired("s_CategoryItemAccounts_select_by_itemid.sql");
-
-                using var conn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = sql;
-
-                AddInt64(cmd, "@ItemId", itemId);
-
-                using var r = cmd.ExecuteReader();
-
-                int oId = r.GetOrdinal("Id");
-                int oItemId = r.GetOrdinal("ItemId");
-                int oLabel = r.GetOrdinal("Label");
-                int oNumber = r.GetOrdinal("Number");
-                int oAccountTypeId = r.GetOrdinal("AccountTypeId");
-                int oAccountTypeFreeform = r.GetOrdinal("AccountTypeFreeform");
-                int oIsActive = r.GetOrdinal("IsActive");
-                int oCreated = r.GetOrdinal("CreatedAtUtcSeconds");
-                int oUpdated = r.GetOrdinal("UpdatedAtUtcSeconds");
-
-                while (r.Read())
-                    rows.Add(MapLeanAccountRow(
-                        r,
-                        oId,
-                        oItemId,
-                        oLabel,
-                        oNumber,
-                        oAccountTypeId,
-                        oAccountTypeFreeform,
-                        oIsActive,
-                        oCreated,
-                        oUpdated));
-            }
-            catch (Exception ex)
-            {
-                ErrorHandler.Abend(ex, "Error loading CategoryItemAccounts by ItemId");
-            }
-
-            return rows;
+            return LoadCategoryItemAccountsByItemIdCore(
+                itemId: itemId,
+                sqlAssetName: Sql_AccountsByItemId_ActiveOnly,
+                errorContext: "Error loading CategoryItemAccounts by ItemId");
         }
 
         public static CategoryItemAccountLean? LoadPrimaryCategoryItemAccountByItemId(long itemId)
@@ -195,6 +158,17 @@ namespace MWPV.Services
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
             if (numberCipher is null || numberCipher.Length == 0)
                 throw new InvalidOperationException("Account number is required for CategoryItemAccounts insert.");
+
+            if (!TryDecryptUtf8(Purpose_CIA_Number, numberCipher, out string? candidatePlain) ||
+                string.IsNullOrWhiteSpace(candidatePlain))
+            {
+                throw new InvalidOperationException("Unable to validate account number uniqueness for this item.");
+            }
+
+            EnsureNoDuplicateAccountNumberForItem(
+                itemId: itemId,
+                candidateAccountNumberPlain: candidatePlain,
+                excludeId: null);
 
             try
             {
@@ -270,6 +244,17 @@ namespace MWPV.Services
             if (numberCipher is null || numberCipher.Length == 0)
                 throw new InvalidOperationException("Account number is required for CategoryItemAccounts update.");
 
+            if (!TryDecryptUtf8(Purpose_CIA_Number, numberCipher, out string? candidatePlain) ||
+                string.IsNullOrWhiteSpace(candidatePlain))
+            {
+                throw new InvalidOperationException("Unable to validate account number uniqueness for this item.");
+            }
+
+            EnsureNoDuplicateAccountNumberForItem(
+                itemId: itemId,
+                candidateAccountNumberPlain: candidatePlain,
+                excludeId: id);
+
             try
             {
                 var sql = LoadSqlRequired("s_CategoryItemAccounts_update.sql");
@@ -292,6 +277,106 @@ namespace MWPV.Services
             {
                 ErrorHandler.Abend(ex, "Error updating CategoryItemAccount");
                 return 0;
+            }
+        }
+
+        private static IReadOnlyList<CategoryItemAccountLean> LoadAllCategoryItemAccountsByItemIdForEnforcement(long itemId)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            return LoadCategoryItemAccountsByItemIdCore(
+                itemId: itemId,
+                sqlAssetName: Sql_AccountsByItemId_AllRows,
+                errorContext: "Error loading CategoryItemAccounts by ItemId for enforcement");
+        }
+
+        private static IReadOnlyList<CategoryItemAccountLean> LoadCategoryItemAccountsByItemIdCore(
+            long itemId,
+            string sqlAssetName,
+            string errorContext)
+        {
+            var rows = new List<CategoryItemAccountLean>();
+
+            try
+            {
+                var sql = LoadSqlRequired(sqlAssetName);
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                AddInt64(cmd, "@ItemId", itemId);
+
+                using var r = cmd.ExecuteReader();
+
+                int oId = r.GetOrdinal("Id");
+                int oItemId = r.GetOrdinal("ItemId");
+                int oLabel = r.GetOrdinal("Label");
+                int oNumber = r.GetOrdinal("Number");
+                int oAccountTypeId = r.GetOrdinal("AccountTypeId");
+                int oAccountTypeFreeform = r.GetOrdinal("AccountTypeFreeform");
+                int oIsActive = r.GetOrdinal("IsActive");
+                int oCreated = r.GetOrdinal("CreatedAtUtcSeconds");
+                int oUpdated = r.GetOrdinal("UpdatedAtUtcSeconds");
+
+                while (r.Read())
+                {
+                    rows.Add(MapLeanAccountRow(
+                        r,
+                        oId,
+                        oItemId,
+                        oLabel,
+                        oNumber,
+                        oAccountTypeId,
+                        oAccountTypeFreeform,
+                        oIsActive,
+                        oCreated,
+                        oUpdated));
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, errorContext);
+            }
+
+            return rows;
+        }
+
+        private static string NormalizeAccountNumberDigitsOnly(string? accountNumber)
+        {
+            if (string.IsNullOrWhiteSpace(accountNumber))
+                return string.Empty;
+
+            return new string(accountNumber.Where(char.IsDigit).ToArray());
+        }
+
+        private static void EnsureNoDuplicateAccountNumberForItem(
+            long itemId,
+            string candidateAccountNumberPlain,
+            long? excludeId)
+        {
+            string candidateNormalized = NormalizeAccountNumberDigitsOnly(candidateAccountNumberPlain);
+            if (string.IsNullOrWhiteSpace(candidateNormalized))
+                throw new InvalidOperationException("Unable to validate account number uniqueness for this item.");
+
+            foreach (var row in LoadAllCategoryItemAccountsByItemIdForEnforcement(itemId))
+            {
+                if (excludeId.HasValue && row.Id == excludeId.Value)
+                    continue;
+
+                if (!TryDecryptUtf8(Purpose_CIA_Number, row.Number, out string? existingPlain) ||
+                    string.IsNullOrWhiteSpace(existingPlain))
+                {
+                    throw new InvalidOperationException("Unable to validate account number uniqueness for this item.");
+                }
+
+                string existingNormalized = NormalizeAccountNumberDigitsOnly(existingPlain);
+                if (string.IsNullOrWhiteSpace(existingNormalized))
+                    throw new InvalidOperationException("Unable to validate account number uniqueness for this item.");
+
+                if (string.Equals(candidateNormalized, existingNormalized, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Duplicate account number is not allowed for this item.");
             }
         }
 
