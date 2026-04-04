@@ -110,9 +110,9 @@ namespace MWPV.View.UserControls.CategoryItems
         // ============================================================
 
         /// <summary>
-        /// Host loads rows into this panel from the current service row shape.
+        /// Host loads rows into this panel from the Accounts service row shape.
         /// </summary>
-        public void LoadFromHostRows(IEnumerable<CategoryItemService.BankCardRow>? rows)
+        public void LoadFromHostRows(IEnumerable<tmp_CategoryItemAccountsService.AccountListRow>? rows)
         {
             _suppressDirty = true;
             try
@@ -138,8 +138,8 @@ namespace MWPV.View.UserControls.CategoryItems
                         var ui = new AccountRow
                         {
                             Id = r.Id,
-                            AccountTypeId = r.CardTypeId,
-                            AccountTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                            AccountTypeId = r.AccountTypeId,
+                            AccountTypeDisplay = r.AccountTypeDisplay ?? string.Empty,
 
                             // Service never returns plaintext. Keep raw empty.
                             AccountNumberRaw = string.Empty,
@@ -147,7 +147,7 @@ namespace MWPV.View.UserControls.CategoryItems
                             IsActive = r.IsActive,
 
                             // For display
-                            AccountNumberMasked = r.CardNumberMasked ?? string.Empty
+                            AccountNumberMasked = r.AccountNumberMasked ?? string.Empty
                         };
 
                         AttachRowHandlers(ui);
@@ -775,13 +775,20 @@ namespace MWPV.View.UserControls.CategoryItems
             string accountNumber = GetCurrentAccountNumber();
             bool isActive = ChkAccountActive?.IsChecked == true;
 
-            bool duplicateType = _accountRows.Any(r =>
-                r.AccountTypeId == selection.ComboDetailId &&
-                !ReferenceEquals(r, _editingRow));
+            bool selectedIsPrimary =
+                string.Equals(selection.Code, "PRIMARY", StringComparison.OrdinalIgnoreCase);
 
-            if (duplicateType)
+            bool duplicateActivePrimary =
+                selectedIsPrimary &&
+                isActive &&
+                _accountRows.Any(r =>
+                    r.IsActive &&
+                    r.AccountTypeId == selection.ComboDetailId &&
+                    !ReferenceEquals(r, _editingRow));
+
+            if (duplicateActivePrimary)
             {
-                ShowAccountError("Only one account of each type is allowed.", AccountTypeCombo);
+                ShowAccountError("Only one active Primary account is allowed.", AccountTypeCombo);
                 SetErrors(true);
                 UpdateTabButtons();
                 return;

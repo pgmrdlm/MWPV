@@ -65,6 +65,8 @@ namespace MWPV.View.UserControls
         private bool _suppressLeaveBankCardsOnce;
         private bool _bankCardsLoaded;
         private int _bankCardsLoadedItemId;
+        private bool _accountsLoaded;
+        private int _accountsLoadedItemId;
 
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
@@ -74,6 +76,7 @@ namespace MWPV.View.UserControls
 
         private const int TabIndexBasic = 0;
         private const int TabIndexBankCards = 1;
+        private const int TabIndexAccounts = 2;
 
         private const string EntityKind_CategoryItem = "CategoryItem";
         private static readonly string SedsKey_EntityKind = SecureEncryptedDataStore.ContextKeys.CurrentEntityKind;
@@ -220,6 +223,43 @@ namespace MWPV.View.UserControls
                 _bankCardsLoaded = false;
                 _bankCardsLoadedItemId = 0;
                 SetStatus("Unable to load Bank Cards.");
+            }
+        }
+        private void EnsureAccountsLoadedForActiveItem(bool forceReload = false)
+        {
+            if (AccountsPanel == null)
+                return;
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                _accountsLoaded = false;
+                _accountsLoadedItemId = 0;
+                return;
+            }
+            int itemId = activeId.Value;
+            if (!forceReload && _accountsLoaded && _accountsLoadedItemId == itemId)
+                return;
+            try
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
+#endif
+                var rows = tmp_CategoryItemAccountsService.LoadAccountListRowsByItemId(itemId);
+                AccountsPanel.LoadFromHostRows(rows);
+                _accountsLoaded = true;
+                _accountsLoadedItemId = itemId;
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] OK itemId={itemId} rows={rows.Count}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] FAILED itemId={itemId}: {ex}");
+#endif
+                _accountsLoaded = false;
+                _accountsLoadedItemId = 0;
+                SetStatus("Unable to load Accounts.");
             }
         }
         /* ======================= SEDS helpers ======================= */
@@ -941,6 +981,8 @@ namespace MWPV.View.UserControls
             AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
+            _accountsLoaded = false;
+            _accountsLoadedItemId = 0;
 
             if (ItemTabs != null)
             {
@@ -1051,6 +1093,8 @@ namespace MWPV.View.UserControls
             AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
+            _accountsLoaded = false;
+            _accountsLoadedItemId = 0;
 
             // IMPORTANT: leaving editor means Basic is not open
             ClearIsBasicOpen_BestEffort();
@@ -1824,10 +1868,8 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine("[ITEM-TABS] AccountsPanel SaveAndExitRequested");
 #endif
-            // Host-wiring placeholder only: stage rows so later Accounts persistence
-            // can attach to the same coordinator without adding I/O in this step.
-            AccountsDraftRows = (e.Rows ?? Array.Empty<CategoryItemAccountsPanel.AccountRow>()).ToList();
-            SetStatus("");
+            TryPersistNewAccountsRowsAndReload(
+                e.Rows ?? Array.Empty<CategoryItemAccountsPanel.AccountRow>());
         }
 
         private void AccountsPanel_CancelAndExitRequested(object? sender, EventArgs e)
@@ -1836,6 +1878,55 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[ITEM-TABS] AccountsPanel CancelAndExitRequested");
 #endif
             HandleCancelAndExitRequest();
+        }
+
+        private bool TryPersistNewAccountsRowsAndReload(
+            IReadOnlyList<CategoryItemAccountsPanel.AccountRow> rows)
+        {
+            AccountsDraftRows = (rows ?? Array.Empty<CategoryItemAccountsPanel.AccountRow>()).ToList();
+            SetStatus("");
+
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                SetStatus("Accounts save failed: missing ItemId context.");
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][ACCOUNTS][SAVE] Missing ItemId context.");
+#endif
+                return false;
+            }
+
+            int itemId = activeId.Value;
+
+            try
+            {
+                foreach (var row in AccountsDraftRows.Where(r => r != null && r.Id <= 0))
+                {
+                    tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
+                        itemId: itemId,
+                        accountTypeId: row.AccountTypeId,
+                        accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
+                        isActive: row.IsActive);
+                }
+
+                if (AccountsPanel != null)
+                {
+                    var reloadedRows = tmp_CategoryItemAccountsService.LoadAccountListRowsByItemId(itemId);
+                    AccountsPanel.LoadFromHostRows(reloadedRows);
+                }
+
+                NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+                SetStatus("");
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][SAVE] FAILED itemId={itemId}: {ex}");
+#endif
+                SetStatus("Accounts save failed. See debug output.");
+                return false;
+            }
         }
 
         private void HandleCancelAndExitRequest()
@@ -1877,6 +1968,10 @@ namespace MWPV.View.UserControls
                     if (newIndex == TabIndexBankCards)
                     {
                         EnsureBankCardsLoadedForActiveItem(forceReload: false);
+                    }
+                    else if (newIndex == TabIndexAccounts)
+                    {
+                        EnsureAccountsLoadedForActiveItem(forceReload: false);
                     }
                     _lastTabIndex = newIndex;
                     return;
@@ -2020,6 +2115,10 @@ namespace MWPV.View.UserControls
             if (oldIndex != TabIndexBankCards && newIndex == TabIndexBankCards)
             {
                 EnsureBankCardsLoadedForActiveItem(forceReload: false);
+            }
+            else if (oldIndex != TabIndexAccounts && newIndex == TabIndexAccounts)
+            {
+                EnsureAccountsLoadedForActiveItem(forceReload: false);
             }
 
             _lastTabIndex = newIndex;

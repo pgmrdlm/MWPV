@@ -1,9 +1,12 @@
 // File: MWPV/Services/tmp_CategoryItemAccountsService.cs
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using Security.Utility.Crypto.Fields;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Text;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;       // SqlCagegory
 
@@ -15,12 +18,71 @@ namespace MWPV.Services
     /// </summary>
     public static class tmp_CategoryItemAccountsService
     {
+        private const string Purpose_CIA_Number = "CIA.Number";
+
+        public sealed class AccountListRow
+        {
+            public long Id { get; init; }
+            public long ItemId { get; init; }
+            public int AccountTypeId { get; init; }
+            public string AccountTypeDisplay { get; init; } = string.Empty;
+            public string AccountNumberMasked { get; init; } = string.Empty;
+            public bool IsActive { get; init; }
+            public long CreatedAtUtcSeconds { get; init; }
+            public long UpdatedAtUtcSeconds { get; init; }
+        }
+
         private static string LoadSqlRequired(string assetName)
         {
             var sql = SqlCagegory.GetSql(assetName);
             if (string.IsNullOrWhiteSpace(sql))
                 throw new InvalidOperationException($"SQL not loaded: {assetName}");
             return sql;
+        }
+
+        public static IReadOnlyList<AccountListRow> LoadAccountListRowsByItemId(long itemId)
+        {
+            var sourceRows = LoadCategoryItemAccountsByItemId(itemId);
+            var list = new List<AccountListRow>(sourceRows.Count);
+
+            var accountTypeDisplayById = new Dictionary<int, string>();
+            try
+            {
+                foreach (var t in ComboDetailService.GetByTypeId(1))
+                {
+                    if (!accountTypeDisplayById.ContainsKey(t.ComboDet))
+                    {
+                        accountTypeDisplayById[t.ComboDet] =
+                            string.IsNullOrWhiteSpace(t.Description) ? (t.Code ?? string.Empty) : t.Description;
+                    }
+                }
+            }
+            catch { }
+
+            foreach (var row in sourceRows)
+            {
+                _ = TryDecryptUtf8(Purpose_CIA_Number, row.Number, out string? numberPlain);
+
+                int accountTypeId = row.AccountTypeId ?? 0;
+                string accountTypeDisplay =
+                    accountTypeId > 0 && accountTypeDisplayById.TryGetValue(accountTypeId, out var display)
+                    ? display
+                    : string.Empty;
+
+                list.Add(new AccountListRow
+                {
+                    Id = row.Id,
+                    ItemId = row.ItemId,
+                    AccountTypeId = accountTypeId,
+                    AccountTypeDisplay = accountTypeDisplay,
+                    AccountNumberMasked = MaskPanLast4(numberPlain),
+                    IsActive = row.IsActive,
+                    CreatedAtUtcSeconds = row.CreatedAtUtcSeconds,
+                    UpdatedAtUtcSeconds = row.UpdatedAtUtcSeconds
+                });
+            }
+
+            return list;
         }
 
         public static IReadOnlyList<CategoryItemAccountLean> LoadCategoryItemAccountsByItemId(long itemId)
@@ -162,6 +224,36 @@ namespace MWPV.Services
             }
         }
 
+        public static long InsertCategoryItemAccountFromUi(
+            long itemId,
+            int accountTypeId,
+            string accountNumberRaw,
+            bool isActive)
+        {
+            if (accountTypeId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(accountTypeId), "accountTypeId must be > 0.");
+
+            byte[]? numberCipher = EncryptNullableUtf8(Purpose_CIA_Number, accountNumberRaw);
+            if (numberCipher is null || numberCipher.Length == 0)
+                throw new InvalidOperationException("Account number is required for CategoryItemAccounts insert.");
+
+            try
+            {
+                return InsertCategoryItemAccount(
+                    itemId: itemId,
+                    label: null,
+                    numberCipher: numberCipher,
+                    accountTypeId: accountTypeId,
+                    accountTypeFreeform: null,
+                    isActive: isActive);
+            }
+            finally
+            {
+                if (numberCipher != null)
+                    Array.Clear(numberCipher, 0, numberCipher.Length);
+            }
+        }
+
         public static int UpdateCategoryItemAccount(
             long id,
             long itemId,
@@ -270,6 +362,76 @@ namespace MWPV.Services
                 return parsed;
 
             return Convert.ToInt64(v, CultureInfo.InvariantCulture);
+        }
+
+        private static byte[]? EncryptNullableUtf8(string purpose, string? plain)
+        {
+            if (string.IsNullOrWhiteSpace(plain))
+                return null;
+
+            byte[] bytes = Encoding.UTF8.GetBytes(plain.Trim());
+
+            try
+            {
+                return FieldAesCrypto.EncryptBytes(
+                    masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
+                    purpose: purpose,
+                    plaintext: bytes);
+            }
+            finally
+            {
+                Array.Clear(bytes, 0, bytes.Length);
+            }
+        }
+
+        private static bool TryDecryptUtf8(string purpose, byte[]? cipherBlob, out string? plain)
+        {
+            plain = null;
+
+            if (cipherBlob is null || cipherBlob.Length == 0)
+                return true;
+
+            try
+            {
+                if (!FieldAesCrypto.TryDecryptBytes(
+                        masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
+                        purpose: purpose,
+                        blob: cipherBlob,
+                        out var plainBytes))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    plain = Encoding.UTF8.GetString(plainBytes);
+                    return true;
+                }
+                finally
+                {
+                    Array.Clear(plainBytes, 0, plainBytes.Length);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string MaskPanLast4(string? accountNumberPlain)
+        {
+            if (string.IsNullOrWhiteSpace(accountNumberPlain))
+                return string.Empty;
+
+            string digits = new string(accountNumberPlain.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0)
+                return string.Empty;
+
+            if (digits.Length <= 4)
+                return $"**** {digits}";
+
+            string last4 = digits.Substring(digits.Length - 4, 4);
+            return $"**** {last4}";
         }
 
         private static void AddText(SqliteCommand cmd, string name, string? value)
