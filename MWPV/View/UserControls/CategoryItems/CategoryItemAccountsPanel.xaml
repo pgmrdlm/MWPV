@@ -59,18 +59,6 @@
         <!-- Grid action buttons (match Save/Cancel sizing via DialogPrimary/DialogSecondary) -->
         <Style x:Key="GridActionEditButton" TargetType="Button" BasedOn="{StaticResource DialogPrimary}">
             <Setter Property="MinWidth" Value="160"/>
-            <Setter Property="Margin" Value="0,0,12,0"/>
-            <Style.Triggers>
-                <!-- Disabled until a row is selected -->
-                <DataTrigger Binding="{Binding SelectedItem, ElementName=AccountGrid}" Value="{x:Null}">
-                    <Setter Property="IsEnabled" Value="False"/>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="GridActionDeleteButton" TargetType="Button" BasedOn="{StaticResource DialogSecondary}">
-            <Setter Property="MinWidth" Value="160"/>
-            <Setter Property="Foreground" Value="Maroon"/>
             <Setter Property="Margin" Value="0,0,0,0"/>
             <Style.Triggers>
                 <!-- Disabled until a row is selected -->
@@ -296,10 +284,6 @@
                                 Content="Edit"
                                 Style="{StaticResource GridActionEditButton}"
                                 Click="OnAccountEditClick" />
-                        <Button x:Name="BtnAccountDeleteSelected"
-                                Content="Delete"
-                                Style="{StaticResource GridActionDeleteButton}"
-                                Click="OnAccountDeleteClick" />
                     </StackPanel>
                 </Grid>
             </Border>

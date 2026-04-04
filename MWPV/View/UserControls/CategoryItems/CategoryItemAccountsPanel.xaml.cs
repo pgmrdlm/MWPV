@@ -971,7 +971,7 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         // ============================================================
-        // Grid strip buttons: Edit/Delete Selected
+        // Grid strip button: Edit Selected
         // ============================================================
 
         private bool TryPopulateEditorForEdit(AccountRow row)
@@ -1028,32 +1028,6 @@ namespace MWPV.View.UserControls.CategoryItems
             if (AccountGrid?.SelectedItem is not AccountRow row)
                 return;
             TryPopulateEditorForEdit(row);
-        }
-
-        private void OnAccountDeleteClick(object sender, RoutedEventArgs e)
-        {
-            if (AccountGrid?.SelectedItem is not AccountRow row)
-                return;
-
-            ClearAccountError();
-
-            if (row.Id != 0)
-            {
-                ShowAccountError("Existing accounts can't be deleted here. Edit the account or mark it inactive instead.");
-                SetErrors(true);
-                UpdateTabButtons();
-                return;
-            }
-
-            if (ReferenceEquals(_editingRow, row))
-                ClearEntryFields();
-
-            row.Wipe();
-            _accountRows.Remove(row);
-
-            SetErrors(false);
-            MarkDirty();
-            UpdateTabButtons();
         }
 
         // ============================================================
