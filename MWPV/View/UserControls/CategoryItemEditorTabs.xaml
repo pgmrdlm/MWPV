@@ -112,17 +112,17 @@
                     <categoryItems:CategoryItemBasicPanel x:Name="BasicPanel"/>
                 </TabItem>
 
-                <!-- ========== BANK CARDS TAB ========== -->
-                <TabItem Header="Bank Cards">
-                    <Grid Margin="20" Background="Bisque">
-                        <categoryItems:CategoryItemBankCardsPanel x:Name="BankCardsPanel"/>
-                    </Grid>
-                </TabItem>
-
                 <!-- ========== ACCOUNTS TAB ========== -->
                 <TabItem Header="Accounts">
                     <Grid Margin="20" Background="Bisque">
                         <categoryItems:CategoryItemAccountsPanel x:Name="AccountsPanel"/>
+                    </Grid>
+                </TabItem>
+
+                <!-- ========== BANK CARDS TAB ========== -->
+                <TabItem Header="Bank Cards">
+                    <Grid Margin="20" Background="Bisque">
+                        <categoryItems:CategoryItemBankCardsPanel x:Name="BankCardsPanel"/>
                     </Grid>
                 </TabItem>
 

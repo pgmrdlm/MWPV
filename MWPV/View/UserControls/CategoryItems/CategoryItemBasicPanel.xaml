@@ -603,6 +603,72 @@
                     </Viewbox>
                 </Button>
             </Grid>
+
+            <Label Content="Primary Account Number"
+                   FontWeight="Bold"
+                   Margin="0,8,0,0"/>
+
+            <Grid Margin="0,0,0,0"
+                  Height="28"
+                  MinWidth="190"
+                  HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0">
+                    <PasswordBox x:Name="pwdPrimaryAccountNumber"
+                                 VerticalAlignment="Center"
+                                 Height="28"
+                                 MinWidth="190"
+                                 IsHitTestVisible="False"
+                                 IsTabStop="False"
+                                 Focusable="False"/>
+                    <TextBox x:Name="txtPrimaryAccountNumberPlain"
+                             VerticalAlignment="Center"
+                             Height="28"
+                             MinWidth="190"
+                             IsReadOnly="True"
+                             IsTabStop="False"
+                             IsHitTestVisible="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Visibility="Collapsed"
+                             Foreground="Black"/>
+                </Grid>
+
+                <Button x:Name="btnCopyPrimaryAccountNumber"
+                        Grid.Column="1"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        ToolTip="Copy primary account number to clipboard"
+                        Click="BtnCopyPrimaryAccountNumber_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               Text="&#xE8C8;"
+                               FontSize="16"
+                               Foreground="Black"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                </Button>
+
+                <Button x:Name="btnTogglePrimaryAccountNumberReveal"
+                        Grid.Column="2"
+                        Style="{StaticResource SmallSquarePrimaryButton}"
+                        ToolTip="Show/Hide primary account number"
+                        Click="BtnTogglePrimaryAccountNumberReveal_Click">
+                    <Viewbox Stretch="Uniform">
+                        <Grid Width="20" Height="20">
+                            <Path Stroke="Black" Fill="Transparent" StrokeThickness="1.6"
+                                  Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z"/>
+                            <Ellipse Width="6" Height="6" Stroke="Black" StrokeThickness="1.2" Fill="White"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Ellipse Width="3" Height="3" Fill="Black"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Viewbox>
+                </Button>
+            </Grid>
         </StackPanel>
 
         <StackPanel Grid.Row="11" Grid.Column="2">

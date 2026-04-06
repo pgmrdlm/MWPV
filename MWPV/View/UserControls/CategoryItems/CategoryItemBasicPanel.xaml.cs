@@ -40,6 +40,8 @@ namespace MWPV.View.UserControls.CategoryItems
         private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
 
         private int _activeEntityId;
+        private string? _primaryAccountNumberPlain;
+        internal string? PrimaryAccountNumberPlain => _primaryAccountNumberPlain;
 
         // Existing item = CurrentEntityId > 0
         private bool IsExistingItem => _activeEntityId > 0;
@@ -60,6 +62,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private bool _mainRevealed;
         private bool _verifyRevealed;
         private bool _phoneRevealed;
+        private bool _primaryAccountNumberRevealed;
         private bool _pinRevealed;
         private bool _emailRevealed;
 
@@ -233,6 +236,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateCopyButtonStates()
         {
+            bool hasPrimaryAccountNumber = !string.IsNullOrEmpty(pwdPrimaryAccountNumber.Password);
+            btnCopyPrimaryAccountNumber.IsEnabled = hasPrimaryAccountNumber;
+            btnTogglePrimaryAccountNumberReveal.IsEnabled = hasPrimaryAccountNumber;
+
             if (!IsViewOnly)
             {
                 btnCopyPassword.IsEnabled = false;
@@ -329,6 +336,9 @@ namespace MWPV.View.UserControls.CategoryItems
                     return;
                 }
 
+                _primaryAccountNumberPlain =
+                    tmp_CategoryItemAccountsService.LoadPrimaryAccountNumberPlainByItemId(itemId);
+
                 string? pwPlain = null;
                 if (row.BookMarkOnly == 0)
                 {
@@ -389,6 +399,15 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 UICleaner.Clear(txtPhone);
                 ClearPhoneError();
+            }
+
+            if (!string.IsNullOrEmpty(PrimaryAccountNumberPlain))
+            {
+                pwdPrimaryAccountNumber.Password = PrimaryAccountNumberPlain;
+            }
+            else
+            {
+                UICleaner.Clear(pwdPrimaryAccountNumber);
             }
 
             if (!string.IsNullOrEmpty(row.PinPlain))
@@ -491,6 +510,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _lastEmailChecked = string.Empty;
             _lastNameChecked = string.Empty;
+            _primaryAccountNumberPlain = null;
 
             ClearItemNameError();
             ClearEmailValidation();
@@ -520,6 +540,7 @@ namespace MWPV.View.UserControls.CategoryItems
             UICleaner.Clear(pwdPassword);
             UICleaner.Clear(pwdVerify);
             UICleaner.Clear(txtPhone);
+            UICleaner.Clear(pwdPrimaryAccountNumber);
             UICleaner.Clear(pwdPin);
             UICleaner.Clear(pwdEmail);
 
@@ -788,13 +809,14 @@ namespace MWPV.View.UserControls.CategoryItems
             HideMainPassword();
             HideVerifyPassword();
             HidePhone();
+            HidePrimaryAccountNumber();
             HidePin();
             HideEmail();
         }
 
         private void TouchRevealTimerIfNeeded()
         {
-            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _pinRevealed || _emailRevealed;
+            bool anyRevealed = _mainRevealed || _verifyRevealed || _phoneRevealed || _primaryAccountNumberRevealed || _pinRevealed || _emailRevealed;
             _revealAutoHide.Touch(anyRevealed);
         }
 
@@ -1629,6 +1651,25 @@ namespace MWPV.View.UserControls.CategoryItems
             TouchRevealTimerIfNeeded();
         }
 
+        private void BtnCopyPrimaryAccountNumber_Click(object? sender, RoutedEventArgs e)
+        {
+            var primaryAccountNumber = (pwdPrimaryAccountNumber.Password ?? string.Empty).Trim();
+            if (primaryAccountNumber.Length == 0) return;
+
+            _ = ClipboardHelper.TryCopySensitiveText(primaryAccountNumber, out _, ClipboardTtl, tag: "BASIC.PRIMARY_ACCOUNT");
+        }
+
+        private void BtnTogglePrimaryAccountNumberReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(pwdPrimaryAccountNumber.Password))
+                return;
+
+            if (_primaryAccountNumberRevealed) HidePrimaryAccountNumber();
+            else ShowPrimaryAccountNumber();
+
+            TouchRevealTimerIfNeeded();
+        }
+
         private void ShowPhone()
         {
             MaskedRevealOverlayHelper.ShowPlainOverlay(txtPhone, txtPhonePlain, txtPhone.Password);
@@ -1640,6 +1681,24 @@ namespace MWPV.View.UserControls.CategoryItems
             UICleaner.Clear(txtPhonePlain);
             MaskedRevealOverlayHelper.RestoreMaskedOverlay(txtPhone, txtPhonePlain);
             _phoneRevealed = false;
+        }
+
+        private void ShowPrimaryAccountNumber()
+        {
+            MaskedRevealOverlayHelper.ShowPlainOverlay(
+                pwdPrimaryAccountNumber,
+                txtPrimaryAccountNumberPlain,
+                pwdPrimaryAccountNumber.Password);
+            _primaryAccountNumberRevealed = true;
+        }
+
+        private void HidePrimaryAccountNumber()
+        {
+            UICleaner.Clear(txtPrimaryAccountNumberPlain);
+            MaskedRevealOverlayHelper.RestoreMaskedOverlay(
+                pwdPrimaryAccountNumber,
+                txtPrimaryAccountNumberPlain);
+            _primaryAccountNumberRevealed = false;
         }
 
         private bool ValidatePhoneNumber(bool forSubmit)
@@ -1697,6 +1756,7 @@ namespace MWPV.View.UserControls.CategoryItems
             UICleaner.Clear(txtPasswordPlain);
             UICleaner.Clear(txtVerifyPlain);
             UICleaner.Clear(txtPhonePlain);
+            UICleaner.Clear(txtPrimaryAccountNumberPlain);
             UICleaner.Clear(txtPinPlain);
             UICleaner.Clear(txtEmailPlain);
         }
@@ -1824,6 +1884,12 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPhone.Click -= BtnCopyPhone_Click;
             btnCopyPhone.Click += BtnCopyPhone_Click;
 
+            btnTogglePrimaryAccountNumberReveal.Click -= BtnTogglePrimaryAccountNumberReveal_Click;
+            btnTogglePrimaryAccountNumberReveal.Click += BtnTogglePrimaryAccountNumberReveal_Click;
+
+            btnCopyPrimaryAccountNumber.Click -= BtnCopyPrimaryAccountNumber_Click;
+            btnCopyPrimaryAccountNumber.Click += BtnCopyPrimaryAccountNumber_Click;
+
             _uiEventsHooked = true;
         }
 
@@ -1876,6 +1942,9 @@ namespace MWPV.View.UserControls.CategoryItems
             txtPhone.LostFocus -= txtPhone_LostFocus;
             btnTogglePhoneReveal.Click -= BtnTogglePhoneReveal_Click;
             btnCopyPhone.Click -= BtnCopyPhone_Click;
+
+            btnTogglePrimaryAccountNumberReveal.Click -= BtnTogglePrimaryAccountNumberReveal_Click;
+            btnCopyPrimaryAccountNumber.Click -= BtnCopyPrimaryAccountNumber_Click;
 
             _uiEventsHooked = false;
         }

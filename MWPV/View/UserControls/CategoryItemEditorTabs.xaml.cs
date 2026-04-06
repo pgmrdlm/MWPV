@@ -75,8 +75,8 @@ namespace MWPV.View.UserControls
             = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
 
         private const int TabIndexBasic = 0;
-        private const int TabIndexBankCards = 1;
-        private const int TabIndexAccounts = 2;
+        private const int TabIndexAccounts = 1;
+        private const int TabIndexBankCards = 2;
         private const string DuplicateAccountNumberMessage = "Duplicate account number is not allowed for this item.";
 
         private const string EntityKind_CategoryItem = "CategoryItem";

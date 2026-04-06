@@ -176,6 +176,32 @@ namespace MWPV.Services
             }
         }
 
+        public static string? LoadPrimaryAccountNumberPlainByItemId(long itemId)
+        {
+            if (itemId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+
+            try
+            {
+                var row = LoadPrimaryCategoryItemAccountByItemId(itemId);
+                if (row == null || row.Number == null || row.Number.Length == 0)
+                    return null;
+
+                if (!TryDecryptUtf8(Purpose_CIA_Number, row.Number, out string? accountNumberPlain) ||
+                    string.IsNullOrWhiteSpace(accountNumberPlain))
+                {
+                    return null;
+                }
+
+                return accountNumberPlain;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading primary CategoryItemAccount number by ItemId");
+                return null;
+            }
+        }
+
         public static long InsertCategoryItemAccount(
             long itemId,
             string? label,
