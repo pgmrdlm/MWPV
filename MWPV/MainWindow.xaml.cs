@@ -11,6 +11,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -44,6 +45,7 @@ namespace MWPV
             InitializeComponent();
 
             Title = "MWPV - My Windows Password Vault";
+            LoadVersionDisplay();
 
             PreviewKeyDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
             PreviewMouseDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
@@ -108,6 +110,27 @@ namespace MWPV
                 });
 
             _inactivity.Start();
+        }
+
+        private void LoadVersionDisplay()
+        {
+            string appVersion =
+                Assembly.GetEntryAssembly()?.GetName()?.Version?.ToString() ?? "dev";
+
+            string dbVersion = "unknown";
+
+            try
+            {
+                var currentDbVersion = DbVersionService.GetCurrentVersion();
+                if (!string.IsNullOrWhiteSpace(currentDbVersion?.Version))
+                    dbVersion = currentDbVersion.Version;
+            }
+            catch
+            {
+                dbVersion = "unknown";
+            }
+
+            VersionDisplayText.Text = $"App: {appVersion}  DB: {dbVersion}";
         }
 
         // ============================================================

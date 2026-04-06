@@ -61,11 +61,31 @@
                 <Grid Grid.Column="1"
                       MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown"
                       MouseRightButtonUp="TitleBar_OnMouseRightButtonUp">
-                    <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
-                               VerticalAlignment="Center"
-                               Foreground="White"
-                               FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis"/>
+                    <Grid Margin="0,0,10,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   VerticalAlignment="Center"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,0,12,0"
+                                   IsHitTestVisible="False"/>
+
+                        <TextBlock x:Name="VersionDisplayText"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"
+                                   Foreground="White"
+                                   FontSize="11"
+                                   Opacity="0.9"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsHitTestVisible="False"/>
+                    </Grid>
                 </Grid>
 
                 <!-- Caption buttons -->
