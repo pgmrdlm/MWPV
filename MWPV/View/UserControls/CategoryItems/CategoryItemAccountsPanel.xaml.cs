@@ -905,10 +905,44 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             StoreSelectedAccountDetailSedsBestEffort(selected.Id, accountNumberForEdit);
-            TryPopulateEditorForEdit(selected);
+            PopulateProtectedViewFromSelectedDetail(selected, accountNumberForEdit);
 #if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][REVIEW] Targeted legacy detail reread isolated itemId={activeItemId.Value} rowId={selected.Id}.");
+            Debug.WriteLine($"[ACCOUNTS-PANEL][SELECT] Protected view loaded itemId={activeItemId.Value} rowId={selected.Id}.");
 #endif
+        }
+
+        private void PopulateProtectedViewFromSelectedDetail(AccountRow row, string accountNumber)
+        {
+            _suppressDirty = true;
+            try
+            {
+                _isSelectedProtectedViewActive = true;
+                SetEditingMode(null);
+
+                var accountType = _accountTypeItems.FirstOrDefault(ct => ct.ComboDetailId == row.AccountTypeId);
+                if (AccountTypeCombo != null)
+                {
+                    if (accountType != null) AccountTypeCombo.SelectedItem = accountType;
+                    else AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
+                }
+
+                if (AccountNumberBox != null)
+                    AccountNumberBox.Password = TrimToMaxChars(accountNumber ?? string.Empty);
+                HideAccountNumber(clearOverlay: true);
+
+                if (ChkAccountActive != null)
+                    ChkAccountActive.IsChecked = row.IsActive;
+
+                ClearAccountError();
+                ResetAccountFieldBackgrounds();
+                SetErrors(false);
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
+
+            UpdateTabButtons();
         }
 
         private static int? TryGetActiveCategoryItemIdFromSeds()
