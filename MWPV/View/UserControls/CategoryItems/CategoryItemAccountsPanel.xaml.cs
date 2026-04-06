@@ -593,11 +593,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ApplyProtectedViewControlState()
         {
-            bool editable = !_entryDisabled && !_isSelectedProtectedViewActive;
+            bool editingExistingPersistedRow = _editingRow != null && _editingRow.Id > 0;
+            bool allowExistingRowActiveToggle = !_entryDisabled && editingExistingPersistedRow;
+            bool editable = !_entryDisabled && !_isSelectedProtectedViewActive && !editingExistingPersistedRow;
 
             if (AccountTypeCombo != null) AccountTypeCombo.IsEnabled = editable;
             if (AccountNumberBox != null) AccountNumberBox.IsEnabled = editable;
-            if (ChkAccountActive != null) ChkAccountActive.IsEnabled = editable;
+            if (ChkAccountActive != null) ChkAccountActive.IsEnabled = editable || allowExistingRowActiveToggle;
 
             bool allowReveal = !_entryDisabled;
             if (BtnViewAccountNumber != null) BtnViewAccountNumber.IsEnabled = allowReveal;
@@ -617,8 +619,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 BtnAccountEditSelected.IsEnabled = showEditSelected;
             }
 
-            if (BtnAccountAddOrUpdate != null) BtnAccountAddOrUpdate.IsEnabled = editable;
-            if (BtnAccountClearRow != null) BtnAccountClearRow.IsEnabled = editable;
+            if (BtnAccountAddOrUpdate != null)
+                BtnAccountAddOrUpdate.IsEnabled = editable || allowExistingRowActiveToggle;
+
+            if (BtnAccountClearRow != null)
+                BtnAccountClearRow.IsEnabled = editable;
         }
 
         // ============================================================
