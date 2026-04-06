@@ -1901,13 +1901,28 @@ namespace MWPV.View.UserControls
 
             try
             {
-                foreach (var row in AccountsDraftRows.Where(r => r != null && r.Id <= 0))
+                foreach (var row in AccountsDraftRows.Where(r => r != null))
                 {
-                    tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
-                        itemId: itemId,
-                        accountTypeId: row.AccountTypeId,
-                        accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
-                        isActive: row.IsActive);
+                    if (row.Id <= 0)
+                    {
+                        tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
+                            itemId: itemId,
+                            accountTypeId: row.AccountTypeId,
+                            accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
+                            isActive: row.IsActive);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.AccountNumberRaw))
+                    {
+                        int affected = tmp_CategoryItemAccountsService.UpdateCategoryItemAccountFromUi(
+                            id: row.Id,
+                            itemId: itemId,
+                            accountTypeId: row.AccountTypeId,
+                            accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
+                            isActive: row.IsActive);
+
+                        if (affected <= 0)
+                            throw new InvalidOperationException("CategoryItemAccount update failed.");
+                    }
                 }
 
                 if (AccountsPanel != null)

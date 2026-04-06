@@ -310,6 +310,37 @@ namespace MWPV.Services
             }
         }
 
+        public static int UpdateCategoryItemAccountFromUi(
+            long id,
+            long itemId,
+            int accountTypeId,
+            string accountNumberRaw,
+            bool isActive)
+        {
+            if (accountTypeId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(accountTypeId), "accountTypeId must be > 0.");
+
+            byte[]? numberCipher = EncryptNullableUtf8(Purpose_CIA_Number, accountNumberRaw);
+            if (numberCipher is null || numberCipher.Length == 0)
+                throw new InvalidOperationException("Account number is required for CategoryItemAccounts update.");
+
+            try
+            {
+                return UpdateCategoryItemAccount(
+                    id: id,
+                    itemId: itemId,
+                    label: null,
+                    numberCipher: numberCipher,
+                    accountTypeId: accountTypeId,
+                    accountTypeFreeform: null,
+                    isActive: isActive);
+            }
+            finally
+            {
+                Array.Clear(numberCipher, 0, numberCipher.Length);
+            }
+        }
+
         private static IReadOnlyList<CategoryItemAccountLean> LoadAllCategoryItemAccountsByItemIdForEnforcement(long itemId)
         {
             if (itemId <= 0)
