@@ -1,11 +1,4 @@
-﻿<!-- File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml -->
-<!-- FULL REWRITE
-     Changes:
-     - Add a view-only clipboard copy button for PIN on the Basic tab.
-     - Follow the existing copy-button pattern used elsewhere in this panel.
-     - No other behavioral or layout changes intended. -->
-
-<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
+﻿<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemBasicPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -623,6 +616,7 @@
                                  VerticalAlignment="Center"
                                  Height="28"
                                  MinWidth="190"
+                                 IsEnabled="False"
                                  IsHitTestVisible="False"
                                  IsTabStop="False"
                                  Focusable="False"/>
