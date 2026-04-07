@@ -14,14 +14,6 @@ namespace MWPV.Services
     public static class DbVersionService
     {
         private const string Sql_CurrentVersion = "s_DbVersion_select_current.sql";
-        private const string Sql_AllVersions = @"
-SELECT
-    Id        AS Id,
-    Version   AS Version,
-    IsCurrent AS IsCurrent,
-    AppliedOn AS CreatedAt
-FROM DbVersion
-ORDER BY Id DESC;";
 
         private static string LoadSqlRequired(string assetName)
         {
@@ -52,28 +44,6 @@ ORDER BY Id DESC;";
                 ErrorHandler.Abend(ex, "Error loading current DbVersion");
                 return null;
             }
-        }
-
-        public static IReadOnlyList<DbVersion> GetAllVersions()
-        {
-            var rows = new List<DbVersion>();
-
-            try
-            {
-                using var conn = DatabaseHelper.GetAppOpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = Sql_AllVersions;
-
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                    rows.Add(MapRow(reader));
-            }
-            catch (Exception ex)
-            {
-                ErrorHandler.Abend(ex, "Error loading DbVersion history");
-            }
-
-            return rows;
         }
 
         private static DbVersion MapRow(SqliteDataReader reader)
