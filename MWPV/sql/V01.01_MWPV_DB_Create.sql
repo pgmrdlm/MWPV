@@ -316,7 +316,6 @@ JOIN (
     UNION ALL SELECT 4, 'DISCOVER', 'Discover'
     UNION ALL SELECT 5, 'STORE_CARD', 'Store card (private label)'
     UNION ALL SELECT 6, 'VIRTUAL_CARD', 'Virtual card'
-    UNION ALL SELECT 99, 'FREEFORM', 'Freeform'
 ) AS v
 WHERE ct.Code = 'credit_cards'
   AND NOT EXISTS (

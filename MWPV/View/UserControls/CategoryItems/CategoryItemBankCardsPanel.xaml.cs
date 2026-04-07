@@ -3,7 +3,8 @@
 // FULL REWRITE (match current XAML exactly)
 //
 // Notes:
-// - XAML has NO Primary/BillingZip/Cardholder controls, so this code does NOT reference them.
+// - XAML has NO Primary/BillingZip controls.
+// - XAML includes a FREEFORM-only custom card-name textbox, but panel persistence wiring remains separate.
 // - Grid edit/delete are "selected row" buttons (no per-row Tag buttons).
 // - Grid bindings expect: CardTypeDisplay, CardNumberMasked, Expiration, CvvMasked, PinMasked, IsActive.
 // - This panel maintains its own UI row DTO (BankCardRow) with Raw + Masked fields.
@@ -82,6 +83,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private bool _hostRequestedCloseWipe;
 
         private const int MaxCardNumberChars = 19; // digits + spaces
+        private const string FreeformCardTypeCode = "FREEFORM";
 
         private const string SedsKey_BankCardSelectedCardId = "BC.Selected.CardId";
         private const string SedsKey_BankCardSelectedNumber = "BC.Selected.Number";
@@ -145,6 +147,7 @@ namespace MWPV.View.UserControls.CategoryItems
                             Id = r.Id,
                             CardTypeId = r.CardTypeId,
                             CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                            Cardholder = string.Empty,
 
                             // Service never returns plaintext. Keep raw empty.
                             CardNumberRaw = string.Empty,
@@ -504,6 +507,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 Id = r.Id,
                 CardTypeId = r.CardTypeId,
                 CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                Cardholder = r.Cardholder ?? string.Empty,
 
                 CardNumberRaw = r.CardNumberRaw ?? string.Empty,
                 Expiration = r.Expiration ?? string.Empty,
@@ -586,6 +590,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 _entryDisabled = false;
                 EnableEntryControls(true);
+                UpdateCustomCardNameUi(clearWhenHidden: false);
 
                 SetErrors(false);
                 UpdateTabButtons();
@@ -624,6 +629,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = enabled;
             if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = enabled;
+
+            UpdateCustomCardNameUi(clearWhenHidden: false);
         }
 
         private void ApplyProtectedViewControlState()
@@ -672,6 +679,72 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (BtnBankCardAddOrUpdate != null) BtnBankCardAddOrUpdate.IsEnabled = editable;
             if (BtnBankCardClearRow != null) BtnBankCardClearRow.IsEnabled = editable;
+            UpdateCustomCardNameUi(clearWhenHidden: false);
+        }
+
+        private static bool IsFreeformCardTypeCode(string? code)
+        {
+            return string.Equals((code ?? string.Empty).Trim(), FreeformCardTypeCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFreeformCardType(CardTypeItem? item)
+        {
+            return item != null && IsFreeformCardTypeCode(item.Code);
+        }
+
+        private bool IsFreeformCardTypeId(int cardTypeId)
+        {
+            return IsFreeformCardType(_cardTypeItems.FirstOrDefault(ct => ct.ComboDetailId == cardTypeId));
+        }
+
+        private string GetCurrentCustomCardName()
+        {
+            return (CustomCardNameTextBox?.Text ?? string.Empty).Trim();
+        }
+
+        private void UpdateCustomCardNameUi(bool clearWhenHidden)
+        {
+            bool isFreeformSelection = IsFreeformCardType(CardTypeCombo?.SelectedItem as CardTypeItem);
+            bool showCustomCardName = isFreeformSelection && !_isSelectedProtectedViewActive;
+
+            if (CustomCardNamePanel != null)
+                CustomCardNamePanel.Visibility = showCustomCardName ? Visibility.Visible : Visibility.Collapsed;
+
+            if (CustomCardNameTextBox != null)
+            {
+                CustomCardNameTextBox.IsEnabled = showCustomCardName && !_entryDisabled;
+
+                if (!showCustomCardName && clearWhenHidden)
+                    UICleaner.Clear(CustomCardNameTextBox);
+            }
+        }
+
+        private void CardTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            bool isFreeformSelection = IsFreeformCardType(CardTypeCombo?.SelectedItem as CardTypeItem);
+            UpdateCustomCardNameUi(clearWhenHidden: !isFreeformSelection);
+
+            if (_suppressDirty)
+                return;
+
+            if (_entryDisabled)
+            {
+                SetErrors(true);
+                UpdateTabButtons();
+                return;
+            }
+
+            if (!EntryLineHasAnyInput())
+            {
+                ClearBankCardError();
+                SetErrors(false);
+                UpdateTabButtons();
+                return;
+            }
+
+            bool ok = ValidateBankCardFields(showErrors: true, out _, out _, out _);
+            SetErrors(!ok);
+            UpdateTabButtons();
         }
 
         // ============================================================
@@ -937,6 +1010,7 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             string cardNumber = GetCurrentCardNumber();
+            string customCardName = IsFreeformCardType(selection) ? GetCurrentCustomCardName() : string.Empty;
             string cvv = GetCurrentCvv();
             string pin = GetCurrentPin();
             bool isActive = ChkCardActive?.IsChecked == true;
@@ -963,6 +1037,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     Id = 0,
                     CardTypeId = selection.ComboDetailId,
                     CardTypeDisplay = selection.DisplayText,
+                    Cardholder = customCardName,
 
                     CardNumberRaw = cardNumber,
                     Expiration = expNormalized,
@@ -982,6 +1057,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 _editingRow.CardTypeId = selection.ComboDetailId;
                 _editingRow.CardTypeDisplay = selection.DisplayText;
+                _editingRow.Cardholder = customCardName;
 
                 _editingRow.CardNumberRaw = cardNumber;
                 _editingRow.Expiration = expNormalized;
@@ -1138,6 +1214,9 @@ namespace MWPV.View.UserControls.CategoryItems
                 if (ChkCardActive != null)
                     ChkCardActive.IsChecked = detail.IsActive;
 
+                if (CustomCardNameTextBox != null)
+                    UICleaner.Clear(CustomCardNameTextBox);
+
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
                 SetErrors(false);
@@ -1278,6 +1357,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 if (ChkCardActive != null)
                     ChkCardActive.IsChecked = row.IsActive;
+
+                if (CustomCardNameTextBox != null)
+                    CustomCardNameTextBox.Text = IsFreeformCardTypeId(row.CardTypeId) ? (row.Cardholder ?? string.Empty) : string.Empty;
 
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -1429,6 +1511,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             var selection = CardTypeCombo?.SelectedItem as CardTypeItem;
             string cardNumber = GetCurrentCardNumber();
+            string customCardName = GetCurrentCustomCardName();
             string expiration = (ExpirationTextBox?.Text ?? "").Trim();
 
             string cvv = GetCurrentCvv();
@@ -1437,6 +1520,12 @@ namespace MWPV.View.UserControls.CategoryItems
             if (selection == null)
             {
                 if (showErrors) ShowBankCardError("Please choose a card type.", CardTypeCombo);
+                return false;
+            }
+
+            if (IsFreeformCardType(selection) && string.IsNullOrWhiteSpace(customCardName))
+            {
+                if (showErrors) ShowBankCardError("Custom card name is required for FREEFORM.", CustomCardNameTextBox);
                 return false;
             }
 
@@ -1610,6 +1699,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void ResetBankCardFieldBackgrounds()
         {
             CardTypeCombo?.ClearValue(BackgroundProperty);
+            CustomCardNameTextBox?.ClearValue(BackgroundProperty);
 
             CardNumberBox?.ClearValue(BackgroundProperty);
             CardNumberPlainTextBox?.ClearValue(BackgroundProperty);
@@ -1639,6 +1729,7 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearRevealOverlayTextOnly(CvvPlainTextBox);
             ClearRevealOverlayTextOnly(PinPlainTextBox);
 
+            if (CustomCardNameTextBox != null) UICleaner.Clear(CustomCardNameTextBox);
             if (ExpirationTextBox != null) UICleaner.Clear(ExpirationTextBox);
         }
 
@@ -1650,6 +1741,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 if (CardTypeCombo != null)
                     CardTypeCombo.SelectedIndex = _cardTypeItems.Count > 0 ? 0 : -1;
 
+                if (CustomCardNameTextBox != null) UICleaner.Clear(CustomCardNameTextBox);
                 if (CardNumberBox != null) UICleaner.Clear(CardNumberBox);
                 HideCardNumber(clearOverlay: true);
 
@@ -1666,6 +1758,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 _isSelectedProtectedViewActive = false;
                 SetEditingMode(null);
+                UpdateCustomCardNameUi(clearWhenHidden: true);
 
                 ClearBankCardError();
                 ResetBankCardFieldBackgrounds();
@@ -1714,6 +1807,9 @@ namespace MWPV.View.UserControls.CategoryItems
                 return true;
 
             if (ExpirationTextBox != null && !string.IsNullOrWhiteSpace(ExpirationTextBox.Text))
+                return true;
+
+            if (CustomCardNameTextBox != null && !string.IsNullOrWhiteSpace(CustomCardNameTextBox.Text))
                 return true;
 
             if (CvvBox != null && !string.IsNullOrWhiteSpace(CvvBox.Password))
@@ -1881,6 +1977,13 @@ namespace MWPV.View.UserControls.CategoryItems
                 set { if (_cardTypeDisplay != value) { _cardTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(CardTypeDisplay)); } }
             }
 
+            private string _cardholder = string.Empty;
+            public string Cardholder
+            {
+                get => _cardholder;
+                set { if (_cardholder != value) { _cardholder = value ?? string.Empty; OnPropertyChanged(nameof(Cardholder)); } }
+            }
+
             private string _cardNumberRaw = string.Empty;
             public string CardNumberRaw
             {
@@ -1948,6 +2051,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 CardTypeDisplay = string.Empty;
                 CardTypeId = 0;
+                Cardholder = string.Empty;
                 CardNumberRaw = string.Empty;
                 Expiration = string.Empty;
                 CvvRaw = string.Empty;

@@ -134,7 +134,21 @@
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
                               SelectedIndex="0"
+                              SelectionChanged="CardTypeCombo_SelectionChanged"
                               LostFocus="OnBankCardFieldLostFocus" />
+
+                    <StackPanel x:Name="CustomCardNamePanel"
+                                Margin="0,8,0,0"
+                                Visibility="Collapsed">
+                        <TextBlock Text="Custom Card Name"
+                                   Margin="0,0,0,2"
+                                   FontWeight="Bold" />
+                        <TextBox x:Name="CustomCardNameTextBox"
+                                 Height="28"
+                                 HorizontalAlignment="Stretch"
+                                 IsEnabled="False"
+                                 LostFocus="OnBankCardFieldLostFocus" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- ROW 0: Card Number (col 1) -->
