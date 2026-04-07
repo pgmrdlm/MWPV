@@ -1,5 +1,4 @@
-﻿// Utilities/Sql/SqlCagegory.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Utilities.Helpers;      // DatabaseHelper.DbPasswordKey
 using Security.Utility;       // SecureEncryptedDataStore
@@ -11,6 +10,7 @@ namespace Utilities.Sql
     /// <summary>
     /// Single source of truth for SQL/secret artifacts stored in keys.7z,
     /// with helpers to load them into the secure store and cache SQL text.
+    /// Review-only tmp copy: includes DbVersion SQL in the required catalog.
     /// </summary>
     public static class SqlCagegory
     {
@@ -70,6 +70,9 @@ namespace Utilities.Sql
 
             // Log message templates.
             "s_LogMessageTemplate_SelectAll.sql",
+
+            // DbVersion
+            "s_DbVersion_select_current.sql",
 
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"

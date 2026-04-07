@@ -2,7 +2,6 @@ using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Utilities.Helpers;
 using Utilities.Sql;
 
@@ -10,6 +9,7 @@ namespace MWPV.Services
 {
     /// <summary>
     /// Runtime helpers for reading database version metadata.
+    /// Review-only tmp copy: relies exclusively on the SQL catalog.
     /// </summary>
     public static class DbVersionService
     {
@@ -25,27 +25,10 @@ ORDER BY Id DESC;";
 
         private static string LoadSqlRequired(string assetName)
         {
-            try
-            {
-                var sql = SqlCagegory.GetSql(assetName);
-                if (!string.IsNullOrWhiteSpace(sql))
-                    return sql;
-            }
-            catch
-            {
-                // Fall through to on-disk lookup so this new service can be
-                // added without immediately expanding the SQL catalog.
-            }
-
-            var sqlPath = FindSqlFile(assetName);
-            if (!string.IsNullOrWhiteSpace(sqlPath) && File.Exists(sqlPath))
-            {
-                var sql = File.ReadAllText(sqlPath);
-                if (!string.IsNullOrWhiteSpace(sql))
-                    return sql;
-            }
-
-            throw new InvalidOperationException($"SQL not loaded: {assetName}");
+            var sql = SqlCagegory.GetSql(assetName);
+            if (string.IsNullOrWhiteSpace(sql))
+                throw new InvalidOperationException($"SQL not loaded: {assetName}");
+            return sql;
         }
 
         public static DbVersion? GetCurrentVersion()
@@ -107,36 +90,6 @@ ORDER BY Id DESC;";
                 IsCurrent = !reader.IsDBNull(ordIsCurrent) && reader.GetInt32(ordIsCurrent) != 0,
                 CreatedAt = reader.IsDBNull(ordCreatedAt) ? string.Empty : reader.GetString(ordCreatedAt)
             };
-        }
-
-        private static string? FindSqlFile(string assetName)
-        {
-            foreach (var start in EnumerateSearchRoots())
-            {
-                var dir = new DirectoryInfo(start);
-                while (dir != null)
-                {
-                    var candidate = Path.Combine(dir.FullName, "sql", assetName);
-                    if (File.Exists(candidate))
-                        return candidate;
-
-                    dir = dir.Parent;
-                }
-            }
-
-            return null;
-        }
-
-        private static IEnumerable<string> EnumerateSearchRoots()
-        {
-            if (!string.IsNullOrWhiteSpace(AppContext.BaseDirectory))
-                yield return AppContext.BaseDirectory;
-
-            if (!string.IsNullOrWhiteSpace(Environment.CurrentDirectory) &&
-                !string.Equals(Environment.CurrentDirectory, AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
-            {
-                yield return Environment.CurrentDirectory;
-            }
         }
     }
 }
