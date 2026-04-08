@@ -2397,6 +2397,7 @@ namespace MWPV.View.UserControls
                         ItemId = itemId,
                         CardTypeId = r.CardTypeId,
                         CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
+                        Cardholder = r.Cardholder,
                         CardNumberRaw = r.CardNumberRaw ?? string.Empty,
                         ExpirationDisplay = r.Expiration ?? string.Empty,
                         ExpMonth = 0,

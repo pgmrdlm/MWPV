@@ -147,7 +147,8 @@ namespace MWPV.View.UserControls.CategoryItems
                             Id = r.Id,
                             CardTypeId = r.CardTypeId,
                             CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
-                            Cardholder = string.Empty,
+                            Cardholder = r.Cardholder ?? string.Empty,
+                            IsFreeform = IsFreeformCardTypeId(r.CardTypeId),
 
                             // Service never returns plaintext. Keep raw empty.
                             CardNumberRaw = string.Empty,
@@ -508,6 +509,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 CardTypeId = r.CardTypeId,
                 CardTypeDisplay = r.CardTypeDisplay ?? string.Empty,
                 Cardholder = r.Cardholder ?? string.Empty,
+                IsFreeform = r.IsFreeform,
 
                 CardNumberRaw = r.CardNumberRaw ?? string.Empty,
                 Expiration = r.Expiration ?? string.Empty,
@@ -1038,6 +1040,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     CardTypeId = selection.ComboDetailId,
                     CardTypeDisplay = selection.DisplayText,
                     Cardholder = customCardName,
+                    IsFreeform = IsFreeformCardType(selection),
 
                     CardNumberRaw = cardNumber,
                     Expiration = expNormalized,
@@ -1058,6 +1061,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 _editingRow.CardTypeId = selection.ComboDetailId;
                 _editingRow.CardTypeDisplay = selection.DisplayText;
                 _editingRow.Cardholder = customCardName;
+                _editingRow.IsFreeform = IsFreeformCardType(selection);
 
                 _editingRow.CardNumberRaw = cardNumber;
                 _editingRow.Expiration = expNormalized;
@@ -1974,15 +1978,51 @@ namespace MWPV.View.UserControls.CategoryItems
             public string CardTypeDisplay
             {
                 get => _cardTypeDisplay;
-                set { if (_cardTypeDisplay != value) { _cardTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(CardTypeDisplay)); } }
+                set
+                {
+                    if (_cardTypeDisplay != value)
+                    {
+                        _cardTypeDisplay = value ?? string.Empty;
+                        OnPropertyChanged(nameof(CardTypeDisplay));
+                        OnPropertyChanged(nameof(DisplayCardTypeText));
+                    }
+                }
             }
 
             private string _cardholder = string.Empty;
             public string Cardholder
             {
                 get => _cardholder;
-                set { if (_cardholder != value) { _cardholder = value ?? string.Empty; OnPropertyChanged(nameof(Cardholder)); } }
+                set
+                {
+                    if (_cardholder != value)
+                    {
+                        _cardholder = value ?? string.Empty;
+                        OnPropertyChanged(nameof(Cardholder));
+                        OnPropertyChanged(nameof(DisplayCardTypeText));
+                    }
+                }
             }
+
+            private bool _isFreeform;
+            public bool IsFreeform
+            {
+                get => _isFreeform;
+                set
+                {
+                    if (_isFreeform != value)
+                    {
+                        _isFreeform = value;
+                        OnPropertyChanged(nameof(IsFreeform));
+                        OnPropertyChanged(nameof(DisplayCardTypeText));
+                    }
+                }
+            }
+
+            public string DisplayCardTypeText =>
+                IsFreeform && !string.IsNullOrWhiteSpace(Cardholder)
+                    ? Cardholder
+                    : CardTypeDisplay;
 
             private string _cardNumberRaw = string.Empty;
             public string CardNumberRaw
@@ -2052,6 +2092,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 CardTypeDisplay = string.Empty;
                 CardTypeId = 0;
                 Cardholder = string.Empty;
+                IsFreeform = false;
                 CardNumberRaw = string.Empty;
                 Expiration = string.Empty;
                 CvvRaw = string.Empty;

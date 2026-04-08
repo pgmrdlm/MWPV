@@ -541,7 +541,7 @@
 
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Card Type"
-                                        Binding="{Binding CardTypeDisplay}"
+                                        Binding="{Binding DisplayCardTypeText}"
                                         Width="160" />
                     <DataGridTextColumn Header="Card Number"
                                         Binding="{Binding CardNumberMasked}"
