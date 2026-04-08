@@ -1908,6 +1908,7 @@ namespace MWPV.View.UserControls
                         tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
                             itemId: itemId,
                             accountTypeId: row.AccountTypeId,
+                            accountTypeFreeform: string.IsNullOrWhiteSpace(row.AccountTypeFreeform) ? null : row.AccountTypeFreeform,
                             accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
                             isActive: row.IsActive);
                     }
@@ -1917,6 +1918,7 @@ namespace MWPV.View.UserControls
                             id: row.Id,
                             itemId: itemId,
                             accountTypeId: row.AccountTypeId,
+                            accountTypeFreeform: string.IsNullOrWhiteSpace(row.AccountTypeFreeform) ? null : row.AccountTypeFreeform,
                             accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
                             isActive: row.IsActive);
 

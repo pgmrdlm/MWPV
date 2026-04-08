@@ -80,6 +80,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private bool _hostRequestedCloseWipe;
 
         private const int MaxAccountNumberChars = 19; // digits + spaces
+        private const string FreeformAccountTypeCode = "FREEFORM";
 
         private const string SedsKey_AccountSelectedRowId = "BC.Selected.CardId";
         private const string SedsKey_AccountSelectedNumber = "BC.Selected.Number";
@@ -140,6 +141,7 @@ namespace MWPV.View.UserControls.CategoryItems
                             Id = r.Id,
                             AccountTypeId = r.AccountTypeId,
                             AccountTypeDisplay = r.AccountTypeDisplay ?? string.Empty,
+                            AccountTypeFreeform = string.Empty,
 
                             // Service never returns plaintext. Keep raw empty.
                             AccountNumberRaw = string.Empty,
@@ -494,6 +496,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 Id = r.Id,
                 AccountTypeId = r.AccountTypeId,
                 AccountTypeDisplay = r.AccountTypeDisplay ?? string.Empty,
+                AccountTypeFreeform = r.AccountTypeFreeform ?? string.Empty,
                 AccountNumberRaw = r.AccountNumberRaw ?? string.Empty,
                 IsActive = r.IsActive,
                 AccountNumberMasked = r.AccountNumberMasked ?? string.Empty
@@ -565,6 +568,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 _entryDisabled = false;
                 EnableEntryControls(true);
+                UpdateCustomAccountTypeUi(clearWhenHidden: false);
                 SetErrors(false);
                 UpdateTabButtons();
             }
@@ -589,6 +593,8 @@ namespace MWPV.View.UserControls.CategoryItems
             if (ChkAccountActive != null) ChkAccountActive.IsEnabled = enabled;
             if (BtnAccountAddOrUpdate != null) BtnAccountAddOrUpdate.IsEnabled = enabled;
             if (BtnAccountClearRow != null) BtnAccountClearRow.IsEnabled = enabled;
+
+            UpdateCustomAccountTypeUi(clearWhenHidden: false);
         }
 
         private void ApplyProtectedViewControlState()
@@ -624,6 +630,64 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (BtnAccountClearRow != null)
                 BtnAccountClearRow.IsEnabled = editable;
+
+            UpdateCustomAccountTypeUi(clearWhenHidden: false);
+        }
+
+        private static bool IsFreeformAccountTypeCode(string? code)
+        {
+            return string.Equals((code ?? string.Empty).Trim(), FreeformAccountTypeCode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsFreeformAccountType(AccountTypeItem? item)
+        {
+            return item != null && IsFreeformAccountTypeCode(item.Code);
+        }
+
+        private bool IsFreeformAccountTypeId(int accountTypeId)
+        {
+            return IsFreeformAccountType(_accountTypeItems.FirstOrDefault(ct => ct.ComboDetailId == accountTypeId));
+        }
+
+        private string GetCurrentCustomAccountType()
+        {
+            return (CustomAccountTypeTextBox?.Text ?? string.Empty).Trim();
+        }
+
+        private void UpdateCustomAccountTypeUi(bool clearWhenHidden)
+        {
+            bool isFreeformSelection = IsFreeformAccountType(AccountTypeCombo?.SelectedItem as AccountTypeItem);
+            bool showCustomAccountType = isFreeformSelection && !_isSelectedProtectedViewActive;
+
+            if (CustomAccountTypePanel != null)
+                CustomAccountTypePanel.Visibility = showCustomAccountType ? Visibility.Visible : Visibility.Collapsed;
+
+            if (CustomAccountTypeTextBox != null)
+            {
+                CustomAccountTypeTextBox.IsEnabled = showCustomAccountType && !_entryDisabled;
+
+                if (!showCustomAccountType && clearWhenHidden)
+                    UICleaner.Clear(CustomAccountTypeTextBox);
+            }
+        }
+
+        private void AccountTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            bool isFreeformSelection = IsFreeformAccountType(AccountTypeCombo?.SelectedItem as AccountTypeItem);
+            UpdateCustomAccountTypeUi(clearWhenHidden: !isFreeformSelection);
+
+            if (_suppressDirty)
+                return;
+
+            if (_entryDisabled)
+            {
+                SetErrors(true);
+                UpdateTabButtons();
+                return;
+            }
+
+            MarkDirty();
+            UpdateTabButtons();
         }
 
         // ============================================================
@@ -778,6 +842,7 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             string accountNumber = GetCurrentAccountNumber();
+            string customAccountType = IsFreeformAccountType(selection) ? GetCurrentCustomAccountType() : string.Empty;
             bool isActive = ChkAccountActive?.IsChecked == true;
 
             bool selectedIsPrimary =
@@ -808,6 +873,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     Id = 0,
                     AccountTypeId = selection.ComboDetailId,
                     AccountTypeDisplay = selection.DisplayText,
+                    AccountTypeFreeform = customAccountType,
                     AccountNumberRaw = accountNumber,
                     AccountNumberMasked = masked,
                     IsActive = isActive
@@ -819,6 +885,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 _editingRow.AccountTypeId = selection.ComboDetailId;
                 _editingRow.AccountTypeDisplay = selection.DisplayText;
+                _editingRow.AccountTypeFreeform = customAccountType;
                 _editingRow.AccountNumberRaw = accountNumber;
                 _editingRow.AccountNumberMasked = masked;
                 _editingRow.IsActive = isActive;
@@ -931,6 +998,9 @@ namespace MWPV.View.UserControls.CategoryItems
                     else AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
                 }
 
+                if (CustomAccountTypeTextBox != null)
+                    CustomAccountTypeTextBox.Text = IsFreeformAccountTypeId(row.AccountTypeId) ? (row.AccountTypeFreeform ?? string.Empty) : string.Empty;
+
                 if (AccountNumberBox != null)
                     AccountNumberBox.Password = TrimToMaxChars(accountNumber ?? string.Empty);
                 HideAccountNumber(clearOverlay: true);
@@ -1041,6 +1111,9 @@ namespace MWPV.View.UserControls.CategoryItems
                     if (accountType != null) AccountTypeCombo.SelectedItem = accountType;
                     else AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
                 }
+
+                if (CustomAccountTypeTextBox != null)
+                    CustomAccountTypeTextBox.Text = IsFreeformAccountTypeId(row.AccountTypeId) ? (row.AccountTypeFreeform ?? string.Empty) : string.Empty;
 
                 if (AccountNumberBox != null)
                     AccountNumberBox.Password = TrimToMaxChars(accountNumberForEdit);
@@ -1157,10 +1230,17 @@ namespace MWPV.View.UserControls.CategoryItems
 
             var selection = AccountTypeCombo?.SelectedItem as AccountTypeItem;
             string accountNumber = GetCurrentAccountNumber();
+            string customAccountType = GetCurrentCustomAccountType();
 
             if (selection == null)
             {
                 if (showErrors) ShowAccountError("Please choose an account type.", AccountTypeCombo);
+                return false;
+            }
+
+            if (IsFreeformAccountType(selection) && string.IsNullOrWhiteSpace(customAccountType))
+            {
+                if (showErrors) ShowAccountError("Custom account type is required for FREEFORM.", CustomAccountTypeTextBox);
                 return false;
             }
 
@@ -1222,6 +1302,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private void ResetAccountFieldBackgrounds()
         {
             AccountTypeCombo?.ClearValue(BackgroundProperty);
+            CustomAccountTypeTextBox?.ClearValue(BackgroundProperty);
             AccountNumberBox?.ClearValue(BackgroundProperty);
             AccountNumberPlainTextBox?.ClearValue(BackgroundProperty);
         }
@@ -1234,6 +1315,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             HideRevealsAndStopTimer(clearRevealOverlays: true);
 
+            if (CustomAccountTypeTextBox != null) UICleaner.Clear(CustomAccountTypeTextBox);
             if (AccountNumberBox != null) UICleaner.Clear(AccountNumberBox);
             ClearRevealOverlayTextOnly(AccountNumberPlainTextBox);
         }
@@ -1246,6 +1328,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 if (AccountTypeCombo != null)
                     AccountTypeCombo.SelectedIndex = _accountTypeItems.Count > 0 ? 0 : -1;
 
+                if (CustomAccountTypeTextBox != null) UICleaner.Clear(CustomAccountTypeTextBox);
                 if (AccountNumberBox != null) UICleaner.Clear(AccountNumberBox);
                 HideAccountNumber(clearOverlay: true);
 
@@ -1299,7 +1382,8 @@ namespace MWPV.View.UserControls.CategoryItems
             if (_isSelectedProtectedViewActive)
                 return false;
 
-            return AccountNumberBox != null && !string.IsNullOrWhiteSpace(AccountNumberBox.Password);
+            return (CustomAccountTypeTextBox != null && !string.IsNullOrWhiteSpace(CustomAccountTypeTextBox.Text)) ||
+                   (AccountNumberBox != null && !string.IsNullOrWhiteSpace(AccountNumberBox.Password));
         }
 
         private string GetCurrentAccountNumber()
@@ -1430,6 +1514,13 @@ namespace MWPV.View.UserControls.CategoryItems
                 set { if (_accountTypeDisplay != value) { _accountTypeDisplay = value ?? string.Empty; OnPropertyChanged(nameof(AccountTypeDisplay)); } }
             }
 
+            private string _accountTypeFreeform = string.Empty;
+            public string AccountTypeFreeform
+            {
+                get => _accountTypeFreeform;
+                set { if (_accountTypeFreeform != value) { _accountTypeFreeform = value ?? string.Empty; OnPropertyChanged(nameof(AccountTypeFreeform)); } }
+            }
+
             private string _accountNumberRaw = string.Empty;
             public string AccountNumberRaw
             {
@@ -1462,6 +1553,7 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 AccountTypeDisplay = string.Empty;
                 AccountTypeId = 0;
+                AccountTypeFreeform = string.Empty;
                 AccountNumberRaw = string.Empty;
                 AccountNumberMasked = string.Empty;
                 IsActive = false;

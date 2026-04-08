@@ -121,7 +121,21 @@
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
                               SelectedIndex="0"
+                              SelectionChanged="AccountTypeCombo_SelectionChanged"
                               LostFocus="OnAccountFieldLostFocus" />
+
+                    <StackPanel x:Name="CustomAccountTypePanel"
+                                Margin="0,8,0,0"
+                                Visibility="Collapsed">
+                        <TextBlock Text="Custom Account Type"
+                                   Margin="0,0,0,2"
+                                   FontWeight="Bold" />
+                        <TextBox x:Name="CustomAccountTypeTextBox"
+                                 Height="28"
+                                 HorizontalAlignment="Stretch"
+                                 IsEnabled="False"
+                                 LostFocus="OnAccountFieldLostFocus" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- ROW 0: Account Number (col 1) -->

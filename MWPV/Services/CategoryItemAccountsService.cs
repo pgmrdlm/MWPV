@@ -257,6 +257,7 @@ namespace MWPV.Services
         public static long InsertCategoryItemAccountFromUi(
             long itemId,
             int accountTypeId,
+            string? accountTypeFreeform,
             string accountNumberRaw,
             bool isActive)
         {
@@ -274,7 +275,7 @@ namespace MWPV.Services
                     label: null,
                     numberCipher: numberCipher,
                     accountTypeId: accountTypeId,
-                    accountTypeFreeform: null,
+                    accountTypeFreeform: accountTypeFreeform,
                     isActive: isActive);
             }
             finally
@@ -340,6 +341,7 @@ namespace MWPV.Services
             long id,
             long itemId,
             int accountTypeId,
+            string? accountTypeFreeform,
             string accountNumberRaw,
             bool isActive)
         {
@@ -358,7 +360,7 @@ namespace MWPV.Services
                     label: null,
                     numberCipher: numberCipher,
                     accountTypeId: accountTypeId,
-                    accountTypeFreeform: null,
+                    accountTypeFreeform: accountTypeFreeform,
                     isActive: isActive);
             }
             finally
