@@ -136,12 +136,15 @@ namespace MWPV.View.UserControls.CategoryItems
                 {
                     foreach (var r in rows)
                     {
+                        string accountTypeFreeform = string.IsNullOrWhiteSpace(r.AccountTypeFreeform)
+                            ? string.Empty
+                            : r.AccountTypeFreeform.Trim();
                         var ui = new AccountRow
                         {
                             Id = r.Id,
                             AccountTypeId = r.AccountTypeId,
                             AccountTypeDisplay = r.AccountTypeDisplay ?? string.Empty,
-                            AccountTypeFreeform = string.Empty,
+                            AccountTypeFreeform = accountTypeFreeform,
 
                             // Service never returns plaintext. Keep raw empty.
                             AccountNumberRaw = string.Empty,
@@ -649,6 +652,14 @@ namespace MWPV.View.UserControls.CategoryItems
             return IsFreeformAccountType(_accountTypeItems.FirstOrDefault(ct => ct.ComboDetailId == accountTypeId));
         }
 
+        private static string ResolveAccountTypeDisplay(AccountTypeItem selection, string? accountTypeFreeform)
+        {
+            if (IsFreeformAccountType(selection) && !string.IsNullOrWhiteSpace(accountTypeFreeform))
+                return accountTypeFreeform.Trim();
+
+            return selection.DisplayText;
+        }
+
         private string GetCurrentCustomAccountType()
         {
             return (CustomAccountTypeTextBox?.Text ?? string.Empty).Trim();
@@ -872,7 +883,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 {
                     Id = 0,
                     AccountTypeId = selection.ComboDetailId,
-                    AccountTypeDisplay = selection.DisplayText,
+                    AccountTypeDisplay = ResolveAccountTypeDisplay(selection, customAccountType),
                     AccountTypeFreeform = customAccountType,
                     AccountNumberRaw = accountNumber,
                     AccountNumberMasked = masked,
@@ -884,7 +895,7 @@ namespace MWPV.View.UserControls.CategoryItems
             else
             {
                 _editingRow.AccountTypeId = selection.ComboDetailId;
-                _editingRow.AccountTypeDisplay = selection.DisplayText;
+                _editingRow.AccountTypeDisplay = ResolveAccountTypeDisplay(selection, customAccountType);
                 _editingRow.AccountTypeFreeform = customAccountType;
                 _editingRow.AccountNumberRaw = accountNumber;
                 _editingRow.AccountNumberMasked = masked;

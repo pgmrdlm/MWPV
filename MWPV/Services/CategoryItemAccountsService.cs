@@ -28,6 +28,7 @@ namespace MWPV.Services
             public long ItemId { get; init; }
             public int AccountTypeId { get; init; }
             public string AccountTypeDisplay { get; init; } = string.Empty;
+            public string AccountTypeFreeform { get; init; } = string.Empty;
             public string AccountNumberMasked { get; init; } = string.Empty;
             public bool IsActive { get; init; }
             public long CreatedAtUtcSeconds { get; init; }
@@ -48,10 +49,17 @@ namespace MWPV.Services
             var list = new List<AccountListRow>(sourceRows.Count);
 
             var accountTypeDisplayById = new Dictionary<int, string>();
+            var accountTypeCodeById = new Dictionary<int, string>();
             try
             {
                 foreach (var t in ComboDetailService.GetByTypeId(1))
                 {
+                    if (!accountTypeCodeById.ContainsKey(t.ComboDet) &&
+                        !string.IsNullOrWhiteSpace(t.Code))
+                    {
+                        accountTypeCodeById[t.ComboDet] = t.Code.Trim();
+                    }
+
                     if (!accountTypeDisplayById.ContainsKey(t.ComboDet))
                     {
                         accountTypeDisplayById[t.ComboDet] =
@@ -66,10 +74,18 @@ namespace MWPV.Services
                 _ = TryDecryptUtf8(Purpose_CIA_Number, row.Number, out string? numberPlain);
 
                 int accountTypeId = row.AccountTypeId ?? 0;
-                string accountTypeDisplay =
+                string comboDisplay =
                     accountTypeId > 0 && accountTypeDisplayById.TryGetValue(accountTypeId, out var display)
                     ? display
                     : string.Empty;
+                string accountTypeFreeform = string.IsNullOrWhiteSpace(row.AccountTypeFreeform)
+                    ? string.Empty
+                    : row.AccountTypeFreeform.Trim();
+                string accountTypeDisplay = ResolveAccountTypeDisplay(
+                    accountTypeId,
+                    accountTypeFreeform,
+                    comboDisplay,
+                    accountTypeCodeById);
 
                 list.Add(new AccountListRow
                 {
@@ -77,6 +93,7 @@ namespace MWPV.Services
                     ItemId = row.ItemId,
                     AccountTypeId = accountTypeId,
                     AccountTypeDisplay = accountTypeDisplay,
+                    AccountTypeFreeform = accountTypeFreeform,
                     AccountNumberMasked = MaskPanLast4(numberPlain),
                     IsActive = row.IsActive,
                     CreatedAtUtcSeconds = row.CreatedAtUtcSeconds,
@@ -430,6 +447,34 @@ namespace MWPV.Services
             }
 
             return rows;
+        }
+
+        private static string ResolveAccountTypeDisplay(
+            int accountTypeId,
+            string? accountTypeFreeform,
+            string? comboDisplay,
+            IReadOnlyDictionary<int, string> accountTypeCodeById)
+        {
+            if (!string.IsNullOrWhiteSpace(accountTypeFreeform) &&
+                IsFreeformAccountTypeId(accountTypeId, accountTypeCodeById))
+            {
+                return accountTypeFreeform.Trim();
+            }
+
+            return comboDisplay ?? string.Empty;
+        }
+
+        private static bool IsFreeformAccountTypeId(
+            int accountTypeId,
+            IReadOnlyDictionary<int, string> accountTypeCodeById)
+        {
+            if (accountTypeId <= 0)
+                return false;
+
+            if (!accountTypeCodeById.TryGetValue(accountTypeId, out var code))
+                return false;
+
+            return string.Equals(code?.Trim(), "FREEFORM", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string NormalizeAccountNumberDigitsOnly(string? accountNumber)
