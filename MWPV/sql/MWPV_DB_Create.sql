@@ -358,6 +358,7 @@ WITH v(Seq, Code, Description) AS (
       (11, 'CATEGORYITEM_CHANGED', 'Category item updated (one or more fields)'),
       (12, 'ACCOUNTS_CREATED',     'Accounts Created'),
       (13, 'ACCOUNTS_CHANGED', 'Accounts Changed')
+
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
 SELECT
