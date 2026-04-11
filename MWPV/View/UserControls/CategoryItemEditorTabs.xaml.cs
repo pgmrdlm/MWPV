@@ -109,11 +109,14 @@ namespace MWPV.View.UserControls
 
         private const string LogEvent_CategoryItemCreated = "CATEGORYITEM_CREATED";
         private const string LogEvent_CategoryItemChanged = "CATEGORYITEM_CHANGED";
+        private const string LogEvent_AccountsCreated = "ACCOUNTS_CREATED";
+        private const string LogEvent_AccountsChanged = "ACCOUNTS_CHANGED";
 
         private const string Template_NewItemCreated =
             "Category Item #CategoryItemName# has been created for Category #CategoryName#";
 
         private const string TemplateForm_BasicTab = "BasicTab";
+        private const string TemplateForm_AccountsTab = "AccountsTab";
 
         public CategoryItemEditorTabs()
         {
@@ -830,6 +833,19 @@ namespace MWPV.View.UserControls
             };
         }
 
+        private static IReadOnlyDictionary<string, string?> BuildAccountsTokens(
+            string categoryItemName,
+            string accountTypeDisplay,
+            string accountNumberMasked)
+        {
+            return new Dictionary<string, string?>
+            {
+                ["CategoryItemName"] = categoryItemName,
+                ["AccountTypeDisplay"] = accountTypeDisplay,
+                ["AccountNumberMasked"] = accountNumberMasked
+            };
+        }
+
         private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
         {
             return Template_NewItemCreated
@@ -924,6 +940,86 @@ namespace MWPV.View.UserControls
             {
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] FAILED (best-effort ignored): {ex}");
+#endif
+            }
+        }
+
+        private void TryWriteAccountCreatedLog_BestEffort(
+            long itemId,
+            string itemName,
+            string accountTypeDisplay,
+            string accountNumberMasked)
+        {
+            try
+            {
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = LogEvent_AccountsCreated,
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
+                    ItemId = itemId,
+                    SubjectText = itemName,
+                    KeySetVersion = 1
+                };
+
+                var tokens = BuildAccountsTokens(itemName, accountTypeDisplay, accountNumberMasked);
+
+                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: TemplateForm_AccountsTab,
+                    seqsInOrder: new[] { 1 },
+                    tokens: tokens,
+                    write: write);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-CREATED] Inserted ACCOUNTS_CREATED logId={logId} itemId={itemId} subject='{itemName}'");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-CREATED] FAILED (best-effort ignored): {ex}");
+#endif
+            }
+        }
+
+        private void TryWriteAccountDeactivatedLog_BestEffort(
+            long itemId,
+            string itemName,
+            string accountTypeDisplay,
+            string accountNumberMasked)
+        {
+            try
+            {
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = LogEvent_AccountsChanged,
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
+                    ItemId = itemId,
+                    SubjectText = itemName,
+                    KeySetVersion = 1
+                };
+
+                var tokens = BuildAccountsTokens(itemName, accountTypeDisplay, accountNumberMasked);
+
+                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: TemplateForm_AccountsTab,
+                    seqsInOrder: new[] { 2 },
+                    tokens: tokens,
+                    write: write);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-DEACTIVATED] Inserted ACCOUNTS_CHANGED logId={logId} itemId={itemId} subject='{itemName}'");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-DEACTIVATED] FAILED (best-effort ignored): {ex}");
 #endif
             }
         }
@@ -1898,6 +1994,7 @@ namespace MWPV.View.UserControls
             }
 
             int itemId = activeId.Value;
+            string itemName = BasicPanel?.GetItemNameTrim() ?? string.Empty;
 
             try
             {
@@ -1905,12 +2002,21 @@ namespace MWPV.View.UserControls
                 {
                     if (row.Id <= 0)
                     {
-                        tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
+                        long insertedAccountId = tmp_CategoryItemAccountsService.InsertCategoryItemAccountFromUi(
                             itemId: itemId,
                             accountTypeId: row.AccountTypeId,
                             accountTypeFreeform: string.IsNullOrWhiteSpace(row.AccountTypeFreeform) ? null : row.AccountTypeFreeform,
                             accountNumberRaw: row.AccountNumberRaw ?? string.Empty,
                             isActive: row.IsActive);
+
+                        if (insertedAccountId > 0)
+                        {
+                            TryWriteAccountCreatedLog_BestEffort(
+                                itemId: itemId,
+                                itemName: itemName,
+                                accountTypeDisplay: row.AccountTypeDisplay ?? string.Empty,
+                                accountNumberMasked: row.AccountNumberMasked ?? string.Empty);
+                        }
                     }
                     else if (!string.IsNullOrWhiteSpace(row.AccountNumberRaw))
                     {
@@ -1924,6 +2030,15 @@ namespace MWPV.View.UserControls
 
                         if (affected <= 0)
                             throw new InvalidOperationException("CategoryItemAccount update failed.");
+
+                        if (!row.IsActive)
+                        {
+                            TryWriteAccountDeactivatedLog_BestEffort(
+                                itemId: itemId,
+                                itemName: itemName,
+                                accountTypeDisplay: row.AccountTypeDisplay ?? string.Empty,
+                                accountNumberMasked: row.AccountNumberMasked ?? string.Empty);
+                        }
                     }
                 }
 
