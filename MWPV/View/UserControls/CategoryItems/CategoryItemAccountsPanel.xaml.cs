@@ -668,7 +668,11 @@ namespace MWPV.View.UserControls.CategoryItems
         private void UpdateCustomAccountTypeUi(bool clearWhenHidden)
         {
             bool isFreeformSelection = IsFreeformAccountType(AccountTypeCombo?.SelectedItem as AccountTypeItem);
-            bool showCustomAccountType = isFreeformSelection && !_isSelectedProtectedViewActive;
+            bool editingExistingPersistedRow = _editingRow != null && _editingRow.Id > 0;
+            bool showCustomAccountType =
+                isFreeformSelection &&
+                !_isSelectedProtectedViewActive &&
+                !editingExistingPersistedRow;
 
             if (CustomAccountTypePanel != null)
                 CustomAccountTypePanel.Visibility = showCustomAccountType ? Visibility.Visible : Visibility.Collapsed;
@@ -894,12 +898,24 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             else
             {
-                _editingRow.AccountTypeId = selection.ComboDetailId;
-                _editingRow.AccountTypeDisplay = ResolveAccountTypeDisplay(selection, customAccountType);
-                _editingRow.AccountTypeFreeform = customAccountType;
-                _editingRow.AccountNumberRaw = accountNumber;
-                _editingRow.AccountNumberMasked = masked;
-                _editingRow.IsActive = isActive;
+                if (isExistingPersistedUpdate)
+                {
+                    string preservedAccountNumber = _editingRow.AccountNumberRaw ?? string.Empty;
+                    string preservedMasked = MaskPanLast4(new string(preservedAccountNumber.Where(char.IsDigit).ToArray()));
+
+                    _editingRow.AccountNumberRaw = preservedAccountNumber;
+                    _editingRow.AccountNumberMasked = preservedMasked;
+                    _editingRow.IsActive = isActive;
+                }
+                else
+                {
+                    _editingRow.AccountTypeId = selection.ComboDetailId;
+                    _editingRow.AccountTypeDisplay = ResolveAccountTypeDisplay(selection, customAccountType);
+                    _editingRow.AccountTypeFreeform = customAccountType;
+                    _editingRow.AccountNumberRaw = accountNumber;
+                    _editingRow.AccountNumberMasked = masked;
+                    _editingRow.IsActive = isActive;
+                }
             }
 
             if (isUpdate)
@@ -1128,6 +1144,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 if (AccountNumberBox != null)
                     AccountNumberBox.Password = TrimToMaxChars(accountNumberForEdit);
+                row.AccountNumberRaw = TrimToMaxChars(accountNumberForEdit);
                 HideAccountNumber(clearOverlay: true);
 
                 if (ChkAccountActive != null)
