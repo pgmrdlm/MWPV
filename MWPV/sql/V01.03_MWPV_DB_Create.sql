@@ -218,7 +218,6 @@ FROM (
     UNION ALL SELECT 'BasicTab', 9,  '- Email updated'
     UNION ALL SELECT 'BasicTab', 10, '- Notes updated'
     UNION ALL SELECT 'BasicTab', 11, 'Edits were discarded for #CategoryItemName# (no changes saved)'
-    UNION ALL SELECT 'BasicTab', 12, '- Category Item #CategoryItemName# was deactivated'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -461,9 +460,9 @@ WHERE ct.Code = 'basic_change_fields'
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.04',
+    '01.03',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.04',
+    'Fresh database created at version 01.03',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
