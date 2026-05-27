@@ -756,7 +756,8 @@ namespace MWPV.View.UserControls
                 UrlUpdated ||
                 PhoneUpdated ||
                 EmailUpdated ||
-                NotesUpdated;
+                NotesUpdated ||
+                CategoryItemDeactivated;
 
             public bool PasswordUpdated { get; init; }
             public bool BookmarkToggled { get; init; }
@@ -766,6 +767,7 @@ namespace MWPV.View.UserControls
             public bool PhoneUpdated { get; init; }
             public bool EmailUpdated { get; init; }
             public bool NotesUpdated { get; init; }
+            public bool CategoryItemDeactivated { get; init; }
         }
 
         private static string N(string? s) => (s ?? string.Empty).Trim();
@@ -789,6 +791,7 @@ namespace MWPV.View.UserControls
             string? afterPhone,
             string? afterEmail,
             string? afterPin,
+            int? afterIsActive,
             bool passwordChangedByFingerprint)
         {
             bool bookmarkSame = BoolEqBookmark(beforeRow.BookMarkOnly, isBookmarkOnly);
@@ -799,6 +802,8 @@ namespace MWPV.View.UserControls
             bool phoneSame = StrEq(beforeRow.AccountPhonePlain, afterPhone);
             bool emailSame = StrEq(beforeRow.AccountEmailPlain, afterEmail);
             bool notesSame = StrEq(beforeRow.Description, afterNotes);
+            bool wasActive = !beforeRow.IsActive.HasValue || beforeRow.IsActive.Value == 1;
+            bool isInactiveNow = afterIsActive.HasValue && afterIsActive.Value == 0;
 
             var changes = new BasicTabChanges
             {
@@ -809,14 +814,15 @@ namespace MWPV.View.UserControls
                 UrlUpdated = !urlSame,
                 PhoneUpdated = !phoneSame,
                 EmailUpdated = !emailSame,
-                NotesUpdated = !notesSame
+                NotesUpdated = !notesSame,
+                CategoryItemDeactivated = wasActive && isInactiveNow
             };
 
 #if DEBUG
             Debug.WriteLine(
                 "[ITEM-TABS][BASIC-CHANGES] " +
                 $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
-                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated}");
+                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated}");
 #endif
 
             return changes;
@@ -907,6 +913,7 @@ namespace MWPV.View.UserControls
                 if (changes.PhoneUpdated) seqs.Add(8);
                 if (changes.EmailUpdated) seqs.Add(9);
                 if (changes.NotesUpdated) seqs.Add(10);
+                if (changes.CategoryItemDeactivated) seqs.Add(12);
 
                 if (seqs.Count <= 1)
                     return;
@@ -1542,6 +1549,7 @@ namespace MWPV.View.UserControls
                             afterPhone: phonePlain,
                             afterEmail: emailPlain,
                             afterPin: pinPlain,
+                            afterIsActive: isActive,
                             passwordChangedByFingerprint: passwordChangedByFingerprint);
 
                         if (changes.Any)
