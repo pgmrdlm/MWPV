@@ -43,6 +43,7 @@ namespace Utilities.Sql
 
             // Category Items
             "s_CategoryItem_SelectGrid.sql",
+            "s_CategoryItem_SelectGrid_all.sql",
             "s_CategoryItem_select_by_id.sql",
             "s_CategoryItem_insert.sql",
             "s_CategoryItem_update.sql",

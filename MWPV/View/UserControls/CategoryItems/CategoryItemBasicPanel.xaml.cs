@@ -197,6 +197,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
             // Editing actions should be disabled
             chkBookmarkOnly.IsEnabled = !viewOnly;
+            chkIsActive.IsEnabled = !viewOnly;
 
             // Replace Generate with Copy in view-only
             btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
@@ -376,6 +377,7 @@ namespace MWPV.View.UserControls.CategoryItems
             txtDescription.Text = row.Description ?? string.Empty;
 
             chkBookmarkOnly.IsChecked = row.BookMarkOnly == 1;
+            chkIsActive.IsChecked = !row.IsActive.HasValue || row.IsActive.Value == 1;
 
             if (!string.IsNullOrEmpty(row.AccountEmailPlain))
             {
@@ -507,6 +509,8 @@ namespace MWPV.View.UserControls.CategoryItems
             txtUsername.Text = string.Empty;
             txtUrl.Text = string.Empty;
             txtDescription.Text = string.Empty;
+
+            chkIsActive.IsChecked = true;
 
             _lastEmailChecked = string.Empty;
             _lastNameChecked = string.Empty;
@@ -692,6 +696,8 @@ namespace MWPV.View.UserControls.CategoryItems
             var s = (pwdPin.Password ?? string.Empty).Trim();
             return s.Length == 0 ? null : s;
         }
+
+        public int GetIsActiveInt() => chkIsActive.IsChecked == true ? 1 : 0;
 
         public string? GetPasswordPlainOrNull()
         {

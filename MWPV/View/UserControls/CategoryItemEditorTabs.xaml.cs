@@ -1400,7 +1400,7 @@ namespace MWPV.View.UserControls
                     string? phonePlain = BasicPanel.GetPhoneTrimOrNull();
                     string? pinPlain = BasicPanel.GetPinTrimOrNull();
 
-                    int? isActive = 1;
+                    int? isActive = BasicPanel.GetIsActiveInt();
                     int? bookMarkOnly = isBookmarkOnly ? 1 : 0;
 
                     int rows = CategoryItemService.UpdateCategoryItemBasic(
@@ -1593,7 +1593,7 @@ namespace MWPV.View.UserControls
                 string? phonePlain = BasicPanel.GetPhoneTrimOrNull();
                 string? pinPlain = BasicPanel.GetPinTrimOrNull();
 
-                int? isActive = 1;
+                int? isActive = BasicPanel.GetIsActiveInt();
 
                 long newId;
 
