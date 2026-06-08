@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MWPV", "MWPV.csproj", "{09C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security.Utility", "..\Security.Utility\Security.Utility.csproj", "{94A6D114-78B4-D96E-0B0A-D478BEF4A0C3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyFileLogic", "KeyFileLogic\KeyFileLogic.csproj", "{0773DABF-CCDF-4B44-8B48-13B30ECAC899}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{94A6D114-78B4-D96E-0B0A-D478BEF4A0C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{94A6D114-78B4-D96E-0B0A-D478BEF4A0C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{94A6D114-78B4-D96E-0B0A-D478BEF4A0C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
