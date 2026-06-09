@@ -36,6 +36,11 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
+		<ProjectReference Include="KeyFileLogic\KeyFileLogic.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Remove="KeyFileLogic\**\*.cs" />
 	</ItemGroup>
 
 	<!-- App resources / content -->
