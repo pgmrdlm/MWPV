@@ -39,6 +39,7 @@ using Security.Utility.Crypto;        // KeyArchiveVerifier, KeyProvisioner
 using MWPV.Utilities.UI;              // UICleaner (UI-only scrubbers)
 using MWPV.Utilities.Security;        // PasswordStrengthEvaluator, PasswordStrength
 using MWPV.Services;                  // LogCatalogService
+using KeyFileLogic;                   // SQLite key-file storage
 
 namespace Utilities.Security
 {
@@ -256,11 +257,11 @@ namespace Utilities.Security
         {
             if (File.Exists(_localDbPath))
             {
-                // Existing DB: choose an existing encrypted key archive
+                // Existing DB: choose an existing encrypted key file
                 var openFileDialog = new Microsoft.Win32.OpenFileDialog
                 {
-                    Title = "Select your encrypted key archive",
-                    Filter = "Archives & All files|*.7z;*.zip;*.*|All files (*.*)|*.*",
+                    Title = "Select your encrypted key file",
+                    Filter = "Key files (*.pv;*.kf;*.db;*.7z)|*.pv;*.kf;*.db;*.7z|SQLite key files (*.pv;*.kf;*.db)|*.pv;*.kf;*.db|Legacy archives (*.7z)|*.7z|All files (*.*)|*.*",
                     InitialDirectory = AppPaths.LocalAppDataRoot(),
                     CheckFileExists = true,
                     CheckPathExists = true,
@@ -272,12 +273,12 @@ namespace Utilities.Security
             }
             else
             {
-                // First run: choose where to create the archive
+                // First run: choose where to create the key file
                 var saveDialog = new Microsoft.Win32.SaveFileDialog
                 {
-                    Title = "Save your encrypted key archive",
-                    Filter = "7-Zip archive (*.7z)|*.7z|All files (*.*)|*.*",
-                    FileName = "Kb.7z",
+                    Title = "Save your encrypted key file",
+                    Filter = "Key files (*.pv;*.kf;*.db;*.7z)|*.pv;*.kf;*.db;*.7z|SQLite key files (*.pv;*.kf;*.db)|*.pv;*.kf;*.db|Legacy archives (*.7z)|*.7z|All files (*.*)|*.*",
+                    FileName = "Kb.pv",
                     InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     AddExtension = false,
                     OverwritePrompt = true
@@ -361,33 +362,12 @@ namespace Utilities.Security
                         return;
                     }
 
-                    // Verify archive/password with sentinels
-                    string? pwTemp = null;
-                    bool isCorrect = false;
-                    try
-                    {
-                        pwTemp = new string(pwChars);
-                        isCorrect = KeyArchiveVerifier.VerifyPasswordAndSentinels(keyArchivePath, pwTemp);
-                    }
-                    catch (Exception ex)
-                    {
-                        EarlyLoginFailures.Record(
-                            EDT.KeyFileVerifyError,
-                            $"Key file verification threw: {ex.GetType().Name}: {ex.Message}"
-                        );
-                        SurfaceLoggedError("Error verifying key file.");
-                        return;
-                    }
-                    finally
-                    {
-                        pwTemp = null; // drop string ref ASAP
-                    }
-
-                    if (!isCorrect)
+                    // Verify SQLite key file/password before storing credentials in SEDS.
+                    if (!ValidateExistingSqliteKeyFile(keyArchivePath, pwChars, out string validationReason))
                     {
                         EarlyLoginFailures.Record(
                             EDT.InvalidPasswordOrKeyFile,
-                            $"Invalid key-file password or unsupported/unencrypted archive. Path='{keyArchivePath}'"
+                            $"Invalid SQLite key-file password, schema, or payload. Path='{keyArchivePath}'. Reason='{validationReason}'"
                         );
 
                         SurfaceLoggedError("Invalid Key File Password or invalid key file selected.");
@@ -550,6 +530,71 @@ namespace Utilities.Security
             int diff = 0;
             for (int i = 0; i < len; i++) diff |= a[i] ^ b[i];
             return diff == 0;
+        }
+
+        private static bool ValidateExistingSqliteKeyFile(string keyFilePath, char[] keyPassword, out string reason)
+        {
+            reason = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(keyFilePath))
+            {
+                reason = "Key file path is empty.";
+                return false;
+            }
+
+            if (!File.Exists(keyFilePath))
+            {
+                reason = "Key file does not exist.";
+                return false;
+            }
+
+            if (keyPassword == null || keyPassword.Length == 0)
+            {
+                reason = "Key file password is empty.";
+                return false;
+            }
+
+            byte[]? payloadBytes = null;
+            try
+            {
+                string? directory = Path.GetDirectoryName(keyFilePath);
+                string fileName = Path.GetFileName(keyFilePath);
+
+                if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+                {
+                    reason = "Key file path is invalid.";
+                    return false;
+                }
+
+                if (!KeyFileStore.CanOpenAndValidateSchema(directory, fileName, keyPassword, out reason))
+                    return false;
+
+                payloadBytes = KeyFileStore.ReadPayloadBytes(directory, fileName, keyPassword, payloadId: 1);
+                if (payloadBytes.Length == 0)
+                {
+                    reason = "Key file payload row 1 is empty.";
+                    return false;
+                }
+
+                byte[] payloadForValidation = payloadBytes;
+                if (!KeyProvisioner.ValidateKeysetJson(() => payloadForValidation))
+                {
+                    reason = "Key file payload row 1 is not a valid keyset.";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                reason = ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (payloadBytes != null)
+                    Array.Clear(payloadBytes, 0, payloadBytes.Length);
+            }
         }
 
         // ========= SecureString helpers =========
