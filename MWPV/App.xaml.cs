@@ -1,6 +1,5 @@
 ﻿// File: App.xaml.cs — full file (WPF, .NET 8)
 using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
-using Security.Utility.Archives;       // ✅ SevenZipCore
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -71,29 +70,6 @@ namespace MWPV
             catch (Exception ex)
             {
                 try { EarlyLoginFailures.Write("App", "Failed to start BringToFront listener", ex: ex); } catch { }
-            }
-
-            // ---- Initialize SevenZip native DLL early (centralized) ----
-            try
-            {
-                var explicitPath = Path.Combine(AppContext.BaseDirectory, "7z.dll");
-                var (ok, reason) = SevenZipCore.EnsureConfigured(explicitPath);
-                if (!ok)
-                    throw new InvalidOperationException(
-                        $"7-Zip native DLL not found or failed to load. Looked for: {explicitPath}. {reason}");
-
-                //#if DEBUG
-                //                System.Diagnostics.Debug.WriteLine("[App] SevenZip USING: " + (SevenZipCore.GetConfiguredPath() ?? "<null>"));
-                //#endif
-            }
-            catch (Exception ex)
-            {
-                ErrorHandler.Abend(
-                    ex,
-                    "SevenZip could not be initialized.\n(Check that 7z.dll matches process bitness and is present.)",
-                    "SevenZip.Init");
-                Shutdown();
-                return;
             }
 
             // ---- Early log folders only (no ingest before login) ----
