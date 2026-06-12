@@ -9,8 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security.Utility", "..\Secu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyFileLogic", "KeyFileLogic\KeyFileLogic.csproj", "{0773DABF-CCDF-4B44-8B48-13B30ECAC899}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MigrationUpgrade", "MigrationUpgrade\MigrationUpgrade.csproj", "{87233B39-7EF3-4CE2-9E72-0A610D3458BB}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,10 +27,6 @@ Global
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.Build.0 = Release|Any CPU
-		{87233B39-7EF3-4CE2-9E72-0A610D3458BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{87233B39-7EF3-4CE2-9E72-0A610D3458BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{87233B39-7EF3-4CE2-9E72-0A610D3458BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{87233B39-7EF3-4CE2-9E72-0A610D3458BB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

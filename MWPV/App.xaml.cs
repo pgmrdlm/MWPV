@@ -41,6 +41,8 @@ namespace MWPV
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            AppRunState.MigrationFlag = CaptureMigrationFlag(e.Args);
+
             // ---- Single-instance gate ----
             _singleInstanceMutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out _ownsMutex);
             if (!_ownsMutex)
@@ -212,6 +214,26 @@ namespace MWPV
                 return;
             }
             // NOTE: No 'finally' that touches ShutdownMode — avoids the crash when app is already shutting down.
+        }
+
+        private static string? CaptureMigrationFlag(string[]? args)
+        {
+            if (args == null || args.Length == 0)
+                return null;
+
+            const string name = "migration_flag";
+            const string prefix = name + "=";
+
+            foreach (var arg in args)
+            {
+                if (string.Equals(arg, name, StringComparison.OrdinalIgnoreCase))
+                    return string.Empty;
+
+                if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return arg[prefix.Length..];
+            }
+
+            return null;
         }
 
         protected override void OnExit(ExitEventArgs e)
