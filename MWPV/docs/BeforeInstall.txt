@@ -1,0 +1,11 @@
+MWPV Installation Information
+
+This installer supports both system and portable installations.
+
+A system installation stores application data in Local AppData.
+
+A portable installation stores application data on the selected drive.
+
+Existing installations may be detected and upgraded automatically.
+
+Please back up important data before performing upgrades.

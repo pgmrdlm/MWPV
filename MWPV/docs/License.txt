@@ -1,0 +1,9 @@
+MWPV License
+
+Copyright (c) Dan Miller
+
+This software is provided as-is without warranty of any kind.
+
+This software is intended for personal use.             s
+
+Use at your own risk.
