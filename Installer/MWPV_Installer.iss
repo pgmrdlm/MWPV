@@ -23,6 +23,8 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
+DisableDirPage=no
+UsePreviousAppDir=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; "ArchitecturesAllowed=x64compatible" specifies that Setup cannot run
 ; on anything but x64 and Windows 11 on Arm.
@@ -42,6 +44,7 @@ InfoBeforeFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\docs\BeforeInstall.txt
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+UsePreviousPrivileges=no
 OutputDir=C:\Users\pgmrd\My Drive\MWPV\Installer\Output
 OutputBaseFilename=MWPV_Setup
 SetupIconFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\Assets\Icons\MWPV.ico
@@ -53,7 +56,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "C:\Users\pgmrd\Desktop\deploy\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\pgmrd\Desktop\deploy\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\pgmrd\Desktop\deploy\*"; DestDir: "{app}"; Excludes: "sql,sql\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\sql\*.sql"; DestDir: "{code:GetMwpvSqlStagingFolder}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
@@ -66,5 +70,60 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetMwpvLaunchArguments}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function GetSelectedInstallDrive(Param: string): string;
+var
+  InstallDrive: string;
+begin
+  InstallDrive := ExtractFileDrive(ExpandConstant('{app}'));
+
+  if (Length(InstallDrive) = 2) and (InstallDrive[2] = ':') then
+    Result := InstallDrive + '\'
+  else
+    Result := AddBackslash(InstallDrive);
+end;
+
+function IsSystemDriveInstall(): Boolean;
+var
+  InstallDrive: string;
+  SystemDrive: string;
+begin
+  InstallDrive := GetSelectedInstallDrive('');
+  SystemDrive := ExtractFileDrive(ExpandConstant('{sys}'));
+
+  if (Length(SystemDrive) = 2) and (SystemDrive[2] = ':') then
+    SystemDrive := SystemDrive + '\'
+  else
+    SystemDrive := AddBackslash(SystemDrive);
+
+  Result := CompareText(InstallDrive, SystemDrive) = 0;
+end;
+
+function GetMwpvDataFolder(Param: string): string;
+begin
+  if IsSystemDriveInstall() then
+    Result := ExpandConstant('{localappdata}') + '\MWPV'
+  else
+    Result := GetSelectedInstallDrive('') + 'AppData\Local\MWPV';
+end;
+
+function GetMwpvSqlStagingFolder(Param: string): string;
+begin
+  Result := GetMwpvDataFolder('') + '\sql';
+end;
+
+function MwpvDatabaseExists(): Boolean;
+begin
+  Result := FileExists(GetMwpvDataFolder('') + '\MWPV.db');
+end;
+
+function GetMwpvLaunchArguments(Param: string): string;
+begin
+  if MwpvDatabaseExists() then
+    Result := 'migration_flag'
+  else
+    Result := '';
+end;
 
