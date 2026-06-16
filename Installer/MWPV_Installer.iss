@@ -55,9 +55,9 @@ WizardStyle=modern dynamic
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
+Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\sql\*.sql"; Flags: dontcopy noencryption
 Source: "C:\Users\pgmrd\Desktop\deploy\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\pgmrd\Desktop\deploy\*"; DestDir: "{app}"; Excludes: "sql,sql\*"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\sql\*.sql"; DestDir: "{code:GetMwpvSqlStagingFolder}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
@@ -205,6 +205,98 @@ begin
   Result := GetMwpvDataFolder('') + '\sql';
 end;
 
+procedure CleanupMwpvSqlStagingFolder();
+var
+  SqlStagingFolder: string;
+  FindRec: TFindRec;
+  ChildPath: string;
+begin
+  SqlStagingFolder := AddBackslash(GetMwpvSqlStagingFolder(''));
+
+  if not DirExists(SqlStagingFolder) then
+    exit;
+
+  if FindFirst(SqlStagingFolder + '*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          ChildPath := SqlStagingFolder + FindRec.Name;
+
+          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+            DelTree(ChildPath, True, True, True)
+          else
+            DeleteFile(ChildPath);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+function CopySqlFiles(SourceDir: string; DestDir: string): Boolean;
+var
+  FindRec: TFindRec;
+  SourcePath: string;
+  DestPath: string;
+begin
+  Result := True;
+
+  SourceDir := AddBackslash(SourceDir);
+  DestDir := AddBackslash(DestDir);
+
+  if not ForceDirectories(DestDir) then
+  begin
+    Result := False;
+    exit;
+  end;
+
+  if FindFirst(SourceDir + '*.sql', FindRec) then
+  begin
+    try
+      repeat
+        SourcePath := SourceDir + FindRec.Name;
+        DestPath := DestDir + FindRec.Name;
+
+        if not CopyFile(SourcePath, DestPath, False) then
+        begin
+          Result := False;
+          exit;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end
+  else
+    Result := False;
+end;
+
+function StageMwpvSqlFiles(): Boolean;
+var
+  SqlStagingFolder: string;
+begin
+  Result := False;
+  SqlStagingFolder := GetMwpvSqlStagingFolder('');
+
+  try
+    ExtractTemporaryFiles('{tmp}\*.sql');
+  except
+    MsgBox('Setup could not extract the SQL deployment files.', mbError, MB_OK);
+    exit;
+  end;
+
+  if not CopySqlFiles(ExpandConstant('{tmp}'), SqlStagingFolder) then
+  begin
+    MsgBox('Setup could not stage the SQL deployment files to: ' + SqlStagingFolder, mbError, MB_OK);
+    exit;
+  end;
+
+  Result := True;
+end;
+
 function MwpvDatabaseExists(): Boolean;
 begin
   Result := FileExists(GetMwpvDataFolder('') + '\MWPV.db');
@@ -228,7 +320,19 @@ begin
       BackupMwpvAppFolder();
   end
   else if CurStep = ssPostInstall then
+  begin
+    if not StageMwpvSqlFiles() then
+    begin
+      CleanupMwpvSqlStagingFolder();
+
+      if IsUpdateMigrationInstall and BackupCompleted then
+        RestoreMwpvAppFolder();
+
+      Abort;
+    end;
+
     DeploymentSucceeded := True;
+  end;
 end;
 
 procedure DeinitializeSetup();
