@@ -73,6 +73,97 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetMwpvLaunchArguments}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  IsUpdateMigrationInstall: Boolean;
+  BackupCompleted: Boolean;
+  DeploymentSucceeded: Boolean;
+
+function GetMwpvRollbackCodeFolder(): string;
+begin
+  Result := ExpandConstant('{userdocs}\MWPV_Rollback\code');
+end;
+
+function CopyFolderContents(SourceDir: string; DestDir: string): Boolean;
+var
+  FindRec: TFindRec;
+  SourcePath: string;
+  DestPath: string;
+begin
+  Result := True;
+
+  SourceDir := AddBackslash(SourceDir);
+  DestDir := AddBackslash(DestDir);
+
+  if not ForceDirectories(DestDir) then
+  begin
+    Result := False;
+    exit;
+  end;
+
+  if FindFirst(SourceDir + '*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          SourcePath := SourceDir + FindRec.Name;
+          DestPath := DestDir + FindRec.Name;
+
+          if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+          begin
+            if not CopyFolderContents(SourcePath, DestPath) then
+            begin
+              Result := False;
+              exit;
+            end;
+          end
+          else if not CopyFile(SourcePath, DestPath, False) then
+          begin
+            Result := False;
+            exit;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+procedure BackupMwpvAppFolder();
+var
+  RollbackCodeFolder: string;
+begin
+  RollbackCodeFolder := GetMwpvRollbackCodeFolder();
+
+  if DirExists(RollbackCodeFolder) then
+  begin
+    if not DelTree(RollbackCodeFolder, True, True, True) then
+    begin
+      MsgBox('Setup could not remove the existing rollback folder: ' + RollbackCodeFolder, mbError, MB_OK);
+      Abort;
+    end;
+  end;
+
+  if not CopyFolderContents(ExpandConstant('{app}'), RollbackCodeFolder) then
+  begin
+    MsgBox('Setup could not back up the existing application folder to: ' + RollbackCodeFolder, mbError, MB_OK);
+    Abort;
+  end;
+
+  BackupCompleted := True;
+end;
+
+procedure RestoreMwpvAppFolder();
+var
+  RollbackCodeFolder: string;
+begin
+  RollbackCodeFolder := GetMwpvRollbackCodeFolder();
+
+  if not CopyFolderContents(RollbackCodeFolder, ExpandConstant('{app}')) then
+    MsgBox('Setup could not restore the application folder from: ' + RollbackCodeFolder, mbError, MB_OK);
+end;
+
 function GetSelectedInstallDrive(Param: string): string;
 var
   InstallDrive: string;
@@ -125,5 +216,24 @@ begin
     Result := 'migration_flag'
   else
     Result := '';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    IsUpdateMigrationInstall := FileExists(ExpandConstant('{app}\MWPV.exe'));
+
+    if IsUpdateMigrationInstall then
+      BackupMwpvAppFolder();
+  end
+  else if CurStep = ssPostInstall then
+    DeploymentSucceeded := True;
+end;
+
+procedure DeinitializeSetup();
+begin
+  if IsUpdateMigrationInstall and BackupCompleted and not DeploymentSucceeded then
+    RestoreMwpvAppFolder();
 end;
 
