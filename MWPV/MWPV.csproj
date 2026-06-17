@@ -45,8 +45,8 @@
 
 	<!-- App resources / content -->
 	<ItemGroup>
-		<None Update="sql\SelectCatagories.sql">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		<None Update="sql\**\*.sql">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
 	<ItemGroup>

@@ -31,4 +31,34 @@ namespace MWPV.Services.Upgrade
                 Exception = exception
             };
     }
+
+    public sealed record UpgradeStepResult<T>
+    {
+        public bool Succeeded { get; init; }
+        public string StepName { get; init; } = string.Empty;
+        public UpgradeFailureCategory FailureCategory { get; init; } = UpgradeFailureCategory.None;
+        public AppExitCode DetailCode { get; init; } = AppExitCode.Success;
+        public string Message { get; init; } = string.Empty;
+        public T? Value { get; init; }
+        public Exception? Exception { get; init; }
+
+        public static UpgradeStepResult<T> Success(string stepName, T value, string message = "") =>
+            new() { Succeeded = true, StepName = stepName, Value = value, Message = message };
+
+        public static UpgradeStepResult<T> Failure(
+            string stepName,
+            UpgradeFailureCategory category,
+            AppExitCode detailCode,
+            string message,
+            Exception? exception = null) =>
+            new()
+            {
+                Succeeded = false,
+                StepName = stepName,
+                FailureCategory = category,
+                DetailCode = detailCode,
+                Message = message,
+                Exception = exception
+            };
+    }
 }
