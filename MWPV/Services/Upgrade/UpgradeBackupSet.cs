@@ -9,6 +9,7 @@ namespace MWPV.Services.Upgrade
         public string BackupRoot { get; init; } = string.Empty;
         public string ManifestPath { get; init; } = string.Empty;
         public DateTimeOffset CreatedUtc { get; init; } = DateTimeOffset.UtcNow;
+        public string AppVersion { get; init; } = string.Empty;
         public IReadOnlyList<BackupFileEntry> Files { get; init; } = Array.Empty<BackupFileEntry>();
     }
 }

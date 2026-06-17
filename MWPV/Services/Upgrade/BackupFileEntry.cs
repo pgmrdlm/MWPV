@@ -6,6 +6,7 @@ namespace MWPV.Services.Upgrade
         public string OriginalPath { get; init; } = string.Empty;
         public string BackupPath { get; init; } = string.Empty;
         public bool Required { get; init; }
+        public bool WasPresent { get; init; }
         public long? Size { get; init; }
         public string? Sha256 { get; init; }
     }
