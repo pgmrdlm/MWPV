@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using MWPV.Services.AppLifecycle;
 
 namespace MWPV.Services.Upgrade
@@ -178,6 +179,7 @@ namespace MWPV.Services.Upgrade
             try
             {
                 ArgumentNullException.ThrowIfNull(backupSet);
+                SqliteConnection.ClearAllPools();
 
                 var verify = VerifyBackupSet(backupSet);
                 if (!verify.Succeeded)

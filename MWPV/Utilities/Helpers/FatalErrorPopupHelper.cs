@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Utilities.Helpers;
 using MWPV.View.UserControls.Popup;
+using MWPV.Services.AppLifecycle;
 
 namespace Utilities.Helpers
 {
@@ -15,7 +16,6 @@ namespace Utilities.Helpers
         private const string DefaultMessageText = "A fatal error occurred.";
         private const string PrimaryExitText = "OK / Exit";
         private const string SecondaryCopyExitText = "Copy / Exit";
-        private const int FatalExitCode = -1;
 
         public static Task ShowFatalAsync(string message, Exception? exception = null, string? details = null)
         {
@@ -190,11 +190,11 @@ namespace Utilities.Helpers
         {
             try
             {
-                Application.Current?.Shutdown(FatalExitCode);
+                AppExit.Shutdown(Application.Current, AppExitCode.UnhandledFatalError, "Fatal error popup closed.");
             }
             catch
             {
-                Environment.Exit(FatalExitCode);
+                Environment.Exit((int)AppExitCode.UnhandledFatalError);
             }
         }
     }

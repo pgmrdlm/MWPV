@@ -14,5 +14,11 @@ namespace MWPV.Services.AppLifecycle
         public static int ToProcessExitCode(AppExitCode code) => (int)code;
 
         public static int CurrentProcessExitCode => ToProcessExitCode(FinalCode);
+
+        public static void Shutdown(System.Windows.Application? application, AppExitCode code, string? reason = null)
+        {
+            Set(code, reason);
+            application?.Shutdown(ToProcessExitCode(code));
+        }
     }
 }

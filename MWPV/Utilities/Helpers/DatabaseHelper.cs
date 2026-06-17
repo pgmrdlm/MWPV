@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Security.Utility;           // SecureEncryptedDataStore, SensitiveDataCleaner
 using Utilities.Helpers;          // ErrorHandler
+using MWPV.Services.AppLifecycle;
 
 namespace Utilities.Helpers
 {
@@ -93,15 +94,15 @@ PRAGMA journal_mode = WAL;";
             if (captured != null)
             {
                 ShowInvalidDbPasswordAndExit();
-                Environment.Exit(1);
-                return null!;      // unreachable; satisfies compiler
+                AppExit.Shutdown(System.Windows.Application.Current, AppExitCode.StartupDatabaseOpenFailed, "Encrypted database open failed.");
+                throw new InvalidOperationException("Encrypted database open failed.", captured);
             }
 
             if (conn == null)
             {
                 ShowInvalidDbPasswordAndExit();
-                Environment.Exit(1);
-                return null!;
+                AppExit.Shutdown(System.Windows.Application.Current, AppExitCode.StartupDatabaseOpenFailed, "Encrypted database open returned no connection.");
+                throw new InvalidOperationException("Encrypted database open returned no connection.");
             }
 
             return conn;

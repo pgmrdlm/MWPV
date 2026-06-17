@@ -1,5 +1,6 @@
 ﻿// File: App.xaml.cs — full file (WPF, .NET 8)
 using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
+using MWPV.Services.AppLifecycle;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -42,6 +43,12 @@ namespace MWPV
         protected override void OnStartup(StartupEventArgs e)
         {
             AppRunState.MigrationFlag = CaptureMigrationFlag(e.Args);
+            var defaultUpgradeFlagPath = GetDefaultUpgradeFlagPath();
+            AppRunState.StartupContext = AppStartupDetector.Detect(
+                e.Args,
+                databaseExists: File.Exists(DatabaseHelper.GetAppDbPath()),
+                upgradeFlagFileExists: File.Exists(defaultUpgradeFlagPath),
+                defaultUpgradeFlagFilePath: defaultUpgradeFlagPath);
 
             // ---- Single-instance gate ----
             _singleInstanceMutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out _ownsMutex);
@@ -152,7 +159,7 @@ namespace MWPV
                 var ok = entry.ShowDialog() == true;   // modal; null/false if closed/cancelled
                 if (!ok)
                 {
-                    Shutdown();        // EXIT CLEANLY ON CANCEL/CLOSE
+                    AppExit.Shutdown(this, AppExitCode.UserCancelledLogin, "Entry window was cancelled or closed.");
                     return;
                 }
 
@@ -207,6 +214,7 @@ namespace MWPV
             catch (Exception ex)
             {
                 try { EarlyLoginFailures.Write("App", "Failed to show initial window(s)", ex: ex); } catch { }
+                AppExit.Set(AppExitCode.UnknownFatalError, "Startup failed while showing the entry or main window.");
                 _ = FatalErrorPopupHelper.ShowFatalAsync(
                     "MWPV could not finish starting and must close.",
                     ex,
@@ -234,6 +242,14 @@ namespace MWPV
             }
 
             return null;
+        }
+
+        private static string GetDefaultUpgradeFlagPath()
+        {
+            var dbDirectory = Path.GetDirectoryName(DatabaseHelper.GetAppDbPath());
+            return Path.Combine(
+                string.IsNullOrWhiteSpace(dbDirectory) ? AppContext.BaseDirectory : dbDirectory,
+                "upgrade.pending.json");
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -450,15 +466,15 @@ namespace MWPV
             {
                 if (Current?.Dispatcher != null && !Current.Dispatcher.CheckAccess())
                 {
-                    Current.Dispatcher.Invoke(() => Current.Shutdown(-1));
+                    Current.Dispatcher.Invoke(() => AppExit.Shutdown(Current, AppExitCode.UnhandledFatalError, "Forced fatal shutdown."));
                     return;
                 }
 
-                Current?.Shutdown(-1);
+                AppExit.Shutdown(Current, AppExitCode.UnhandledFatalError, "Forced fatal shutdown.");
             }
             catch
             {
-                Environment.Exit(-1);
+                Environment.Exit((int)AppExitCode.UnhandledFatalError);
             }
         }
 

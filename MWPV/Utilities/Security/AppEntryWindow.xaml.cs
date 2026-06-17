@@ -30,6 +30,8 @@ using System.Windows.Media;           // Brush for meter coloring
 
 using Microsoft.Data.Sqlite;          // ok if not used directly here
 
+using MWPV.Services.AppLifecycle;
+using MWPV.Services.Upgrade;
 using Utilities.Helpers;              // DatabaseHelper (keep), no popup usage
 using Utilities.Sql;                  // SqlCagegory, SchemaBootstrap
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
@@ -413,6 +415,27 @@ namespace Utilities.Security
                         ex,
                         "Session key material could not be loaded from the verified key archive.");
                     return;
+                }
+
+                if (MWPV.AppRunState.StartupContext.RunMode == AppRunMode.Upgrade)
+                {
+                    var upgradeResult = new AppUpgradeCoordinator()
+                        .RunAuthenticatedUpgrade(MWPV.AppRunState.StartupContext);
+
+                    AppExit.Set(upgradeResult.FinalExitCode, upgradeResult.Message);
+
+                    if (!upgradeResult.Succeeded)
+                    {
+                        SurfaceLoggedError(upgradeResult.Message);
+                        AppExit.Shutdown(Application.Current, upgradeResult.FinalExitCode, upgradeResult.Message);
+                        return;
+                    }
+
+                    if (MWPV.AppRunState.StartupContext.ShouldExitAfterUpgrade)
+                    {
+                        AppExit.Shutdown(Application.Current, AppExitCode.Success, upgradeResult.Message);
+                        return;
+                    }
                 }
 
                 // 📦 Load additional SQL logic from key archive
