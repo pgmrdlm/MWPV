@@ -13,6 +13,9 @@ namespace MWPV.Services.Upgrade
         public bool RollbackRequired { get; init; }
         public RollbackResult Rollback { get; init; } = RollbackResult.NotRequired();
         public string Message { get; init; } = string.Empty;
+        public string LogPath { get; init; } = string.Empty;
+        public string BackupSetPath { get; init; } = string.Empty;
+        public string CodeBackupPath { get; init; } = string.Empty;
         public Exception? Exception { get; init; }
 
         public static UpgradeResult Success(string message = "") =>
@@ -26,6 +29,9 @@ namespace MWPV.Services.Upgrade
             bool backupSetCreated = false,
             bool rollbackRequired = false,
             RollbackResult? rollback = null,
+            string? logPath = null,
+            string? backupSetPath = null,
+            string? codeBackupPath = null,
             Exception? exception = null) =>
             new()
             {
@@ -37,6 +43,9 @@ namespace MWPV.Services.Upgrade
                 RollbackRequired = rollbackRequired,
                 Rollback = rollback ?? RollbackResult.NotRequired(),
                 Message = message,
+                LogPath = logPath ?? string.Empty,
+                BackupSetPath = backupSetPath ?? string.Empty,
+                CodeBackupPath = codeBackupPath ?? string.Empty,
                 Exception = exception
             };
     }

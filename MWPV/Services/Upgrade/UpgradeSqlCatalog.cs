@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using MWPV.Services.AppLifecycle;
+using Utilities.Helpers;
 
 namespace MWPV.Services.Upgrade
 {
@@ -131,7 +132,7 @@ namespace MWPV.Services.Upgrade
             if (!string.IsNullOrWhiteSpace(explicitSqlDirectory))
                 return Path.GetFullPath(explicitSqlDirectory);
 
-            return Path.Combine(AppContext.BaseDirectory, "sql");
+            return DatabaseHelper.GetSqlFolderPath();
         }
     }
 }

@@ -73,6 +73,10 @@ namespace MWPV.View.UserControls.Popup
             DependencyProperty.Register(nameof(IsFatalError), typeof(bool), typeof(PopupDialog),
                 new PropertyMetadata(false, OnFatalErrorChanged));
 
+        public static readonly DependencyProperty FatalHeaderTextProperty =
+            DependencyProperty.Register(nameof(FatalHeaderText), typeof(string), typeof(PopupDialog),
+                new PropertyMetadata("FATAL APPLICATION ERROR"));
+
         public int Severity
         {
             get => (int)GetValue(SeverityProperty);
@@ -113,6 +117,12 @@ namespace MWPV.View.UserControls.Popup
         {
             get => (bool)GetValue(IsFatalErrorProperty);
             set => SetValue(IsFatalErrorProperty, value);
+        }
+
+        public string FatalHeaderText
+        {
+            get => (string)GetValue(FatalHeaderTextProperty);
+            set => SetValue(FatalHeaderTextProperty, value);
         }
 
         // =========================

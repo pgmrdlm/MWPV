@@ -53,4 +53,14 @@
 	  <Folder Include="Authentication\" />
 	</ItemGroup>
 
+	<Target Name="CleanInstallerPayloadPublishDirectory"
+			AfterTargets="_IncrementalCleanPublishDirectory"
+			BeforeTargets="_ComputeResolvedFilesToPublishTypes"
+			Condition="'$(Configuration)' == 'Release' and '$(PublishDir)' != '' and Exists('$(PublishDir)')">
+		<ItemGroup>
+			<InstallerPayloadPublishFiles Include="$(PublishDir)**\*" />
+		</ItemGroup>
+		<Delete Files="@(InstallerPayloadPublishFiles)" />
+	</Target>
+
 </Project>

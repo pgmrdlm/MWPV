@@ -10,6 +10,10 @@
 #define MyAppAssocName MyAppName + " Vault"
 #define MyAppAssocExt ".pv"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
+#define InstallerOutputDir "C:\Users\pgmrd\My Drive\MWPV\Installer\Output"
+
+; Clear generated installer artifacts before compiling a new setup package.
+#expr Exec("cmd.exe", "/C if exist """ + InstallerOutputDir + """ rd /S /Q """ + InstallerOutputDir + """ & mkdir """ + InstallerOutputDir + """", "", 1)
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
@@ -45,7 +49,7 @@ InfoBeforeFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\docs\BeforeInstall.txt
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UsePreviousPrivileges=no
-OutputDir=C:\Users\pgmrd\My Drive\MWPV\Installer\Output
+OutputDir={#InstallerOutputDir}
 OutputBaseFilename=MWPV_Setup
 SetupIconFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\Assets\Icons\MWPV.ico
 SolidCompression=yes
@@ -56,8 +60,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\sql\*.sql"; Flags: dontcopy noencryption
-Source: "C:\Users\pgmrd\Desktop\deploy\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\pgmrd\Desktop\deploy\*"; DestDir: "{app}"; Excludes: "sql,sql\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\bin\Release\net8.0-windows\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\pgmrd\My Drive\MWPV\MWPV\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Excludes: "sql,sql\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
@@ -70,7 +74,7 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetMwpvLaunchArguments}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetMwpvLaunchArguments}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent; Check: ShouldShowPostInstallLaunch
 
 [Code]
 var
@@ -78,6 +82,79 @@ var
   BackupCompleted: Boolean;
   DeploymentSucceeded: Boolean;
 
+function IsMwpvRunning(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(
+    ExpandConstant('{cmd}'),
+    '/C tasklist /FI "IMAGENAME eq {#MyAppExeName}" /NH | find /I "{#MyAppExeName}" >NUL',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode) and (ResultCode = 0);
+end;
+
+function TerminateMwpvProcess(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(
+    ExpandConstant('{sys}\taskkill.exe'),
+    '/F /T /IM "{#MyAppExeName}"',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+end;
+
+function WaitForMwpvToExit(): Boolean;
+var
+  Attempt: Integer;
+begin
+  Result := False;
+
+  for Attempt := 1 to 20 do
+  begin
+    if not IsMwpvRunning() then
+    begin
+      Result := True;
+      exit;
+    end;
+
+    Sleep(250);
+  end;
+end;
+
+procedure EnsureMwpvIsNotRunning();
+var
+  Answer: Integer;
+begin
+  if not IsMwpvRunning() then
+    exit;
+
+  Answer := MsgBox(
+    'MWPV is currently running.' + #13#10 + #13#10 +
+    'Setup cannot continue while MWPV is open.' + #13#10 + #13#10 +
+    'Would you like Setup to terminate MWPV now?',
+    mbConfirmation,
+    MB_YESNO);
+
+  if Answer <> IDYES then
+    Abort;
+
+  if not TerminateMwpvProcess() then
+  begin
+    MsgBox('Setup could not terminate MWPV.', mbError, MB_OK);
+    Abort;
+  end;
+
+  if not WaitForMwpvToExit() then
+  begin
+    MsgBox('Setup could not verify that MWPV has exited.', mbError, MB_OK);
+    Abort;
+  end;
+end;
 function GetMwpvRollbackCodeFolder(): string;
 begin
   Result := ExpandConstant('{userdocs}\MWPV_Rollback\code');
@@ -310,10 +387,34 @@ begin
     Result := '';
 end;
 
+function ShouldShowPostInstallLaunch(): Boolean;
+begin
+  Result := not IsUpdateMigrationInstall;
+end;
+
+procedure LaunchMwpvAfterUpdate();
+var
+  ResultCode: Integer;
+begin
+  if not Exec(
+    ExpandConstant('{app}\{#MyAppExeName}'),
+    GetMwpvLaunchArguments(''),
+    ExpandConstant('{app}'),
+    SW_SHOWNORMAL,
+    ewNoWait,
+    ResultCode) then
+  begin
+    MsgBox('Setup could not launch MWPV after the update.', mbError, MB_OK);
+    Abort;
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
   begin
+    EnsureMwpvIsNotRunning();
+
     IsUpdateMigrationInstall := FileExists(ExpandConstant('{app}\MWPV.exe'));
 
     if IsUpdateMigrationInstall then
@@ -332,6 +433,9 @@ begin
     end;
 
     DeploymentSucceeded := True;
+
+    if IsUpdateMigrationInstall then
+      LaunchMwpvAfterUpdate();
   end;
 end;
 

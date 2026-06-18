@@ -427,15 +427,11 @@ namespace Utilities.Security
                     if (!upgradeResult.Succeeded)
                     {
                         SurfaceLoggedError(upgradeResult.Message);
+                        UpgradeFailurePopupHelper.Show(upgradeResult);
                         AppExit.Shutdown(Application.Current, upgradeResult.FinalExitCode, upgradeResult.Message);
                         return;
                     }
 
-                    if (MWPV.AppRunState.StartupContext.ShouldExitAfterUpgrade)
-                    {
-                        AppExit.Shutdown(Application.Current, AppExitCode.Success, upgradeResult.Message);
-                        return;
-                    }
                 }
 
                 // 📦 Load additional SQL logic from key archive

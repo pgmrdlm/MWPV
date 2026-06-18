@@ -92,7 +92,7 @@
                         BorderThickness="1"
                         CornerRadius="6"
                         Padding="10,8">
-                    <TextBlock Text="FATAL APPLICATION ERROR"
+                    <TextBlock Text="{Binding FatalHeaderText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                FontSize="18"
                                FontWeight="Bold"
                                Foreground="White"

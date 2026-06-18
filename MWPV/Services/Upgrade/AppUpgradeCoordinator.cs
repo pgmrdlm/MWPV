@@ -18,6 +18,8 @@ namespace MWPV.Services.Upgrade
         public string? TargetVersion { get; init; }
         public string? UpgradeFlagFilePath { get; init; }
         public string? LogPath { get; init; }
+        public string? AppInstallDirectory { get; init; }
+        public string? CodeBackupPath { get; init; }
     }
 
     public sealed class AppUpgradeCoordinator
@@ -73,8 +75,10 @@ namespace MWPV.Services.Upgrade
                 var dbPath = DatabaseHelper.GetAppDbPath();
                 var keyFilePath = SecureEncryptedDataStore.GetString(SedsKey_KeyFile);
                 var localRoot = Path.GetDirectoryName(dbPath) ?? AppContext.BaseDirectory;
+                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 var backupRoot = Path.Combine(localRoot, "upgrade-backups");
                 var logPath = Path.Combine(localRoot, "upgrade", $"upgrade-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
+                var codeBackupPath = Path.Combine(documentsPath, "MWPV_Rollback", "code");
 
                 var context = new UpgradeExecutionContext
                 {
@@ -85,18 +89,43 @@ namespace MWPV.Services.Upgrade
                     BackupRoot = backupRoot,
                     TargetVersion = startupContext.RequestedTargetVersion,
                     UpgradeFlagFilePath = startupContext.UpgradeFlagFilePath,
-                    LogPath = logPath
+                    LogPath = logPath,
+                    AppInstallDirectory = AppContext.BaseDirectory,
+                    CodeBackupPath = codeBackupPath
                 };
 
                 return RunAuthenticatedUpgrade(context);
             }
             catch (Exception ex)
             {
+                var fallbackLogPath = Path.Combine(AppContext.BaseDirectory, "upgrade", $"upgrade-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
+                var fallbackContext = new UpgradeExecutionContext
+                {
+                    LogPath = fallbackLogPath,
+                    AppInstallDirectory = AppContext.BaseDirectory,
+                    CodeBackupPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "MWPV_Rollback",
+                        "code")
+                };
+                var logger = new UpgradeLogger(fallbackLogPath);
+                logger.LogResult(AppExitCode.UpgradeSqlCatalogMissing, "Upgrade context resolution failed.");
+                logger.LogManualRecoveryInstructions(
+                    fallbackContext,
+                    AppExitCode.UpgradeSqlCatalogMissing,
+                    AppExitCode.UpgradeSqlCatalogMissing,
+                    UpgradeFailureCategory.Unknown,
+                    "Upgrade context resolution failed.",
+                    backupSet: null,
+                    rollback: RollbackResult.NotRequired("Upgrade failed before automatic rollback could run."));
+
                 return UpgradeResult.Failure(
                     AppExitCode.UpgradeSqlCatalogMissing,
                     AppExitCode.UpgradeSqlCatalogMissing,
                     UpgradeFailureCategory.Unknown,
                     "Upgrade context resolution failed.",
+                    logPath: fallbackLogPath,
+                    codeBackupPath: fallbackContext.CodeBackupPath,
                     exception: ex);
             }
             finally
@@ -112,6 +141,7 @@ namespace MWPV.Services.Upgrade
 
         public UpgradeResult RunAuthenticatedUpgrade(UpgradeExecutionContext context)
         {
+            context = NormalizeContext(context);
             var logger = new UpgradeLogger(context.LogPath);
             UpgradeBackupSet? backupSet = null;
 
@@ -127,7 +157,7 @@ namespace MWPV.Services.Upgrade
                 });
 
                 if (!catalogResult.Succeeded || catalogResult.Value == null)
-                    return PreBackupFailure(catalogResult.Code, UpgradeFailureCategory.SqlCatalog, catalogResult.Message, catalogResult.Exception, logger);
+                    return PreBackupFailure(context, catalogResult.Code, UpgradeFailureCategory.SqlCatalog, catalogResult.Message, catalogResult.Exception, logger);
 
                 var catalog = catalogResult.Value;
 
@@ -140,11 +170,22 @@ namespace MWPV.Services.Upgrade
                 if (!backupResult.Succeeded || backupResult.Value == null)
                 {
                     logger.LogResult(AppExitCode.UpgradeBackupSetCreationFailed, backupResult.Message);
+                    logger.LogManualRecoveryInstructions(
+                        context,
+                        AppExitCode.UpgradeBackupSetCreationFailed,
+                        AppExitCode.UpgradeBackupSetCreationFailed,
+                        UpgradeFailureCategory.Backup,
+                        backupResult.Message,
+                        backupSet: null,
+                        rollback: RollbackResult.NotRequired("Backup set creation failed before automatic rollback could run."));
                     return UpgradeResult.Failure(
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         UpgradeFailureCategory.Backup,
                         backupResult.Message,
+                        logPath: context.LogPath,
+                        backupSetPath: context.BackupRoot,
+                        codeBackupPath: context.CodeBackupPath,
                         exception: backupResult.Exception);
                 }
 
@@ -155,11 +196,11 @@ namespace MWPV.Services.Upgrade
                     context.PasswordDatabasePath,
                     context.PasswordDatabasePassword);
                 if (!versionResult.Succeeded || string.IsNullOrWhiteSpace(versionResult.Value))
-                    return RollbackAfterFailure(versionResult, backupSet, logger);
+                    return RollbackAfterFailure(versionResult, backupSet, context, logger);
 
                 var planResult = _dbExecutor.BuildPlan(versionResult.Value, catalog, context.TargetVersion);
                 if (!planResult.Succeeded || planResult.Value == null)
-                    return RollbackAfterFailure(planResult, backupSet, logger);
+                    return RollbackAfterFailure(planResult, backupSet, context, logger);
 
                 var plan = planResult.Value;
                 var executeResult = _dbExecutor.ExecutePlan(
@@ -168,7 +209,7 @@ namespace MWPV.Services.Upgrade
                     plan,
                     catalog);
                 if (!executeResult.Succeeded)
-                    return RollbackAfterFailure(executeResult, backupSet, logger);
+                    return RollbackAfterFailure(executeResult, backupSet, context, logger);
 
                 var expectedVersion = string.IsNullOrWhiteSpace(plan.TargetDbVersion)
                     ? versionResult.Value
@@ -179,21 +220,21 @@ namespace MWPV.Services.Upgrade
                     context.PasswordDatabasePassword,
                     expectedVersion);
                 if (!dbValidation.Succeeded)
-                    return RollbackAfterFailure(dbValidation, backupSet, logger);
+                    return RollbackAfterFailure(dbValidation, backupSet, context, logger);
 
                 var keyRewrite = _keyFileUpgradeService.RewriteSqlPayload(
                     context.KeyFilePath,
                     context.KeyFilePassword,
                     catalog);
                 if (!keyRewrite.Succeeded)
-                    return RollbackAfterFailure(keyRewrite, backupSet, logger);
+                    return RollbackAfterFailure(keyRewrite, backupSet, context, logger);
 
                 var keyValidation = _keyFileUpgradeService.ValidateKeyFile(
                     context.KeyFilePath,
                     context.KeyFilePassword,
                     catalog);
                 if (!keyValidation.Succeeded)
-                    return RollbackAfterFailure(keyValidation, backupSet, logger);
+                    return RollbackAfterFailure(keyValidation, backupSet, context, logger);
 
                 var flagClear = _flagService.ClearUpgradeFlag(context.UpgradeFlagFilePath);
                 if (!flagClear.Succeeded)
@@ -212,10 +253,11 @@ namespace MWPV.Services.Upgrade
                         AppExitCode.UnknownFatalError,
                         "Upgrade failed unexpectedly.",
                         ex);
-                    return RollbackAfterFailure(failure, backupSet, logger);
+                    return RollbackAfterFailure(failure, backupSet, context, logger);
                 }
 
                 return PreBackupFailure(
+                    context,
                     AppExitCode.UnknownFatalError,
                     UpgradeFailureCategory.Unknown,
                     "Upgrade failed before backup set creation.",
@@ -225,6 +267,7 @@ namespace MWPV.Services.Upgrade
         }
 
         private static UpgradeResult PreBackupFailure(
+            UpgradeExecutionContext context,
             AppExitCode code,
             UpgradeFailureCategory category,
             string message,
@@ -232,15 +275,26 @@ namespace MWPV.Services.Upgrade
             UpgradeLogger logger)
         {
             logger.LogResult(code, message);
+            logger.LogManualRecoveryInstructions(
+                context,
+                code,
+                code,
+                category,
+                message,
+                backupSet: null,
+                rollback: RollbackResult.NotRequired("Upgrade failed before automatic rollback could run."));
             return UpgradeResult.Failure(
                 code,
                 code,
                 category,
                 message,
+                logPath: context.LogPath,
+                backupSetPath: context.BackupRoot,
+                codeBackupPath: context.CodeBackupPath,
                 exception: exception);
         }
 
-        private UpgradeResult RollbackAfterFailure(UpgradeStepResult stepResult, UpgradeBackupSet backupSet, UpgradeLogger logger)
+        private UpgradeResult RollbackAfterFailure(UpgradeStepResult stepResult, UpgradeBackupSet backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
             logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
             var rollback = _backupService.RestoreBackupSet(backupSet);
@@ -249,6 +303,14 @@ namespace MWPV.Services.Upgrade
                 : AppExitCode.UpgradeRollbackFailed;
 
             logger.LogResult(finalCode, rollback.Message);
+            logger.LogManualRecoveryInstructions(
+                context,
+                finalCode,
+                stepResult.DetailCode,
+                stepResult.FailureCategory,
+                stepResult.Message,
+                backupSet,
+                rollback);
             return UpgradeResult.Failure(
                 finalCode,
                 stepResult.DetailCode,
@@ -257,10 +319,13 @@ namespace MWPV.Services.Upgrade
                 backupSetCreated: true,
                 rollbackRequired: true,
                 rollback: rollback,
+                logPath: logger.LogPath,
+                backupSetPath: backupSet.BackupRoot,
+                codeBackupPath: GetDefaultCodeBackupPath(),
                 exception: stepResult.Exception);
         }
 
-        private UpgradeResult RollbackAfterFailure<T>(UpgradeStepResult<T> stepResult, UpgradeBackupSet backupSet, UpgradeLogger logger)
+        private UpgradeResult RollbackAfterFailure<T>(UpgradeStepResult<T> stepResult, UpgradeBackupSet backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
             logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
             var rollback = _backupService.RestoreBackupSet(backupSet);
@@ -269,6 +334,14 @@ namespace MWPV.Services.Upgrade
                 : AppExitCode.UpgradeRollbackFailed;
 
             logger.LogResult(finalCode, rollback.Message);
+            logger.LogManualRecoveryInstructions(
+                context,
+                finalCode,
+                stepResult.DetailCode,
+                stepResult.FailureCategory,
+                stepResult.Message,
+                backupSet,
+                rollback);
             return UpgradeResult.Failure(
                 finalCode,
                 stepResult.DetailCode,
@@ -277,7 +350,34 @@ namespace MWPV.Services.Upgrade
                 backupSetCreated: true,
                 rollbackRequired: true,
                 rollback: rollback,
+                logPath: logger.LogPath,
+                backupSetPath: backupSet.BackupRoot,
+                codeBackupPath: GetDefaultCodeBackupPath(),
                 exception: stepResult.Exception);
         }
+
+        private static UpgradeExecutionContext NormalizeContext(UpgradeExecutionContext context)
+        {
+            var logPath = string.IsNullOrWhiteSpace(context.LogPath)
+                ? Path.Combine(AppContext.BaseDirectory, "upgrade", $"upgrade-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log")
+                : context.LogPath;
+
+            return context with
+            {
+                LogPath = logPath,
+                AppInstallDirectory = string.IsNullOrWhiteSpace(context.AppInstallDirectory)
+                    ? AppContext.BaseDirectory
+                    : context.AppInstallDirectory,
+                CodeBackupPath = string.IsNullOrWhiteSpace(context.CodeBackupPath)
+                    ? GetDefaultCodeBackupPath()
+                    : context.CodeBackupPath
+            };
+        }
+
+        private static string GetDefaultCodeBackupPath() =>
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "MWPV_Rollback",
+                "code");
     }
 }
