@@ -26,8 +26,12 @@ namespace Security.Utility.Storage
         private const string CompatibleSpecials = "!@#$%&*()-_=+.?";
 
         public static bool IsPasswordValid(string password, string verifyPassword, out string errorMessage)
+            => IsPasswordValid(password, verifyPassword, MinimumLength, out errorMessage);
+
+        public static bool IsPasswordValid(string password, string verifyPassword, int minimumLength, out string errorMessage)
         {
             errorMessage = "";
+            minimumLength = Math.Max(minimumLength, MinimumLength);
 
             if (password != verifyPassword)
             {
@@ -35,9 +39,9 @@ namespace Security.Utility.Storage
                 return false;
             }
 
-            if (password.Length < MinimumLength)
+            if (password.Length < minimumLength)
             {
-                errorMessage = "Password must be at least 8 characters long.";
+                errorMessage = $"Password must be at least {minimumLength} characters long.";
                 return false;
             }
 

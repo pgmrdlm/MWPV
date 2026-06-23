@@ -1,11 +1,17 @@
 
 /* ============================================================================
-   MWPV - 01.03 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.05 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.03
+   - Create a fresh database at schema version 01.05
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.05 changes reflected here:
+   - AppSettings added for user-defined password length settings
+
+   01.04 changes reflected here:
+   - BasicTab CategoryItem deactivation logging template added
 
    01.03 changes reflected here:
    - KeyArchiveIntegrity removed
@@ -29,6 +35,7 @@ DROP TABLE IF EXISTS BankCards;
 DROP TABLE IF EXISTS CategoryItem;
 DROP TABLE IF EXISTS Category;
 DROP TABLE IF EXISTS DbVersion;
+DROP TABLE IF EXISTS AppSettings;
 DROP TABLE IF EXISTS Logs;
 DROP TABLE IF EXISTS LogMessageTemplate;
 
@@ -156,6 +163,13 @@ CREATE TABLE DbVersion (
     AppliedOn   TEXT    NOT NULL,
     Description TEXT,
     IsCurrent   INTEGER NOT NULL CHECK (IsCurrent IN (0, 1))
+);
+
+-- Application settings
+CREATE TABLE AppSettings (
+    AS_PW_Minimum          INTEGER NOT NULL,
+    AS_PW_Incriments       INTEGER NOT NULL,
+    AS_PW_Inctriment_Steps INTEGER NOT NULL
 );
 
 -- Log message templates
@@ -458,12 +472,24 @@ WHERE ct.Code = 'basic_change_fields'
         AND cd.Code        = v.Code
   );
 
+-- Default application settings
+INSERT INTO AppSettings (
+    AS_PW_Minimum,
+    AS_PW_Incriments,
+    AS_PW_Inctriment_Steps
+)
+SELECT
+    12,
+    10,
+    10
+WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
+
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.04',
+    '01.05',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.04',
+    'Fresh database created at version 01.05',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

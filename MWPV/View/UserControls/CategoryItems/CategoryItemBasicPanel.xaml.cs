@@ -70,6 +70,7 @@ namespace MWPV.View.UserControls.CategoryItems
         private readonly AutoHideTimer _revealAutoHide;
 
         private bool _settingPwProgrammatically;
+        private int _passwordMinimum;
 
         // Default visuals
         private Brush? _emailDefaultBorderBrush;
@@ -117,6 +118,7 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
             CacheDefaultFieldVisualsIfNeeded();
             HookUiEventsOnce();
+            LoadPasswordMinimum();
 
             ClearForm();
             ResetUiState();
@@ -899,6 +901,11 @@ namespace MWPV.View.UserControls.CategoryItems
 
         /* ======================= Password / Verify ======================= */
 
+        private void LoadPasswordMinimum()
+        {
+            _passwordMinimum = AppSettingsService.GetPasswordMinimum();
+        }
+
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
         {
             if (IsViewOnly) return;
@@ -906,7 +913,7 @@ namespace MWPV.View.UserControls.CategoryItems
             try
             {
                 // CHANGED: use COMPATIBLE generator (picky-site friendly)
-                var generated = SecurePassword.GenerateCompatibleAsString(12);
+                var generated = SecurePassword.GenerateCompatibleAsString(_passwordMinimum);
 
                 _settingPwProgrammatically = true;
                 try { SetPassword(generated); }
@@ -1133,7 +1140,7 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             UpdateStrengthPanelForPolicy();
-            if (!SecurePassword.IsPasswordValid(pw, pw, out _))
+            if (!SecurePassword.IsPasswordValid(pw, pw, _passwordMinimum, out _))
             {
                 error = "Password does not meet policy requirements.";
                 ShowVerifyError(error);
@@ -1175,7 +1182,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (pw.Any(char.IsDigit)) classes++;
             if (pw.Any(ch => !char.IsLetterOrDigit(ch))) classes++;
 
-            bool lengthOk = pw.Length >= 8;
+            bool lengthOk = pw.Length >= _passwordMinimum;
             bool policyPass = lengthOk && classes >= 3;
 
             if (policyPass)
@@ -1202,7 +1209,7 @@ namespace MWPV.View.UserControls.CategoryItems
             PwStrengthText.Text = $"Password strength: {label} ({pw.Length} chars)";
 
             var tips = new List<string>();
-            if (!lengthOk) tips.Add("Use at least 8 characters.");
+            if (!lengthOk) tips.Add($"Use at least {_passwordMinimum} characters.");
             if (!pw.Any(char.IsLower)) tips.Add("Add a lowercase letter.");
             if (!pw.Any(char.IsUpper)) tips.Add("Add an uppercase letter.");
             if (!pw.Any(char.IsDigit)) tips.Add("Add a digit.");

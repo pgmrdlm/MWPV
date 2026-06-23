@@ -75,6 +75,9 @@ namespace Utilities.Sql
             // DbVersion
             "s_DbVersion_select_current.sql",
 
+            // AppSettings
+            "s_AppSettings_select.sql",
+
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"
         };
