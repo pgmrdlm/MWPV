@@ -166,14 +166,14 @@ namespace Utilities.Security
                 // and validate that the bytes deserialize as the expected keyset.json.
 
                 Volatile.Write(ref _keysetLoaded, 0);
-                SecurelyScrubSqlStagingFolder();
+                SqlStagingCleanupService.SecurelyScrubDefaultStagingFolder();
 
                 return $"Encrypted SQLite key file created at: {keyFilePath}";
             }
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error creating SQLite key file.");
-                try { SecurelyScrubSqlStagingFolder(); } catch { /* best-effort */ }
+                try { SqlStagingCleanupService.SecurelyScrubDefaultStagingFolder(); } catch { /* best-effort */ }
                 return "Error creating SQLite key file: " + ex.Message;
             }
             finally
@@ -496,28 +496,6 @@ namespace Utilities.Security
                 throw new InvalidOperationException("KeyFile path must include both directory and file name.");
 
             return (directory, fileName);
-        }
-
-        private static void SecurelyScrubSqlStagingFolder()
-        {
-            if (!Directory.Exists(SqlFolder))
-                return;
-
-            SensitiveDataCleaner.SecureDeleteAllFiles(SqlFolder, overwritePasses: 3);
-
-            try
-            {
-                SensitiveDataCleaner.SecureDeleteDirectory(
-                    SqlFolder,
-                    overwritePasses: 1,
-                    shredNames: true,
-                    finalZeroPass: false,
-                    removeDirectories: true);
-            }
-            catch
-            {
-                // best effort
-            }
         }
 
         #endregion

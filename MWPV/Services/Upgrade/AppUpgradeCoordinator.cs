@@ -3,6 +3,7 @@ using System.IO;
 using Security.Utility.Storage;
 using Security.Utility.Wiping;
 using Utilities.Helpers;
+using Utilities.Security;
 using MWPV.Services.AppLifecycle;
 
 namespace MWPV.Services.Upgrade
@@ -235,6 +236,17 @@ namespace MWPV.Services.Upgrade
                     catalog);
                 if (!keyValidation.Succeeded)
                     return RollbackAfterFailure(keyValidation, backupSet, context, logger);
+
+                if (SqlStagingCleanupService.TrySecurelyScrubDefaultStagingFolder(out var cleanupException))
+                {
+                    logger.LogPhase("SqlCleanup", "SQL staging folder cleanup completed.");
+                }
+                else
+                {
+                    logger.LogPhase(
+                        "SqlCleanup",
+                        $"SQL staging folder cleanup failed after successful validation; staged files were left in place. {cleanupException?.Message}");
+                }
 
                 var flagClear = _flagService.ClearUpgradeFlag(context.UpgradeFlagFilePath);
                 if (!flagClear.Succeeded)
