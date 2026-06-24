@@ -12,7 +12,11 @@ namespace MWPV.Services
     {
         private const string Sql_AppSettingsSelect = "s_AppSettings_select.sql";
         private const int FallbackPasswordMinimum = 12;
+        private const int FallbackPasswordIncrement = 10;
+        private const int FallbackPasswordEntryCount = 10;
         private const int AbsolutePasswordMinimum = 8;
+        private const int AbsolutePasswordIncrementMinimum = 1;
+        private const int AbsolutePasswordEntryCountMinimum = 1;
 
         private static string LoadSqlRequired(string assetName)
         {
@@ -24,6 +28,11 @@ namespace MWPV.Services
 
         public static int GetPasswordMinimum()
         {
+            return GetPasswordLengthSettings().Minimum;
+        }
+
+        public static PasswordLengthSettings GetPasswordLengthSettings()
+        {
             try
             {
                 var sql = LoadSqlRequired(Sql_AppSettingsSelect);
@@ -34,23 +43,37 @@ namespace MWPV.Services
 
                 using var reader = cmd.ExecuteReader();
                 if (!reader.Read())
-                    return FallbackPasswordMinimum;
+                    return PasswordLengthSettings.Fallback;
 
                 int ordMinimum = reader.GetOrdinal("AS_PW_Minimum");
-                if (reader.IsDBNull(ordMinimum))
-                    return FallbackPasswordMinimum;
+                int ordIncrement = reader.GetOrdinal("AS_PW_Incriments");
+                int ordEntryCount = reader.GetOrdinal("AS_PW_Inctriment_Steps");
 
-                int configured = ReadInt32(reader, ordMinimum);
-                return Math.Max(configured, AbsolutePasswordMinimum);
+                int minimum = reader.IsDBNull(ordMinimum)
+                    ? FallbackPasswordMinimum
+                    : ReadInt32(reader, ordMinimum, FallbackPasswordMinimum);
+
+                int increment = reader.IsDBNull(ordIncrement)
+                    ? FallbackPasswordIncrement
+                    : ReadInt32(reader, ordIncrement, FallbackPasswordIncrement);
+
+                int entryCount = reader.IsDBNull(ordEntryCount)
+                    ? FallbackPasswordEntryCount
+                    : ReadInt32(reader, ordEntryCount, FallbackPasswordEntryCount);
+
+                return new PasswordLengthSettings(
+                    Math.Max(minimum, AbsolutePasswordMinimum),
+                    Math.Max(increment, AbsolutePasswordIncrementMinimum),
+                    Math.Max(entryCount, AbsolutePasswordEntryCountMinimum));
             }
             catch (Exception ex)
             {
-                ErrorHandler.Abend(ex, "Error loading AppSettings password minimum");
-                return FallbackPasswordMinimum;
+                ErrorHandler.Abend(ex, "Error loading AppSettings password length settings");
+                return PasswordLengthSettings.Fallback;
             }
         }
 
-        private static int ReadInt32(SqliteDataReader reader, int ordinal)
+        private static int ReadInt32(SqliteDataReader reader, int ordinal, int fallback)
         {
             try
             {
@@ -61,8 +84,27 @@ namespace MWPV.Services
             catch
             {
                 try { return Convert.ToInt32(reader.GetInt64(ordinal)); }
-                catch { return FallbackPasswordMinimum; }
+                catch { return fallback; }
             }
+        }
+    }
+
+    public sealed record PasswordLengthSettings(int Minimum, int Increment, int EntryCount)
+    {
+        public static PasswordLengthSettings Fallback { get; } =
+            new(FallbackMinimum, FallbackIncrement, FallbackEntryCount);
+
+        private const int FallbackMinimum = 12;
+        private const int FallbackIncrement = 10;
+        private const int FallbackEntryCount = 10;
+
+        public IReadOnlyList<int> BuildLengthOptions()
+        {
+            var values = new List<int>(EntryCount);
+            for (int i = 0; i < EntryCount; i++)
+                values.Add(Minimum + (Increment * i));
+
+            return values;
         }
     }
 }

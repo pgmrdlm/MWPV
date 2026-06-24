@@ -65,6 +65,45 @@
             </Setter>
         </Style>
 
+        <!-- Small square secondary button: Cancel color, password-row footprint -->
+        <Style x:Key="SmallSquareSecondaryButton" TargetType="Button"
+               BasedOn="{StaticResource SmallSquarePrimaryButton}">
+            <Setter Property="Background" Value="{DynamicResource SecondaryNormalBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                CornerRadius="4"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource SecondaryHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource SecondaryPressedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBrush}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledForeground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
     </UserControl.Resources>
 
     <Grid Margin="20"
@@ -161,30 +200,35 @@
               Grid.Column="0"
               Grid.ColumnSpan="3"
               Margin="0,22,0,0"
-              Height="28"
               MinWidth="320"
               HorizontalAlignment="Left">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="28"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0">
+            <Grid Grid.Row="0" Grid.Column="0">
                 <PasswordBox x:Name="pwdPassword"
                              VerticalAlignment="Center"
                              Height="28"
-                             MinWidth="260"
-                             HorizontalAlignment="Stretch"
+                             Width="260"
+                             HorizontalAlignment="Left"
                              PasswordChanged="pwdPassword_PasswordChanged"
                              GotFocus="pwdPassword_GotFocus"
                              PreviewKeyDown="PwdPassword_PreviewKeyDown"/>
                 <TextBox x:Name="txtPasswordPlain"
                          VerticalAlignment="Center"
                          Height="28"
-                         MinWidth="260"
-                         HorizontalAlignment="Stretch"
+                         Width="260"
+                         HorizontalAlignment="Left"
                          IsReadOnly="True"
                          IsHitTestVisible="False"
                          Background="Transparent"
@@ -195,9 +239,10 @@
 
             <!-- ADD/EDIT: Generate -->
             <Button x:Name="btnGeneratePassword"
+                    Grid.Row="0"
                     Grid.Column="1"
                     Style="{StaticResource SmallSquarePrimaryButton}"
-                    ToolTip="Generate password"
+                    ToolTip="Generate a password using the selected Password Length value."
                     Click="BtnGeneratePassword_Click">
                 <Viewbox Stretch="Uniform">
                     <Canvas Width="18" Height="18">
@@ -209,6 +254,7 @@
 
             <!-- VIEW-ONLY: Copy -->
             <Button x:Name="btnCopyPassword"
+                    Grid.Row="0"
                     Grid.Column="1"
                     Style="{StaticResource SmallSquarePrimaryButton}"
                     ToolTip="Copy password to clipboard"
@@ -222,10 +268,20 @@
                            HorizontalAlignment="Center"/>
             </Button>
 
+            <ComboBox x:Name="cmbPasswordLength"
+                      Grid.Row="0"
+                      Grid.Column="2"
+                      Width="58"
+                      Height="28"
+                      Margin="4,0,0,0"
+                      VerticalAlignment="Center"
+                      ToolTip="Select the length of passwords created by the Generate button."/>
+
             <Button x:Name="btnTogglePasswordReveal"
-                    Grid.Column="2"
+                    Grid.Row="0"
+                    Grid.Column="3"
                     Style="{StaticResource SmallSquarePrimaryButton}"
-                    ToolTip="Show/Hide password"
+                    ToolTip="Show or hide the current password."
                     Click="BtnTogglePasswordReveal_Click">
                 <Viewbox Stretch="Uniform">
                     <Grid Width="20" Height="20">
@@ -239,10 +295,26 @@
                 </Viewbox>
             </Button>
 
+            <Button x:Name="btnResetPasswordSection"
+                    Grid.Row="0"
+                    Grid.Column="4"
+                    Style="{StaticResource SmallSquareSecondaryButton}"
+                    ToolTip="Clear the password field and restore password generator defaults."
+                    Click="BtnResetPasswordSection_Click">
+                <TextBlock FontFamily="Segoe MDL2 Assets"
+                           Text="&#xE72C;"
+                           FontSize="16"
+                           Foreground="Black"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Button>
+
             <CheckBox x:Name="chkBookmarkOnly"
-                      Grid.Column="3"
+                      Grid.Row="1"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="5"
                       VerticalAlignment="Center"
-                      Margin="8,0,0,0"
+                      Margin="0,6,0,0"
                       Content="Bookmark only"
                       ToolTip="If checked, this item will be treated as a bookmark-only entry with no password."/>
         </Grid>

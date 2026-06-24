@@ -71,6 +71,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool _settingPwProgrammatically;
         private int _passwordMinimum;
+        private IReadOnlyList<int> _passwordLengthOptions = Array.Empty<int>();
+        private int _passwordDefaultLength;
+        private bool _passwordManualEntryMode;
 
         // Default visuals
         private Brush? _emailDefaultBorderBrush;
@@ -118,7 +121,7 @@ namespace MWPV.View.UserControls.CategoryItems
 #endif
             CacheDefaultFieldVisualsIfNeeded();
             HookUiEventsOnce();
-            LoadPasswordMinimum();
+            LoadPasswordLengthSettings();
 
             ClearForm();
             ResetUiState();
@@ -204,7 +207,9 @@ namespace MWPV.View.UserControls.CategoryItems
             // Replace Generate with Copy in view-only
             btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
             btnCopyPassword.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-            btnGeneratePassword.IsEnabled = !viewOnly;
+            cmbPasswordLength.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
+            btnResetPasswordSection.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
+            ApplyPasswordGeneratorControlState();
 
             // View-only copy buttons
             btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
@@ -532,6 +537,8 @@ namespace MWPV.View.UserControls.CategoryItems
             HideStrengthRow();
             HideVerifyRow();
             HideVerifyError();
+            ResetPasswordLengthSelection();
+            SetPasswordManualEntryMode(false);
 
             ClearItemNameError();
             ClearEmailValidation();
@@ -901,9 +908,54 @@ namespace MWPV.View.UserControls.CategoryItems
 
         /* ======================= Password / Verify ======================= */
 
-        private void LoadPasswordMinimum()
+        private void LoadPasswordLengthSettings()
         {
-            _passwordMinimum = AppSettingsService.GetPasswordMinimum();
+            var settings = AppSettingsService.GetPasswordLengthSettings();
+            _passwordMinimum = settings.Minimum;
+            _passwordLengthOptions = settings.BuildLengthOptions();
+            _passwordDefaultLength = _passwordLengthOptions.Count > 0
+                ? _passwordLengthOptions[0]
+                : _passwordMinimum;
+
+            cmbPasswordLength.ItemsSource = _passwordLengthOptions;
+            ResetPasswordLengthSelection();
+        }
+
+        private void ResetPasswordLengthSelection()
+        {
+            if (cmbPasswordLength == null)
+                return;
+
+            cmbPasswordLength.SelectedItem = _passwordDefaultLength;
+            if (cmbPasswordLength.SelectedIndex < 0 && cmbPasswordLength.Items.Count > 0)
+                cmbPasswordLength.SelectedIndex = 0;
+        }
+
+        private int GetSelectedPasswordLength()
+        {
+            if (cmbPasswordLength?.SelectedItem is int selected)
+                return selected;
+
+            return _passwordDefaultLength > 0 ? _passwordDefaultLength : _passwordMinimum;
+        }
+
+        private void SetPasswordManualEntryMode(bool manual)
+        {
+            _passwordManualEntryMode = manual;
+            ApplyPasswordGeneratorControlState();
+        }
+
+        private void ApplyPasswordGeneratorControlState()
+        {
+            if (btnGeneratePassword == null || cmbPasswordLength == null || btnResetPasswordSection == null)
+                return;
+
+            bool editable = !IsViewOnly;
+            bool generatorEnabled = editable && !_passwordManualEntryMode;
+
+            btnGeneratePassword.IsEnabled = generatorEnabled;
+            cmbPasswordLength.IsEnabled = generatorEnabled;
+            btnResetPasswordSection.IsEnabled = editable;
         }
 
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
@@ -913,11 +965,13 @@ namespace MWPV.View.UserControls.CategoryItems
             try
             {
                 // CHANGED: use COMPATIBLE generator (picky-site friendly)
-                var generated = SecurePassword.GenerateCompatibleAsString(_passwordMinimum);
+                var generated = SecurePassword.GenerateCompatibleAsString(GetSelectedPasswordLength());
 
                 _settingPwProgrammatically = true;
                 try { SetPassword(generated); }
                 finally { _settingPwProgrammatically = false; }
+
+                SetPasswordManualEntryMode(false);
 
                 HideStrengthRow();
                 HideVerifyRow();
@@ -927,6 +981,31 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 PasswordValidationFailed?.Invoke(this, "Password generator failed.");
             }
+        }
+
+        private void BtnResetPasswordSection_Click(object? sender, RoutedEventArgs e)
+        {
+            if (IsViewOnly) return;
+
+            _settingPwProgrammatically = true;
+            try
+            {
+                HideMainPassword();
+                UICleaner.Clear(pwdPassword);
+                UICleaner.Clear(txtPasswordPlain);
+            }
+            finally
+            {
+                _settingPwProgrammatically = false;
+            }
+
+            ResetPasswordLengthSelection();
+            SetPasswordManualEntryMode(false);
+
+            HideVerifyRow();
+            HideVerifyError();
+            HideStrengthRow();
+            UpdateCopyButtonStates();
         }
 
         private void BtnCopyPassword_Click(object? sender, RoutedEventArgs e)
@@ -1018,6 +1097,8 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             if (_settingPwProgrammatically) return;
+
+            SetPasswordManualEntryMode(true);
 
             if (!string.IsNullOrEmpty(pwdPassword.Password))
                 EnsureVerifyRowVisibleForManual();
@@ -1846,6 +1927,9 @@ namespace MWPV.View.UserControls.CategoryItems
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
             btnGeneratePassword.Click += BtnGeneratePassword_Click;
 
+            btnResetPasswordSection.Click -= BtnResetPasswordSection_Click;
+            btnResetPasswordSection.Click += BtnResetPasswordSection_Click;
+
             btnCopyPassword.Click -= BtnCopyPassword_Click;
             btnCopyPassword.Click += BtnCopyPassword_Click;
 
@@ -1934,6 +2018,7 @@ namespace MWPV.View.UserControls.CategoryItems
             btnTogglePasswordReveal.Click -= BtnTogglePasswordReveal_Click;
             btnToggleVerifyReveal.Click -= BtnToggleVerifyReveal_Click;
             btnGeneratePassword.Click -= BtnGeneratePassword_Click;
+            btnResetPasswordSection.Click -= BtnResetPasswordSection_Click;
             btnCopyPassword.Click -= BtnCopyPassword_Click;
 
             btnCopyUsername.Click -= BtnCopyUsername_Click;
