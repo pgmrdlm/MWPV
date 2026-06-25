@@ -1438,8 +1438,10 @@ LIMIT 1;";
                                     isPrimary: isPrimaryForUpdate,
                                     isActive: row.IsActive);
 
-                                if (affected > 0)
-                                    writes += affected;
+                                if (affected <= 0)
+                                    throw new InvalidOperationException("BankCard update failed (no rows affected).");
+
+                                writes += affected;
                             }
                         }
                         finally
@@ -1464,7 +1466,7 @@ LIMIT 1;";
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error saving BankCards by ItemId");
-                return 0;
+                return -1;
             }
         }
 

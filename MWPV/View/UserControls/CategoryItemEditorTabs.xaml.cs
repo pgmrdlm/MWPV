@@ -2542,6 +2542,11 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes}");
 #endif
+                if (writes < 0)
+                {
+                    SetStatus("Bank Cards save failed. See debug output.");
+                    return false;
+                }
 
                 EnsureBankCardsLoadedForActiveItem(forceReload: true);
                 NotifyPanel_RefreshCategoryItemGrid_BestEffort();
