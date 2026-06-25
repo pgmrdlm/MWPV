@@ -716,7 +716,7 @@ namespace MWPV.Services
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error updating CategoryItem (Basic tab) by ItemId");
-                return 0;
+                return -1;
             }
         }
 
