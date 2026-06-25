@@ -1,14 +1,11 @@
 
 /* ============================================================================
-   MWPV - 01.07 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.06 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.07
+   - Create a fresh database at schema version 01.06
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
-
-   01.07 changes reflected here:
-   - Enhanced BankCardsTab logging templates added
 
    01.06 changes reflected here:
    - BankCardsTab logging templates and matching log_filters seeds added
@@ -293,18 +290,6 @@ FROM (
     SELECT 'BankCardsTab',
            3,
            'Bank card has been deactivated for #CategoryItemName#'
-    UNION ALL
-    SELECT 'BankCardsTab',
-           4,
-           'Bank card #BankCardDisplayName# has been created for #CategoryItemName#'
-    UNION ALL
-    SELECT 'BankCardsTab',
-           5,
-           'Bank card #BankCardDisplayName# has been updated for #CategoryItemName#: #BankCardChangeSummary#'
-    UNION ALL
-    SELECT 'BankCardsTab',
-           6,
-           'Bank card #BankCardDisplayName# has been deactivated for #CategoryItemName#'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -530,9 +515,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.07',
+    '01.06',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.07',
+    'Fresh database created at version 01.06',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
