@@ -1,14 +1,11 @@
 
 /* ============================================================================
-   MWPV - 01.06 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.05 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.06
+   - Create a fresh database at schema version 01.05
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
-
-   01.06 changes reflected here:
-   - BankCardsTab logging templates and matching log_filters seeds added
 
    01.05 changes reflected here:
    - AppSettings added for user-defined password length settings
@@ -276,28 +273,6 @@ WHERE NOT EXISTS (
       AND t.Seq        = v.Seq
 );
 
-INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
-SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
-FROM (
-    SELECT 'BankCardsTab' AS UpdateForm,
-           1 AS Seq,
-           'Bank card has been created for #CategoryItemName#' AS LogMessage
-    UNION ALL
-    SELECT 'BankCardsTab',
-           2,
-           'Bank card has been updated for #CategoryItemName#'
-    UNION ALL
-    SELECT 'BankCardsTab',
-           3,
-           'Bank card has been deactivated for #CategoryItemName#'
-) AS v
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM LogMessageTemplate t
-    WHERE t.UpdateForm = v.UpdateForm
-      AND t.Seq        = v.Seq
-);
-
 -- Reference ComboType seeds
 INSERT INTO ComboType (Code, Description, Active)
 SELECT 'account_types', 'Common financial account types', 1
@@ -397,10 +372,7 @@ WITH v(Seq, Code, Description) AS (
       (10, 'CATEGORYITEM_CREATED', 'Category item created'),
       (11, 'CATEGORYITEM_CHANGED', 'Category item updated (one or more fields)'),
       (12, 'ACCOUNTS_CREATED',     'Accounts Created'),
-      (13, 'ACCOUNTS_CHANGED',     'Accounts Changed'),
-      (14, 'BANKCARD_CREATED',     'Bank card created'),
-      (15, 'BANKCARD_CHANGED',     'Bank card changed'),
-      (16, 'BANKCARD_DEACTIVATED', 'Bank card deactivated')
+      (13, 'ACCOUNTS_CHANGED', 'Accounts Changed')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -515,9 +487,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.06',
+    '01.05',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.06',
+    'Fresh database created at version 01.05',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
