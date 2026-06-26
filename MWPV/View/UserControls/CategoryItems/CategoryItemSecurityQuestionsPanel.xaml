@@ -1,0 +1,347 @@
+<UserControl x:Class="MWPV.View.UserControls.CategoryItems.CategoryItemSecurityQuestionsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="260"
+             d:DesignWidth="900">
+
+    <UserControl.Resources>
+        <Style x:Key="SmallSquarePrimaryButton" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Foreground" Value="Black" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ShadowStroke}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="UseLayoutRounding" Value="True" />
+            <Setter Property="Background" Value="{DynamicResource PrimaryNormalBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                CornerRadius="4"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource PrimaryPressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledForeground}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GridActionButton" TargetType="Button" BasedOn="{StaticResource DialogPrimary}">
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SelectedItem, ElementName=SecurityQuestionGrid}" Value="{x:Null}">
+                    <Setter Property="IsEnabled" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="0" Background="Bisque">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Margin="0,0,0,6"
+                Padding="14,10"
+                Background="Transparent"
+                HorizontalAlignment="Center"
+                MaxWidth="760">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="240" />
+                    <ColumnDefinition Width="*" MinWidth="240" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Row="0"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,16,8">
+                    <TextBlock Text="Question"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <TextBox x:Name="QuestionTextBox"
+                             Height="28"
+                             HorizontalAlignment="Stretch"
+                             MaxLength="500"
+                             TextChanged="QuestionTextBox_TextChanged"
+                             LostFocus="OnSecurityQuestionFieldLostFocus" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="0"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="Answer"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <Grid Height="28"
+                          HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Stretch">
+                            <PasswordBox x:Name="AnswerBox"
+                                         VerticalAlignment="Center"
+                                         Height="28"
+                                         MinWidth="240"
+                                         HorizontalAlignment="Stretch"
+                                         MaxLength="500"
+                                         PasswordChanged="AnswerBox_PasswordChanged"
+                                         LostFocus="OnSecurityQuestionFieldLostFocus" />
+
+                            <TextBox x:Name="AnswerPlainTextBox"
+                                     VerticalAlignment="Center"
+                                     Height="28"
+                                     MinWidth="240"
+                                     HorizontalAlignment="Stretch"
+                                     IsReadOnly="True"
+                                     IsHitTestVisible="False"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Visibility="Collapsed"
+                                     Foreground="Black" />
+                        </Grid>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Button x:Name="BtnCopyAnswer"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    Visibility="Collapsed"
+                                    ToolTip="Copy answer to clipboard"
+                                    Click="BtnCopyAnswer_Click">
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           Text="&#xE8C8;"
+                                           FontSize="16"
+                                           Foreground="Black"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+
+                            <Button x:Name="BtnViewAnswer"
+                                    Style="{StaticResource SmallSquarePrimaryButton}"
+                                    ToolTip="Show answer"
+                                    Click="BtnViewAnswer_Click">
+                                <Viewbox Stretch="Uniform">
+                                    <Grid Width="20" Height="20">
+                                        <Path Stroke="Black"
+                                              Fill="Transparent"
+                                              StrokeThickness="1.6"
+                                              Data="M1.8,10 C4.6,6.0 8.3,4 10.8,4 13.3,4 17.0,6.0 19.8,10 17.0,14.0 13.3,16 10.8,16 8.3,16 4.6,14.0 1.8,10 Z" />
+                                        <Ellipse Width="6"
+                                                 Height="6"
+                                                 Stroke="Black"
+                                                 StrokeThickness="1.2"
+                                                 Fill="White"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                        <Ellipse Width="3"
+                                                 Height="3"
+                                                 Fill="Black"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center" />
+                                    </Grid>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,0,8">
+                    <TextBlock Text="Active"
+                               Margin="0,0,0,2"
+                               FontWeight="Bold" />
+                    <CheckBox x:Name="ChkSecurityQuestionActive"
+                              IsChecked="True"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center"
+                              Checked="SecurityQuestionActive_Changed"
+                              Unchecked="SecurityQuestionActive_Changed" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2"
+                            Grid.ColumnSpan="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            Margin="0,6,0,0">
+                    <Button x:Name="BtnSecurityQuestionAddOrUpdate"
+                            Margin="0,0,12,0"
+                            Content="Add"
+                            Style="{StaticResource DialogPrimary}"
+                            Click="OnSecurityQuestionAddOrUpdateClick" />
+                    <Button x:Name="BtnSecurityQuestionClearRow"
+                            Content="Clear Row"
+                            Style="{StaticResource DialogSecondary}"
+                            Click="OnSecurityQuestionClearRowClick" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TextBlock x:Name="SecurityQuestionErrorTextBlock"
+                   Grid.Row="1"
+                   Margin="0,4,0,4"
+                   Foreground="Red"
+                   FontWeight="Bold"
+                   TextWrapping="Wrap" />
+
+        <Grid Grid.Row="2"
+              Margin="0,6,0,0"
+              HorizontalAlignment="Center"
+              MaxWidth="760">
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Padding="10,8"
+                    Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               VerticalAlignment="Center"
+                               FontWeight="Bold"
+                               Foreground="Black"
+                               Text="Saved Security Questions" />
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <Button x:Name="BtnSecurityQuestionEditSelected"
+                                Content="Edit"
+                                Style="{StaticResource GridActionButton}"
+                                Click="OnSecurityQuestionEditClick" />
+                        <Button x:Name="BtnSecurityQuestionDeactivateSelected"
+                                Content="Deactivate"
+                                Style="{StaticResource GridActionButton}"
+                                Click="OnSecurityQuestionDeactivateClick" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <DataGrid x:Name="SecurityQuestionGrid"
+                      Grid.Row="1"
+                      Margin="0,6,0,0"
+                      AutoGenerateColumns="False"
+                      HeadersVisibility="Column"
+                      SelectionChanged="SecurityQuestionGrid_SelectionChanged"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserResizeRows="False"
+                      IsReadOnly="True"
+                      ItemsSource="{Binding SecurityQuestionRows, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                      Background="Bisque"
+                      RowBackground="Bisque"
+                      AlternatingRowBackground="Bisque"
+                      RowHeight="28"
+                      ColumnHeaderHeight="28"
+                      MaxHeight="200"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto">
+
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#FF800000" />
+                        <Setter Property="Foreground" Value="White" />
+                        <Setter Property="FontWeight" Value="Bold" />
+                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Question"
+                                        Binding="{Binding QuestionPlain}"
+                                        Width="360" />
+                    <DataGridTextColumn Header="Answer"
+                                        Binding="{Binding AnswerMasked}"
+                                        Width="110" />
+                    <DataGridTemplateColumn Header="Active" Width="70">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsActive}"
+                                          IsHitTestVisible="False"
+                                          HorizontalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <Grid Grid.Row="3"
+              Margin="0,10,0,0"
+              VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <Button x:Name="BtnTabSave"
+                        Content="Save"
+                        Style="{StaticResource DialogPrimary}"
+                        Margin="0,0,12,0"
+                        Click="OnTabSaveClick" />
+                <Button x:Name="BtnTabCancel"
+                        Content="Cancel"
+                        Style="{StaticResource DialogSecondary}"
+                        Click="OnTabCancelClick" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>
