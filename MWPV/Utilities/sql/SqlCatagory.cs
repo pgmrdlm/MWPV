@@ -57,6 +57,14 @@ namespace Utilities.Sql
             "s_CategoryItemAccounts_insert.sql",
             "s_CategoryItemAccounts_update.sql",
 
+            // Category Item Security Questions
+            "s_CategoryItemSecurityQuestions_select_by_itemid.sql",
+            "s_CategoryItemSecurityQuestions_select_all_by_itemid.sql",
+            "s_CategoryItemSecurityQuestions_select_by_itemid_and_id.sql",
+            "s_CategoryItemSecurityQuestions_insert.sql",
+            "s_CategoryItemSecurityQuestions_update.sql",
+            "s_CategoryItemSecurityQuestions_deactivate.sql",
+
             // Category Item Password history
             "s_CategoryItem_exists_by_name.sql",
             "s_CategoryItemPasswordHistory_insert.sql",
