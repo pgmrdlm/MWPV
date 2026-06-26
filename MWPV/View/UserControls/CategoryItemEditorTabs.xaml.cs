@@ -111,12 +111,16 @@ namespace MWPV.View.UserControls
         private const string LogEvent_CategoryItemChanged = "CATEGORYITEM_CHANGED";
         private const string LogEvent_AccountsCreated = "ACCOUNTS_CREATED";
         private const string LogEvent_AccountsChanged = "ACCOUNTS_CHANGED";
+        private const string LogEvent_BankCardCreated = "BANKCARD_CREATED";
+        private const string LogEvent_BankCardChanged = "BANKCARD_CHANGED";
+        private const string LogEvent_BankCardDeactivated = "BANKCARD_DEACTIVATED";
 
         private const string Template_NewItemCreated =
             "Category Item #CategoryItemName# has been created for Category #CategoryName#";
 
         private const string TemplateForm_BasicTab = "BasicTab";
         private const string TemplateForm_AccountsTab = "AccountsTab";
+        private const string TemplateForm_BankCardsTab = "BankCardsTab";
 
         public CategoryItemEditorTabs()
         {
@@ -852,6 +856,42 @@ namespace MWPV.View.UserControls
             };
         }
 
+        private static IReadOnlyDictionary<string, string?> BuildBankCardTokens(
+            string categoryItemName,
+            CategoryItemService.BankCardSaveLogEntry entry)
+        {
+            return new Dictionary<string, string?>
+            {
+                ["CategoryItemName"] = categoryItemName,
+                ["BankCardDisplayName"] = entry.BankCardDisplayName
+            };
+        }
+
+        private static IReadOnlyList<int> BuildBankCardTemplateSeqs(CategoryItemService.BankCardSaveLogEntry entry)
+        {
+            if (entry.Action == CategoryItemService.BankCardSaveLogAction.Created)
+                return new[] { 4 };
+
+            if (entry.Action == CategoryItemService.BankCardSaveLogAction.Deactivated)
+                return new[] { 6 };
+
+            if (entry.Action != CategoryItemService.BankCardSaveLogAction.Changed)
+                return Array.Empty<int>();
+
+            var seqs = new List<int> { 5 };
+
+            if (entry.CardTypeChanged) seqs.Add(7);
+            if (entry.CardholderChanged) seqs.Add(8);
+            if (entry.ExpirationChanged) seqs.Add(9);
+            if (entry.ActiveChanged) seqs.Add(10);
+            if (entry.CardNumberChanged) seqs.Add(11);
+            if (entry.CvvChanged) seqs.Add(12);
+            if (entry.PinChanged) seqs.Add(13);
+            if (entry.BillingZipChanged) seqs.Add(14);
+
+            return seqs.Count > 1 ? seqs : Array.Empty<int>();
+        }
+
         private static string BuildCategoryItemCreatedMessage(string categoryName, string categoryItemName)
         {
             return Template_NewItemCreated
@@ -1027,6 +1067,72 @@ namespace MWPV.View.UserControls
             {
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-DEACTIVATED] FAILED (best-effort ignored): {ex}");
+#endif
+            }
+        }
+
+        private void TryWriteBankCardLog_BestEffort(
+            long itemId,
+            string itemName,
+            CategoryItemService.BankCardSaveLogEntry entry)
+        {
+            if (entry == null || entry.Action == CategoryItemService.BankCardSaveLogAction.Unchanged)
+                return;
+
+            try
+            {
+                string eventCode;
+
+                switch (entry.Action)
+                {
+                    case CategoryItemService.BankCardSaveLogAction.Created:
+                        eventCode = LogEvent_BankCardCreated;
+                        break;
+
+                    case CategoryItemService.BankCardSaveLogAction.Deactivated:
+                        eventCode = LogEvent_BankCardDeactivated;
+                        break;
+
+                    case CategoryItemService.BankCardSaveLogAction.Changed:
+                        eventCode = LogEvent_BankCardChanged;
+                        break;
+
+                    default:
+                        return;
+                }
+
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = eventCode,
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
+                    ItemId = itemId,
+                    SubjectText = itemName,
+                    KeySetVersion = 1
+                };
+
+                var seqs = BuildBankCardTemplateSeqs(entry);
+                if (seqs.Count == 0)
+                    return;
+
+                var tokens = BuildBankCardTokens(itemName, entry);
+
+                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: TemplateForm_BankCardsTab,
+                    seqsInOrder: seqs,
+                    tokens: tokens,
+                    write: write);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][BANKCARD] Inserted {eventCode} logId={logId} itemId={itemId} subject='{itemName}' card='{entry.BankCardDisplayName}'");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][BANKCARD] FAILED (best-effort ignored): {ex}");
 #endif
             }
         }
@@ -2512,6 +2618,7 @@ namespace MWPV.View.UserControls
             }
 
             int itemId = activeId.Value;
+            string itemName = BasicPanel?.GetItemNameTrim() ?? string.Empty;
 
             try
             {
@@ -2538,14 +2645,23 @@ namespace MWPV.View.UserControls
                     })
                     .ToList();
 
-                int writes = CategoryItemService.SaveBankCardsByItemId(itemId, serviceRows);
+                var saveResult = CategoryItemService.SaveBankCardsByItemIdWithLogResult(itemId, serviceRows);
+                int writes = saveResult.Writes;
 #if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes}");
+                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes} logEntries={saveResult.LogEntries.Count}");
 #endif
                 if (writes < 0)
                 {
                     SetStatus("Bank Cards save failed. See debug output.");
                     return false;
+                }
+
+                foreach (var entry in saveResult.LogEntries)
+                {
+                    TryWriteBankCardLog_BestEffort(
+                        itemId: itemId,
+                        itemName: itemName,
+                        entry: entry);
                 }
 
                 EnsureBankCardsLoadedForActiveItem(forceReload: true);

@@ -38,7 +38,7 @@ namespace Utilities.Sql
             "s_Logs_SelectPage.sql",
 
             // Combos
-           // "s_Combo_LogsDetailSelectByType.sql",
+            "s_Combo_LogsDetailSelectByType.sql",
             "s_Combo_CategoryType.sql",
 
             // Category Items

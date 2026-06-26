@@ -432,9 +432,9 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Combo_DetailByTypeId.sql");
+                var sql = SqlCagegory.GetSql("s_Combo_LogsDetailSelectByType.sql");
                 if (string.IsNullOrWhiteSpace(sql))
-                    throw new InvalidOperationException("SQL not loaded: s_Combo_DetailByTypeId.sql");
+                    throw new InvalidOperationException("SQL not loaded: s_Combo_LogsDetailSelectByType.sql");
                 cmd.CommandText = sql;
 
                 cmd.Parameters.AddWithValue("@type_code", comboTypeCode);

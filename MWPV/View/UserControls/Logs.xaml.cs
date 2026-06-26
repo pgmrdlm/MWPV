@@ -121,9 +121,9 @@ namespace MWPV.View.UserControls
 
             try
             {
-                // 4 is the fixed ComboTypeId for log filters
+                // Event-code filters come from the logical log_filters combo family.
                 var dbTypes = await Task.Run(() =>
-                    ComboDetailService.GetByTypeId(3));
+                    ComboDetailService.GetByType("log_filters"));
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {

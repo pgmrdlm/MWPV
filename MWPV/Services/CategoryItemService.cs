@@ -55,6 +55,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Utilities.Helpers;                 // DatabaseHelper, ErrorHandler
@@ -199,6 +200,63 @@ namespace MWPV.Services
 
             public long CreatedAtUtcSeconds { get; init; }
             public long UpdatedAtUtcSeconds { get; init; }
+        }
+
+        public enum BankCardSaveLogAction
+        {
+            Unchanged = 0,
+            Created = 1,
+            Changed = 2,
+            Deactivated = 3
+        }
+
+        public sealed class BankCardSaveLogEntry
+        {
+            public long Id { get; init; }
+            public BankCardSaveLogAction Action { get; init; }
+
+            public string BankCardDisplayName { get; init; } = string.Empty;
+            public string CardTypeDisplay { get; init; } = string.Empty;
+            public string? Cardholder { get; init; }
+            public string CardNumberMasked { get; init; } = string.Empty;
+            public string ExpirationDisplay { get; init; } = string.Empty;
+            public bool IsActive { get; init; }
+
+            public bool CardTypeChanged { get; init; }
+            public bool CardholderChanged { get; init; }
+            public bool ExpirationChanged { get; init; }
+            public bool ActiveChanged { get; init; }
+            public bool CardNumberChanged { get; init; }
+            public bool CvvChanged { get; init; }
+            public bool PinChanged { get; init; }
+            public bool BillingZipChanged { get; init; }
+        }
+
+        public sealed class BankCardSaveResult
+        {
+            public int Writes { get; init; }
+            public IReadOnlyList<BankCardSaveLogEntry> LogEntries { get; init; } = Array.Empty<BankCardSaveLogEntry>();
+        }
+
+        private sealed class BankCardSnapshot
+        {
+            public long Id { get; init; }
+            public long ItemId { get; init; }
+            public int CardTypeId { get; init; }
+            public string CardTypeDisplay { get; init; } = string.Empty;
+            public string? Cardholder { get; init; }
+            public string NumberPlain { get; init; } = string.Empty;
+            public string CvvPlain { get; init; } = string.Empty;
+            public string PinPlain { get; init; } = string.Empty;
+            public string BillingZipPlain { get; init; } = string.Empty;
+            public int ExpMonth { get; init; }
+            public int ExpYear { get; init; }
+            public bool IsPrimary { get; init; }
+            public bool IsActive { get; init; }
+
+            public string CardNumberMasked => MaskPanLast4(NumberPlain);
+            public string ExpirationDisplay => FormatExpiration(ExpMonth, ExpYear);
+            public string BankCardDisplayName => BuildBankCardDisplayName(CardTypeDisplay, Cardholder, CardNumberMasked);
         }
 
         // ============================================================
@@ -1300,18 +1358,24 @@ LIMIT 1;";
         ///
         /// Policy used for minimal wiring:
         /// - New rows (Id <= 0): INSERT via s_BankCard_insert.sql.
-        /// - Existing rows (Id > 0): UPDATE only when CardNumberRaw is present
-        ///   (unchanged service-loaded rows carry empty raw fields and are skipped).
+        /// - Existing rows (Id > 0): UPDATE via s_BankCard_update.sql, preserving
+        ///   stored encrypted values when the UI row leaves raw sensitive fields blank.
         ///
         /// DEPENDENCY OUTSIDE THIS FILE:
         /// - Requires sql/s_BankCard_update.sql to exist and be loaded in SqlCagegory.
         /// </summary>
         public static int SaveBankCardsByItemId(long itemId, IReadOnlyList<BankCardRow>? rows)
         {
+            return SaveBankCardsByItemIdWithLogResult(itemId, rows).Writes;
+        }
+
+        public static BankCardSaveResult SaveBankCardsByItemIdWithLogResult(long itemId, IReadOnlyList<BankCardRow>? rows)
+        {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
 
             var input = rows ?? Array.Empty<BankCardRow>();
+            var logEntries = new List<BankCardSaveLogEntry>();
 
             try
             {
@@ -1322,6 +1386,8 @@ LIMIT 1;";
                 using var tx = conn.BeginTransaction();
 
                 int writes = 0;
+                var beforeById = LoadExistingBankCardSnapshots(conn, tx, itemId)
+                    .ToDictionary(x => x.Id);
 
                 try
                 {
@@ -1362,6 +1428,10 @@ LIMIT 1;";
                         byte[]? pinCipher = EncryptNullableUtf8(Purpose_BC_Pin, row.PinRaw);
                         byte[]? billingZipCipher = EncryptNullableUtf8(Purpose_BC_BillingZip, row.BillingZipRaw);
 
+                        BankCardSnapshot? before = null;
+                        if (row.Id > 0 && beforeById.TryGetValue(row.Id, out var existingSnapshot))
+                            before = existingSnapshot;
+
                         try
                         {
                             if (row.Id <= 0)
@@ -1388,6 +1458,7 @@ LIMIT 1;";
                                 if (newId <= 0)
                                     throw new InvalidOperationException("BankCard insert failed (no Id returned).");
 
+                                logEntries.Add(BuildCreatedBankCardLogEntry(newId, row, expMonth, expYear));
                                 writes++;
                             }
                             else
@@ -1421,6 +1492,9 @@ LIMIT 1;";
                                 if (numberCipher is null || numberCipher.Length == 0)
                                     throw new InvalidOperationException("Card number is required for BankCard update.");
 
+                                if (before == null)
+                                    before = BuildSnapshotFromStoredValues(row, itemId, expMonth, expYear, existingValues);
+
                                 int affected = UpdateBankCardCore(
                                     conn: conn,
                                     tx: tx,
@@ -1440,6 +1514,10 @@ LIMIT 1;";
 
                                 if (affected <= 0)
                                     throw new InvalidOperationException("BankCard update failed (no rows affected).");
+
+                                var entry = BuildChangedBankCardLogEntry(row, before, expMonth, expYear);
+                                if (entry.Action != BankCardSaveLogAction.Unchanged)
+                                    logEntries.Add(entry);
 
                                 writes += affected;
                             }
@@ -1461,14 +1539,254 @@ LIMIT 1;";
                     throw;
                 }
 
-                return writes;
+                return new BankCardSaveResult
+                {
+                    Writes = writes,
+                    LogEntries = logEntries
+                };
             }
             catch (Exception ex)
             {
                 ErrorHandler.Abend(ex, "Error saving BankCards by ItemId");
-                return -1;
+                return new BankCardSaveResult
+                {
+                    Writes = -1,
+                    LogEntries = Array.Empty<BankCardSaveLogEntry>()
+                };
             }
         }
+
+        private static IReadOnlyList<BankCardSnapshot> LoadExistingBankCardSnapshots(
+            SqliteConnection conn,
+            SqliteTransaction tx,
+            long itemId)
+        {
+            var rows = new List<BankCardSnapshot>();
+            var cardTypeDisplayById = LoadCardTypeDisplayMap();
+
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+SELECT
+    BC_Id         AS Id,
+    BC_ItemId     AS ItemId,
+    BC_CardType   AS CardTypeId,
+    BC_Cardholder AS Cardholder,
+    BC_Number     AS Number,
+    BC_ExpMonth   AS ExpMonth,
+    BC_ExpYear    AS ExpYear,
+    BC_CVV        AS Cvv,
+    BC_Pin        AS Pin,
+    BC_BillingZip AS BillingZip,
+    BC_IsPrimary  AS IsPrimary,
+    BC_IsActive   AS IsActive
+FROM BankCards
+WHERE BC_ItemId = @ItemId;";
+
+            AddInt64(cmd, "@ItemId", itemId);
+
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                int cardTypeId = SafeGetInt32(r, r.GetOrdinal("CardTypeId"));
+
+                _ = TryDecryptUtf8(Purpose_BC_Number, ReadBlobNullable(r, r.GetOrdinal("Number")), out var numberPlain);
+                _ = TryDecryptUtf8(Purpose_BC_CVV, ReadBlobNullable(r, r.GetOrdinal("Cvv")), out var cvvPlain);
+                _ = TryDecryptUtf8(Purpose_BC_Pin, ReadBlobNullable(r, r.GetOrdinal("Pin")), out var pinPlain);
+                _ = TryDecryptUtf8(Purpose_BC_BillingZip, ReadBlobNullable(r, r.GetOrdinal("BillingZip")), out var billingZipPlain);
+
+                rows.Add(new BankCardSnapshot
+                {
+                    Id = SafeGetInt64(r, r.GetOrdinal("Id")),
+                    ItemId = SafeGetInt64(r, r.GetOrdinal("ItemId")),
+                    CardTypeId = cardTypeId,
+                    CardTypeDisplay = cardTypeDisplayById.TryGetValue(cardTypeId, out var display) ? display : string.Empty,
+                    Cardholder = r.IsDBNull(r.GetOrdinal("Cardholder")) ? null : r.GetString(r.GetOrdinal("Cardholder")),
+                    NumberPlain = numberPlain ?? string.Empty,
+                    CvvPlain = cvvPlain ?? string.Empty,
+                    PinPlain = pinPlain ?? string.Empty,
+                    BillingZipPlain = billingZipPlain ?? string.Empty,
+                    ExpMonth = SafeGetInt32(r, r.GetOrdinal("ExpMonth")),
+                    ExpYear = SafeGetInt32(r, r.GetOrdinal("ExpYear")),
+                    IsPrimary = !r.IsDBNull(r.GetOrdinal("IsPrimary")) && SafeGetInt32(r, r.GetOrdinal("IsPrimary")) == 1,
+                    IsActive = r.IsDBNull(r.GetOrdinal("IsActive")) || SafeGetInt32(r, r.GetOrdinal("IsActive")) == 1
+                });
+            }
+
+            return rows;
+        }
+
+        private static Dictionary<int, string> LoadCardTypeDisplayMap()
+        {
+            var cardTypeDisplayById = new Dictionary<int, string>();
+
+            try
+            {
+                foreach (var t in ComboDetailService.GetByTypeId(2))
+                {
+                    if (!cardTypeDisplayById.ContainsKey(t.ComboDet))
+                    {
+                        cardTypeDisplayById[t.ComboDet] =
+                            string.IsNullOrWhiteSpace(t.Description) ? (t.Code ?? string.Empty) : t.Description;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return cardTypeDisplayById;
+        }
+
+        private static BankCardSnapshot BuildSnapshotFromStoredValues(
+            BankCardRow row,
+            long itemId,
+            int expMonth,
+            int expYear,
+            (byte[]? NumberCipher, byte[]? CvvCipher, byte[]? PinCipher, byte[]? BillingZipCipher, string? Cardholder, bool IsPrimary) existingValues)
+        {
+            _ = TryDecryptUtf8(Purpose_BC_Number, existingValues.NumberCipher, out var numberPlain);
+            _ = TryDecryptUtf8(Purpose_BC_CVV, existingValues.CvvCipher, out var cvvPlain);
+            _ = TryDecryptUtf8(Purpose_BC_Pin, existingValues.PinCipher, out var pinPlain);
+            _ = TryDecryptUtf8(Purpose_BC_BillingZip, existingValues.BillingZipCipher, out var billingZipPlain);
+
+            return new BankCardSnapshot
+            {
+                Id = row.Id,
+                ItemId = itemId,
+                CardTypeId = row.CardTypeId,
+                CardTypeDisplay = row.CardTypeDisplay ?? string.Empty,
+                Cardholder = existingValues.Cardholder,
+                NumberPlain = numberPlain ?? string.Empty,
+                CvvPlain = cvvPlain ?? string.Empty,
+                PinPlain = pinPlain ?? string.Empty,
+                BillingZipPlain = billingZipPlain ?? string.Empty,
+                ExpMonth = expMonth,
+                ExpYear = expYear,
+                IsPrimary = existingValues.IsPrimary,
+                IsActive = row.IsActive
+            };
+        }
+
+        private static BankCardSaveLogEntry BuildCreatedBankCardLogEntry(BankCardRow row, int expMonth, int expYear)
+            => BuildCreatedBankCardLogEntry(row.Id, row, expMonth, expYear);
+
+        private static BankCardSaveLogEntry BuildCreatedBankCardLogEntry(long id, BankCardRow row, int expMonth, int expYear)
+        {
+            var masked = SafeMaskedCardNumber(row);
+            return new BankCardSaveLogEntry
+            {
+                Id = id,
+                Action = BankCardSaveLogAction.Created,
+                BankCardDisplayName = BuildBankCardDisplayName(row.CardTypeDisplay, row.Cardholder, masked),
+                CardTypeDisplay = row.CardTypeDisplay ?? string.Empty,
+                Cardholder = string.IsNullOrWhiteSpace(row.Cardholder) ? null : row.Cardholder,
+                CardNumberMasked = masked,
+                ExpirationDisplay = FormatExpiration(expMonth, expYear),
+                IsActive = row.IsActive
+            };
+        }
+
+        private static BankCardSaveLogEntry BuildChangedBankCardLogEntry(BankCardRow row, BankCardSnapshot before, int expMonth, int expYear)
+        {
+            string? afterCardholder = string.IsNullOrWhiteSpace(row.Cardholder) ? before.Cardholder : row.Cardholder;
+            string afterCardTypeDisplay = row.CardTypeDisplay ?? string.Empty;
+            string afterMasked = string.IsNullOrWhiteSpace(row.CardNumberRaw)
+                ? before.CardNumberMasked
+                : SafeMaskedCardNumber(row);
+            string afterExpiration = FormatExpiration(expMonth, expYear);
+
+            bool cardTypeChanged = row.CardTypeId != before.CardTypeId ||
+                                   !SafeEquals(afterCardTypeDisplay, before.CardTypeDisplay);
+            bool cardholderChanged = !SafeEquals(afterCardholder, before.Cardholder);
+            bool expirationChanged = expMonth != before.ExpMonth || expYear != before.ExpYear;
+            bool activeChanged = row.IsActive != before.IsActive;
+            bool cardNumberChanged = !string.IsNullOrWhiteSpace(row.CardNumberRaw) &&
+                                     !SafeEquals(NormalizeDigits(row.CardNumberRaw), NormalizeDigits(before.NumberPlain));
+            bool cvvChanged = !string.IsNullOrWhiteSpace(row.CvvRaw) &&
+                              !SafeEquals(row.CvvRaw.Trim(), before.CvvPlain.Trim());
+            bool pinChanged = !string.IsNullOrWhiteSpace(row.PinRaw) &&
+                              !SafeEquals(row.PinRaw.Trim(), before.PinPlain.Trim());
+            bool billingZipChanged = !string.IsNullOrWhiteSpace(row.BillingZipRaw) &&
+                                     !SafeEquals(row.BillingZipRaw.Trim(), before.BillingZipPlain.Trim());
+
+            bool anyChanged =
+                cardTypeChanged ||
+                cardholderChanged ||
+                expirationChanged ||
+                activeChanged ||
+                cardNumberChanged ||
+                cvvChanged ||
+                pinChanged ||
+                billingZipChanged;
+
+            var action = BankCardSaveLogAction.Unchanged;
+            if (before.IsActive && !row.IsActive)
+                action = BankCardSaveLogAction.Deactivated;
+            else if (anyChanged)
+                action = BankCardSaveLogAction.Changed;
+
+            return new BankCardSaveLogEntry
+            {
+                Id = row.Id,
+                Action = action,
+                BankCardDisplayName = BuildBankCardDisplayName(afterCardTypeDisplay, afterCardholder, afterMasked),
+                CardTypeDisplay = afterCardTypeDisplay,
+                Cardholder = string.IsNullOrWhiteSpace(afterCardholder) ? null : afterCardholder,
+                CardNumberMasked = afterMasked,
+                ExpirationDisplay = afterExpiration,
+                IsActive = row.IsActive,
+                CardTypeChanged = cardTypeChanged,
+                CardholderChanged = cardholderChanged,
+                ExpirationChanged = expirationChanged,
+                ActiveChanged = activeChanged,
+                CardNumberChanged = cardNumberChanged,
+                CvvChanged = cvvChanged,
+                PinChanged = pinChanged,
+                BillingZipChanged = billingZipChanged
+            };
+        }
+
+        private static string SafeMaskedCardNumber(BankCardRow row)
+        {
+            if (!string.IsNullOrWhiteSpace(row.CardNumberMasked))
+                return row.CardNumberMasked;
+
+            return MaskPanLast4(row.CardNumberRaw);
+        }
+
+        private static string BuildBankCardDisplayName(string? cardTypeDisplay, string? cardholder, string? maskedNumber)
+        {
+            if (!string.IsNullOrWhiteSpace(cardholder))
+                return cardholder.Trim();
+
+            if (!string.IsNullOrWhiteSpace(cardTypeDisplay) && !string.IsNullOrWhiteSpace(maskedNumber))
+                return $"{cardTypeDisplay.Trim()} {maskedNumber.Trim()}";
+
+            if (!string.IsNullOrWhiteSpace(cardTypeDisplay))
+                return cardTypeDisplay.Trim();
+
+            if (!string.IsNullOrWhiteSpace(maskedNumber))
+                return maskedNumber.Trim();
+
+            return "card";
+        }
+
+        private static string FormatExpiration(int expMonth, int expYear)
+        {
+            if (expMonth < 1 || expMonth > 12 || expYear <= 0)
+                return string.Empty;
+
+            return $"{expMonth:00}/{expYear:0000}";
+        }
+
+        private static string NormalizeDigits(string? value)
+            => string.IsNullOrWhiteSpace(value)
+                ? string.Empty
+                : new string(value.Where(char.IsDigit).ToArray());
+
+        private static bool SafeEquals(string? left, string? right)
+            => string.Equals((left ?? string.Empty).Trim(), (right ?? string.Empty).Trim(), StringComparison.Ordinal);
 
         private static (byte[]? NumberCipher, byte[]? CvvCipher, byte[]? PinCipher, byte[]? BillingZipCipher, string? Cardholder, bool IsPrimary) LoadExistingBankCardStoredValues(
             SqliteConnection conn,

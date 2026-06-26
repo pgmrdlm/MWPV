@@ -1,11 +1,15 @@
 
 /* ============================================================================
-   MWPV - 01.07 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.08 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.07
+   - Create a fresh database at schema version 01.08
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.08 changes reflected here:
+   - BankCardsTab changed-field logging templates added
+   - Log Display filter data remains keyed by ComboType.Code = 'log_filters'
 
    01.07 changes reflected here:
    - Enhanced BankCardsTab logging templates added
@@ -300,11 +304,43 @@ FROM (
     UNION ALL
     SELECT 'BankCardsTab',
            5,
-           'Bank card #BankCardDisplayName# has been updated for #CategoryItemName#: #BankCardChangeSummary#'
+           'Bank card #BankCardDisplayName# has been updated for #CategoryItemName#'
     UNION ALL
     SELECT 'BankCardsTab',
            6,
            'Bank card #BankCardDisplayName# has been deactivated for #CategoryItemName#'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           7,
+           '- Card type changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           8,
+           '- Cardholder changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           9,
+           '- Expiration changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           10,
+           '- Active state changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           11,
+           '- Card number changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           12,
+           '- CVV changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           13,
+           '- PIN changed'
+    UNION ALL
+    SELECT 'BankCardsTab',
+           14,
+           '- Billing ZIP changed'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -530,9 +566,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.07',
+    '01.08',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.07',
+    'Fresh database created at version 01.08',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

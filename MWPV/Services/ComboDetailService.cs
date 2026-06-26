@@ -13,9 +13,8 @@ namespace MWPV.Services
     public static class ComboDetailService
     {
         /// <summary>
-        /// OLD PATH – keeps existing callers (log filters etc.) working.
-        /// Uses the logical combo "code" like "log_filters" and delegates
-        /// to LogCatalogService.
+        /// Preferred path for logical combo families. Uses the ComboType.Code
+        /// value, such as "log_filters", and delegates to LogCatalogService.
         /// </summary>
         public static IReadOnlyList<ComboDetail> GetByType(string comboTypeCode)
         {
@@ -27,9 +26,9 @@ namespace MWPV.Services
         }
 
         /// <summary>
-        /// NEW: load ComboDetail rows by numeric ComboTypeId using
-        /// s_Combo_DetailByTypeId.sql and @ComboTypeId.
-        /// This is what we use for bank cards (2) and can later use for logs (4).
+        /// Load ComboDetail rows by numeric ComboTypeId using
+        /// s_Combo_DetailByTypeId.sql and @ComboTypeId. Retained for existing
+        /// reference-combo callers that still store stable numeric ids.
         /// </summary>
         public static IReadOnlyList<ComboDetail> GetByTypeId(int comboTypeId)
         {
