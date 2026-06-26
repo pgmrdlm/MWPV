@@ -121,6 +121,9 @@ namespace MWPV.View.UserControls
         private const string LogEvent_BankCardCreated = "BANKCARD_CREATED";
         private const string LogEvent_BankCardChanged = "BANKCARD_CHANGED";
         private const string LogEvent_BankCardDeactivated = "BANKCARD_DEACTIVATED";
+        private const string LogEvent_SecurityQuestionCreated = "SECURITYQUESTION_CREATED";
+        private const string LogEvent_SecurityQuestionChanged = "SECURITYQUESTION_CHANGED";
+        private const string LogEvent_SecurityQuestionDeactivated = "SECURITYQUESTION_DEACTIVATED";
 
         private const string Template_NewItemCreated =
             "Category Item #CategoryItemName# has been created for Category #CategoryName#";
@@ -128,6 +131,7 @@ namespace MWPV.View.UserControls
         private const string TemplateForm_BasicTab = "BasicTab";
         private const string TemplateForm_AccountsTab = "AccountsTab";
         private const string TemplateForm_BankCardsTab = "BankCardsTab";
+        private const string TemplateForm_SecurityQuestionsTab = "SecurityQuestionsTab";
 
         public CategoryItemEditorTabs()
         {
@@ -915,6 +919,14 @@ namespace MWPV.View.UserControls
             };
         }
 
+        private static IReadOnlyDictionary<string, string?> BuildSecurityQuestionTokens(string categoryItemName)
+        {
+            return new Dictionary<string, string?>
+            {
+                ["CategoryItemName"] = categoryItemName
+            };
+        }
+
         private static IReadOnlyList<int> BuildBankCardTemplateSeqs(CategoryItemService.BankCardSaveLogEntry entry)
         {
             if (entry.Action == CategoryItemService.BankCardSaveLogAction.Created)
@@ -1181,6 +1193,49 @@ namespace MWPV.View.UserControls
             {
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][BANKCARD] FAILED (best-effort ignored): {ex}");
+#endif
+            }
+        }
+
+        private void TryWriteSecurityQuestionLog_BestEffort(
+            long itemId,
+            string itemName,
+            string eventCode,
+            int templateSeq)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(eventCode) || templateSeq <= 0)
+                    return;
+
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = LogSource_CategoryItem,
+                    EventCode = eventCode,
+                    CreatedUtc = DateTime.UtcNow,
+                    WhenUtc = DateTime.UtcNow,
+                    ItemId = itemId,
+                    SubjectText = itemName,
+                    KeySetVersion = 1
+                };
+
+                var tokens = BuildSecurityQuestionTokens(itemName);
+
+                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: TemplateForm_SecurityQuestionsTab,
+                    seqsInOrder: new[] { templateSeq },
+                    tokens: tokens,
+                    write: write);
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][SECURITYQUESTION] Inserted {eventCode} logId={logId} itemId={itemId} subject='{itemName}' seq={templateSeq}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][LOG][SECURITYQUESTION] FAILED (best-effort ignored): {ex}");
 #endif
             }
         }
@@ -2271,6 +2326,7 @@ namespace MWPV.View.UserControls
             }
 
             int itemId = activeId.Value;
+            string itemName = BasicPanel?.GetItemNameTrim() ?? string.Empty;
 
             try
             {
@@ -2291,6 +2347,11 @@ namespace MWPV.View.UserControls
                             throw new InvalidOperationException("CategoryItemSecurityQuestion insert failed.");
 
                         writes++;
+                        TryWriteSecurityQuestionLog_BestEffort(
+                            itemId: itemId,
+                            itemName: itemName,
+                            eventCode: LogEvent_SecurityQuestionCreated,
+                            templateSeq: 1);
                     }
                     else if (!row.IsActive && string.IsNullOrWhiteSpace(row.AnswerRaw))
                     {
@@ -2302,6 +2363,11 @@ namespace MWPV.View.UserControls
                             throw new InvalidOperationException("CategoryItemSecurityQuestion deactivate failed.");
 
                         writes += affected;
+                        TryWriteSecurityQuestionLog_BestEffort(
+                            itemId: itemId,
+                            itemName: itemName,
+                            eventCode: LogEvent_SecurityQuestionDeactivated,
+                            templateSeq: 3);
                     }
                     else if (!string.IsNullOrWhiteSpace(row.AnswerRaw))
                     {
@@ -2317,6 +2383,11 @@ namespace MWPV.View.UserControls
                             throw new InvalidOperationException("CategoryItemSecurityQuestion update failed.");
 
                         writes += affected;
+                        TryWriteSecurityQuestionLog_BestEffort(
+                            itemId: itemId,
+                            itemName: itemName,
+                            eventCode: row.IsActive ? LogEvent_SecurityQuestionChanged : LogEvent_SecurityQuestionDeactivated,
+                            templateSeq: row.IsActive ? 2 : 3);
                     }
                 }
 
