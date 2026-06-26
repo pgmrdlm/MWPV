@@ -63,10 +63,13 @@ namespace MWPV.View.UserControls
         // re-run the leave-basic persistence logic (it already ran).
         private bool _suppressLeaveBasicOnce;
         private bool _suppressLeaveBankCardsOnce;
+        private bool _suppressLeaveSecurityQuestionsOnce;
         private bool _bankCardsLoaded;
         private int _bankCardsLoadedItemId;
         private bool _accountsLoaded;
         private int _accountsLoadedItemId;
+        private bool _securityQuestionsLoaded;
+        private int _securityQuestionsLoadedItemId;
 
         public IReadOnlyList<CategoryItemBankCardsPanel.BankCardRow> BankCardsDraftRows { get; private set; }
             = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
@@ -74,9 +77,13 @@ namespace MWPV.View.UserControls
         public IReadOnlyList<CategoryItemAccountsPanel.AccountRow> AccountsDraftRows { get; private set; }
             = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
 
+        public IReadOnlyList<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow> SecurityQuestionsDraftRows { get; private set; }
+            = Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>();
+
         private const int TabIndexBasic = 0;
         private const int TabIndexAccounts = 1;
         private const int TabIndexBankCards = 2;
+        private const int TabIndexSecurityQuestions = 3;
         private const string DuplicateAccountNumberMessage = "Duplicate account number is not allowed for this item.";
 
         private const string EntityKind_CategoryItem = "CategoryItem";
@@ -268,6 +275,47 @@ namespace MWPV.View.UserControls
                 _accountsLoaded = false;
                 _accountsLoadedItemId = 0;
                 SetStatus("Unable to load Accounts.");
+            }
+        }
+
+        private void EnsureSecurityQuestionsLoadedForActiveItem(bool forceReload = false)
+        {
+            if (SecurityQuestionsPanel == null)
+                return;
+
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                _securityQuestionsLoaded = false;
+                _securityQuestionsLoadedItemId = 0;
+                return;
+            }
+
+            int itemId = activeId.Value;
+            if (!forceReload && _securityQuestionsLoaded && _securityQuestionsLoadedItemId == itemId)
+                return;
+
+            try
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
+#endif
+                var rows = CategoryItemSecurityQuestionsService.LoadSecurityQuestionListRowsByItemId(itemId);
+                SecurityQuestionsPanel.LoadFromHostRows(rows);
+                _securityQuestionsLoaded = true;
+                _securityQuestionsLoadedItemId = itemId;
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] OK itemId={itemId} rows={rows.Count}");
+#endif
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] FAILED itemId={itemId}: {ex}");
+#endif
+                _securityQuestionsLoaded = false;
+                _securityQuestionsLoadedItemId = 0;
+                SetStatus("Unable to load Security Questions.");
             }
         }
         /* ======================= SEDS helpers ======================= */
@@ -1189,10 +1237,13 @@ namespace MWPV.View.UserControls
             HookPanelsOnce();
             BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
             AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
+            SecurityQuestionsDraftRows = Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
             _accountsLoaded = false;
             _accountsLoadedItemId = 0;
+            _securityQuestionsLoaded = false;
+            _securityQuestionsLoadedItemId = 0;
 
             if (ItemTabs != null)
             {
@@ -1263,6 +1314,7 @@ namespace MWPV.View.UserControls
                 BasicPanel?.WipeAllForHostClose();
                 BankCardsPanel?.WipeAllForHostClose();
                 AccountsPanel?.WipeAllForHostClose();
+                SecurityQuestionsPanel?.WipeAllForHostClose();
             }
             catch { }
 
@@ -1301,10 +1353,13 @@ namespace MWPV.View.UserControls
             try { ClearSedsContext(); } catch { }
             BankCardsDraftRows = Array.Empty<CategoryItemBankCardsPanel.BankCardRow>();
             AccountsDraftRows = Array.Empty<CategoryItemAccountsPanel.AccountRow>();
+            SecurityQuestionsDraftRows = Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>();
             _bankCardsLoaded = false;
             _bankCardsLoadedItemId = 0;
             _accountsLoaded = false;
             _accountsLoadedItemId = 0;
+            _securityQuestionsLoaded = false;
+            _securityQuestionsLoadedItemId = 0;
 
             // IMPORTANT: leaving editor means Basic is not open
             ClearIsBasicOpen_BestEffort();
@@ -1339,6 +1394,14 @@ namespace MWPV.View.UserControls
             {
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS] AccountsPanel.WipeAllForHostClose failed: {ex}");
+#endif
+            }
+
+            try { SecurityQuestionsPanel?.WipeAllForHostClose(); }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS] SecurityQuestionsPanel.WipeAllForHostClose failed: {ex}");
 #endif
             }
         }
@@ -1391,8 +1454,12 @@ namespace MWPV.View.UserControls
             bool bankCardsHasHostCloseSessionWork = false;
             try { bankCardsHasHostCloseSessionWork = BankCardsPanel?.HasHostCloseSessionWork() ?? false; } catch { }
 
+            bool securityQuestionsHasHostCloseSessionWork = false;
+            try { securityQuestionsHasHostCloseSessionWork = SecurityQuestionsPanel?.HasHostCloseSessionWork() ?? false; } catch { }
+
 #if DEBUG
             Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] SessionWorkDetected={bankCardsHasHostCloseSessionWork}");
+            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] SessionWorkDetected={securityQuestionsHasHostCloseSessionWork}");
 #endif
 
             if (bankCardsHasHostCloseSessionWork)
@@ -1408,6 +1475,24 @@ namespace MWPV.View.UserControls
 
 #if DEBUG
                     Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] TryHostClosePreflight EXIT allowClose=false");
+#endif
+                    return false;
+                }
+            }
+
+            if (securityQuestionsHasHostCloseSessionWork)
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] Entering SecurityQuestions host-close branch");
+#endif
+                bool securityQuestionsAllowed = TryResolveSecurityQuestionsHostCloseDecision();
+                if (!securityQuestionsAllowed)
+                {
+                    _lastTabIndex = ItemTabs?.SelectedIndex ?? _lastTabIndex;
+                    UpdateIsBasicOpenFromUi_BestEffort();
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] TryHostClosePreflight EXIT allowClose=false");
 #endif
                     return false;
                 }
@@ -1924,6 +2009,15 @@ namespace MWPV.View.UserControls
                 AccountsPanel.CancelAndExitRequested += AccountsPanel_CancelAndExitRequested;
             }
 
+            if (SecurityQuestionsPanel != null)
+            {
+                SecurityQuestionsPanel.SaveAndExitRequested -= SecurityQuestionsPanel_SaveAndExitRequested;
+                SecurityQuestionsPanel.CancelAndExitRequested -= SecurityQuestionsPanel_CancelAndExitRequested;
+
+                SecurityQuestionsPanel.SaveAndExitRequested += SecurityQuestionsPanel_SaveAndExitRequested;
+                SecurityQuestionsPanel.CancelAndExitRequested += SecurityQuestionsPanel_CancelAndExitRequested;
+            }
+
             _panelsHooked = true;
         }
 
@@ -1949,6 +2043,12 @@ namespace MWPV.View.UserControls
             {
                 AccountsPanel.SaveAndExitRequested -= AccountsPanel_SaveAndExitRequested;
                 AccountsPanel.CancelAndExitRequested -= AccountsPanel_CancelAndExitRequested;
+            }
+
+            if (SecurityQuestionsPanel != null)
+            {
+                SecurityQuestionsPanel.SaveAndExitRequested -= SecurityQuestionsPanel_SaveAndExitRequested;
+                SecurityQuestionsPanel.CancelAndExitRequested -= SecurityQuestionsPanel_CancelAndExitRequested;
             }
 
             _panelsHooked = false;
@@ -2089,6 +2189,162 @@ namespace MWPV.View.UserControls
             Debug.WriteLine("[ITEM-TABS] AccountsPanel CancelAndExitRequested");
 #endif
             HandleCancelAndExitRequest();
+        }
+
+        /* ======================= Security Questions integration ======================= */
+
+        private void SecurityQuestionsPanel_SaveAndExitRequested(object? sender, CategoryItemSecurityQuestionsPanel.SecurityQuestionsCommitEventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] SecurityQuestionsPanel SaveAndExitRequested");
+#endif
+            TryPersistSecurityQuestionsRows(
+                rows: e.Rows ?? Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>(),
+                selectSecurityQuestionsOnSuccess: true);
+        }
+
+        private void SecurityQuestionsPanel_CancelAndExitRequested(object? sender, EventArgs e)
+        {
+#if DEBUG
+            Debug.WriteLine("[ITEM-TABS] SecurityQuestionsPanel CancelAndExitRequested");
+#endif
+            HandleCancelAndExitRequest();
+        }
+
+        private bool TryPersistSecurityQuestionsRows(
+            IReadOnlyList<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow> rows,
+            bool selectSecurityQuestionsOnSuccess)
+        {
+            SecurityQuestionsDraftRows = (rows ?? Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>()).ToList();
+            SetStatus("");
+
+            if (BasicPanel == null)
+                return true;
+
+            bool bypassBasicPersist = IsExistingItemAndBasicPanelIsViewMode();
+            bool isBookmarkOnly = false;
+
+            if (!bypassBasicPersist)
+            {
+                BasicPanel.NormalizeUsernameFromEmailIfEmpty();
+                if (!BasicPanel.TryValidateAllForSubmit(out isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+
+                    BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
+                    SetStatus("Security Questions are staged, fix Basic tab errors before saving.");
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Blocked by Basic validation.");
+#endif
+                    return false;
+                }
+
+                if (!TryPersistBasicIfNeeded(PersistTrigger.Save, isBookmarkOnly))
+                {
+                    if (ItemTabs != null)
+                        ForceSelectTab(TabIndexBasic);
+
+#if DEBUG
+                    Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Blocked by Basic persistence failure.");
+#endif
+                    return false;
+                }
+            }
+
+#if DEBUG
+            else
+            {
+                Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
+            }
+#endif
+
+            var activeId = TryGetActiveCategoryItemId();
+            if (!activeId.HasValue || activeId.Value <= 0)
+            {
+                SetStatus("Security Questions save failed: missing ItemId context.");
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Missing ItemId context.");
+#endif
+                return false;
+            }
+
+            int itemId = activeId.Value;
+
+            try
+            {
+                int writes = 0;
+
+                foreach (var row in SecurityQuestionsDraftRows.Where(r => r != null))
+                {
+                    if (row.Id <= 0)
+                    {
+                        long insertedId = CategoryItemSecurityQuestionsService.InsertCategoryItemSecurityQuestionFromUi(
+                            itemId: itemId,
+                            seq: row.Seq,
+                            questionPlain: row.QuestionPlain ?? string.Empty,
+                            answerPlain: row.AnswerRaw ?? string.Empty,
+                            isActive: row.IsActive);
+
+                        if (insertedId <= 0)
+                            throw new InvalidOperationException("CategoryItemSecurityQuestion insert failed.");
+
+                        writes++;
+                    }
+                    else if (!row.IsActive && string.IsNullOrWhiteSpace(row.AnswerRaw))
+                    {
+                        int affected = CategoryItemSecurityQuestionsService.DeactivateCategoryItemSecurityQuestion(
+                            id: row.Id,
+                            itemId: itemId);
+
+                        if (affected <= 0)
+                            throw new InvalidOperationException("CategoryItemSecurityQuestion deactivate failed.");
+
+                        writes += affected;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.AnswerRaw))
+                    {
+                        int affected = CategoryItemSecurityQuestionsService.UpdateCategoryItemSecurityQuestionFromUi(
+                            id: row.Id,
+                            itemId: itemId,
+                            seq: row.Seq,
+                            questionPlain: row.QuestionPlain ?? string.Empty,
+                            answerPlain: row.AnswerRaw ?? string.Empty,
+                            isActive: row.IsActive);
+
+                        if (affected <= 0)
+                            throw new InvalidOperationException("CategoryItemSecurityQuestion update failed.");
+
+                        writes += affected;
+                    }
+                }
+
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][SAVE] itemId={itemId} writes={writes}");
+#endif
+
+                EnsureSecurityQuestionsLoadedForActiveItem(forceReload: true);
+                NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+
+                if (selectSecurityQuestionsOnSuccess)
+                {
+                    ForceSelectTab(TabIndexSecurityQuestions);
+                    _lastTabIndex = TabIndexSecurityQuestions;
+                }
+
+                SetStatus("");
+                return true;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][SAVE] FAILED itemId={itemId}: {ex}");
+#endif
+                SecurityQuestionsPanel?.ShowPersistenceError("Security Questions save failed. See debug output.");
+                SetStatus("Security Questions save failed. See debug output.");
+                return false;
+            }
         }
 
         private bool TryPersistNewAccountsRowsAndReload(
@@ -2248,6 +2504,10 @@ namespace MWPV.View.UserControls
                     {
                         EnsureAccountsLoadedForActiveItem(forceReload: false);
                     }
+                    else if (newIndex == TabIndexSecurityQuestions)
+                    {
+                        EnsureSecurityQuestionsLoadedForActiveItem(forceReload: false);
+                    }
                     _lastTabIndex = newIndex;
                     return;
                 }
@@ -2387,6 +2647,85 @@ namespace MWPV.View.UserControls
                     return;
                 }
             }
+
+            if (oldIndex == TabIndexSecurityQuestions && newIndex != TabIndexSecurityQuestions)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving SECURITYQUESTIONS => newIndex={newIndex}");
+#endif
+                if (_suppressLeaveSecurityQuestionsOnce)
+                {
+                    _suppressLeaveSecurityQuestionsOnce = false;
+                }
+                else
+                {
+#if DEBUG
+                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving SECURITYQUESTIONS => requestedIndex={newIndex}");
+#endif
+                    int requestedIndex = newIndex;
+
+                    ForceSelectTab(TabIndexSecurityQuestions);
+
+                    bool allowLeaveSecurityQuestions = PromptLeaveSecurityQuestionsBeforeTabSwitch();
+                    if (!allowLeaveSecurityQuestions)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][TAB] Leave SECURITYQUESTIONS CANCELED -> stay on SecurityQuestions.");
+#endif
+                        _lastTabIndex = TabIndexSecurityQuestions;
+
+                        UpdateIsBasicOpenFromUi_BestEffort();
+                        return;
+                    }
+
+                    bool allowLeave = true;
+
+                    try
+                    {
+                        _handlingTabSelection = true;
+                        if (SecurityQuestionsPanel != null)
+                            allowLeave = SecurityQuestionsPanel.TryAutoCommitAndWipe();
+                    }
+                    finally
+                    {
+                        _handlingTabSelection = false;
+                        UpdateIsBasicOpenFromUi_BestEffort();
+                    }
+
+                    if (!allowLeave)
+                    {
+#if DEBUG
+                        Debug.WriteLine("[ITEM-TABS][TAB] Leave SECURITYQUESTIONS BLOCKED -> stay on SecurityQuestions.");
+#endif
+                        _lastTabIndex = TabIndexSecurityQuestions;
+                        return;
+                    }
+
+                    _lastTabIndex = TabIndexSecurityQuestions;
+                    _suppressLeaveSecurityQuestionsOnce = true;
+
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_isClosing || ItemTabs == null)
+                            return;
+
+                        try
+                        {
+                            ItemTabs.SelectedIndex = requestedIndex;
+                        }
+                        catch
+                        {
+                        }
+                        finally
+                        {
+                            UpdateIsBasicOpenFromUi_BestEffort();
+                        }
+                    }), DispatcherPriority.Background);
+
+                    return;
+                }
+            }
+
             if (oldIndex != TabIndexBankCards && newIndex == TabIndexBankCards)
             {
                 EnsureBankCardsLoadedForActiveItem(forceReload: false);
@@ -2394,6 +2733,10 @@ namespace MWPV.View.UserControls
             else if (oldIndex != TabIndexAccounts && newIndex == TabIndexAccounts)
             {
                 EnsureAccountsLoadedForActiveItem(forceReload: false);
+            }
+            else if (oldIndex != TabIndexSecurityQuestions && newIndex == TabIndexSecurityQuestions)
+            {
+                EnsureSecurityQuestionsLoadedForActiveItem(forceReload: false);
             }
 
             _lastTabIndex = newIndex;
@@ -2451,6 +2794,22 @@ namespace MWPV.View.UserControls
                 {
                     if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBankCards)
                         ForceSelectTab(TabIndexBankCards);
+                });
+        }
+
+        private bool TryResolveSecurityQuestionsHostCloseDecision()
+        {
+            return TryResolveHostCloseDecision(
+                hasPanel: SecurityQuestionsPanel != null,
+                panelMissingDebugMessage: "[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] Panel missing -> allowClose=true",
+                debugPrefix: "[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS]",
+                getDecision: PromptSecurityQuestionsHostCloseDecision,
+                saveAndExit: TryCommitSecurityQuestionsFromHostClose,
+                exitWithoutSave: () => SecurityQuestionsPanel?.TryPrepareHostCloseDiscard() ?? true,
+                onCancelExit: () =>
+                {
+                    if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexSecurityQuestions)
+                        ForceSelectTab(TabIndexSecurityQuestions);
                 });
         }
 
@@ -2557,6 +2916,25 @@ namespace MWPV.View.UserControls
             }
 
             return TryPersistBankCardsRows(rows, selectBankCardsOnSuccess: false);
+        }
+
+        private bool TryCommitSecurityQuestionsFromHostClose()
+        {
+            if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexSecurityQuestions)
+                ForceSelectTab(TabIndexSecurityQuestions);
+
+            if (SecurityQuestionsPanel == null)
+                return true;
+
+            if (!SecurityQuestionsPanel.TryBuildHostCloseSavePayload(out var rows))
+            {
+#if DEBUG
+                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] Host-close save payload not available -> allowClose=false");
+#endif
+                return false;
+            }
+
+            return TryPersistSecurityQuestionsRows(rows, selectSecurityQuestionsOnSuccess: false);
         }
 
         private bool TryPersistBankCardsRows(
@@ -2751,6 +3129,24 @@ namespace MWPV.View.UserControls
                 step2DebugContext: "HOST-CLOSE-BANKCARDS-STEP2");
         }
 
+        private HostCloseDecision PromptSecurityQuestionsHostCloseDecision()
+        {
+            return PromptHostCloseDecision(
+                step1Title: "Save Security Questions Before Exiting?",
+                step1Body:
+                    "You have Security Questions work in this session.\n\n" +
+                    "Choose Save & Exit to save your Security Questions changes and close the window.\n" +
+                    "Choose More Options to continue without saving or cancel exit.",
+                step2Title: "Exit Security Questions Without Saving?",
+                step2Body:
+                    "Your Security Questions session work will be discarded.\n\n" +
+                    "Choose Exit Without Saving to close the window now.\n" +
+                    "Choose Cancel to remain in the editor.",
+                resultDebugPrefix: "[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS]",
+                step1DebugContext: "HOST-CLOSE-SECURITYQUESTIONS-STEP1",
+                step2DebugContext: "HOST-CLOSE-SECURITYQUESTIONS-STEP2");
+        }
+
         private HostCloseDecision PromptBasicHostCloseDecision()
         {
             return PromptHostCloseDecision(
@@ -2905,6 +3301,28 @@ namespace MWPV.View.UserControls
 
 #if DEBUG
             Debug.WriteLine($"[ITEM-TABS][LEAVE-BANKCARDS] Popup result={result}");
+#endif
+
+            return result == PopupDialog.PopupResult.Accept;
+        }
+
+        private bool PromptLeaveSecurityQuestionsBeforeTabSwitch()
+        {
+            const string title = "Leave Security Questions Tab?";
+            const string body =
+                "You have Security Questions work in this editor session.\n\n" +
+                "Choose Yes to leave Security Questions now, or No to stay on this tab.";
+
+            var result = ShowCustomPopupDecision(
+                title: title,
+                body: body,
+                primaryText: "Yes",
+                secondaryText: "No",
+                debugContext: "LEAVE-SECURITYQUESTIONS",
+                safeFallbackResult: PopupDialog.PopupResult.Cancel);
+
+#if DEBUG
+            Debug.WriteLine($"[ITEM-TABS][LEAVE-SECURITYQUESTIONS] Popup result={result}");
 #endif
 
             return result == PopupDialog.PopupResult.Accept;

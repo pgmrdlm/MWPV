@@ -129,14 +129,7 @@
                 <!-- ========== SECURITY QUESTIONS TAB ========== -->
                 <TabItem Header="Security Q/A">
                     <Grid Margin="20" Background="Bisque">
-                        <StackPanel>
-                            <TextBlock Text="Security questions and answers will go here."
-                                       FontWeight="SemiBold"
-                                       Margin="0,0,0,8"/>
-                            <TextBlock Text="(Finally we’ll move just the Security Questions piece into its own control and host it here.)"
-                                       TextWrapping="Wrap"
-                                       FontSize="12"/>
-                        </StackPanel>
+                        <categoryItems:CategoryItemSecurityQuestionsPanel x:Name="SecurityQuestionsPanel"/>
                     </Grid>
                 </TabItem>
 
