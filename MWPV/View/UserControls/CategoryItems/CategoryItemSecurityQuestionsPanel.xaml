@@ -263,10 +263,6 @@
                                 Content="Edit"
                                 Style="{StaticResource GridActionButton}"
                                 Click="OnSecurityQuestionEditClick" />
-                        <Button x:Name="BtnSecurityQuestionDeactivateSelected"
-                                Content="Deactivate"
-                                Style="{StaticResource GridActionButton}"
-                                Click="OnSecurityQuestionDeactivateClick" />
                     </StackPanel>
                 </Grid>
             </Border>

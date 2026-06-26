@@ -2336,9 +2336,11 @@ namespace MWPV.View.UserControls
                 {
                     if (row.Id <= 0)
                     {
+                        int nextSeq = CategoryItemSecurityQuestionsService.GetNextSeqForItem(itemId);
+
                         long insertedId = CategoryItemSecurityQuestionsService.InsertCategoryItemSecurityQuestionFromUi(
                             itemId: itemId,
-                            seq: row.Seq,
+                            seq: nextSeq,
                             questionPlain: row.QuestionPlain ?? string.Empty,
                             answerPlain: row.AnswerRaw ?? string.Empty,
                             isActive: row.IsActive);

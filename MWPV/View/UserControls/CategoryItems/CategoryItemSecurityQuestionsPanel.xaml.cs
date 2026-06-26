@@ -303,6 +303,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateTabButtons()
         {
+            ApplyProtectedViewControlState();
+
             if (BtnTabSave != null)
             {
                 BtnTabSave.IsEnabled =
@@ -317,6 +319,28 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (BtnCopyAnswer != null)
                 BtnCopyAnswer.Visibility = _isSelectedProtectedViewActive ? Visibility.Visible : Visibility.Collapsed;
+
+            if (BtnSecurityQuestionEditSelected != null)
+            {
+                bool hasSelectedRow = SecurityQuestionGrid?.SelectedItem is SecurityQuestionRow;
+                BtnSecurityQuestionEditSelected.IsEnabled =
+                    !_entryDisabled &&
+                    _isSelectedProtectedViewActive &&
+                    _editingRow == null &&
+                    hasSelectedRow;
+            }
+        }
+
+        private void ApplyProtectedViewControlState()
+        {
+            bool editable = !_entryDisabled && (!_isSelectedProtectedViewActive || _editingRow != null);
+
+            if (QuestionTextBox != null) QuestionTextBox.IsEnabled = editable;
+            if (AnswerBox != null) AnswerBox.IsEnabled = editable;
+            if (ChkSecurityQuestionActive != null) ChkSecurityQuestionActive.IsEnabled = editable;
+            if (BtnSecurityQuestionAddOrUpdate != null) BtnSecurityQuestionAddOrUpdate.IsEnabled = editable;
+            if (BtnSecurityQuestionClearRow != null) BtnSecurityQuestionClearRow.IsEnabled = editable;
+            if (BtnViewAnswer != null) BtnViewAnswer.IsEnabled = !_entryDisabled;
         }
 
         private void CaptureBaselineFromCurrent()
@@ -453,8 +477,11 @@ namespace MWPV.View.UserControls.CategoryItems
             _isSelectedProtectedViewActive = false;
             ClearSecurityQuestionError();
 
-            bool isAdd = _editingRow == null;
-            if (isAdd)
+            bool isTrueAddMode = _editingRow == null;
+            bool isUpdate = _editingRow != null;
+            bool isExistingPersistedUpdate = _editingRow != null && _editingRow.Id > 0;
+
+            if (isTrueAddMode)
                 BeginAddNewQuestionSession();
 
             if (_entryDisabled)
@@ -477,7 +504,7 @@ namespace MWPV.View.UserControls.CategoryItems
             bool isActive = ChkSecurityQuestionActive?.IsChecked == true;
             string masked = MaskAnswer(answer);
 
-            if (isAdd)
+            if (isTrueAddMode)
             {
                 var row = new SecurityQuestionRow
                 {
@@ -501,10 +528,17 @@ namespace MWPV.View.UserControls.CategoryItems
             }
 
             ClearNewQuestionSessionTracking("OnSecurityQuestionAddOrUpdateClick");
-            TeardownAfterSuccessfulUpdate();
+            if (isUpdate)
+                TeardownAfterSuccessfulUpdate();
+            else
+                ClearEntryFields();
+
             SetErrors(false);
             MarkDirty();
             UpdateTabButtons();
+
+            if (isExistingPersistedUpdate || isTrueAddMode)
+                RaiseSaveAndExitRequestOnly();
         }
 
         private void OnSecurityQuestionClearRowClick(object sender, RoutedEventArgs e)
@@ -554,7 +588,7 @@ namespace MWPV.View.UserControls.CategoryItems
             if (selected.Id <= 0)
             {
                 StoreSelectedSecurityQuestionDetailSedsBestEffort(selected.Id, selected.AnswerRaw ?? string.Empty);
-                PopulateProtectedViewFromSelectedDetail(selected, selected.AnswerRaw ?? string.Empty);
+                PopulateProtectedViewFromSelectedDetail(selected, selected.AnswerRaw ?? string.Empty, editMode: false);
                 return;
             }
 
@@ -582,21 +616,29 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            selected.QuestionPlain = detail.QuestionPlain;
-            selected.AnswerMasked = MaskAnswer(detail.AnswerPlain);
-            selected.IsActive = detail.IsActive;
+            _suppressDirty = true;
+            try
+            {
+                selected.QuestionPlain = detail.QuestionPlain;
+                selected.AnswerMasked = MaskAnswer(detail.AnswerPlain);
+                selected.IsActive = detail.IsActive;
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
 
             StoreSelectedSecurityQuestionDetailSedsBestEffort(selected.Id, detail.AnswerPlain);
-            PopulateProtectedViewFromSelectedDetail(selected, detail.AnswerPlain);
+            PopulateProtectedViewFromSelectedDetail(selected, detail.AnswerPlain, editMode: false);
         }
 
-        private void PopulateProtectedViewFromSelectedDetail(SecurityQuestionRow row, string answer)
+        private void PopulateProtectedViewFromSelectedDetail(SecurityQuestionRow row, string answer, bool editMode)
         {
             _suppressDirty = true;
             try
             {
                 _isSelectedProtectedViewActive = true;
-                SetEditingMode(row);
+                SetEditingMode(editMode ? row : null);
 
                 if (QuestionTextBox != null)
                     QuestionTextBox.Text = TrimToMaxChars(row.QuestionPlain, MaxQuestionChars);
@@ -635,25 +677,7 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            PopulateProtectedViewFromSelectedDetail(row, answerForEdit);
-        }
-
-        private void OnSecurityQuestionDeactivateClick(object sender, RoutedEventArgs e)
-        {
-            if (SecurityQuestionGrid?.SelectedItem is not SecurityQuestionRow row)
-                return;
-
-            ClearSecurityQuestionError();
-            row.IsActive = false;
-
-            if (ReferenceEquals(_editingRow, row))
-            {
-                if (ChkSecurityQuestionActive != null)
-                    ChkSecurityQuestionActive.IsChecked = false;
-            }
-
-            MarkDirty();
-            UpdateTabButtons();
+            PopulateProtectedViewFromSelectedDetail(row, answerForEdit, editMode: true);
         }
 
         private void OnTabSaveClick(object sender, RoutedEventArgs e)
@@ -683,7 +707,13 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            SaveAndExitRequested?.Invoke(this, new SecurityQuestionsCommitEventArgs(_securityQuestionRows.Select(CloneRow).ToList()));
+            RaiseSaveAndExitRequestOnly();
+        }
+
+        private void RaiseSaveAndExitRequestOnly()
+        {
+            var payload = _securityQuestionRows.Select(CloneRow).ToList();
+            SaveAndExitRequested?.Invoke(this, new SecurityQuestionsCommitEventArgs(payload));
         }
 
         private void OnTabCancelClick(object sender, RoutedEventArgs e)
@@ -830,6 +860,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private bool EntryLineHasAnyInput()
         {
+            if (_isSelectedProtectedViewActive && _editingRow == null)
+                return false;
+
             return (QuestionTextBox != null && !string.IsNullOrWhiteSpace(QuestionTextBox.Text)) ||
                    (AnswerBox != null && !string.IsNullOrEmpty(AnswerBox.Password)) ||
                    _editingRow != null;
