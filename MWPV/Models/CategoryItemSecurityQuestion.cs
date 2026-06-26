@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 
-namespace MWPV.Model
+namespace MWPV.Models
 {
     /// <summary>
     /// Maps to table: CategoryItemSecurityQuestions
@@ -17,6 +17,7 @@ namespace MWPV.Model
         public const string Col_Seq = "CISQ_Seq";
         public const string Col_QuestionBlob = "CISQ_Question";
         public const string Col_AnswerBlob = "CISQ_Answer";
+        public const string Col_IsActive = "CISQ_IsActive";
         public const string Col_CreatedAt = "CISQ_CreatedAt";
         public const string Col_UpdatedAt = "CISQ_UpdatedAt";
 
@@ -43,20 +44,28 @@ namespace MWPV.Model
             set { if (_seq != value) { _seq = value; Touch(); OnPropertyChanged(nameof(Seq)); } }
         }
 
-        private byte[] _questionEnc = Array.Empty<byte>();
-        /// <summary>Encrypted question bytes (DDL: BLOB NOT NULL). Placeholder until we wire crypto.</summary>
-        public byte[] QuestionEnc
+        private byte[] _question = Array.Empty<byte>();
+        /// <summary>Encrypted question bytes (DDL: BLOB NOT NULL).</summary>
+        public byte[] Question
         {
-            get => _questionEnc;
-            set { _questionEnc = value ?? Array.Empty<byte>(); Touch(); OnPropertyChanged(nameof(QuestionEnc)); }
+            get => _question;
+            set { _question = value ?? Array.Empty<byte>(); Touch(); OnPropertyChanged(nameof(Question)); }
         }
 
-        private byte[] _answerEnc = Array.Empty<byte>();
-        /// <summary>Encrypted answer bytes (DDL: BLOB NOT NULL). Placeholder until we wire crypto.</summary>
-        public byte[] AnswerEnc
+        private byte[] _answer = Array.Empty<byte>();
+        /// <summary>Encrypted answer bytes (DDL: BLOB NOT NULL).</summary>
+        public byte[] Answer
         {
-            get => _answerEnc;
-            set { _answerEnc = value ?? Array.Empty<byte>(); Touch(); OnPropertyChanged(nameof(AnswerEnc)); }
+            get => _answer;
+            set { _answer = value ?? Array.Empty<byte>(); Touch(); OnPropertyChanged(nameof(Answer)); }
+        }
+
+        private bool _isActive = true;
+        /// <summary>Soft-delete / active flag (CISQ_IsActive).</summary>
+        public bool IsActive
+        {
+            get => _isActive;
+            set { if (_isActive != value) { _isActive = value; Touch(); OnPropertyChanged(nameof(IsActive)); } }
         }
 
         private long _createdAtUnix;
