@@ -22,6 +22,7 @@ namespace Utilities.Sql
             "s_Category_Exists.sql",
             "s_Category_Insert.sql",
             "s_CategorySelectAll.sql",
+            "s_CategorySelectWithActiveItems.sql",
 
             // Secrets (not SQL) packaged alongside
             DatabaseHelper.DbPasswordKey,          // maps to DB_Password.txt in archive (secret, not SQL)
@@ -49,6 +50,7 @@ namespace Utilities.Sql
             "s_CategoryItem_update.sql",
             "s_Combo_DetailByTypeId.sql",
             "s_CategoryItem_select_by_category.sql",
+            "s_CategoryItem_CountActive_Global.sql",
 
             // Category Item Accounts
             "s_CategoryItemAccounts_select_by_itemid.sql",

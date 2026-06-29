@@ -6,6 +6,7 @@
 SELECT
     AS_PW_Minimum,
     AS_PW_Incriments,
-    AS_PW_Inctriment_Steps
+    AS_PW_Inctriment_Steps,
+    AS_DisplayCategoriesWithItems
 FROM AppSettings
 LIMIT 1;
