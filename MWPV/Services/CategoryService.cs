@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using MWPV.Models;
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using Utilities.Helpers;   // DatabaseHelper, ErrorHandler
 using Utilities.Sql;      // SqlCagegory  (intentional spelling to match existing)
 using Security.Utility;   // InputGuards
@@ -15,6 +16,9 @@ namespace MWPV.Services
         private const int MinCategoryNameLength = 4;
         private const int MaxCategoryNameLength = 64; // was 17
         private const int MaxDescriptionLength = 512;
+        private const string Sql_CategorySelectAll = "s_CategorySelectAll.sql";
+        private const string Sql_CategorySelectWithActiveItems = "s_CategorySelectWithActiveItems.sql";
+        private const string Sql_CategoryItemCountActiveGlobal = "s_CategoryItem_CountActive_Global.sql";
 
         // --------------------------- Helpers ---------------------------------
 
@@ -38,11 +42,12 @@ namespace MWPV.Services
 
             try
             {
-                var selectSql = LoadSqlRequired("s_CategorySelectAll.sql");
+                string selectSqlName = ChooseCategorySelectSqlName();
+                var selectSql = LoadSqlRequired(selectSqlName);
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = selectSql;
+                ConfigureCategorySelectCommand(cmd, selectSqlName, selectSql);
 
                 using var r = cmd.ExecuteReader();
 
@@ -84,6 +89,116 @@ namespace MWPV.Services
             }
 
             return rows;
+        }
+
+        private static string ChooseCategorySelectSqlName()
+        {
+            long activeItemCount = CountActiveCategoryItemsGlobal();
+            if (activeItemCount <= 0)
+                return Sql_CategorySelectAll;
+
+            return AppSettingsService.GetDisplayCategoriesWithItems()
+                ? Sql_CategorySelectWithActiveItems
+                : Sql_CategorySelectAll;
+        }
+
+        private static long CountActiveCategoryItemsGlobal()
+        {
+            var sql = LoadSqlRequired(Sql_CategoryItemCountActiveGlobal);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+
+            object? scalar = cmd.ExecuteScalar();
+            if (scalar == null || scalar == DBNull.Value)
+                return 0;
+
+            return Convert.ToInt64(scalar);
+        }
+
+        private static void ConfigureCategorySelectCommand(SqliteCommand cmd, string selectSqlName, string selectSql)
+        {
+            if (!string.Equals(selectSqlName, Sql_CategorySelectWithActiveItems, StringComparison.OrdinalIgnoreCase))
+            {
+                cmd.CommandText = selectSql;
+                return;
+            }
+
+            var sessionCategoryKeys = CategorySessionStateService.GetSessionVisibleCategoryKeys();
+            if (sessionCategoryKeys.Count == 0)
+            {
+                cmd.CommandText = selectSql;
+                return;
+            }
+
+            cmd.CommandText = BuildCategorySelectWithSessionVisibleSql(cmd, sessionCategoryKeys);
+        }
+
+        private static string BuildCategorySelectWithSessionVisibleSql(
+            SqliteCommand cmd,
+            IReadOnlyList<int> sessionCategoryKeys)
+        {
+            var parameterNames = new List<string>(sessionCategoryKeys.Count);
+
+            for (int i = 0; i < sessionCategoryKeys.Count; i++)
+            {
+                string parameterName = $"@SessionCategoryKey{i}";
+                parameterNames.Add(parameterName);
+                cmd.Parameters.AddWithValue(parameterName, sessionCategoryKeys[i]);
+            }
+
+            string inClause = string.Join(", ", parameterNames);
+
+            // Intentional one-time exception to the normal MWPV SQL-file pattern:
+            // this keeps newly-created categories visible only during the current
+            // session, until they gain active items or the app exits. Category_Key
+            // values come only from successful category inserts in this process.
+            // Values must be bound as SQL parameters. Do not copy this as a
+            // general SQL construction pattern elsewhere.
+            return $@"
+WITH Numbered AS (
+    SELECT
+        c.Category_Key,
+        c.Category_Name,
+        c.Category_Description,
+        ROW_NUMBER() OVER (ORDER BY c.Category_Name COLLATE NOCASE) - 1 AS rn
+    FROM Category c
+    WHERE IFNULL(c.IsActive, 1) = 1
+      AND (
+          EXISTS (
+              SELECT 1
+              FROM CategoryItem ci
+              WHERE ci.Category_Key = c.Category_Key
+                AND IFNULL(ci.IsActive, 1) = 1
+          )
+          OR c.Category_Key IN ({inClause})
+      )
+),
+Grouped AS (
+    SELECT
+        (rn / 3) AS group_id,
+        rn % 3 AS col_pos,
+        Category_Key,
+        Category_Name,
+        Category_Description
+    FROM Numbered
+)
+SELECT
+    MAX(CASE WHEN col_pos = 0 THEN Category_Key END)         AS Key1,
+    MAX(CASE WHEN col_pos = 1 THEN Category_Key END)         AS Key2,
+    MAX(CASE WHEN col_pos = 2 THEN Category_Key END)         AS Key3,
+
+    MAX(CASE WHEN col_pos = 0 THEN Category_Name END)        AS Col1,
+    MAX(CASE WHEN col_pos = 1 THEN Category_Name END)        AS Col2,
+    MAX(CASE WHEN col_pos = 2 THEN Category_Name END)        AS Col3,
+
+    MAX(CASE WHEN col_pos = 0 THEN Category_Description END) AS Des1,
+    MAX(CASE WHEN col_pos = 1 THEN Category_Description END) AS Des2,
+    MAX(CASE WHEN col_pos = 2 THEN Category_Description END) AS Des3
+FROM Grouped
+GROUP BY group_id
+ORDER BY group_id;";
         }
 
         // ---------------------------- Exists ---------------------------------
@@ -177,6 +292,9 @@ namespace MWPV.Services
             }
 
             tx.Commit();
+
+            if (newId > 0 && newId <= int.MaxValue)
+                CategorySessionStateService.RememberCreatedCategory((int)newId);
 
             // ------------------------------------------------------------
             // Template-based log (best-effort; must NOT block insert)

@@ -14,6 +14,7 @@ namespace MWPV.Services
         private const int FallbackPasswordMinimum = 12;
         private const int FallbackPasswordIncrement = 10;
         private const int FallbackPasswordEntryCount = 10;
+        private const bool FallbackDisplayCategoriesWithItems = true;
         private const int AbsolutePasswordMinimum = 8;
         private const int AbsolutePasswordIncrementMinimum = 1;
         private const int AbsolutePasswordEntryCountMinimum = 1;
@@ -70,6 +71,33 @@ namespace MWPV.Services
             {
                 ErrorHandler.Abend(ex, "Error loading AppSettings password length settings");
                 return PasswordLengthSettings.Fallback;
+            }
+        }
+
+        public static bool GetDisplayCategoriesWithItems()
+        {
+            try
+            {
+                var sql = LoadSqlRequired(Sql_AppSettingsSelect);
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
+                    return FallbackDisplayCategoriesWithItems;
+
+                int ordinal = reader.GetOrdinal("AS_DisplayCategoriesWithItems");
+                if (reader.IsDBNull(ordinal))
+                    return FallbackDisplayCategoriesWithItems;
+
+                return ReadInt32(reader, ordinal, FallbackDisplayCategoriesWithItems ? 1 : 0) != 0;
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading AppSettings DisplayCategoriesWithItems setting");
+                return FallbackDisplayCategoriesWithItems;
             }
         }
 
