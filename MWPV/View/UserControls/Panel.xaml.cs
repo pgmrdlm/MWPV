@@ -14,6 +14,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Security.Utility.Storage; // SecureEncryptedDataStore (SEDS)
+using MWPV.Services;
 using MWPV.View.UserControls.Popup;
 using Utilities.Helpers;
 
@@ -75,6 +76,7 @@ namespace MWPV.View.UserControls
 
             ShowCategoryGrid();
             InitializeAddCategoryInline();
+            ApplyCategoryViewMode(CategoryViewMode.InUse, refresh: false, clearSelection: false);
 
             SetNavigationLocked(false);
             UpdateLockdownBanner(false);
@@ -219,6 +221,7 @@ namespace MWPV.View.UserControls
 
             // Left side
             if (btnAddCategory != null) btnAddCategory.IsEnabled = !locked;
+            if (CategoryViewOptionsPanel != null) CategoryViewOptionsPanel.IsEnabled = !locked;
             if (CategoryGrid != null) CategoryGrid.IsEnabled = !locked;
 
             // Inline add-category host stays visible but inactive when locked.
@@ -296,6 +299,42 @@ namespace MWPV.View.UserControls
 
             try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
             catch { }
+        }
+
+        private void CategoryViewRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded && CategoryGrid == null) return;
+            if (ReferenceEquals(sender, rbCategoryViewAllActive))
+                ApplyCategoryViewMode(CategoryViewMode.AllActive, refresh: true, clearSelection: true);
+            else
+                ApplyCategoryViewMode(CategoryViewMode.InUse, refresh: true, clearSelection: true);
+        }
+
+        private void ApplyCategoryViewMode(CategoryViewMode viewMode, bool refresh, bool clearSelection)
+        {
+            if (CategoryGrid == null) return;
+
+            if (refresh)
+                CategoryGrid.SetCategoryViewMode(viewMode);
+            else
+                CategoryGrid.CategoryViewMode = viewMode;
+
+            if (clearSelection)
+                ClearSelectedCategoryContext();
+        }
+
+        private void ClearSelectedCategoryContext()
+        {
+            _selectedCategoryKey = 0;
+            _selectedCategoryName = string.Empty;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Visibility = Visibility.Collapsed;
+
+            if (txtCategoryItemsTitle != null)
+                txtCategoryItemsTitle.Text = "Category Items";
+
+            try { CategoryItemGrid?.Clear(); } catch { }
         }
 
         /* =================== Category Item Grid (pills) =================== */

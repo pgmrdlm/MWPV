@@ -10,6 +10,12 @@ using Security.Utility;   // InputGuards
 
 namespace MWPV.Services
 {
+    public enum CategoryViewMode
+    {
+        InUse = 0,
+        AllActive = 1
+    }
+
     public static class CategoryService
     {
         // ===== Centralized limits to keep UI/Backend consistent =====
@@ -36,13 +42,13 @@ namespace MWPV.Services
         /// Loads the 3-column category grid rows.
         /// Expects SQL to project: Key1/Key2/Key3, Col1/Col2/Col3, Des1/Des2/Des3.
         /// </summary>
-        public static ObservableCollection<Categories> LoadCategories()
+        public static ObservableCollection<Categories> LoadCategories(CategoryViewMode viewMode = CategoryViewMode.InUse)
         {
             var rows = new ObservableCollection<Categories>();
 
             try
             {
-                string selectSqlName = ChooseCategorySelectSqlName();
+                string selectSqlName = ChooseCategorySelectSqlName(viewMode);
                 var selectSql = LoadSqlRequired(selectSqlName);
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
@@ -91,15 +97,11 @@ namespace MWPV.Services
             return rows;
         }
 
-        private static string ChooseCategorySelectSqlName()
+        private static string ChooseCategorySelectSqlName(CategoryViewMode viewMode)
         {
-            long activeItemCount = CountActiveCategoryItemsGlobal();
-            if (activeItemCount <= 0)
-                return Sql_CategorySelectAll;
-
-            return AppSettingsService.GetDisplayCategoriesWithItems()
-                ? Sql_CategorySelectWithActiveItems
-                : Sql_CategorySelectAll;
+            return viewMode == CategoryViewMode.AllActive
+                ? Sql_CategorySelectAll
+                : Sql_CategorySelectWithActiveItems;
         }
 
         private static long CountActiveCategoryItemsGlobal()

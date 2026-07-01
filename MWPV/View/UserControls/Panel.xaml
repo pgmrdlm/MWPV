@@ -69,6 +69,28 @@
                                FontWeight="SemiBold"
                                Margin="0,0,0,8"/>
 
+                    <!-- Category view selector -->
+                    <StackPanel x:Name="CategoryViewOptionsPanel"
+                                DockPanel.Dock="Top"
+                                Orientation="Horizontal"
+                                Margin="0,0,0,8">
+                        <TextBlock Text="Show:"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <RadioButton x:Name="rbCategoryViewInUse"
+                                     Content="In Use"
+                                     GroupName="CategoryViewMode"
+                                     IsChecked="True"
+                                     Checked="CategoryViewRadio_Checked"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,12,0"/>
+                        <RadioButton x:Name="rbCategoryViewAllActive"
+                                     Content="All Active"
+                                     GroupName="CategoryViewMode"
+                                     Checked="CategoryViewRadio_Checked"
+                                     VerticalAlignment="Center"/>
+                    </StackPanel>
+
                     <!-- Add Category button -->
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"

@@ -57,6 +57,7 @@ namespace MWPV.View.UserControls
         /* ================== Data ================== */
 
         public ObservableCollection<Categories> BoundCategories { get; } = new();
+        public CategoryViewMode CategoryViewMode { get; set; } = CategoryViewMode.InUse;
 
         public CategoryGrid()
         {
@@ -68,8 +69,20 @@ namespace MWPV.View.UserControls
         public void Refresh()
         {
             BoundCategories.Clear();
-            foreach (var c in CategoryService.LoadCategories())
+            foreach (var c in CategoryService.LoadCategories(CategoryViewMode))
                 BoundCategories.Add(c);
+        }
+
+        public void SetCategoryViewMode(CategoryViewMode viewMode)
+        {
+            if (CategoryViewMode == viewMode)
+            {
+                Refresh();
+                return;
+            }
+
+            CategoryViewMode = viewMode;
+            Refresh();
         }
 
         /* ================== UI ================== */
