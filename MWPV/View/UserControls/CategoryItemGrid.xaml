@@ -34,6 +34,7 @@
                BasedOn="{StaticResource ItemPill}">
             <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
             <Setter Property="Visibility" Value="Visible"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Foreground}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Content.Text}"
                              Value="">
@@ -81,10 +82,21 @@
 
                         <!-- Pill 1 -->
                         <Button Grid.Column="0"
-                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Tag="{Binding strCategoryItemKey1}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem1}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ItemPillWhenNotEmpty}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive1}" Value="False">
+                                            <Setter Property="Opacity" Value="0.55"/>
+                                            <Setter Property="Foreground" Value="#666666"/>
+                                            <Setter Property="Background" Value="#E5E5E5"/>
+                                            <Setter Property="BorderBrush" Value="#A0A0A0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategoryItem1, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"
@@ -101,10 +113,21 @@
 
                         <!-- Pill 2 -->
                         <Button Grid.Column="2"
-                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Tag="{Binding strCategoryItemKey2}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem2}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ItemPillWhenNotEmpty}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive2}" Value="False">
+                                            <Setter Property="Opacity" Value="0.55"/>
+                                            <Setter Property="Foreground" Value="#666666"/>
+                                            <Setter Property="Background" Value="#E5E5E5"/>
+                                            <Setter Property="BorderBrush" Value="#A0A0A0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategoryItem2, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"
@@ -121,10 +144,21 @@
 
                         <!-- Pill 3 -->
                         <Button Grid.Column="4"
-                                Style="{StaticResource ItemPillWhenNotEmpty}"
                                 Tag="{Binding strCategoryItemKey3}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem3}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ItemPillWhenNotEmpty}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive3}" Value="False">
+                                            <Setter Property="Opacity" Value="0.55"/>
+                                            <Setter Property="Foreground" Value="#666666"/>
+                                            <Setter Property="Background" Value="#E5E5E5"/>
+                                            <Setter Property="BorderBrush" Value="#A0A0A0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <Button.Content>
                                 <TextBlock Text="{Binding strCategoryItem3, Converter={StaticResource CategoryCrop}, ConverterParameter=17}"
                                            TextTrimming="CharacterEllipsis"

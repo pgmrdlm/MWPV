@@ -132,6 +132,28 @@
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,8"/>
 
+                        <!-- Category item view selector -->
+                        <StackPanel x:Name="CategoryItemViewOptionsPanel"
+                                    DockPanel.Dock="Top"
+                                    Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <TextBlock Text="Show:"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <RadioButton x:Name="rbCategoryItemViewActiveItems"
+                                         Content="Active Items"
+                                         GroupName="CategoryItemViewMode"
+                                         IsChecked="True"
+                                         Checked="CategoryItemViewRadio_Checked"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,12,0"/>
+                            <RadioButton x:Name="rbCategoryItemViewAllItems"
+                                         Content="All Items"
+                                         GroupName="CategoryItemViewMode"
+                                         Checked="CategoryItemViewRadio_Checked"
+                                         VerticalAlignment="Center"/>
+                        </StackPanel>
+
                         <!-- Add Item button -->
                         <StackPanel DockPanel.Dock="Top"
                                     Orientation="Horizontal"

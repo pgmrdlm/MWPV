@@ -68,6 +68,12 @@ namespace MWPV.Services
 {
     public static class CategoryItemService
     {
+        public enum CategoryItemGridViewMode
+        {
+            ActiveItems = 0,
+            AllItems = 1
+        }
+
         // ============================================================
         // Purposes (AAD / domain separation) - must be stable forever
         // ============================================================
@@ -1034,7 +1040,9 @@ namespace MWPV.Services
         // SELECT: Category Items grid
         // ============================================================
 
-        public static ObservableCollection<CategoryItemGriud> LoadCategoryItems(int categoryKey)
+        public static ObservableCollection<CategoryItemGriud> LoadCategoryItems(
+            int categoryKey,
+            CategoryItemGridViewMode viewMode = CategoryItemGridViewMode.ActiveItems)
         {
             if (categoryKey < 0)
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
@@ -1043,7 +1051,9 @@ namespace MWPV.Services
 
             try
             {
-                var sql = LoadSqlRequired("s_CategoryItem_SelectGrid.sql");
+                var sql = LoadSqlRequired(viewMode == CategoryItemGridViewMode.AllItems
+                    ? "s_CategoryItem_SelectGrid_all.sql"
+                    : "s_CategoryItem_SelectGrid.sql");
 
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
@@ -1065,6 +1075,10 @@ namespace MWPV.Services
                 int oDes2 = r.GetOrdinal("Des2");
                 int oDes3 = r.GetOrdinal("Des3");
 
+                int oActive1 = SafeGetOrdinal(r, "Active1");
+                int oActive2 = SafeGetOrdinal(r, "Active2");
+                int oActive3 = SafeGetOrdinal(r, "Active3");
+
                 while (r.Read())
                 {
                     rows.Add(new CategoryItemGriud
@@ -1080,6 +1094,10 @@ namespace MWPV.Services
                         strCategoryItemToolTip1 = r.IsDBNull(oDes1) ? "" : r.GetString(oDes1),
                         strCategoryItemToolTip2 = r.IsDBNull(oDes2) ? "" : r.GetString(oDes2),
                         strCategoryItemToolTip3 = r.IsDBNull(oDes3) ? "" : r.GetString(oDes3),
+
+                        IsActive1 = ReadNullableBoolDefaultTrue(r, oActive1),
+                        IsActive2 = ReadNullableBoolDefaultTrue(r, oActive2),
+                        IsActive3 = ReadNullableBoolDefaultTrue(r, oActive3),
                     });
                 }
             }
@@ -1089,6 +1107,18 @@ namespace MWPV.Services
             }
 
             return rows;
+        }
+
+        private static int SafeGetOrdinal(SqliteDataReader r, string name)
+        {
+            try { return r.GetOrdinal(name); } catch { return -1; }
+        }
+
+        private static bool? ReadNullableBoolDefaultTrue(SqliteDataReader r, int ordinal)
+        {
+            if (ordinal < 0 || r.IsDBNull(ordinal)) return true;
+            try { return SafeGetInt32(r, ordinal) != 0; }
+            catch { return true; }
         }
 
         // ============================================================

@@ -30,5 +30,10 @@ namespace MWPV.Models
         public string? strCategoryItemKey1 { get; set; }
         public string? strCategoryItemKey2 { get; set; }
         public string? strCategoryItemKey3 { get; set; }
+
+        // Active state for visual styling. Null/missing is treated as active.
+        public bool? IsActive1 { get; set; }
+        public bool? IsActive2 { get; set; }
+        public bool? IsActive3 { get; set; }
     }
 }

@@ -12,6 +12,7 @@ WITH Numbered AS (
         ItemId,
         CI_Name,
         CI_Description,
+        IsActive,
         ROW_NUMBER() OVER (ORDER BY CI_Name COLLATE NOCASE) - 1 AS rn
     FROM CategoryItem
     WHERE Category_Key = @Category_Key
@@ -22,7 +23,8 @@ Grouped AS (
         rn % 3 AS col_pos,
         ItemId,
         CI_Name,
-        CI_Description
+        CI_Description,
+        IsActive
     FROM Numbered
 )
 SELECT
@@ -39,7 +41,12 @@ SELECT
     -- tooltips / descriptions
     MAX(CASE WHEN col_pos = 0 THEN CI_Description END) AS Des1,
     MAX(CASE WHEN col_pos = 1 THEN CI_Description END) AS Des2,
-    MAX(CASE WHEN col_pos = 2 THEN CI_Description END) AS Des3
+    MAX(CASE WHEN col_pos = 2 THEN CI_Description END) AS Des3,
+
+    -- active-state for visual styling
+    MAX(CASE WHEN col_pos = 0 THEN IsActive END) AS Active1,
+    MAX(CASE WHEN col_pos = 1 THEN IsActive END) AS Active2,
+    MAX(CASE WHEN col_pos = 2 THEN IsActive END) AS Active3
 FROM Grouped
 GROUP BY group_id
 ORDER BY group_id;

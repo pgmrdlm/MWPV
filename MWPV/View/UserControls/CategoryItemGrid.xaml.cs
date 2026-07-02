@@ -35,9 +35,11 @@ namespace MWPV.View.UserControls
 
         private int _currentCategoryKey;
         private string _currentCategoryName = string.Empty;
+        private CategoryItemService.CategoryItemGridViewMode _viewMode = CategoryItemService.CategoryItemGridViewMode.ActiveItems;
 
         public int CurrentCategoryKey => _currentCategoryKey;
         public string CurrentCategoryName => _currentCategoryName;
+        public CategoryItemService.CategoryItemGridViewMode ViewMode => _viewMode;
 
         public CategoryItemGrid()
         {
@@ -71,12 +73,16 @@ namespace MWPV.View.UserControls
 #endif
         }
 
-        public void Refresh(int categoryKey, string? categoryName = null)
+        public void Refresh(
+            int categoryKey,
+            string? categoryName = null,
+            CategoryItemService.CategoryItemGridViewMode viewMode = CategoryItemService.CategoryItemGridViewMode.ActiveItems)
         {
 #if DEBUG
             Debug.WriteLine($"[ITEMS_GRID][REFRESH][ENTER] catKey={categoryKey}, catName='{categoryName ?? _currentCategoryName}'");
 #endif
             _currentCategoryKey = categoryKey;
+            _viewMode = viewMode;
 
             if (!string.IsNullOrWhiteSpace(categoryName))
                 _currentCategoryName = categoryName!;
@@ -97,7 +103,7 @@ namespace MWPV.View.UserControls
 #if DEBUG
                 Debug.WriteLine("[ITEMS_GRID][REFRESH] Calling CategoryItemService.LoadCategoryItems(catKey)...");
 #endif
-                var rows = CategoryItemService.LoadCategoryItems(categoryKey);
+                var rows = CategoryItemService.LoadCategoryItems(categoryKey, _viewMode);
                 if (rows != null)
                 {
                     foreach (var r in rows)

@@ -29,6 +29,8 @@ namespace MWPV.View.UserControls
 
         private int _selectedCategoryKey;
         private string _selectedCategoryName = string.Empty;
+        private CategoryItemService.CategoryItemGridViewMode _categoryItemViewMode =
+            CategoryItemService.CategoryItemGridViewMode.ActiveItems;
 
         // When true: navigation is visible but inactive.
         private bool _isNavigationLocked;
@@ -229,6 +231,7 @@ namespace MWPV.View.UserControls
 
             // Right-side Add Item button should not be clickable while editor overlay is up.
             if (btnAddCategoryItem != null) btnAddCategoryItem.IsEnabled = !locked;
+            if (CategoryItemViewOptionsPanel != null) CategoryItemViewOptionsPanel.IsEnabled = !locked;
 
             UpdateLockdownBanner(locked);
             RaiseNavigationLockChanged(locked);
@@ -301,7 +304,7 @@ namespace MWPV.View.UserControls
                 ? "Category Items"
                 : $"Category Items — {_selectedCategoryName}";
 
-            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
+            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName, _categoryItemViewMode); }
             catch { }
         }
 
@@ -350,6 +353,23 @@ namespace MWPV.View.UserControls
                 txtCategoryItemsTitle.Text = "Category Items";
 
             try { CategoryItemGrid?.Clear(); } catch { }
+        }
+
+        private void CategoryItemViewRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (ReferenceEquals(sender, rbCategoryItemViewAllItems))
+                _categoryItemViewMode = CategoryItemService.CategoryItemGridViewMode.AllItems;
+            else
+                _categoryItemViewMode = CategoryItemService.CategoryItemGridViewMode.ActiveItems;
+
+            if (_selectedCategoryKey <= 0)
+            {
+                try { CategoryItemGrid?.Clear(); } catch { }
+                return;
+            }
+
+            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName, _categoryItemViewMode); }
+            catch { }
         }
 
         /* =================== Category Item Grid (pills) =================== */
@@ -512,7 +532,7 @@ namespace MWPV.View.UserControls
                     : $"Category Items — {_selectedCategoryName}";
             }
 
-            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
+            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName, _categoryItemViewMode); }
             catch { }
         }
 
@@ -585,7 +605,7 @@ namespace MWPV.View.UserControls
             try
             {
                 if (_selectedCategoryKey > 0)
-                    CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName);
+                    CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName, _categoryItemViewMode);
             }
             catch { }
         }
