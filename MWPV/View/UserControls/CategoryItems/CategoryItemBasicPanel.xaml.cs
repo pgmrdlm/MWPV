@@ -87,6 +87,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         // Duplicate-check guard
         private string _lastNameChecked = string.Empty;
+        private bool _activeCheckboxLockedByInactiveCategory;
 
         // PIN rules
         private const int PinMinLen = 4;
@@ -155,6 +156,7 @@ namespace MWPV.View.UserControls.CategoryItems
             _activeEntityId = 0;
             _editUnlocked = false; // existing items start locked each time we load/reload
             _lastNameChecked = string.Empty;
+            _activeCheckboxLockedByInactiveCategory = false;
 
             // IMPORTANT: always clear signature state when mode changes
             _sigState.Clear();
@@ -200,7 +202,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
             // Editing actions should be disabled
             chkBookmarkOnly.IsEnabled = !viewOnly;
-            chkIsActive.IsEnabled = !viewOnly;
+            chkIsActive.IsEnabled = !viewOnly && !_activeCheckboxLockedByInactiveCategory;
+            chkIsActive.ToolTip = _activeCheckboxLockedByInactiveCategory
+                ? "Reactivate the category first."
+                : "Unchecked Category Items are inactive and hidden from the category item grid.";
 
             // Replace Generate with Copy in view-only
             btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
@@ -383,6 +388,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
             chkBookmarkOnly.IsChecked = row.BookMarkOnly == 1;
             chkIsActive.IsChecked = !row.IsActive.HasValue || row.IsActive.Value == 1;
+            _activeCheckboxLockedByInactiveCategory =
+                chkIsActive.IsChecked != true && !row.ParentCategoryIsActive;
 
             if (!string.IsNullOrEmpty(row.AccountEmailPlain))
             {
@@ -516,6 +523,7 @@ namespace MWPV.View.UserControls.CategoryItems
             txtDescription.Text = string.Empty;
 
             chkIsActive.IsChecked = true;
+            _activeCheckboxLockedByInactiveCategory = false;
 
             _lastEmailChecked = string.Empty;
             _lastNameChecked = string.Empty;

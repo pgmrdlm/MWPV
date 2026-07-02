@@ -116,6 +116,12 @@ namespace MWPV.Services
                 : base("DUPLICATE_PASSWORD_WARNING") { }
         }
 
+        public sealed class CategoryItemReactivationBlockedException : InvalidOperationException
+        {
+            public CategoryItemReactivationBlockedException()
+                : base("Reactivate the category first.") { }
+        }
+
         // ============================================================
         // DTO: Basic tab row (CategoryItem only)
         // ============================================================
@@ -132,6 +138,7 @@ namespace MWPV.Services
 
             public int BookMarkOnly { get; init; } // 0/1
             public int? IsActive { get; init; }    // nullable allowed
+            public bool ParentCategoryIsActive { get; init; } = true;
 
             // Encrypted-at-rest blobs
             public byte[]? AccountEmailCipher { get; init; } // CI_AccountEmail
@@ -734,6 +741,8 @@ namespace MWPV.Services
             if (bookMarkOnly.HasValue)
                 _ = NormalizeBookMarkOnly(bookMarkOnly.Value);
 
+            ValidateCategoryItemReactivationAllowed(itemId, isActive);
+
             try
             {
                 var sql = LoadSqlRequired("s_CategoryItem_update.sql");
@@ -782,6 +791,22 @@ namespace MWPV.Services
                 ErrorHandler.Abend(ex, "Error updating CategoryItem (Basic tab) by ItemId");
                 return -1;
             }
+        }
+
+        private static void ValidateCategoryItemReactivationAllowed(long itemId, int? requestedIsActive)
+        {
+            if (!requestedIsActive.HasValue || requestedIsActive.Value != 1)
+                return;
+
+            var before = LoadCategoryItemBasicById(itemId);
+            if (before == null)
+                return;
+
+            bool wasActive = !before.IsActive.HasValue || before.IsActive.Value == 1;
+            if (wasActive || before.ParentCategoryIsActive)
+                return;
+
+            throw new CategoryItemReactivationBlockedException();
         }
 
         // ============================================================
@@ -833,6 +858,7 @@ namespace MWPV.Services
                 int oCreate = r.GetOrdinal("CI_CreateUTC");
                 int oUpdate = r.GetOrdinal("CI_UpdateUTC");
                 int oActive = r.GetOrdinal("IsActive");
+                int oCategoryActive = SafeGetOrdinal(r, "CategoryIsActive");
 
                 byte[]? emailCipher = ReadBlobNullable(r, oEmail);
                 byte[]? phoneCipher = ReadBlobNullable(r, oPhone);
@@ -889,6 +915,7 @@ namespace MWPV.Services
 
                     BookMarkOnly = r.IsDBNull(oBmo) ? 0 : SafeGetInt32(r, oBmo),
                     IsActive = r.IsDBNull(oActive) ? null : SafeGetInt32(r, oActive),
+                    ParentCategoryIsActive = oCategoryActive < 0 || r.IsDBNull(oCategoryActive) || SafeGetInt32(r, oCategoryActive) != 0,
 
                     AccountEmailCipher = emailCipher,
                     AccountPhoneCipher = phoneCipher,

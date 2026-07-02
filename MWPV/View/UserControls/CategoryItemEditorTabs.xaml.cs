@@ -813,7 +813,8 @@ namespace MWPV.View.UserControls
                 PhoneUpdated ||
                 EmailUpdated ||
                 NotesUpdated ||
-                CategoryItemDeactivated;
+                CategoryItemDeactivated ||
+                CategoryItemActivated;
 
             public bool PasswordUpdated { get; init; }
             public bool BookmarkToggled { get; init; }
@@ -824,6 +825,7 @@ namespace MWPV.View.UserControls
             public bool EmailUpdated { get; init; }
             public bool NotesUpdated { get; init; }
             public bool CategoryItemDeactivated { get; init; }
+            public bool CategoryItemActivated { get; init; }
         }
 
         private static string N(string? s) => (s ?? string.Empty).Trim();
@@ -859,7 +861,7 @@ namespace MWPV.View.UserControls
             bool emailSame = StrEq(beforeRow.AccountEmailPlain, afterEmail);
             bool notesSame = StrEq(beforeRow.Description, afterNotes);
             bool wasActive = !beforeRow.IsActive.HasValue || beforeRow.IsActive.Value == 1;
-            bool isInactiveNow = afterIsActive.HasValue && afterIsActive.Value == 0;
+            bool isActiveNow = !afterIsActive.HasValue || afterIsActive.Value == 1;
 
             var changes = new BasicTabChanges
             {
@@ -871,14 +873,15 @@ namespace MWPV.View.UserControls
                 PhoneUpdated = !phoneSame,
                 EmailUpdated = !emailSame,
                 NotesUpdated = !notesSame,
-                CategoryItemDeactivated = wasActive && isInactiveNow
+                CategoryItemDeactivated = wasActive && !isActiveNow,
+                CategoryItemActivated = !wasActive && isActiveNow
             };
 
 #if DEBUG
             Debug.WriteLine(
                 "[ITEM-TABS][BASIC-CHANGES] " +
                 $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
-                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated}");
+                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated} Activated={changes.CategoryItemActivated}");
 #endif
 
             return changes;
@@ -1014,6 +1017,7 @@ namespace MWPV.View.UserControls
                 if (changes.EmailUpdated) seqs.Add(9);
                 if (changes.NotesUpdated) seqs.Add(10);
                 if (changes.CategoryItemDeactivated) seqs.Add(12);
+                if (changes.CategoryItemActivated) seqs.Add(13);
 
                 if (seqs.Count <= 1)
                     return;
@@ -1808,13 +1812,25 @@ namespace MWPV.View.UserControls
                         }
                     }
 
-                    SetStatus("");
-                    return true;
-                }
-                catch (Exception ex)
-                {
+                SetStatus("");
+                return true;
+            }
+            catch (CategoryItemService.CategoryItemReactivationBlockedException ex)
+            {
 #if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] FAILED: {ex}");
+                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Reactivation blocked: {ex.Message}");
+#endif
+                SetStatus(ex.Message);
+                ShowInformationalPopup(
+                    title: "Cannot Reactivate Item",
+                    body: ex.Message,
+                    debugContext: "ITEM-REACTIVATE-BLOCKED");
+                return false;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] FAILED: {ex}");
 #endif
                     SetStatus("Save failed. See debug output.");
                     return false;
@@ -3267,7 +3283,8 @@ namespace MWPV.View.UserControls
             string primaryText,
             string secondaryText,
             string debugContext = "POPUP",
-            PopupDialog.PopupResult safeFallbackResult = PopupDialog.PopupResult.Cancel)
+            PopupDialog.PopupResult safeFallbackResult = PopupDialog.PopupResult.Cancel,
+            bool showCancel = true)
         {
             try
             {
@@ -3298,7 +3315,7 @@ namespace MWPV.View.UserControls
                     severity: 0,
                     title: title,
                     message: body,
-                    showCancel: true,
+                    showCancel: showCancel,
                     primaryText: primaryText,
                     secondaryText: secondaryText);
 
@@ -3334,6 +3351,18 @@ namespace MWPV.View.UserControls
 #endif
                 return safeFallbackResult;
             }
+        }
+
+        private void ShowInformationalPopup(string title, string body, string debugContext)
+        {
+            _ = ShowCustomPopupDecision(
+                title: title,
+                body: body,
+                primaryText: "OK",
+                secondaryText: "Cancel",
+                debugContext: debugContext,
+                safeFallbackResult: PopupDialog.PopupResult.Accept,
+                showCancel: false);
         }
 
         private bool PromptSaveBasicBeforeTabSwitch()

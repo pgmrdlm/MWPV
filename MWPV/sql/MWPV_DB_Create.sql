@@ -262,6 +262,7 @@ FROM (
     UNION ALL SELECT 'BasicTab', 10, '- Notes updated'
     UNION ALL SELECT 'BasicTab', 11, 'Edits were discarded for #CategoryItemName# (no changes saved)'
     UNION ALL SELECT 'BasicTab', 12, '- Category Item #CategoryItemName# was deactivated'
+    UNION ALL SELECT 'BasicTab', 13, '- Category Item #CategoryItemName# was activated'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
