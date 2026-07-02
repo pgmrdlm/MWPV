@@ -37,8 +37,6 @@ namespace MWPV.View.UserControls.CategoryItems
         private const int SecretStorage_Default = 0;
 
         // Mode detection (SEDS)
-        private static readonly TimeSpan ClipboardTtl = TimeSpan.FromSeconds(20);
-
         private int _activeEntityId;
         private string? _primaryAccountNumberPlain;
         internal string? PrimaryAccountNumberPlain => _primaryAccountNumberPlain;
@@ -1016,7 +1014,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var pw = pwdPassword.Password;
             if (string.IsNullOrEmpty(pw)) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(pw, out _, ClipboardTtl, tag: "BASIC.PW");
+            _ = ClipboardHelper.TryCopySensitiveText(pw, out _, tag: "BASIC.PW");
         }
 
         private void BtnCopyUsername_Click(object? sender, RoutedEventArgs e)
@@ -1026,7 +1024,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var user = (txtUsername.Text ?? string.Empty).Trim();
             if (user.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(user, out _, ClipboardTtl, tag: "BASIC.USER");
+            _ = ClipboardHelper.TryCopySensitiveText(user, out _, tag: "BASIC.USER");
         }
 
         private void BtnCopyUrl_Click(object? sender, RoutedEventArgs e)
@@ -1036,7 +1034,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var url = (txtUrl.Text ?? string.Empty).Trim();
             if (url.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(url, out _, ClipboardTtl, tag: "BASIC.URL");
+            _ = ClipboardHelper.TryCopySensitiveText(url, out _, tag: "BASIC.URL");
         }
 
         private void BtnTogglePasswordReveal_Click(object? sender, RoutedEventArgs e)
@@ -1488,7 +1486,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var pin = (pwdPin.Password ?? string.Empty).Trim();
             if (pin.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(pin, out _, ClipboardTtl, tag: "BASIC.PIN");
+            _ = ClipboardHelper.TryCopySensitiveText(pin, out _, tag: "BASIC.PIN");
         }
 
         private void ShowPin()
@@ -1615,7 +1613,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var email = (pwdEmail.Password ?? string.Empty).Trim();
             if (email.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(email, out _, ClipboardTtl, tag: "BASIC.EMAIL");
+            _ = ClipboardHelper.TryCopySensitiveText(email, out _, tag: "BASIC.EMAIL");
         }
 
         private void BtnToggleEmailReveal_Click(object? sender, RoutedEventArgs e)
@@ -1734,7 +1732,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var phone = (txtPhone.Password ?? string.Empty).Trim();
             if (phone.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(phone, out _, ClipboardTtl, tag: "BASIC.PHONE");
+            _ = ClipboardHelper.TryCopySensitiveText(phone, out _, tag: "BASIC.PHONE");
         }
 
         private void BtnTogglePhoneReveal_Click(object? sender, RoutedEventArgs e)
@@ -1750,7 +1748,7 @@ namespace MWPV.View.UserControls.CategoryItems
             var primaryAccountNumber = (pwdPrimaryAccountNumber.Password ?? string.Empty).Trim();
             if (primaryAccountNumber.Length == 0) return;
 
-            _ = ClipboardHelper.TryCopySensitiveText(primaryAccountNumber, out _, ClipboardTtl, tag: "BASIC.PRIMARY_ACCOUNT");
+            _ = ClipboardHelper.TryCopySensitiveText(primaryAccountNumber, out _, tag: "BASIC.PRIMARY_ACCOUNT");
         }
 
         private void BtnTogglePrimaryAccountNumberReveal_Click(object? sender, RoutedEventArgs e)

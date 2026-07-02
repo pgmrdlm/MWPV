@@ -15,6 +15,9 @@ namespace MWPV.Services
         private const int FallbackPasswordIncrement = 10;
         private const int FallbackPasswordEntryCount = 10;
         private const bool FallbackDisplayCategoriesWithItems = true;
+        private const int FallbackSensitiveClipboardClearSeconds = 45;
+        private const int MinimumSensitiveClipboardClearSeconds = 5;
+        private const int MaximumSensitiveClipboardClearSeconds = 300;
         private const int AbsolutePasswordMinimum = 8;
         private const int AbsolutePasswordIncrementMinimum = 1;
         private const int AbsolutePasswordEntryCountMinimum = 1;
@@ -99,6 +102,40 @@ namespace MWPV.Services
                 ErrorHandler.Abend(ex, "Error loading AppSettings DisplayCategoriesWithItems setting");
                 return FallbackDisplayCategoriesWithItems;
             }
+        }
+
+        public static int GetSensitiveClipboardClearSeconds()
+        {
+            try
+            {
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT SensitiveClipboardClearSeconds FROM AppSettings LIMIT 1;";
+
+                var value = cmd.ExecuteScalar();
+                if (value == null || value == DBNull.Value)
+                    return FallbackSensitiveClipboardClearSeconds;
+
+                return ClampSensitiveClipboardSeconds(Convert.ToInt32(value));
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                System.Diagnostics.Debug.WriteLine($"[APPSETTINGS][SensitiveClipboardClearSeconds] fallback: {ex.GetType().Name}");
+#endif
+                return FallbackSensitiveClipboardClearSeconds;
+            }
+        }
+
+        private static int ClampSensitiveClipboardSeconds(int value)
+        {
+            if (value < MinimumSensitiveClipboardClearSeconds)
+                return FallbackSensitiveClipboardClearSeconds;
+
+            if (value > MaximumSensitiveClipboardClearSeconds)
+                return FallbackSensitiveClipboardClearSeconds;
+
+            return value;
         }
 
         private static int ReadInt32(SqliteDataReader reader, int ordinal, int fallback)

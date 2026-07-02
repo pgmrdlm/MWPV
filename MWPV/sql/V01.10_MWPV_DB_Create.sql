@@ -9,6 +9,7 @@
 
    01.10 changes reflected here:
    - AppSettings DisplayCategoriesWithItems option added
+   - AppSettings SensitiveClipboardClearSeconds option added
 
    01.09 changes reflected here:
    - Security Questions soft-deactivation column added
@@ -191,7 +192,8 @@ CREATE TABLE AppSettings (
     AS_PW_Minimum          INTEGER NOT NULL,
     AS_PW_Incriments       INTEGER NOT NULL,
     AS_PW_Inctriment_Steps INTEGER NOT NULL,
-    AS_DisplayCategoriesWithItems INTEGER NOT NULL DEFAULT 1 CHECK (AS_DisplayCategoriesWithItems IN (0,1))
+    AS_DisplayCategoriesWithItems INTEGER NOT NULL DEFAULT 1 CHECK (AS_DisplayCategoriesWithItems IN (0,1)),
+    SensitiveClipboardClearSeconds INTEGER NOT NULL DEFAULT 45 CHECK (SensitiveClipboardClearSeconds BETWEEN 5 AND 300)
 );
 
 -- Log message templates
@@ -593,13 +595,15 @@ INSERT INTO AppSettings (
     AS_PW_Minimum,
     AS_PW_Incriments,
     AS_PW_Inctriment_Steps,
-    AS_DisplayCategoriesWithItems
+    AS_DisplayCategoriesWithItems,
+    SensitiveClipboardClearSeconds
 )
 SELECT
     12,
     10,
     10,
-    1
+    1,
+    45
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 
 -- Fresh install database version stamp

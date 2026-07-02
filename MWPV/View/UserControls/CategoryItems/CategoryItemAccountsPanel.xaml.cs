@@ -798,18 +798,10 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            try
-            {
-                Clipboard.SetText(value);
+            if (ClipboardHelper.TryCopySensitiveText(value, out _, tag: "ACCOUNT.NUMBER"))
                 ClearAccountError();
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[ACCOUNTS-PANEL][COPY] Clipboard copy failed for key '{sedsKey}': {ex}");
-#endif
+            else
                 ShowAccountError("Unable to copy value to clipboard.");
-            }
         }
         // ============================================================
         // Row-level: Add/Update + Clear

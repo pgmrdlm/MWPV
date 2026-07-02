@@ -953,18 +953,18 @@ namespace MWPV.View.UserControls.CategoryItems
                 return;
             }
 
-            try
+            string reasonCode = sedsKey switch
             {
-                Clipboard.SetText(value);
+                SedsKey_BankCardSelectedNumber => "BANKCARD.NUMBER",
+                SedsKey_BankCardSelectedCvv => "BANKCARD.CVV",
+                SedsKey_BankCardSelectedPin => "BANKCARD.PIN",
+                _ => "BANKCARD.SENSITIVE"
+            };
+
+            if (ClipboardHelper.TryCopySensitiveText(value, out _, tag: reasonCode))
                 ClearBankCardError();
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][COPY] Clipboard copy failed for key '{sedsKey}': {ex}");
-#endif
+            else
                 ShowBankCardError("Unable to copy value to clipboard.");
-            }
         }
         // ============================================================
         // Row-level: Add/Update + Clear
