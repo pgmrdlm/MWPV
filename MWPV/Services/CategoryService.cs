@@ -28,8 +28,10 @@ namespace MWPV.Services
         private const string Sql_CategoryItemCountActiveByCategory = "s_CategoryItem_CountActive_ByCategory.sql";
         private const string Sql_CategorySelectById = "s_Category_select_by_id.sql";
         private const string Sql_CategoryUpdate = "s_Category_update.sql";
-        private const string Sql_CategoryDeactivate = "s_Category_deactivate.sql";
         private const string Sql_CategoryExistsExceptId = "s_Category_Exists_ExceptId.sql";
+        private const string CategoryLogUpdateForm = "CategoryUpdates";
+        private const string LogEventCategoryCreated = "CATEGORY_CREATED";
+        private const string LogEventCategoryUpdated = "CATEGORY_UPDATED";
 
         public sealed class CategoryDetail
         {
@@ -401,21 +403,18 @@ ORDER BY group_id;";
                     ["CategoryName"] = cleanName
                 };
 
-                // Prefer templates if present:
-                // UpdateForm = "Category"
-                // Seq 1 = e.g. "Category #CategoryName# has been created"
                 var write = new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
                     Source = "Category",
-                    EventCode = "CATEGORY_CREATED",
+                    EventCode = LogEventCategoryCreated,
                     ItemId = newId,
                     SubjectText = cleanName,
                     KeySetVersion = 1
                 };
 
                 long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
-                    updateForm: "Category",
+                    updateForm: CategoryLogUpdateForm,
                     seqsInOrder: new[] { 1 },
                     tokens: tokens,
                     write: write);
@@ -423,8 +422,8 @@ ORDER BY group_id;";
                 // Fallback if no template rows exist yet
                 if (logId <= 0)
                 {
-                    write.MessageText = $"Category '{cleanName}' has been created.";
-                    TemplateLogWriter.InsertRendered(write);
+                    write.MessageText = $"Category {cleanName} has been created.";
+                    TemplateLogWriter.InsertRendered_BestEffort(write);
                 }
             }
             catch
@@ -486,22 +485,47 @@ ORDER BY group_id;";
             cmd.Parameters.AddWithValue("@IsActive", isActive ? 1 : 0);
 
             int affected = cmd.ExecuteNonQuery();
-            if (affected > 0 && CategoryTextChanged(before, cleanName, desc))
-                LogCategoryChanged_BestEffort(categoryKey, cleanName);
+            if (affected <= 0)
+                return affected;
 
-            if (affected > 0 && before.IsActive != isActive)
-            {
-                if (isActive)
-                    LogCategoryActivated_BestEffort(categoryKey, cleanName);
-                else
-                {
-                    CategorySessionStateService.ForgetCategory(categoryKey);
-                    LogCategoryDeactivated_BestEffort(categoryKey, cleanName);
-                }
-            }
+            if (before.IsActive && !isActive)
+                CategorySessionStateService.ForgetCategory(categoryKey);
+
+            string? changeSummary = BuildCategoryChangeSummary(before, cleanName, desc, isActive);
+            if (!string.IsNullOrWhiteSpace(changeSummary))
+                LogCategoryUpdated_BestEffort(categoryKey, cleanName, changeSummary);
 
             return affected;
         }
+
+        private static string? BuildCategoryChangeSummary(
+            CategoryDetail before,
+            string afterName,
+            string? afterDescription,
+            bool afterIsActive)
+        {
+            var changes = new List<string>(capacity: 3);
+
+            if (!TextEquals(before.Name, afterName))
+                changes.Add($"Name changed from {N(before.Name)} to {N(afterName)}");
+
+            if (!TextEquals(before.Description, afterDescription))
+                changes.Add("Description changed");
+
+            if (before.IsActive != afterIsActive)
+            {
+                string beforeStatus = FormatActiveStatus(before.IsActive);
+                string afterStatus = FormatActiveStatus(afterIsActive);
+                changes.Add($"Status changed from {beforeStatus} to {afterStatus}");
+            }
+
+            return changes.Count == 0
+                ? null
+                : string.Join("; ", changes);
+        }
+
+        private static string FormatActiveStatus(bool isActive)
+            => isActive ? "Active" : "Inactive";
 
         public static int DeactivateCategory(int categoryKey)
         {
@@ -509,53 +533,41 @@ ORDER BY group_id;";
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "Category key is required.");
 
             var detail = LoadCategoryByKey(categoryKey);
-            var categoryName = detail?.Name ?? string.Empty;
+            if (detail == null)
+                return 0;
 
-            var deactivateSql = LoadSqlRequired(Sql_CategoryDeactivate);
-
-            using var conn = DatabaseHelper.GetAppOpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = deactivateSql;
-            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
-
-            int affected = cmd.ExecuteNonQuery();
-            if (affected > 0)
-            {
-                CategorySessionStateService.ForgetCategory(categoryKey);
-                LogCategoryDeactivated_BestEffort(categoryKey, categoryName);
-            }
-
-            return affected;
+            return SaveCategoryEdit(categoryKey, detail.Name, detail.Description, false);
         }
 
-        private static void LogCategoryChanged_BestEffort(int categoryKey, string categoryName)
+        private static void LogCategoryUpdated_BestEffort(int categoryKey, string categoryName, string changeSummary)
         {
             try
             {
                 var tokens = new Dictionary<string, string?>
                 {
-                    ["CategoryName"] = categoryName
+                    ["CategoryName"] = categoryName,
+                    ["ChangeSummary"] = changeSummary
                 };
 
                 var write = new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
                     Source = "Category",
-                    EventCode = "CATEGORY_UPDATED",
+                    EventCode = LogEventCategoryUpdated,
                     ItemId = categoryKey,
                     SubjectText = categoryName,
                     KeySetVersion = 1
                 };
 
                 long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
-                    updateForm: "Category",
+                    updateForm: CategoryLogUpdateForm,
                     seqsInOrder: new[] { 2 },
                     tokens: tokens,
                     write: write);
 
                 if (logId <= 0)
                 {
-                    write.MessageText = $"Category '{categoryName}' has been updated.";
+                    write.MessageText = $"Category {categoryName} was updated: {changeSummary}.";
                     TemplateLogWriter.InsertRendered_BestEffort(write);
                 }
             }
@@ -564,86 +576,10 @@ ORDER BY group_id;";
             }
         }
 
-        private static void LogCategoryDeactivated_BestEffort(int categoryKey, string categoryName)
-        {
-            try
-            {
-                var tokens = new Dictionary<string, string?>
-                {
-                    ["CategoryName"] = categoryName
-                };
-
-                var write = new TemplateLogWriter.WriteRequest
-                {
-                    Level = "INFO",
-                    Source = "Category",
-                    EventCode = "CATEGORY_DEACTIVATED",
-                    ItemId = categoryKey,
-                    SubjectText = categoryName,
-                    KeySetVersion = 1
-                };
-
-                long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
-                    updateForm: "Category",
-                    seqsInOrder: new[] { 3 },
-                    tokens: tokens,
-                    write: write);
-
-                if (logId <= 0)
-                {
-                    write.MessageText = $"Category '{categoryName}' has been deactivated.";
-                    TemplateLogWriter.InsertRendered_BestEffort(write);
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static void LogCategoryActivated_BestEffort(int categoryKey, string categoryName)
-        {
-            try
-            {
-                var tokens = new Dictionary<string, string?>
-                {
-                    ["CategoryName"] = categoryName
-                };
-
-                var write = new TemplateLogWriter.WriteRequest
-                {
-                    Level = "INFO",
-                    Source = "Category",
-                    EventCode = "CATEGORY_ACTIVATED",
-                    ItemId = categoryKey,
-                    SubjectText = categoryName,
-                    KeySetVersion = 1
-                };
-
-                long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
-                    updateForm: "Category",
-                    seqsInOrder: new[] { 4 },
-                    tokens: tokens,
-                    write: write);
-
-                if (logId <= 0)
-                {
-                    write.MessageText = $"Category '{categoryName}' has been activated.";
-                    TemplateLogWriter.InsertRendered_BestEffort(write);
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static bool CategoryTextChanged(CategoryDetail before, string afterName, string? afterDescription)
-        {
-            return !TextEquals(before.Name, afterName) ||
-                   !TextEquals(before.Description, afterDescription);
-        }
+        private static string N(string? value) => (value ?? string.Empty).Trim();
 
         private static bool TextEquals(string? a, string? b)
-            => string.Equals((a ?? string.Empty).Trim(), (b ?? string.Empty).Trim(), StringComparison.Ordinal);
+            => string.Equals(N(a), N(b), StringComparison.Ordinal);
 
         // ------------------------- Internal utils ----------------------------
 

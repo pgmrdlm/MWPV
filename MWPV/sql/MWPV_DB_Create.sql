@@ -275,10 +275,8 @@ SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
     SELECT 'CategoryUpdates' AS UpdateForm,
            1 AS Seq,
-           'Category #CategoryName# has been created' AS LogMessage
-    UNION ALL SELECT 'CategoryUpdates', 2, 'Category #CategoryName# has been updated'
-    UNION ALL SELECT 'CategoryUpdates', 3, 'Category #CategoryName# has been deactivated'
-    UNION ALL SELECT 'CategoryUpdates', 4, 'Category #CategoryName# has been activated'
+           'Category #CategoryName# has been created.' AS LogMessage
+    UNION ALL SELECT 'CategoryUpdates', 2, 'Category #CategoryName# was updated: #ChangeSummary#.'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -484,7 +482,7 @@ WHERE ct.Code = 'credit_cards'
 WITH v(Seq, Code, Description) AS (
     VALUES
       (0,  'CATEGORY_DUPLICATE',   'Duplicate category detected'),
-      (1,  'CATEGORY_CREATED',     'Category successfully inserted'),
+      (1,  'CATEGORY_CREATED',     'Category created'),
       (2,  'LOGIN',                'Login events'),
       (3,  'EARLY_FAIL',           'Early-fail events'),
       (4,  'SESSION_START',        'Session started (post-login)'),
@@ -498,7 +496,8 @@ WITH v(Seq, Code, Description) AS (
       (16, 'BANKCARD_DEACTIVATED', 'Bank card deactivated'),
       (17, 'SECURITYQUESTION_CREATED', 'Security question created'),
       (18, 'SECURITYQUESTION_CHANGED', 'Security question changed'),
-      (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated')
+      (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated'),
+      (20, 'CATEGORY_UPDATED', 'Category updated')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
