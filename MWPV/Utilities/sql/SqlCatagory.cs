@@ -20,7 +20,11 @@ namespace Utilities.Sql
         {
             // Category
             "s_Category_Exists.sql",
+            "s_Category_Exists_ExceptId.sql",
             "s_Category_Insert.sql",
+            "s_Category_deactivate.sql",
+            "s_Category_select_by_id.sql",
+            "s_Category_update.sql",
             "s_CategorySelectAll.sql",
             "s_CategorySelectWithActiveItems.sql",
 
@@ -51,6 +55,7 @@ namespace Utilities.Sql
             "s_Combo_DetailByTypeId.sql",
             "s_CategoryItem_select_by_category.sql",
             "s_CategoryItem_CountActive_Global.sql",
+            "s_CategoryItem_CountActive_ByCategory.sql",
 
             // Category Item Accounts
             "s_CategoryItemAccounts_select_by_itemid.sql",

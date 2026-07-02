@@ -25,6 +25,22 @@ namespace MWPV.Services
         private const string Sql_CategorySelectAll = "s_CategorySelectAll.sql";
         private const string Sql_CategorySelectWithActiveItems = "s_CategorySelectWithActiveItems.sql";
         private const string Sql_CategoryItemCountActiveGlobal = "s_CategoryItem_CountActive_Global.sql";
+        private const string Sql_CategoryItemCountActiveByCategory = "s_CategoryItem_CountActive_ByCategory.sql";
+        private const string Sql_CategorySelectById = "s_Category_select_by_id.sql";
+        private const string Sql_CategoryUpdate = "s_Category_update.sql";
+        private const string Sql_CategoryExistsExceptId = "s_Category_Exists_ExceptId.sql";
+        private const string CategoryLogUpdateForm = "CategoryUpdates";
+        private const string LogEventCategoryCreated = "CATEGORY_CREATED";
+        private const string LogEventCategoryUpdated = "CATEGORY_UPDATED";
+
+        public sealed class CategoryDetail
+        {
+            public int CategoryKey { get; init; }
+            public string Name { get; init; } = string.Empty;
+            public string Description { get; init; } = string.Empty;
+            public bool IsActive { get; init; }
+            public int ActiveItemCount { get; init; }
+        }
 
         // --------------------------- Helpers ---------------------------------
 
@@ -41,6 +57,7 @@ namespace MWPV.Services
         /// <summary>
         /// Loads the 3-column category grid rows.
         /// Expects SQL to project: Key1/Key2/Key3, Col1/Col2/Col3, Des1/Des2/Des3.
+        /// Optional Active1/Active2/Active3 columns mark inactive cells for disabled-looking styling.
         /// </summary>
         public static ObservableCollection<Categories> LoadCategories(CategoryViewMode viewMode = CategoryViewMode.InUse)
         {
@@ -69,6 +86,10 @@ namespace MWPV.Services
                 int iDes2 = SafeGetOrdinal(r, "Des2");
                 int iDes3 = SafeGetOrdinal(r, "Des3");
 
+                int iActive1 = SafeGetOrdinal(r, "Active1");
+                int iActive2 = SafeGetOrdinal(r, "Active2");
+                int iActive3 = SafeGetOrdinal(r, "Active3");
+
                 while (r.Read())
                 {
                     var row = new Categories
@@ -84,6 +105,10 @@ namespace MWPV.Services
                         strCategoryToolTip1 = ReadNullableString(r, iDes1),
                         strCategoryToolTip2 = ReadNullableString(r, iDes2),
                         strCategoryToolTip3 = ReadNullableString(r, iDes3),
+
+                        IsActive1 = ReadNullableBoolDefaultTrue(r, iActive1),
+                        IsActive2 = ReadNullableBoolDefaultTrue(r, iActive2),
+                        IsActive3 = ReadNullableBoolDefaultTrue(r, iActive3),
                     };
 
                     rows.Add(row);
@@ -117,6 +142,58 @@ namespace MWPV.Services
                 return 0;
 
             return Convert.ToInt64(scalar);
+        }
+
+        private static int CountActiveCategoryItemsByCategory(int categoryKey)
+        {
+            if (categoryKey <= 0)
+                return 0;
+
+            var sql = LoadSqlRequired(Sql_CategoryItemCountActiveByCategory);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
+
+            object? scalar = cmd.ExecuteScalar();
+            if (scalar == null || scalar == DBNull.Value)
+                return 0;
+
+            return Convert.ToInt32(scalar);
+        }
+
+        public static CategoryDetail? LoadCategoryByKey(int categoryKey)
+        {
+            if (categoryKey <= 0)
+                return null;
+
+            var sql = LoadSqlRequired(Sql_CategorySelectById);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
+
+            using var r = cmd.ExecuteReader();
+            if (!r.Read())
+                return null;
+
+            int iKey = SafeGetOrdinal(r, "CategoryKey");
+            int iName = SafeGetOrdinal(r, "CategoryName");
+            int iDescription = SafeGetOrdinal(r, "CategoryDescription");
+            int iActive = SafeGetOrdinal(r, "IsActive");
+
+            int resolvedCategoryKey = ReadNullableInt(r, iKey) ?? categoryKey;
+
+            return new CategoryDetail
+            {
+                CategoryKey = resolvedCategoryKey,
+                Name = ReadNullableString(r, iName) ?? string.Empty,
+                Description = ReadNullableString(r, iDescription) ?? string.Empty,
+                IsActive = (ReadNullableInt(r, iActive) ?? 1) != 0,
+                ActiveItemCount = CountActiveCategoryItemsByCategory(resolvedCategoryKey)
+            };
         }
 
         private static void ConfigureCategorySelectCommand(SqliteCommand cmd, string selectSqlName, string selectSql)
@@ -221,6 +298,23 @@ ORDER BY group_id;";
             return scalar != null && Convert.ToInt64(scalar) != 0;
         }
 
+        public static bool DoesCategoryExistExceptKey(string categoryName, int categoryKey)
+        {
+            if (string.IsNullOrWhiteSpace(categoryName) || categoryKey <= 0)
+                return false;
+
+            var existsSql = LoadSqlRequired(Sql_CategoryExistsExceptId);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = existsSql;
+            cmd.Parameters.AddWithValue("@CategoryName", categoryName.Trim());
+            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
+
+            object? scalar = cmd.ExecuteScalar();
+            return scalar != null && Convert.ToInt64(scalar) != 0;
+        }
+
         // ---------------------------- Insert ---------------------------------
 
         /// <summary>
@@ -309,21 +403,18 @@ ORDER BY group_id;";
                     ["CategoryName"] = cleanName
                 };
 
-                // Prefer templates if present:
-                // UpdateForm = "Category"
-                // Seq 1 = e.g. "Category #CategoryName# has been created"
                 var write = new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
                     Source = "Category",
-                    EventCode = "CATEGORY_CREATED",
+                    EventCode = LogEventCategoryCreated,
                     ItemId = newId,
                     SubjectText = cleanName,
                     KeySetVersion = 1
                 };
 
                 long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
-                    updateForm: "Category",
+                    updateForm: CategoryLogUpdateForm,
                     seqsInOrder: new[] { 1 },
                     tokens: tokens,
                     write: write);
@@ -331,8 +422,8 @@ ORDER BY group_id;";
                 // Fallback if no template rows exist yet
                 if (logId <= 0)
                 {
-                    write.MessageText = $"Category '{cleanName}' has been created.";
-                    TemplateLogWriter.InsertRendered(write);
+                    write.MessageText = $"Category {cleanName} has been created.";
+                    TemplateLogWriter.InsertRendered_BestEffort(write);
                 }
             }
             catch
@@ -340,6 +431,155 @@ ORDER BY group_id;";
                 // DO NOT BLOCK insert because of logging.
             }
         }
+
+        // ---------------------------- Update ---------------------------------
+
+        public static int UpdateCategory(int categoryKey, string categoryName, string? description)
+        {
+            var detail = LoadCategoryByKey(categoryKey);
+            bool isActive = detail?.IsActive ?? true;
+            return SaveCategoryEdit(categoryKey, categoryName, description, isActive);
+        }
+
+        public static int SaveCategoryEdit(int categoryKey, string categoryName, string? description, bool isActive)
+        {
+            if (categoryKey <= 0)
+                throw new ArgumentOutOfRangeException(nameof(categoryKey), "Category key is required.");
+            if (categoryName is null)
+                throw new ArgumentNullException(nameof(categoryName));
+
+            var check = InputGuards.ValidateCategoryName(
+                categoryName,
+                minLen: MinCategoryNameLength,
+                maxLen: MaxCategoryNameLength
+            );
+
+            if (!check.IsValid)
+                throw new ArgumentException(
+                    check.Error ?? $"Category name must be {MaxCategoryNameLength} characters or fewer.",
+                    nameof(categoryName));
+
+            string cleanName = check.CleanName;
+
+            string? desc = InputGuards.NormalizeFreeText(description, maxLen: MaxDescriptionLength);
+            if (string.IsNullOrWhiteSpace(desc)) desc = cleanName;
+
+            if (DoesCategoryExistExceptKey(cleanName, categoryKey))
+                throw new InvalidOperationException("Category already exists. Please enter a different name.");
+
+            var before = LoadCategoryByKey(categoryKey);
+            if (before == null)
+                return 0;
+
+            if (before.IsActive && !isActive && CountActiveCategoryItemsByCategory(categoryKey) > 0)
+                throw new InvalidOperationException("Category contains active items. Deactivate or move the items first.");
+
+            var updateSql = LoadSqlRequired(Sql_CategoryUpdate);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = updateSql;
+            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
+            cmd.Parameters.AddWithValue("@CategoryName", cleanName);
+            cmd.Parameters.AddWithValue("@Description", desc);
+            cmd.Parameters.AddWithValue("@IsActive", isActive ? 1 : 0);
+
+            int affected = cmd.ExecuteNonQuery();
+            if (affected <= 0)
+                return affected;
+
+            if (before.IsActive && !isActive)
+                CategorySessionStateService.ForgetCategory(categoryKey);
+
+            string? changeSummary = BuildCategoryChangeSummary(before, cleanName, desc, isActive);
+            if (!string.IsNullOrWhiteSpace(changeSummary))
+                LogCategoryUpdated_BestEffort(categoryKey, cleanName, changeSummary);
+
+            return affected;
+        }
+
+        private static string? BuildCategoryChangeSummary(
+            CategoryDetail before,
+            string afterName,
+            string? afterDescription,
+            bool afterIsActive)
+        {
+            var changes = new List<string>(capacity: 3);
+
+            if (!TextEquals(before.Name, afterName))
+                changes.Add($"Name changed from {N(before.Name)} to {N(afterName)}");
+
+            if (!TextEquals(before.Description, afterDescription))
+                changes.Add("Description changed");
+
+            if (before.IsActive != afterIsActive)
+            {
+                string beforeStatus = FormatActiveStatus(before.IsActive);
+                string afterStatus = FormatActiveStatus(afterIsActive);
+                changes.Add($"Status changed from {beforeStatus} to {afterStatus}");
+            }
+
+            return changes.Count == 0
+                ? null
+                : string.Join("; ", changes);
+        }
+
+        private static string FormatActiveStatus(bool isActive)
+            => isActive ? "Active" : "Inactive";
+
+        public static int DeactivateCategory(int categoryKey)
+        {
+            if (categoryKey <= 0)
+                throw new ArgumentOutOfRangeException(nameof(categoryKey), "Category key is required.");
+
+            var detail = LoadCategoryByKey(categoryKey);
+            if (detail == null)
+                return 0;
+
+            return SaveCategoryEdit(categoryKey, detail.Name, detail.Description, false);
+        }
+
+        private static void LogCategoryUpdated_BestEffort(int categoryKey, string categoryName, string changeSummary)
+        {
+            try
+            {
+                var tokens = new Dictionary<string, string?>
+                {
+                    ["CategoryName"] = categoryName,
+                    ["ChangeSummary"] = changeSummary
+                };
+
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = "Category",
+                    EventCode = LogEventCategoryUpdated,
+                    ItemId = categoryKey,
+                    SubjectText = categoryName,
+                    KeySetVersion = 1
+                };
+
+                long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: CategoryLogUpdateForm,
+                    seqsInOrder: new[] { 2 },
+                    tokens: tokens,
+                    write: write);
+
+                if (logId <= 0)
+                {
+                    write.MessageText = $"Category {categoryName} was updated: {changeSummary}.";
+                    TemplateLogWriter.InsertRendered_BestEffort(write);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static string N(string? value) => (value ?? string.Empty).Trim();
+
+        private static bool TextEquals(string? a, string? b)
+            => string.Equals(N(a), N(b), StringComparison.Ordinal);
 
         // ------------------------- Internal utils ----------------------------
 
@@ -368,6 +608,12 @@ ORDER BY group_id;";
         {
             if (ordinal < 0 || r.IsDBNull(ordinal)) return "";
             try { return r.GetString(ordinal); } catch { return r.GetValue(ordinal)?.ToString() ?? ""; }
+        }
+
+        private static bool? ReadNullableBoolDefaultTrue(SqliteDataReader r, int ordinal)
+        {
+            if (ordinal < 0 || r.IsDBNull(ordinal)) return true;
+            return (ReadNullableInt(r, ordinal) ?? 1) != 0;
         }
     }
 }

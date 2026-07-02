@@ -272,6 +272,9 @@ namespace MWPV.View.UserControls
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
             CategoryGrid.SelectedCategoryChanged += CategoryGrid_SelectedCategoryChanged;
 
+            CategoryGrid.EditCategoryRequested -= CategoryGrid_EditCategoryRequested;
+            CategoryGrid.EditCategoryRequested += CategoryGrid_EditCategoryRequested;
+
             txtCategoryItemsTitle.Text = "Category Items";
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
         }
@@ -281,6 +284,7 @@ namespace MWPV.View.UserControls
             if (CategoryGrid == null) return;
 
             CategoryGrid.SelectedCategoryChanged -= CategoryGrid_SelectedCategoryChanged;
+            CategoryGrid.EditCategoryRequested -= CategoryGrid_EditCategoryRequested;
         }
 
         private void CategoryGrid_SelectedCategoryChanged(object sender, RoutedEventArgs e)
@@ -299,6 +303,17 @@ namespace MWPV.View.UserControls
 
             try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
             catch { }
+        }
+
+        private void CategoryGrid_EditCategoryRequested(object sender, RoutedEventArgs e)
+        {
+            if (_isNavigationLocked) return;
+            if (IsPopupOverlayActive) return;
+
+            var sel = CategoryGrid.GetEditedCategory(e);
+            if (sel.Key <= 0) return;
+
+            ShowEditCategory(sel.Key);
         }
 
         private void CategoryViewRadio_Checked(object sender, RoutedEventArgs e)
@@ -392,13 +407,29 @@ namespace MWPV.View.UserControls
 
         private void ShowAddCategory()
         {
+            _addCategoryInline?.ConfigureForAdd();
+            ShowCategoryForm();
+
+            txtCategoryItemsTitle.Text = "Category Items";
+            try { CategoryItemGrid?.Clear(); } catch { }
+        }
+
+        private void ShowEditCategory(int categoryKey)
+        {
+            var detail = CategoryService.LoadCategoryByKey(categoryKey);
+            if (detail == null)
+                return;
+
+            _addCategoryInline?.ConfigureForEdit(detail);
+            ShowCategoryForm();
+        }
+
+        private void ShowCategoryForm()
+        {
             AddCategoryHost.Visibility = Visibility.Visible;
             CategoryGrid.Visibility = Visibility.Collapsed;
             btnAddCategory.Visibility = Visibility.Collapsed;
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
-
-            txtCategoryItemsTitle.Text = "Category Items";
-            try { CategoryItemGrid?.Clear(); } catch { }
         }
 
         private void ShowCategoryGrid()
@@ -420,7 +451,20 @@ namespace MWPV.View.UserControls
             {
                 ShowCategoryGrid();
                 SafeRefreshCategories();
-                _addCategoryInline?.ResetForm();
+                if (e.Mode == CategoryFormMode.Edit &&
+                    e.CategoryKey == _selectedCategoryKey &&
+                    (e.IsActive || CategoryGrid.CategoryViewMode == CategoryViewMode.AllActive))
+                {
+                    RestoreSelectedCategoryContext(e.CategoryKey, e.Name);
+                }
+                else if (e.Mode == CategoryFormMode.Edit &&
+                         e.CategoryKey == _selectedCategoryKey &&
+                         !e.IsActive)
+                {
+                    ClearSelectedCategoryContext();
+                }
+
+                _addCategoryInline?.ConfigureForAdd();
             }
             finally { _isHandlingInlineEvent = false; }
         }
@@ -433,11 +477,43 @@ namespace MWPV.View.UserControls
             _isHandlingInlineEvent = true;
             try
             {
+                bool wasEditingSelectedCategory =
+                    _addCategoryInline?.Mode == CategoryFormMode.Edit &&
+                    _addCategoryInline.EditingCategoryKey == _selectedCategoryKey &&
+                    _selectedCategoryKey > 0;
+
+                int selectedKey = _selectedCategoryKey;
+                string selectedName = _selectedCategoryName;
+
                 ShowCategoryGrid();
                 SafeRefreshCategories();
-                _addCategoryInline?.ResetForm();
+                if (wasEditingSelectedCategory)
+                    RestoreSelectedCategoryContext(selectedKey, selectedName);
+                _addCategoryInline?.ConfigureForAdd();
             }
             finally { _isHandlingInlineEvent = false; }
+        }
+
+        private void RestoreSelectedCategoryContext(int categoryKey, string categoryName)
+        {
+            if (categoryKey <= 0)
+                return;
+
+            _selectedCategoryKey = categoryKey;
+            _selectedCategoryName = categoryName ?? string.Empty;
+
+            if (btnAddCategoryItem != null)
+                btnAddCategoryItem.Visibility = Visibility.Visible;
+
+            if (txtCategoryItemsTitle != null)
+            {
+                txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
+                    ? "Category Items"
+                    : $"Category Items — {_selectedCategoryName}";
+            }
+
+            try { CategoryItemGrid?.Refresh(_selectedCategoryKey, _selectedCategoryName); }
+            catch { }
         }
 
         /* =================== Add/Edit Category Item =================== */

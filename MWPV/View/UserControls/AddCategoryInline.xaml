@@ -18,6 +18,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
+                           x:Name="txtHeader"
                            VerticalAlignment="Center"
                            Foreground="White"
                            FontWeight="SemiBold"
@@ -61,6 +62,10 @@
                     <!-- 3: spacer -->
                     <RowDefinition Height="Auto"/>
                     <!-- 4: Description -->
+                    <RowDefinition Height="10"/>
+                    <!-- 5: spacer -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- 6: Active -->
                 </Grid.RowDefinitions>
 
                 <!-- Name -->
@@ -108,6 +113,13 @@
                          Background="White"
                          Foreground="Black"
                          TextChanged="tbCategoryDescription_TextChanged"/>
+
+                <!-- Active state -->
+                <CheckBox x:Name="chkIsActive"
+                          Grid.Row="6" Grid.Column="2"
+                          VerticalAlignment="Center"
+                          Content="Active"
+                          ToolTip="Unchecked Categories are inactive. Use All Categories to view inactive categories."/>
             </Grid>
 
             <!-- Error line -->
@@ -132,7 +144,7 @@
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    Text="&#xE8FB;"
                                    Margin="0,0,8,0"/>
-                        <TextBlock Text="Submit"/>
+                        <TextBlock x:Name="txtSubmitCaption" Text="Submit"/>
                     </StackPanel>
                 </Button>
 

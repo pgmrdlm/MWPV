@@ -8,9 +8,9 @@ WITH Numbered AS (
         Category_Key,
         Category_Name,
         Category_Description,
+        IFNULL(IsActive, 1) AS IsActive,
         ROW_NUMBER() OVER (ORDER BY Category_Name COLLATE NOCASE) - 1 AS rn
     FROM Category
-    WHERE IFNULL(IsActive, 1) = 1
 ),
 Grouped AS (
     SELECT
@@ -18,7 +18,8 @@ Grouped AS (
         rn % 3 AS col_pos,
         Category_Key,
         Category_Name,
-        Category_Description
+        Category_Description,
+        IsActive
     FROM Numbered
 )
 SELECT
@@ -32,7 +33,11 @@ SELECT
 
     MAX(CASE WHEN col_pos = 0 THEN Category_Description END) AS Des1,
     MAX(CASE WHEN col_pos = 1 THEN Category_Description END) AS Des2,
-    MAX(CASE WHEN col_pos = 2 THEN Category_Description END) AS Des3
+    MAX(CASE WHEN col_pos = 2 THEN Category_Description END) AS Des3,
+
+    MAX(CASE WHEN col_pos = 0 THEN IsActive END)             AS Active1,
+    MAX(CASE WHEN col_pos = 1 THEN IsActive END)             AS Active2,
+    MAX(CASE WHEN col_pos = 2 THEN IsActive END)             AS Active3
 FROM Grouped
 GROUP BY group_id
 ORDER BY group_id;

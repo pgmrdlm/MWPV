@@ -1,20 +1,15 @@
 
 /* ============================================================================
-   MWPV - 01.12 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.10 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.12
+   - Create a fresh database at schema version 01.10
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
 
-   01.12 changes reflected here:
-   - Category edit/deactivate logging templates added
-
-   01.11 changes reflected here:
-   - AppSettings SensitiveClipboardClearSeconds option added
-
    01.10 changes reflected here:
    - AppSettings DisplayCategoriesWithItems option added
+   - AppSettings SensitiveClipboardClearSeconds option added
 
    01.09 changes reflected here:
    - Security Questions soft-deactivation column added
@@ -275,8 +270,7 @@ SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
     SELECT 'CategoryUpdates' AS UpdateForm,
            1 AS Seq,
-           'Category #CategoryName# has been created.' AS LogMessage
-    UNION ALL SELECT 'CategoryUpdates', 2, 'Category #CategoryName# was updated: #ChangeSummary#.'
+           'Category #CategoryName# has been created' AS LogMessage
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -482,7 +476,7 @@ WHERE ct.Code = 'credit_cards'
 WITH v(Seq, Code, Description) AS (
     VALUES
       (0,  'CATEGORY_DUPLICATE',   'Duplicate category detected'),
-      (1,  'CATEGORY_CREATED',     'Category created'),
+      (1,  'CATEGORY_CREATED',     'Category successfully inserted'),
       (2,  'LOGIN',                'Login events'),
       (3,  'EARLY_FAIL',           'Early-fail events'),
       (4,  'SESSION_START',        'Session started (post-login)'),
@@ -496,8 +490,7 @@ WITH v(Seq, Code, Description) AS (
       (16, 'BANKCARD_DEACTIVATED', 'Bank card deactivated'),
       (17, 'SECURITYQUESTION_CREATED', 'Security question created'),
       (18, 'SECURITYQUESTION_CHANGED', 'Security question changed'),
-      (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated'),
-      (20, 'CATEGORY_UPDATED', 'Category updated')
+      (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -616,9 +609,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.12',
+    '01.10',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.12',
+    'Fresh database created at version 01.10',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
