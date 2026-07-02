@@ -20,7 +20,11 @@ namespace Utilities.Sql
         {
             // Category
             "s_Category_Exists.sql",
+            "s_Category_Exists_ExceptId.sql",
             "s_Category_Insert.sql",
+            "s_Category_deactivate.sql",
+            "s_Category_select_by_id.sql",
+            "s_Category_update.sql",
             "s_CategorySelectAll.sql",
             "s_CategorySelectWithActiveItems.sql",
 

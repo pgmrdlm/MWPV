@@ -1,15 +1,20 @@
 
 /* ============================================================================
-   MWPV - 01.10 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.12 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.10
+   - Create a fresh database at schema version 01.12
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
 
+   01.12 changes reflected here:
+   - Category edit/deactivate logging templates added
+
+   01.11 changes reflected here:
+   - AppSettings SensitiveClipboardClearSeconds option added
+
    01.10 changes reflected here:
    - AppSettings DisplayCategoriesWithItems option added
-   - AppSettings SensitiveClipboardClearSeconds option added
 
    01.09 changes reflected here:
    - Security Questions soft-deactivation column added
@@ -271,6 +276,8 @@ FROM (
     SELECT 'CategoryUpdates' AS UpdateForm,
            1 AS Seq,
            'Category #CategoryName# has been created' AS LogMessage
+    UNION ALL SELECT 'CategoryUpdates', 2, 'Category #CategoryName# has been updated'
+    UNION ALL SELECT 'CategoryUpdates', 3, 'Category #CategoryName# has been deactivated'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -609,9 +616,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.10',
+    '01.12',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.10',
+    'Fresh database created at version 01.12',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

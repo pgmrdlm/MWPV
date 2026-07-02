@@ -24,10 +24,12 @@ namespace MWPV.View.UserControls
         {
             public int Key { get; }
             public string Name { get; }
-            public CategorySelected(int key, string name)
+            public string Description { get; }
+            public CategorySelected(int key, string name, string? description = null)
             {
                 Key = key;
                 Name = name ?? string.Empty;
+                Description = description ?? string.Empty;
             }
         }
 
@@ -44,7 +46,23 @@ namespace MWPV.View.UserControls
             remove => RemoveHandler(SelectedCategoryChangedEvent, value);
         }
 
+        public static readonly RoutedEvent EditCategoryRequestedEvent =
+            EventManager.RegisterRoutedEvent(
+                nameof(EditCategoryRequested),
+                RoutingStrategy.Bubble,
+                typeof(RoutedEventHandler),
+                typeof(CategoryGrid));
+
+        public event RoutedEventHandler EditCategoryRequested
+        {
+            add => AddHandler(EditCategoryRequestedEvent, value);
+            remove => RemoveHandler(EditCategoryRequestedEvent, value);
+        }
+
         public static CategorySelected GetSelectedCategory(RoutedEventArgs e)
+            => e is CategorySelectedRoutedEventArgs ce ? ce.Payload : default;
+
+        public static CategorySelected GetEditedCategory(RoutedEventArgs e)
             => e is CategorySelectedRoutedEventArgs ce ? ce.Payload : default;
 
         private sealed class CategorySelectedRoutedEventArgs : RoutedEventArgs
@@ -87,21 +105,17 @@ namespace MWPV.View.UserControls
 
         /* ================== UI ================== */
 
-        private void OnCategoryButtonClick(object sender, RoutedEventArgs e)
+        private void OnCategorySelected(object sender, CategoryCellEventArgs e)
         {
-            if (sender is not Button btn) return;
-
-            // Content is a TextBlock
-            var name = (btn.Content as TextBlock)?.Text ?? string.Empty;
-
-            // Tag holds the key
-            int key = 0;
-            if (btn.Tag is int k) key = k;
-            else if (btn.Tag is long l) key = (int)l;
-            else if (btn.Tag is string s && int.TryParse(s, out var parsed)) key = parsed;
-
-            var payload = new CategorySelected(key, name);
+            var payload = new CategorySelected(e.Key, e.Name, e.Description);
             var args = new CategorySelectedRoutedEventArgs(SelectedCategoryChangedEvent, this, payload);
+            RaiseEvent(args);
+        }
+
+        private void OnCategoryEditRequested(object sender, CategoryCellEventArgs e)
+        {
+            var payload = new CategorySelected(e.Key, e.Name, e.Description);
+            var args = new CategorySelectedRoutedEventArgs(EditCategoryRequestedEvent, this, payload);
             RaiseEvent(args);
         }
     }

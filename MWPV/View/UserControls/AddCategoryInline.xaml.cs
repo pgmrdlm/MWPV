@@ -13,14 +13,26 @@ using Security.Utility;            // InputGuards
 
 namespace MWPV.View.UserControls
 {
+    public enum CategoryFormMode
+    {
+        Add = 0,
+        Edit = 1
+    }
+
     public partial class AddCategoryInline : UserControl
     {
         public event EventHandler<CategorySubmittedEventArgs>? Submitted;
+        public event EventHandler<CategoryDeactivatedEventArgs>? Deactivated;
         public event EventHandler? Canceled;
 
         // Single place to control max length for the name
         private const int MinCategoryNameLength = 4;
         private const int MaxCategoryNameLength = 64; // was 17
+        private CategoryFormMode _mode = CategoryFormMode.Add;
+        private int _editingCategoryKey;
+
+        public CategoryFormMode Mode => _mode;
+        public int EditingCategoryKey => _editingCategoryKey;
 
         public AddCategoryInline()
         {
@@ -37,7 +49,7 @@ namespace MWPV.View.UserControls
         private void tbCategoryName_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
         private void tbCategoryDescription_TextChanged(object sender, TextChangedEventArgs e) => ClearError();
 
-        private async void btnAddCategory_Click(object sender, RoutedEventArgs e)
+        private void btnAddCategory_Click(object sender, RoutedEventArgs e)
         {
             ClearError();
             SetBusy(true);
@@ -76,7 +88,9 @@ namespace MWPV.View.UserControls
                 bool exists;
                 try
                 {
-                    exists = CategoryService.DoesCategoryExist(name);
+                    exists = _mode == CategoryFormMode.Edit
+                        ? CategoryService.DoesCategoryExistExceptKey(name, _editingCategoryKey)
+                        : CategoryService.DoesCategoryExist(name);
                 }
                 catch (Exception ex)
                 {
@@ -90,21 +104,35 @@ namespace MWPV.View.UserControls
                     return;
                 }
 
-                // --- Insert
+                // --- Save
                 try
                 {
-                    // New world: Category_Type defaults to 0 in the DB; no type code.
-                    // CategoryService is responsible for best-effort template logging.
-                    CategoryService.InsertCategory(name, description);
+                    if (_mode == CategoryFormMode.Edit)
+                    {
+                        int affected = CategoryService.UpdateCategory(_editingCategoryKey, name, description);
+                        if (affected <= 0)
+                        {
+                            Fail("Category was not updated. It may have already been changed or deactivated.");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // New world: Category_Type defaults to 0 in the DB; no type code.
+                        // CategoryService is responsible for best-effort template logging.
+                        CategoryService.InsertCategory(name, description);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Fail($"Error inserting category: {ex.Message}");
+                    Fail(_mode == CategoryFormMode.Edit
+                        ? $"Error updating category: {ex.Message}"
+                        : $"Error inserting category: {ex.Message}");
                     return;
                 }
 
                 // --- Notify host
-                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description));
+                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description, _editingCategoryKey, _mode));
             }
             finally
             {
@@ -124,6 +152,7 @@ namespace MWPV.View.UserControls
         {
             if (btnAddCategory != null) btnAddCategory.IsEnabled = !isBusy;
             if (btnCancel != null) btnCancel.IsEnabled = !isBusy;
+            if (btnDeactivateCategory != null) btnDeactivateCategory.IsEnabled = !isBusy;
         }
 
         private void ShowError(string message)
@@ -158,6 +187,67 @@ namespace MWPV.View.UserControls
             tbCategoryName?.Focus();
         }
 
+        public void ConfigureForAdd()
+        {
+            _mode = CategoryFormMode.Add;
+            _editingCategoryKey = 0;
+
+            if (txtHeader != null) txtHeader.Text = "Add New Category";
+            if (txtSubmitCaption != null) txtSubmitCaption.Text = "Submit";
+            if (btnDeactivateCategory != null) btnDeactivateCategory.Visibility = Visibility.Collapsed;
+
+            ResetForm();
+        }
+
+        public void ConfigureForEdit(CategoryService.CategoryDetail detail)
+        {
+            if (detail == null) throw new ArgumentNullException(nameof(detail));
+
+            _mode = CategoryFormMode.Edit;
+            _editingCategoryKey = detail.CategoryKey;
+
+            if (txtHeader != null) txtHeader.Text = "Edit Category";
+            if (txtSubmitCaption != null) txtSubmitCaption.Text = "Save";
+            if (btnDeactivateCategory != null) btnDeactivateCategory.Visibility = Visibility.Visible;
+
+            if (tbCategoryName != null) tbCategoryName.Text = detail.Name ?? string.Empty;
+            if (tbCategoryDescription != null) tbCategoryDescription.Text = detail.Description ?? string.Empty;
+
+            ClearError();
+            tbCategoryName?.Focus();
+            tbCategoryName?.SelectAll();
+        }
+
+        private void btnDeactivateCategory_Click(object sender, RoutedEventArgs e)
+        {
+            if (_mode != CategoryFormMode.Edit || _editingCategoryKey <= 0)
+                return;
+
+            ClearError();
+            SetBusy(true);
+
+            try
+            {
+                string categoryName = tbCategoryName?.Text ?? string.Empty;
+                int affected = CategoryService.DeactivateCategory(_editingCategoryKey);
+                if (affected <= 0)
+                {
+                    Fail("Category was not deactivated. It may already be inactive.");
+                    return;
+                }
+
+                Deactivated?.Invoke(this, new CategoryDeactivatedEventArgs(_editingCategoryKey, categoryName));
+            }
+            catch (Exception ex)
+            {
+                Fail($"Error deactivating category: {ex.Message}");
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
         // -------- JSON helpers (kept; harmless and used nowhere else) --------
     }
 
@@ -165,11 +255,31 @@ namespace MWPV.View.UserControls
     {
         public string Name { get; }
         public string? Description { get; }
+        public int CategoryKey { get; }
+        public CategoryFormMode Mode { get; }
 
-        public CategorySubmittedEventArgs(string name, string? description)
+        public CategorySubmittedEventArgs(
+            string name,
+            string? description,
+            int categoryKey = 0,
+            CategoryFormMode mode = CategoryFormMode.Add)
         {
             Name = name;
             Description = string.IsNullOrWhiteSpace(description) ? null : description;
+            CategoryKey = categoryKey;
+            Mode = mode;
+        }
+    }
+
+    public sealed class CategoryDeactivatedEventArgs : EventArgs
+    {
+        public int CategoryKey { get; }
+        public string Name { get; }
+
+        public CategoryDeactivatedEventArgs(int categoryKey, string? name)
+        {
+            CategoryKey = categoryKey;
+            Name = name ?? string.Empty;
         }
     }
 }
