@@ -25,6 +25,7 @@ namespace MWPV.Services
         private const string Sql_CategorySelectAll = "s_CategorySelectAll.sql";
         private const string Sql_CategorySelectWithActiveItems = "s_CategorySelectWithActiveItems.sql";
         private const string Sql_CategoryItemCountActiveGlobal = "s_CategoryItem_CountActive_Global.sql";
+        private const string Sql_CategoryItemCountActiveByCategory = "s_CategoryItem_CountActive_ByCategory.sql";
         private const string Sql_CategorySelectById = "s_Category_select_by_id.sql";
         private const string Sql_CategoryUpdate = "s_Category_update.sql";
         private const string Sql_CategoryDeactivate = "s_Category_deactivate.sql";
@@ -36,6 +37,7 @@ namespace MWPV.Services
             public string Name { get; init; } = string.Empty;
             public string Description { get; init; } = string.Empty;
             public bool IsActive { get; init; }
+            public int ActiveItemCount { get; init; }
         }
 
         // --------------------------- Helpers ---------------------------------
@@ -140,6 +142,25 @@ namespace MWPV.Services
             return Convert.ToInt64(scalar);
         }
 
+        private static int CountActiveCategoryItemsByCategory(int categoryKey)
+        {
+            if (categoryKey <= 0)
+                return 0;
+
+            var sql = LoadSqlRequired(Sql_CategoryItemCountActiveByCategory);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
+
+            object? scalar = cmd.ExecuteScalar();
+            if (scalar == null || scalar == DBNull.Value)
+                return 0;
+
+            return Convert.ToInt32(scalar);
+        }
+
         public static CategoryDetail? LoadCategoryByKey(int categoryKey)
         {
             if (categoryKey <= 0)
@@ -161,12 +182,15 @@ namespace MWPV.Services
             int iDescription = SafeGetOrdinal(r, "CategoryDescription");
             int iActive = SafeGetOrdinal(r, "IsActive");
 
+            int resolvedCategoryKey = ReadNullableInt(r, iKey) ?? categoryKey;
+
             return new CategoryDetail
             {
-                CategoryKey = ReadNullableInt(r, iKey) ?? categoryKey,
+                CategoryKey = resolvedCategoryKey,
                 Name = ReadNullableString(r, iName) ?? string.Empty,
                 Description = ReadNullableString(r, iDescription) ?? string.Empty,
-                IsActive = (ReadNullableInt(r, iActive) ?? 1) != 0
+                IsActive = (ReadNullableInt(r, iActive) ?? 1) != 0,
+                ActiveItemCount = CountActiveCategoryItemsByCategory(resolvedCategoryKey)
             };
         }
 
@@ -413,6 +437,13 @@ ORDER BY group_id;";
 
         public static int UpdateCategory(int categoryKey, string categoryName, string? description)
         {
+            var detail = LoadCategoryByKey(categoryKey);
+            bool isActive = detail?.IsActive ?? true;
+            return SaveCategoryEdit(categoryKey, categoryName, description, isActive);
+        }
+
+        public static int SaveCategoryEdit(int categoryKey, string categoryName, string? description, bool isActive)
+        {
             if (categoryKey <= 0)
                 throw new ArgumentOutOfRangeException(nameof(categoryKey), "Category key is required.");
             if (categoryName is null)
@@ -437,6 +468,13 @@ ORDER BY group_id;";
             if (DoesCategoryExistExceptKey(cleanName, categoryKey))
                 throw new InvalidOperationException("Category already exists. Please enter a different name.");
 
+            var before = LoadCategoryByKey(categoryKey);
+            if (before == null)
+                return 0;
+
+            if (before.IsActive && !isActive && CountActiveCategoryItemsByCategory(categoryKey) > 0)
+                throw new InvalidOperationException("Category contains active items. Deactivate or move the items first.");
+
             var updateSql = LoadSqlRequired(Sql_CategoryUpdate);
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
@@ -445,10 +483,22 @@ ORDER BY group_id;";
             cmd.Parameters.AddWithValue("@CategoryKey", categoryKey);
             cmd.Parameters.AddWithValue("@CategoryName", cleanName);
             cmd.Parameters.AddWithValue("@Description", desc);
+            cmd.Parameters.AddWithValue("@IsActive", isActive ? 1 : 0);
 
             int affected = cmd.ExecuteNonQuery();
-            if (affected > 0)
+            if (affected > 0 && CategoryTextChanged(before, cleanName, desc))
                 LogCategoryChanged_BestEffort(categoryKey, cleanName);
+
+            if (affected > 0 && before.IsActive != isActive)
+            {
+                if (isActive)
+                    LogCategoryActivated_BestEffort(categoryKey, cleanName);
+                else
+                {
+                    CategorySessionStateService.ForgetCategory(categoryKey);
+                    LogCategoryDeactivated_BestEffort(categoryKey, cleanName);
+                }
+            }
 
             return affected;
         }
@@ -549,6 +599,51 @@ ORDER BY group_id;";
             {
             }
         }
+
+        private static void LogCategoryActivated_BestEffort(int categoryKey, string categoryName)
+        {
+            try
+            {
+                var tokens = new Dictionary<string, string?>
+                {
+                    ["CategoryName"] = categoryName
+                };
+
+                var write = new TemplateLogWriter.WriteRequest
+                {
+                    Level = "INFO",
+                    Source = "Category",
+                    EventCode = "CATEGORY_ACTIVATED",
+                    ItemId = categoryKey,
+                    SubjectText = categoryName,
+                    KeySetVersion = 1
+                };
+
+                long logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                    updateForm: "Category",
+                    seqsInOrder: new[] { 4 },
+                    tokens: tokens,
+                    write: write);
+
+                if (logId <= 0)
+                {
+                    write.MessageText = $"Category '{categoryName}' has been activated.";
+                    TemplateLogWriter.InsertRendered_BestEffort(write);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool CategoryTextChanged(CategoryDetail before, string afterName, string? afterDescription)
+        {
+            return !TextEquals(before.Name, afterName) ||
+                   !TextEquals(before.Description, afterDescription);
+        }
+
+        private static bool TextEquals(string? a, string? b)
+            => string.Equals((a ?? string.Empty).Trim(), (b ?? string.Empty).Trim(), StringComparison.Ordinal);
 
         // ------------------------- Internal utils ----------------------------
 

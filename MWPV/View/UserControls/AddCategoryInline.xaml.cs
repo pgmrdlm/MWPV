@@ -22,7 +22,6 @@ namespace MWPV.View.UserControls
     public partial class AddCategoryInline : UserControl
     {
         public event EventHandler<CategorySubmittedEventArgs>? Submitted;
-        public event EventHandler<CategoryDeactivatedEventArgs>? Deactivated;
         public event EventHandler? Canceled;
 
         // Single place to control max length for the name
@@ -30,6 +29,9 @@ namespace MWPV.View.UserControls
         private const int MaxCategoryNameLength = 64; // was 17
         private CategoryFormMode _mode = CategoryFormMode.Add;
         private int _editingCategoryKey;
+        private bool _activeCheckboxLockedByActiveItems;
+        private const string ActiveCheckboxNormalToolTip = "Unchecked Categories are inactive. Use All Categories to view inactive categories.";
+        private const string ActiveCheckboxLockedToolTip = "Category contains active items. Deactivate or move the items first.";
 
         public CategoryFormMode Mode => _mode;
         public int EditingCategoryKey => _editingCategoryKey;
@@ -109,10 +111,11 @@ namespace MWPV.View.UserControls
                 {
                     if (_mode == CategoryFormMode.Edit)
                     {
-                        int affected = CategoryService.UpdateCategory(_editingCategoryKey, name, description);
+                        bool isActive = chkIsActive?.IsChecked == true;
+                        int affected = CategoryService.SaveCategoryEdit(_editingCategoryKey, name, description, isActive);
                         if (affected <= 0)
                         {
-                            Fail("Category was not updated. It may have already been changed or deactivated.");
+                            Fail("Category was not updated. It may have already been changed.");
                             return;
                         }
                     }
@@ -132,7 +135,11 @@ namespace MWPV.View.UserControls
                 }
 
                 // --- Notify host
-                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description, _editingCategoryKey, _mode));
+                bool savedIsActive = _mode == CategoryFormMode.Edit
+                    ? chkIsActive?.IsChecked == true
+                    : true;
+
+                Submitted?.Invoke(this, new CategorySubmittedEventArgs(name, description, _editingCategoryKey, _mode, savedIsActive));
             }
             finally
             {
@@ -152,7 +159,17 @@ namespace MWPV.View.UserControls
         {
             if (btnAddCategory != null) btnAddCategory.IsEnabled = !isBusy;
             if (btnCancel != null) btnCancel.IsEnabled = !isBusy;
-            if (btnDeactivateCategory != null) btnDeactivateCategory.IsEnabled = !isBusy;
+            ApplyActiveCheckboxState(isBusy);
+        }
+
+        private void ApplyActiveCheckboxState(bool isBusy = false)
+        {
+            if (chkIsActive == null) return;
+
+            chkIsActive.IsEnabled = !isBusy && !_activeCheckboxLockedByActiveItems;
+            chkIsActive.ToolTip = _activeCheckboxLockedByActiveItems
+                ? ActiveCheckboxLockedToolTip
+                : ActiveCheckboxNormalToolTip;
         }
 
         private void ShowError(string message)
@@ -191,10 +208,16 @@ namespace MWPV.View.UserControls
         {
             _mode = CategoryFormMode.Add;
             _editingCategoryKey = 0;
+            _activeCheckboxLockedByActiveItems = false;
 
             if (txtHeader != null) txtHeader.Text = "Add New Category";
             if (txtSubmitCaption != null) txtSubmitCaption.Text = "Submit";
-            if (btnDeactivateCategory != null) btnDeactivateCategory.Visibility = Visibility.Collapsed;
+            if (chkIsActive != null)
+            {
+                chkIsActive.IsChecked = true;
+                chkIsActive.Visibility = Visibility.Collapsed;
+                ApplyActiveCheckboxState();
+            }
 
             ResetForm();
         }
@@ -205,10 +228,16 @@ namespace MWPV.View.UserControls
 
             _mode = CategoryFormMode.Edit;
             _editingCategoryKey = detail.CategoryKey;
+            _activeCheckboxLockedByActiveItems = detail.IsActive && detail.ActiveItemCount > 0;
 
             if (txtHeader != null) txtHeader.Text = "Edit Category";
             if (txtSubmitCaption != null) txtSubmitCaption.Text = "Save";
-            if (btnDeactivateCategory != null) btnDeactivateCategory.Visibility = Visibility.Visible;
+            if (chkIsActive != null)
+            {
+                chkIsActive.IsChecked = detail.IsActive;
+                chkIsActive.Visibility = Visibility.Visible;
+                ApplyActiveCheckboxState();
+            }
 
             if (tbCategoryName != null) tbCategoryName.Text = detail.Name ?? string.Empty;
             if (tbCategoryDescription != null) tbCategoryDescription.Text = detail.Description ?? string.Empty;
@@ -216,36 +245,6 @@ namespace MWPV.View.UserControls
             ClearError();
             tbCategoryName?.Focus();
             tbCategoryName?.SelectAll();
-        }
-
-        private void btnDeactivateCategory_Click(object sender, RoutedEventArgs e)
-        {
-            if (_mode != CategoryFormMode.Edit || _editingCategoryKey <= 0)
-                return;
-
-            ClearError();
-            SetBusy(true);
-
-            try
-            {
-                string categoryName = tbCategoryName?.Text ?? string.Empty;
-                int affected = CategoryService.DeactivateCategory(_editingCategoryKey);
-                if (affected <= 0)
-                {
-                    Fail("Category was not deactivated. It may already be inactive.");
-                    return;
-                }
-
-                Deactivated?.Invoke(this, new CategoryDeactivatedEventArgs(_editingCategoryKey, categoryName));
-            }
-            catch (Exception ex)
-            {
-                Fail($"Error deactivating category: {ex.Message}");
-            }
-            finally
-            {
-                SetBusy(false);
-            }
         }
 
         // -------- JSON helpers (kept; harmless and used nowhere else) --------
@@ -257,29 +256,21 @@ namespace MWPV.View.UserControls
         public string? Description { get; }
         public int CategoryKey { get; }
         public CategoryFormMode Mode { get; }
+        public bool IsActive { get; }
 
         public CategorySubmittedEventArgs(
             string name,
             string? description,
             int categoryKey = 0,
-            CategoryFormMode mode = CategoryFormMode.Add)
+            CategoryFormMode mode = CategoryFormMode.Add,
+            bool isActive = true)
         {
             Name = name;
             Description = string.IsNullOrWhiteSpace(description) ? null : description;
             CategoryKey = categoryKey;
             Mode = mode;
+            IsActive = isActive;
         }
     }
 
-    public sealed class CategoryDeactivatedEventArgs : EventArgs
-    {
-        public int CategoryKey { get; }
-        public string Name { get; }
-
-        public CategoryDeactivatedEventArgs(int categoryKey, string? name)
-        {
-            CategoryKey = categoryKey;
-            Name = name ?? string.Empty;
-        }
-    }
 }

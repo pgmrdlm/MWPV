@@ -62,6 +62,10 @@
                     <!-- 3: spacer -->
                     <RowDefinition Height="Auto"/>
                     <!-- 4: Description -->
+                    <RowDefinition Height="10"/>
+                    <!-- 5: spacer -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- 6: Active -->
                 </Grid.RowDefinitions>
 
                 <!-- Name -->
@@ -109,6 +113,13 @@
                          Background="White"
                          Foreground="Black"
                          TextChanged="tbCategoryDescription_TextChanged"/>
+
+                <!-- Active state -->
+                <CheckBox x:Name="chkIsActive"
+                          Grid.Row="6" Grid.Column="2"
+                          VerticalAlignment="Center"
+                          Content="Active"
+                          ToolTip="Unchecked Categories are inactive. Use All Categories to view inactive categories."/>
             </Grid>
 
             <!-- Error line -->
@@ -134,19 +145,6 @@
                                    Text="&#xE8FB;"
                                    Margin="0,0,8,0"/>
                         <TextBlock x:Name="txtSubmitCaption" Text="Submit"/>
-                    </StackPanel>
-                </Button>
-
-                <Button x:Name="btnDeactivateCategory"
-                        Style="{StaticResource DialogDanger}"
-                        Click="btnDeactivateCategory_Click"
-                        Visibility="Collapsed"
-                        Margin="0,0,12,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   Text="&#xE74D;"
-                                   Margin="0,0,8,0"/>
-                        <TextBlock Text="Deactivate"/>
                     </StackPanel>
                 </Button>
 

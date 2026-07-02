@@ -278,6 +278,7 @@ FROM (
            'Category #CategoryName# has been created' AS LogMessage
     UNION ALL SELECT 'CategoryUpdates', 2, 'Category #CategoryName# has been updated'
     UNION ALL SELECT 'CategoryUpdates', 3, 'Category #CategoryName# has been deactivated'
+    UNION ALL SELECT 'CategoryUpdates', 4, 'Category #CategoryName# has been activated'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1

@@ -1,9 +1,9 @@
 /* ============================================================================
    MWPV - 01.11 -> 01.12 UPGRADE
-   Category edit/deactivate logging templates.
+   Category edit/deactivate/activate logging templates.
 
    Purpose:
-   - Add CategoryUpdates templates for category update and deactivation.
+   - Add CategoryUpdates templates for category update, deactivation, and activation.
 ============================================================================ */
 
 PRAGMA encoding = "UTF-8";
@@ -18,6 +18,7 @@ FROM (
            2 AS Seq,
            'Category #CategoryName# has been updated' AS LogMessage
     UNION ALL SELECT 'CategoryUpdates', 3, 'Category #CategoryName# has been deactivated'
+    UNION ALL SELECT 'CategoryUpdates', 4, 'Category #CategoryName# has been activated'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1

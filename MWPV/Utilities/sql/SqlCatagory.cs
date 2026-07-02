@@ -55,6 +55,7 @@ namespace Utilities.Sql
             "s_Combo_DetailByTypeId.sql",
             "s_CategoryItem_select_by_category.sql",
             "s_CategoryItem_CountActive_Global.sql",
+            "s_CategoryItem_CountActive_ByCategory.sql",
 
             // Category Item Accounts
             "s_CategoryItemAccounts_select_by_itemid.sql",

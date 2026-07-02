@@ -387,13 +387,11 @@ namespace MWPV.View.UserControls
             if (_addCategoryInline != null)
             {
                 _addCategoryInline.Submitted -= AddCategoryInline_Submitted;
-                _addCategoryInline.Deactivated -= AddCategoryInline_Deactivated;
                 _addCategoryInline.Canceled -= AddCategoryInline_Canceled;
             }
 
             _addCategoryInline = new AddCategoryInline();
             _addCategoryInline.Submitted += AddCategoryInline_Submitted;
-            _addCategoryInline.Deactivated += AddCategoryInline_Deactivated;
             _addCategoryInline.Canceled += AddCategoryInline_Canceled;
 
             AddCategoryContent.Content = _addCategoryInline;
@@ -453,8 +451,19 @@ namespace MWPV.View.UserControls
             {
                 ShowCategoryGrid();
                 SafeRefreshCategories();
-                if (e.Mode == CategoryFormMode.Edit && e.CategoryKey == _selectedCategoryKey)
+                if (e.Mode == CategoryFormMode.Edit &&
+                    e.CategoryKey == _selectedCategoryKey &&
+                    (e.IsActive || CategoryGrid.CategoryViewMode == CategoryViewMode.AllActive))
+                {
                     RestoreSelectedCategoryContext(e.CategoryKey, e.Name);
+                }
+                else if (e.Mode == CategoryFormMode.Edit &&
+                         e.CategoryKey == _selectedCategoryKey &&
+                         !e.IsActive)
+                {
+                    ClearSelectedCategoryContext();
+                }
+
                 _addCategoryInline?.ConfigureForAdd();
             }
             finally { _isHandlingInlineEvent = false; }
@@ -480,24 +489,6 @@ namespace MWPV.View.UserControls
                 SafeRefreshCategories();
                 if (wasEditingSelectedCategory)
                     RestoreSelectedCategoryContext(selectedKey, selectedName);
-                _addCategoryInline?.ConfigureForAdd();
-            }
-            finally { _isHandlingInlineEvent = false; }
-        }
-
-        private void AddCategoryInline_Deactivated(object? sender, CategoryDeactivatedEventArgs e)
-        {
-            if (_isHandlingInlineEvent) return;
-            if (IsPopupOverlayActive) return;
-
-            _isHandlingInlineEvent = true;
-            try
-            {
-                if (e.CategoryKey == _selectedCategoryKey)
-                    ClearSelectedCategoryContext();
-
-                ShowCategoryGrid();
-                SafeRefreshCategories();
                 _addCategoryInline?.ConfigureForAdd();
             }
             finally { _isHandlingInlineEvent = false; }
