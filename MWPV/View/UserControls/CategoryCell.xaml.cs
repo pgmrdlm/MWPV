@@ -27,6 +27,13 @@ namespace MWPV.View.UserControls
                 typeof(CategoryCell),
                 new PropertyMetadata(string.Empty));
 
+        public static readonly DependencyProperty IsCategoryActiveProperty =
+            DependencyProperty.Register(
+                nameof(IsCategoryActive),
+                typeof(bool?),
+                typeof(CategoryCell),
+                new PropertyMetadata(true));
+
         public int? CategoryKey
         {
             get => (int?)GetValue(CategoryKeyProperty);
@@ -43,6 +50,12 @@ namespace MWPV.View.UserControls
         {
             get => (string)GetValue(CategoryDescriptionProperty);
             set => SetValue(CategoryDescriptionProperty, value);
+        }
+
+        public bool? IsCategoryActive
+        {
+            get => (bool?)GetValue(IsCategoryActiveProperty);
+            set => SetValue(IsCategoryActiveProperty, value);
         }
 
         public event EventHandler<CategoryCellEventArgs>? CategorySelected;

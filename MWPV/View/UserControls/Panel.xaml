@@ -85,7 +85,7 @@
                                      VerticalAlignment="Center"
                                      Margin="0,0,12,0"/>
                         <RadioButton x:Name="rbCategoryViewAllActive"
-                                     Content="All Active"
+                                     Content="All Categories"
                                      GroupName="CategoryViewMode"
                                      Checked="CategoryViewRadio_Checked"
                                      VerticalAlignment="Center"/>

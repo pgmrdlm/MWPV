@@ -419,7 +419,7 @@ namespace MWPV.View.UserControls
         private void ShowEditCategory(int categoryKey)
         {
             var detail = CategoryService.LoadCategoryByKey(categoryKey);
-            if (detail == null || !detail.IsActive)
+            if (detail == null)
                 return;
 
             _addCategoryInline?.ConfigureForEdit(detail);

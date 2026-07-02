@@ -53,6 +53,7 @@ namespace MWPV.Services
         /// <summary>
         /// Loads the 3-column category grid rows.
         /// Expects SQL to project: Key1/Key2/Key3, Col1/Col2/Col3, Des1/Des2/Des3.
+        /// Optional Active1/Active2/Active3 columns mark inactive cells for disabled-looking styling.
         /// </summary>
         public static ObservableCollection<Categories> LoadCategories(CategoryViewMode viewMode = CategoryViewMode.InUse)
         {
@@ -81,6 +82,10 @@ namespace MWPV.Services
                 int iDes2 = SafeGetOrdinal(r, "Des2");
                 int iDes3 = SafeGetOrdinal(r, "Des3");
 
+                int iActive1 = SafeGetOrdinal(r, "Active1");
+                int iActive2 = SafeGetOrdinal(r, "Active2");
+                int iActive3 = SafeGetOrdinal(r, "Active3");
+
                 while (r.Read())
                 {
                     var row = new Categories
@@ -96,6 +101,10 @@ namespace MWPV.Services
                         strCategoryToolTip1 = ReadNullableString(r, iDes1),
                         strCategoryToolTip2 = ReadNullableString(r, iDes2),
                         strCategoryToolTip3 = ReadNullableString(r, iDes3),
+
+                        IsActive1 = ReadNullableBoolDefaultTrue(r, iActive1),
+                        IsActive2 = ReadNullableBoolDefaultTrue(r, iActive2),
+                        IsActive3 = ReadNullableBoolDefaultTrue(r, iActive3),
                     };
 
                     rows.Add(row);
@@ -568,6 +577,12 @@ ORDER BY group_id;";
         {
             if (ordinal < 0 || r.IsDBNull(ordinal)) return "";
             try { return r.GetString(ordinal); } catch { return r.GetValue(ordinal)?.ToString() ?? ""; }
+        }
+
+        private static bool? ReadNullableBoolDefaultTrue(SqliteDataReader r, int ordinal)
+        {
+            if (ordinal < 0 || r.IsDBNull(ordinal)) return true;
+            return (ReadNullableInt(r, ordinal) ?? 1) != 0;
         }
     }
 }

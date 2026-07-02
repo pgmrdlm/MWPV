@@ -7,5 +7,4 @@ UPDATE Category
 SET
     Category_Name        = @CategoryName,
     Category_Description = @Description
-WHERE Category_Key = @CategoryKey
-  AND IFNULL(IsActive, 1) = 1;
+WHERE Category_Key = @CategoryKey;
