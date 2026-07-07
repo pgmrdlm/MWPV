@@ -829,6 +829,7 @@ namespace MWPV.View.UserControls
                 NotesUpdated ||
                 CategoryItemDeactivated ||
                 CategoryItemActivated ||
+                CategoryItemNameChanged ||
                 CategoryChanged;
 
             public bool PasswordUpdated { get; init; }
@@ -841,6 +842,9 @@ namespace MWPV.View.UserControls
             public bool NotesUpdated { get; init; }
             public bool CategoryItemDeactivated { get; init; }
             public bool CategoryItemActivated { get; init; }
+            public bool CategoryItemNameChanged { get; init; }
+            public string? BeforeCategoryItemName { get; init; }
+            public string? AfterCategoryItemName { get; init; }
             public bool CategoryChanged { get; init; }
             public string? BeforeCategoryName { get; init; }
             public string? AfterCategoryName { get; init; }
@@ -861,6 +865,7 @@ namespace MWPV.View.UserControls
         private BasicTabChanges ComputeBasicTabChanges_ExistingItem(
             CategoryItemService.CategoryItemBasicRow beforeRow,
             bool isBookmarkOnly,
+            string? afterCategoryItemName,
             string? afterNotes,
             string? afterUsername,
             string? afterUrl,
@@ -873,6 +878,7 @@ namespace MWPV.View.UserControls
         {
             bool bookmarkSame = BoolEqBookmark(beforeRow.BookMarkOnly, isBookmarkOnly);
 
+            bool itemNameSame = StrEq(beforeRow.Name, afterCategoryItemName);
             bool pinSame = StrEq(beforeRow.PinPlain, afterPin);
             bool userSame = StrEq(beforeRow.Username, afterUsername);
             bool urlSame = StrEq(beforeRow.SignInUrl, afterUrl);
@@ -897,6 +903,9 @@ namespace MWPV.View.UserControls
                 NotesUpdated = !notesSame,
                 CategoryItemDeactivated = wasActive && !isActiveNow,
                 CategoryItemActivated = !wasActive && isActiveNow,
+                CategoryItemNameChanged = !itemNameSame,
+                BeforeCategoryItemName = itemNameSame ? null : beforeRow.Name,
+                AfterCategoryItemName = itemNameSame ? null : afterCategoryItemName,
                 CategoryChanged = categoryChanged,
                 BeforeCategoryName = beforeCategoryName,
                 AfterCategoryName = afterCategoryName
@@ -905,7 +914,7 @@ namespace MWPV.View.UserControls
 #if DEBUG
             Debug.WriteLine(
                 "[ITEM-TABS][BASIC-CHANGES] " +
-                $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
+                $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} ItemName={changes.CategoryItemNameChanged} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
                 $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated} Activated={changes.CategoryItemActivated} Category={changes.CategoryChanged}");
 #endif
 
@@ -926,12 +935,22 @@ namespace MWPV.View.UserControls
 
         /* ======================= LOGGING HELPERS ======================= */
 
-        private static IReadOnlyDictionary<string, string?> BuildCommonTokens(string categoryName, string categoryItemName)
+        private static IReadOnlyDictionary<string, string?> BuildCommonTokens(
+            string categoryName,
+            string categoryItemName,
+            string? beforeCategoryItemName = null,
+            string? afterCategoryItemName = null,
+            string? beforeCategoryName = null,
+            string? afterCategoryName = null)
         {
             return new Dictionary<string, string?>
             {
                 ["CategoryName"] = categoryName,
-                ["CategoryItemName"] = categoryItemName
+                ["CategoryItemName"] = categoryItemName,
+                ["BeforeCategoryItemName"] = beforeCategoryItemName,
+                ["AfterCategoryItemName"] = afterCategoryItemName,
+                ["BeforeCategoryName"] = beforeCategoryName,
+                ["AfterCategoryName"] = afterCategoryName
             };
         }
 
@@ -1043,7 +1062,7 @@ namespace MWPV.View.UserControls
 
             try
             {
-                var seqs = new List<int>(capacity: 9) { 2 };
+                var seqs = new List<int>(capacity: 11) { 2 };
 
                 if (changes.PasswordUpdated) seqs.Add(3);
                 if (changes.BookmarkToggled) seqs.Add(4);
@@ -1055,8 +1074,10 @@ namespace MWPV.View.UserControls
                 if (changes.NotesUpdated) seqs.Add(10);
                 if (changes.CategoryItemDeactivated) seqs.Add(12);
                 if (changes.CategoryItemActivated) seqs.Add(13);
+                if (changes.CategoryItemNameChanged) seqs.Add(15);
+                if (changes.CategoryChanged) seqs.Add(14);
 
-                if (seqs.Count <= 1 && !changes.CategoryChanged)
+                if (seqs.Count <= 1)
                     return;
 
                 var write = new TemplateLogWriter.WriteRequest
@@ -1072,27 +1093,31 @@ namespace MWPV.View.UserControls
                     KeySetVersion = 1
                 };
 
-                var tokens = BuildCommonTokens(categoryName, itemName);
+                string beforeCategory = string.IsNullOrWhiteSpace(changes.BeforeCategoryName)
+                    ? categoryName
+                    : changes.BeforeCategoryName!;
+                string afterCategory = string.IsNullOrWhiteSpace(changes.AfterCategoryName)
+                    ? "selected category"
+                    : changes.AfterCategoryName!;
+                string beforeCategoryItemName = string.IsNullOrWhiteSpace(changes.BeforeCategoryItemName)
+                    ? itemName
+                    : changes.BeforeCategoryItemName!;
+                string afterCategoryItemName = string.IsNullOrWhiteSpace(changes.AfterCategoryItemName)
+                    ? itemName
+                    : changes.AfterCategoryItemName!;
+
+                var tokens = BuildCommonTokens(
+                    categoryName,
+                    itemName,
+                    beforeCategoryItemName: beforeCategoryItemName,
+                    afterCategoryItemName: afterCategoryItemName,
+                    beforeCategoryName: beforeCategory,
+                    afterCategoryName: afterCategory);
 
                 string? message = TemplateLogWriter.BuildMessageFromTemplates_BestEffort(
                     updateForm: TemplateForm_BasicTab,
                     seqsInOrder: seqs,
                     tokens: tokens);
-
-                if (changes.CategoryChanged)
-                {
-                    string beforeCategory = string.IsNullOrWhiteSpace(changes.BeforeCategoryName)
-                        ? categoryName
-                        : changes.BeforeCategoryName!;
-                    string afterCategory = string.IsNullOrWhiteSpace(changes.AfterCategoryName)
-                        ? "selected category"
-                        : changes.AfterCategoryName!;
-                    string categoryLine = $"- Category changed from {beforeCategory} to {afterCategory}";
-
-                    message = string.IsNullOrWhiteSpace(message)
-                        ? $"The following updates have been saved for {itemName}{Environment.NewLine}{categoryLine}"
-                        : message + Environment.NewLine + categoryLine;
-                }
 
                 if (string.IsNullOrWhiteSpace(message))
                     return;
@@ -1852,6 +1877,7 @@ namespace MWPV.View.UserControls
                         var changes = ComputeBasicTabChanges_ExistingItem(
                             beforeRow: beforeRow,
                             isBookmarkOnly: isBookmarkOnly,
+                            afterCategoryItemName: name,
                             afterNotes: desc,
                             afterUsername: username,
                             afterUrl: url,

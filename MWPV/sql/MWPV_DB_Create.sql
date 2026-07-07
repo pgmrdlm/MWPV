@@ -1,11 +1,19 @@
 
 /* ============================================================================
-   MWPV - 01.12 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.16 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.12
+   - Create a fresh database at schema version 01.16
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.16 changes reflected here:
+   - BasicTab category item name-change template repair for DBs that already reached 01.15
+
+   01.15 changes reflected here:
+   - BasicTab category reassignment logging template added
+   - BasicTab category item name-change logging template added
+   - Fresh install version stamp updated to 01.16
 
    01.12 changes reflected here:
    - Category edit/deactivate logging templates added
@@ -263,6 +271,8 @@ FROM (
     UNION ALL SELECT 'BasicTab', 11, 'Edits were discarded for #CategoryItemName# (no changes saved)'
     UNION ALL SELECT 'BasicTab', 12, '- Category Item #CategoryItemName# was deactivated'
     UNION ALL SELECT 'BasicTab', 13, '- Category Item #CategoryItemName# was activated'
+    UNION ALL SELECT 'BasicTab', 14, '- Category changed from #BeforeCategoryName# to #AfterCategoryName#'
+    UNION ALL SELECT 'BasicTab', 15, '- Category item name changed from #BeforeCategoryItemName# to #AfterCategoryItemName#'
 ) AS v
 WHERE NOT EXISTS (
     SELECT 1
@@ -617,9 +627,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.12',
+    '01.16',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.12',
+    'Fresh database created at version 01.16',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
