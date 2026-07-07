@@ -610,6 +610,11 @@ namespace MWPV.View.UserControls
             catch { }
         }
 
+        public void RequestCategoryGridRefresh()
+        {
+            SafeRefreshCategories();
+        }
+
         private void CategoryItemEdit_Submitted(object? sender, EventArgs e)
         {
             HideAddEditCategoryItem();

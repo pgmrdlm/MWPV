@@ -42,6 +42,12 @@ namespace MWPV.Services
             public int ActiveItemCount { get; init; }
         }
 
+        public sealed class CategoryChoice
+        {
+            public int CategoryKey { get; init; }
+            public string Name { get; init; } = string.Empty;
+        }
+
         // --------------------------- Helpers ---------------------------------
 
         private static string LoadSqlRequired(string assetName)
@@ -194,6 +200,42 @@ namespace MWPV.Services
                 IsActive = (ReadNullableInt(r, iActive) ?? 1) != 0,
                 ActiveItemCount = CountActiveCategoryItemsByCategory(resolvedCategoryKey)
             };
+        }
+
+        public static IReadOnlyList<CategoryChoice> LoadActiveCategoryChoices()
+        {
+            var choices = new List<CategoryChoice>();
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+SELECT
+    Category_Key  AS CategoryKey,
+    Category_Name AS CategoryName
+FROM Category
+WHERE IFNULL(IsActive, 1) = 1
+ORDER BY Category_Name COLLATE NOCASE;";
+
+            using var r = cmd.ExecuteReader();
+            int iKey = SafeGetOrdinal(r, "CategoryKey");
+            int iName = SafeGetOrdinal(r, "CategoryName");
+
+            while (r.Read())
+            {
+                int? key = ReadNullableInt(r, iKey);
+                string? name = ReadNullableString(r, iName);
+
+                if (key.HasValue && key.Value > 0 && !string.IsNullOrWhiteSpace(name))
+                {
+                    choices.Add(new CategoryChoice
+                    {
+                        CategoryKey = key.Value,
+                        Name = name.Trim()
+                    });
+                }
+            }
+
+            return choices;
         }
 
         private static void ConfigureCategorySelectCommand(SqliteCommand cmd, string selectSqlName, string selectSql)

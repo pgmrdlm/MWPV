@@ -1,6 +1,7 @@
 -- s_CategoryItem_update.sql
 UPDATE CategoryItem
 SET
+    Category_Key          = @Category_Key,
     CI_Name               = @CI_Name,
     CI_Description        = @CI_Description,
     CI_Username           = @CI_Username,

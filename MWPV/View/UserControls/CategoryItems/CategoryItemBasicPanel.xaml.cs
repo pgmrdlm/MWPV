@@ -88,6 +88,8 @@ namespace MWPV.View.UserControls.CategoryItems
         // Duplicate-check guard
         private string _lastNameChecked = string.Empty;
         private bool _activeCheckboxLockedByInactiveCategory;
+        private int _currentCategoryKey;
+        private IReadOnlyList<CategoryService.CategoryChoice> _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
 
         // PIN rules
         private const int PinMinLen = 4;
@@ -206,6 +208,10 @@ namespace MWPV.View.UserControls.CategoryItems
             chkIsActive.ToolTip = _activeCheckboxLockedByInactiveCategory
                 ? "Reactivate the category first."
                 : "Unchecked Category Items are inactive and hidden from the category item grid.";
+            if (CategoryChoicePanel != null)
+                CategoryChoicePanel.Visibility = IsExistingItem ? Visibility.Visible : Visibility.Collapsed;
+            if (cmbCategory != null)
+                cmbCategory.IsEnabled = IsExistingItem && !viewOnly;
 
             // Replace Generate with Copy in view-only
             btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
@@ -347,6 +353,8 @@ namespace MWPV.View.UserControls.CategoryItems
                     return;
                 }
 
+                LoadActiveCategoryChoicesForCurrentRow(row);
+
                 _primaryAccountNumberPlain =
                     tmp_CategoryItemAccountsService.LoadPrimaryAccountNumberPlainByItemId(itemId);
 
@@ -381,6 +389,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ApplyBasicRowToUi(CategoryItemService.CategoryItemBasicRow row, string? mostRecentPasswordPlain)
         {
+            _currentCategoryKey = row.CategoryKey;
+
             txtItemName.Text = row.Name ?? string.Empty;
             txtUsername.Text = row.Username ?? string.Empty;
             txtUrl.Text = row.SignInUrl ?? string.Empty;
@@ -479,6 +489,36 @@ namespace MWPV.View.UserControls.CategoryItems
             UpdateCopyButtonStates();
         }
 
+        private void LoadActiveCategoryChoicesForCurrentRow(CategoryItemService.CategoryItemBasicRow row)
+        {
+            try
+            {
+                _activeCategoryChoices = CategoryService.LoadActiveCategoryChoices();
+
+                if (cmbCategory != null)
+                {
+                    cmbCategory.ItemsSource = _activeCategoryChoices;
+
+                    bool currentCategoryAvailable = _activeCategoryChoices.Any(c => c.CategoryKey == row.CategoryKey);
+                    cmbCategory.SelectedValue = currentCategoryAvailable
+                        ? row.CategoryKey
+                        : null;
+                }
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[BASIC][CATEGORY] Active category choice load failed: {ex}");
+#endif
+                _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
+                if (cmbCategory != null)
+                {
+                    cmbCategory.ItemsSource = _activeCategoryChoices;
+                    cmbCategory.SelectedValue = null;
+                }
+            }
+        }
+
         /* ======================= NON-SENSITIVE BEFORE BASELINES (DB -> BEFORE) ======================= */
 
         private void CaptureOriginalNonSensitiveBeforeFromRow(CategoryItemService.CategoryItemBasicRow row, string tag)
@@ -524,6 +564,15 @@ namespace MWPV.View.UserControls.CategoryItems
 
             chkIsActive.IsChecked = true;
             _activeCheckboxLockedByInactiveCategory = false;
+            _currentCategoryKey = 0;
+            _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
+            if (cmbCategory != null)
+            {
+                cmbCategory.ItemsSource = null;
+                cmbCategory.SelectedValue = null;
+            }
+            if (CategoryChoicePanel != null)
+                CategoryChoicePanel.Visibility = Visibility.Collapsed;
 
             _lastEmailChecked = string.Empty;
             _lastNameChecked = string.Empty;
@@ -713,6 +762,26 @@ namespace MWPV.View.UserControls.CategoryItems
         }
 
         public int GetIsActiveInt() => chkIsActive.IsChecked == true ? 1 : 0;
+
+        public int GetSelectedCategoryKeyForExistingEdit()
+        {
+            if (!IsExistingItem)
+                return _currentCategoryKey;
+
+            if (cmbCategory?.SelectedValue is int selectedInt)
+                return selectedInt;
+
+            if (cmbCategory?.SelectedValue is long selectedLong && selectedLong > 0 && selectedLong <= int.MaxValue)
+                return (int)selectedLong;
+
+            if (cmbCategory?.SelectedValue is string selectedString &&
+                int.TryParse(selectedString, out int selectedParsed))
+            {
+                return selectedParsed;
+            }
+
+            return 0;
+        }
 
         public string? GetPasswordPlainOrNull()
         {

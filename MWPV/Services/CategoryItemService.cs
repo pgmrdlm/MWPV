@@ -699,6 +699,7 @@ namespace MWPV.Services
 
         public static int UpdateCategoryItemBasic(
             long itemId,
+            int categoryKey,
             string name,
             string? description,
             string? username,
@@ -711,6 +712,7 @@ namespace MWPV.Services
         {
             return UpdateCategoryItemBasicCore(
                 itemId: itemId,
+                categoryKey: categoryKey,
                 name: name,
                 description: description,
                 username: username,
@@ -724,6 +726,7 @@ namespace MWPV.Services
 
         private static int UpdateCategoryItemBasicCore(
             long itemId,
+            int categoryKey,
             string name,
             string? description,
             string? username,
@@ -736,12 +739,15 @@ namespace MWPV.Services
         {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
+            if (categoryKey <= 0)
+                throw new ArgumentOutOfRangeException(nameof(categoryKey), "A valid category is required.");
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
             if (bookMarkOnly.HasValue)
                 _ = NormalizeBookMarkOnly(bookMarkOnly.Value);
 
-            ValidateCategoryItemReactivationAllowed(itemId, isActive);
+            ValidateActiveDestinationCategory(categoryKey);
+            ValidateCategoryItemReactivationAllowed(itemId, isActive, categoryKey);
 
             try
             {
@@ -758,6 +764,7 @@ namespace MWPV.Services
                 cmd.CommandText = sql;
 
                 AddInt64(cmd, "@ItemId", itemId);
+                AddInt32(cmd, "@Category_Key", categoryKey);
                 AddText(cmd, "@CI_Name", name.Trim());
 
                 AddTextIfSqlUses(cmd, sql, "@CI_Description", string.IsNullOrWhiteSpace(description) ? null : description);
@@ -793,7 +800,14 @@ namespace MWPV.Services
             }
         }
 
-        private static void ValidateCategoryItemReactivationAllowed(long itemId, int? requestedIsActive)
+        private static void ValidateActiveDestinationCategory(int categoryKey)
+        {
+            var category = CategoryService.LoadCategoryByKey(categoryKey);
+            if (category == null || !category.IsActive)
+                throw new InvalidOperationException("Select an active category.");
+        }
+
+        private static void ValidateCategoryItemReactivationAllowed(long itemId, int? requestedIsActive, int destinationCategoryKey)
         {
             if (!requestedIsActive.HasValue || requestedIsActive.Value != 1)
                 return;
@@ -803,7 +817,14 @@ namespace MWPV.Services
                 return;
 
             bool wasActive = !before.IsActive.HasValue || before.IsActive.Value == 1;
-            if (wasActive || before.ParentCategoryIsActive)
+            if (wasActive)
+                return;
+
+            if (before.CategoryKey == destinationCategoryKey && before.ParentCategoryIsActive)
+                return;
+
+            var destination = CategoryService.LoadCategoryByKey(destinationCategoryKey);
+            if (destination?.IsActive == true)
                 return;
 
             throw new CategoryItemReactivationBlockedException();

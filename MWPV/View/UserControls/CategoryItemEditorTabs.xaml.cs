@@ -207,6 +207,20 @@ namespace MWPV.View.UserControls
                 // swallow: refresh request must never break save/tab-switch/close
             }
         }
+
+        private void NotifyPanel_RefreshCategoryGrid_BestEffort()
+        {
+            try
+            {
+                var hostPanel = FindPanelHost();
+                if (hostPanel == null) return;
+                hostPanel.RequestCategoryGridRefresh();
+            }
+            catch
+            {
+                // swallow: refresh request must never break save/tab-switch/close
+            }
+        }
         private void EnsureBankCardsLoadedForActiveItem(bool forceReload = false)
         {
             if (BankCardsPanel == null)
@@ -814,7 +828,8 @@ namespace MWPV.View.UserControls
                 EmailUpdated ||
                 NotesUpdated ||
                 CategoryItemDeactivated ||
-                CategoryItemActivated;
+                CategoryItemActivated ||
+                CategoryChanged;
 
             public bool PasswordUpdated { get; init; }
             public bool BookmarkToggled { get; init; }
@@ -826,6 +841,9 @@ namespace MWPV.View.UserControls
             public bool NotesUpdated { get; init; }
             public bool CategoryItemDeactivated { get; init; }
             public bool CategoryItemActivated { get; init; }
+            public bool CategoryChanged { get; init; }
+            public string? BeforeCategoryName { get; init; }
+            public string? AfterCategoryName { get; init; }
         }
 
         private static string N(string? s) => (s ?? string.Empty).Trim();
@@ -850,6 +868,7 @@ namespace MWPV.View.UserControls
             string? afterEmail,
             string? afterPin,
             int? afterIsActive,
+            int afterCategoryKey,
             bool passwordChangedByFingerprint)
         {
             bool bookmarkSame = BoolEqBookmark(beforeRow.BookMarkOnly, isBookmarkOnly);
@@ -862,6 +881,9 @@ namespace MWPV.View.UserControls
             bool notesSame = StrEq(beforeRow.Description, afterNotes);
             bool wasActive = !beforeRow.IsActive.HasValue || beforeRow.IsActive.Value == 1;
             bool isActiveNow = !afterIsActive.HasValue || afterIsActive.Value == 1;
+            bool categoryChanged = beforeRow.CategoryKey != afterCategoryKey;
+            string? beforeCategoryName = categoryChanged ? TryLoadCategoryName(beforeRow.CategoryKey) : null;
+            string? afterCategoryName = categoryChanged ? TryLoadCategoryName(afterCategoryKey) : null;
 
             var changes = new BasicTabChanges
             {
@@ -874,17 +896,32 @@ namespace MWPV.View.UserControls
                 EmailUpdated = !emailSame,
                 NotesUpdated = !notesSame,
                 CategoryItemDeactivated = wasActive && !isActiveNow,
-                CategoryItemActivated = !wasActive && isActiveNow
+                CategoryItemActivated = !wasActive && isActiveNow,
+                CategoryChanged = categoryChanged,
+                BeforeCategoryName = beforeCategoryName,
+                AfterCategoryName = afterCategoryName
             };
 
 #if DEBUG
             Debug.WriteLine(
                 "[ITEM-TABS][BASIC-CHANGES] " +
                 $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
-                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated} Activated={changes.CategoryItemActivated}");
+                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated} Activated={changes.CategoryItemActivated} Category={changes.CategoryChanged}");
 #endif
 
             return changes;
+        }
+
+        private static string? TryLoadCategoryName(int categoryKey)
+        {
+            try
+            {
+                return CategoryService.LoadCategoryByKey(categoryKey)?.Name;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /* ======================= LOGGING HELPERS ======================= */
@@ -1019,7 +1056,7 @@ namespace MWPV.View.UserControls
                 if (changes.CategoryItemDeactivated) seqs.Add(12);
                 if (changes.CategoryItemActivated) seqs.Add(13);
 
-                if (seqs.Count <= 1)
+                if (seqs.Count <= 1 && !changes.CategoryChanged)
                     return;
 
                 var write = new TemplateLogWriter.WriteRequest
@@ -1037,11 +1074,31 @@ namespace MWPV.View.UserControls
 
                 var tokens = BuildCommonTokens(categoryName, itemName);
 
-                var logId = TemplateLogWriter.InsertFromTemplates_BestEffort(
+                string? message = TemplateLogWriter.BuildMessageFromTemplates_BestEffort(
                     updateForm: TemplateForm_BasicTab,
                     seqsInOrder: seqs,
-                    tokens: tokens,
-                    write: write);
+                    tokens: tokens);
+
+                if (changes.CategoryChanged)
+                {
+                    string beforeCategory = string.IsNullOrWhiteSpace(changes.BeforeCategoryName)
+                        ? categoryName
+                        : changes.BeforeCategoryName!;
+                    string afterCategory = string.IsNullOrWhiteSpace(changes.AfterCategoryName)
+                        ? "selected category"
+                        : changes.AfterCategoryName!;
+                    string categoryLine = $"- Category changed from {beforeCategory} to {afterCategory}";
+
+                    message = string.IsNullOrWhiteSpace(message)
+                        ? $"The following updates have been saved for {itemName}{Environment.NewLine}{categoryLine}"
+                        : message + Environment.NewLine + categoryLine;
+                }
+
+                if (string.IsNullOrWhiteSpace(message))
+                    return;
+
+                write.MessageText = message;
+                var logId = TemplateLogWriter.InsertRendered_BestEffort(write);
 
 #if DEBUG
                 Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] Inserted CATEGORYITEM_CHANGED logId={logId} itemId={itemId} subject='{itemName}' seqCount={seqs.Count}");
@@ -1659,9 +1716,11 @@ namespace MWPV.View.UserControls
 
                     int? isActive = BasicPanel.GetIsActiveInt();
                     int? bookMarkOnly = isBookmarkOnly ? 1 : 0;
+                    int categoryKey = BasicPanel.GetSelectedCategoryKeyForExistingEdit();
 
                     int rows = CategoryItemService.UpdateCategoryItemBasic(
                         itemId: itemId,
+                        categoryKey: categoryKey,
                         name: name,
                         description: desc,
                         username: username,
@@ -1800,6 +1859,7 @@ namespace MWPV.View.UserControls
                             afterEmail: emailPlain,
                             afterPin: pinPlain,
                             afterIsActive: isActive,
+                            afterCategoryKey: categoryKey,
                             passwordChangedByFingerprint: passwordChangedByFingerprint);
 
                         if (changes.Any)
@@ -1810,6 +1870,13 @@ namespace MWPV.View.UserControls
                                 itemName: name,
                                 changes: changes);
                         }
+                    }
+
+                    var savedCategory = CategoryService.LoadCategoryByKey(categoryKey);
+                    if (savedCategory != null)
+                    {
+                        _categoryKey = savedCategory.CategoryKey;
+                        _categoryName = savedCategory.Name;
                     }
 
                 SetStatus("");
@@ -1825,6 +1892,22 @@ namespace MWPV.View.UserControls
                     title: "Cannot Reactivate Item",
                     body: ex.Message,
                     debugContext: "ITEM-REACTIVATE-BLOCKED");
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Validation failed: {ex.Message}");
+#endif
+                SetStatus(ex.Message);
+                return false;
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+#if DEBUG
+                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Validation failed: {ex.Message}");
+#endif
+                SetStatus(ex.Message);
                 return false;
             }
             catch (Exception ex)
@@ -2204,6 +2287,7 @@ namespace MWPV.View.UserControls
 
             // Refresh grid after successful save
             NotifyPanel_RefreshCategoryItemGrid_BestEffort();
+            NotifyPanel_RefreshCategoryGrid_BestEffort();
 
             // Stay on Basic tab
             ForceSelectTab(TabIndexBasic);
