@@ -83,6 +83,7 @@
                         <!-- Pill 1 -->
                         <Button Grid.Column="0"
                                 Tag="{Binding strCategoryItemKey1}"
+                                CommandParameter="{Binding CurrentCategoryName, RelativeSource={RelativeSource AncestorType=local:CategoryItemGrid}}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem1}">
                             <Button.Style>
@@ -104,16 +105,25 @@
                                            HorizontalAlignment="Center"/>
                             </Button.Content>
                             <Button.ToolTip>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding strCategoryItem1}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding strCategoryItemToolTip1}"/>
-                                </StackPanel>
+                                <ToolTip DataContext="{Binding PlacementTarget, RelativeSource={RelativeSource Self}}">
+                                    <StackPanel>
+                                        <TextBlock>
+                                            <Run Text="Item: "/>
+                                            <Run Text="{Binding DataContext.strCategoryItem1}"/>
+                                        </TextBlock>
+                                        <TextBlock>
+                                            <Run Text="Category: "/>
+                                            <Run Text="{Binding CommandParameter}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </ToolTip>
                             </Button.ToolTip>
                         </Button>
 
                         <!-- Pill 2 -->
                         <Button Grid.Column="2"
                                 Tag="{Binding strCategoryItemKey2}"
+                                CommandParameter="{Binding CurrentCategoryName, RelativeSource={RelativeSource AncestorType=local:CategoryItemGrid}}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem2}">
                             <Button.Style>
@@ -135,16 +145,25 @@
                                            HorizontalAlignment="Center"/>
                             </Button.Content>
                             <Button.ToolTip>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding strCategoryItem2}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding strCategoryItemToolTip2}"/>
-                                </StackPanel>
+                                <ToolTip DataContext="{Binding PlacementTarget, RelativeSource={RelativeSource Self}}">
+                                    <StackPanel>
+                                        <TextBlock>
+                                            <Run Text="Item: "/>
+                                            <Run Text="{Binding DataContext.strCategoryItem2}"/>
+                                        </TextBlock>
+                                        <TextBlock>
+                                            <Run Text="Category: "/>
+                                            <Run Text="{Binding CommandParameter}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </ToolTip>
                             </Button.ToolTip>
                         </Button>
 
                         <!-- Pill 3 -->
                         <Button Grid.Column="4"
                                 Tag="{Binding strCategoryItemKey3}"
+                                CommandParameter="{Binding CurrentCategoryName, RelativeSource={RelativeSource AncestorType=local:CategoryItemGrid}}"
                                 Click="ItemPill_Click"
                                 AutomationProperties.Name="{Binding strCategoryItem3}">
                             <Button.Style>
@@ -166,10 +185,18 @@
                                            HorizontalAlignment="Center"/>
                             </Button.Content>
                             <Button.ToolTip>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding strCategoryItem3}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding strCategoryItemToolTip3}"/>
-                                </StackPanel>
+                                <ToolTip DataContext="{Binding PlacementTarget, RelativeSource={RelativeSource Self}}">
+                                    <StackPanel>
+                                        <TextBlock>
+                                            <Run Text="Item: "/>
+                                            <Run Text="{Binding DataContext.strCategoryItem3}"/>
+                                        </TextBlock>
+                                        <TextBlock>
+                                            <Run Text="Category: "/>
+                                            <Run Text="{Binding CommandParameter}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </ToolTip>
                             </Button.ToolTip>
                         </Button>
 

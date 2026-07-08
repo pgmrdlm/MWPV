@@ -290,6 +290,7 @@
                         <Button x:Name="btnSubmit"
                                 Style="{StaticResource DialogPrimary}"
                                 Click="btnSubmit_Click"
+                                ToolTip="Submit the entered password and key file."
                                 Margin="0,0,12,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8FB;" Margin="0,0,8,0"/>
@@ -299,6 +300,7 @@
 
                         <Button x:Name="btnCancel"
                                 Style="{StaticResource DialogSecondary}"
+                                ToolTip="Cancel and close this window."
                                 Click="btnCancel_Click">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" Margin="0,0,8,0"/>

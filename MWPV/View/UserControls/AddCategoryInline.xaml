@@ -139,6 +139,7 @@
                         Style="{StaticResource DialogPrimary}"
                         IsDefault="True"
                         Click="btnAddCategory_Click"
+                        ToolTip="Save this category."
                         Margin="0,0,12,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -151,6 +152,7 @@
                 <Button x:Name="btnCancel"
                         Style="{StaticResource DialogSecondary}"
                         IsCancel="True"
+                        ToolTip="Cancel category changes."
                         Click="btnCancel_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock FontFamily="Segoe MDL2 Assets"

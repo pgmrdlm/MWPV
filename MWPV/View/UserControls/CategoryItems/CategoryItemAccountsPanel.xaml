@@ -117,6 +117,7 @@
                     <ComboBox x:Name="AccountTypeCombo"
                               Height="28"
                               HorizontalAlignment="Stretch"
+                              ToolTip="Select the account type."
                               ItemsSource="{Binding AccountTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
@@ -233,6 +234,7 @@
                     <CheckBox x:Name="ChkAccountActive"
                               IsChecked="True"
                               HorizontalAlignment="Left"
+                              ToolTip="Mark this saved account active."
                               VerticalAlignment="Center" />
                 </StackPanel>
                 <!-- ROW 2 (ROW-LEVEL buttons) -->
@@ -245,10 +247,12 @@
                             Margin="0,0,12,0"
                             Content="Add"
                             Style="{StaticResource DialogPrimary}"
+                            ToolTip="Add or update this account row."
                             Click="OnAccountAddOrUpdateClick" />
                     <Button x:Name="BtnAccountClearRow"
                             Content="Clear Row"
                             Style="{StaticResource DialogSecondary}"
+                            ToolTip="Clear the account entry fields."
                             Click="OnAccountClearRowClick" />
                 </StackPanel>
 
@@ -297,6 +301,7 @@
                         <Button x:Name="BtnAccountEditSelected"
                                 Content="Edit"
                                 Style="{StaticResource GridActionEditButton}"
+                                ToolTip="Edit the selected saved account."
                                 Click="OnAccountEditClick" />
                     </StackPanel>
                 </Grid>
@@ -372,10 +377,12 @@
                         Content="Save"
                         Style="{StaticResource DialogPrimary}"
                         Margin="0,0,12,0"
+                        ToolTip="Save account changes."
                         Click="OnTabSaveClick" />
                 <Button x:Name="BtnTabCancel"
                         Content="Cancel"
                         Style="{StaticResource DialogSecondary}"
+                        ToolTip="Cancel account changes."
                         Click="OnTabCancelClick" />
             </StackPanel>
         </Grid>

@@ -108,26 +108,30 @@
                         SelectedIndex="0">
 
                 <!-- ========== BASIC TAB ========== -->
-                <TabItem Header="Basic">
+                <TabItem Header="Basic"
+                         ToolTip="Edit basic item details.">
                     <categoryItems:CategoryItemBasicPanel x:Name="BasicPanel"/>
                 </TabItem>
 
                 <!-- ========== ACCOUNTS TAB ========== -->
-                <TabItem Header="Accounts">
+                <TabItem Header="Accounts"
+                         ToolTip="Manage saved accounts.">
                     <Grid Margin="20" Background="Bisque">
                         <categoryItems:CategoryItemAccountsPanel x:Name="AccountsPanel"/>
                     </Grid>
                 </TabItem>
 
                 <!-- ========== BANK CARDS TAB ========== -->
-                <TabItem Header="Bank Cards">
+                <TabItem Header="Bank Cards"
+                         ToolTip="Manage saved bank cards.">
                     <Grid Margin="20" Background="Bisque">
                         <categoryItems:CategoryItemBankCardsPanel x:Name="BankCardsPanel"/>
                     </Grid>
                 </TabItem>
 
                 <!-- ========== SECURITY QUESTIONS TAB ========== -->
-                <TabItem Header="Security Q/A">
+                <TabItem Header="Security Q/A"
+                         ToolTip="Manage security questions and answers.">
                     <Grid Margin="20" Background="Bisque">
                         <categoryItems:CategoryItemSecurityQuestionsPanel x:Name="SecurityQuestionsPanel"/>
                     </Grid>

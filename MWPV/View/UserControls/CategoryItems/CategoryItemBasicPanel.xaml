@@ -163,6 +163,7 @@
                         Margin="12,0,0,0"
                         VerticalAlignment="Center"
                         Visibility="Collapsed"
+                        ToolTip="Edit this category item."
                         Click="btnEditPill_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -370,7 +371,7 @@
             <Button x:Name="btnToggleVerifyReveal"
                     Grid.Column="2"
                     Style="{StaticResource SmallSquarePrimaryButton}"
-                    ToolTip="Show/Hide verification"
+                    ToolTip="Show or hide the verification password."
                     Margin="4,0,0,0"
                     Visibility="Collapsed"
                     Click="BtnToggleVerifyReveal_Click">
@@ -504,7 +505,7 @@
                     Margin="6,0,0,0"
                     Visibility="Visible"
                     IsEnabled="True"
-                    ToolTip="Show/Hide PIN"
+                    ToolTip="Show or hide the PIN."
                     Click="Pin_ToggleReveal_Click">
                 <Viewbox Stretch="Uniform">
                     <Grid Width="20" Height="20">
@@ -663,7 +664,7 @@
                 <Button x:Name="btnTogglePhoneReveal"
                         Grid.Column="2"
                         Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show/Hide phone number"
+                        ToolTip="Show or hide the phone number."
                         Click="BtnTogglePhoneReveal_Click">
                     <Viewbox Stretch="Uniform">
                         <Grid Width="20" Height="20">
@@ -730,7 +731,7 @@
                 <Button x:Name="btnTogglePrimaryAccountNumberReveal"
                         Grid.Column="2"
                         Style="{StaticResource SmallSquarePrimaryButton}"
-                        ToolTip="Show/Hide primary account number"
+                        ToolTip="Show or hide the primary account number."
                         Click="BtnTogglePrimaryAccountNumberReveal_Click">
                     <Viewbox Stretch="Uniform">
                         <Grid Width="20" Height="20">
@@ -800,7 +801,7 @@
                         Grid.Column="2"
                         Style="{StaticResource SmallSquarePrimaryButton}"
                         Margin="6,0,0,0"
-                        ToolTip="Show/Hide email"
+                        ToolTip="Show or hide the email."
                         Click="BtnToggleEmailReveal_Click">
                     <Viewbox Stretch="Uniform">
                         <Grid Width="20" Height="20">
@@ -907,6 +908,7 @@
                 <Button x:Name="btnSubmit"
                         Style="{StaticResource DialogPrimary}"
                         Margin="0,0,12,0"
+                        ToolTip="Save item changes and close the editor."
                         Click="btnSubmit_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -919,6 +921,7 @@
 
                 <Button x:Name="btnCancel"
                         Style="{StaticResource DialogSecondary}"
+                        ToolTip="Close the editor without saving current changes."
                         Click="btnCancel_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock FontFamily="Segoe MDL2 Assets"

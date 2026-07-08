@@ -201,6 +201,7 @@
                               IsChecked="True"
                               HorizontalAlignment="Left"
                               VerticalAlignment="Center"
+                              ToolTip="Mark this security question active."
                               Checked="SecurityQuestionActive_Changed"
                               Unchecked="SecurityQuestionActive_Changed" />
                 </StackPanel>
@@ -214,10 +215,12 @@
                             Margin="0,0,12,0"
                             Content="Add"
                             Style="{StaticResource DialogPrimary}"
+                            ToolTip="Add or update this security question row."
                             Click="OnSecurityQuestionAddOrUpdateClick" />
                     <Button x:Name="BtnSecurityQuestionClearRow"
                             Content="Clear Row"
                             Style="{StaticResource DialogSecondary}"
+                            ToolTip="Clear the security question entry fields."
                             Click="OnSecurityQuestionClearRowClick" />
                 </StackPanel>
             </Grid>
@@ -262,6 +265,7 @@
                         <Button x:Name="BtnSecurityQuestionEditSelected"
                                 Content="Edit"
                                 Style="{StaticResource GridActionButton}"
+                                ToolTip="Edit the selected security question."
                                 Click="OnSecurityQuestionEditClick" />
                     </StackPanel>
                 </Grid>
@@ -332,10 +336,12 @@
                         Content="Save"
                         Style="{StaticResource DialogPrimary}"
                         Margin="0,0,12,0"
+                        ToolTip="Save security question changes."
                         Click="OnTabSaveClick" />
                 <Button x:Name="BtnTabCancel"
                         Content="Cancel"
                         Style="{StaticResource DialogSecondary}"
+                        ToolTip="Cancel security question changes."
                         Click="OnTabCancelClick" />
             </StackPanel>
         </Grid>

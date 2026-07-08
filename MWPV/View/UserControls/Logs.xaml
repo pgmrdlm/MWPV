@@ -27,6 +27,7 @@
                     Content="Close"
                     Style="{StaticResource DialogSecondary}"
                     Padding="16,4"
+                    ToolTip="Close the log viewer."
                     Click="Close_Click"
                     MinWidth="80" />
 
@@ -47,6 +48,7 @@
                           Background="Transparent"
                           BorderThickness="0"
                           VerticalAlignment="Center"
+                          ToolTip="Filter the log list by event code."
                           DisplayMemberPath="Description"
                           SelectedValuePath="Code"
                           SelectionChanged="Type_SelectionChanged"
@@ -78,6 +80,7 @@
                           HorizontalAlignment="Center"
                           VerticalAlignment="Stretch"
                           Background="#20000000"
+                          ToolTip="Drag to resize the log list and details panes."
                           ShowsPreview="True"
                           ResizeBehavior="PreviousAndNext"/>
 

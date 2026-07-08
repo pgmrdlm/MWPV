@@ -130,6 +130,7 @@
                     <ComboBox x:Name="CardTypeCombo"
                               Height="28"
                               HorizontalAlignment="Stretch"
+                              ToolTip="Select the card type."
                               ItemsSource="{Binding CardTypeItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               DisplayMemberPath="DisplayText"
                               SelectedValuePath="ComboDetailId"
@@ -265,6 +266,7 @@
                                FontWeight="Bold" />
                     <CheckBox x:Name="ChkCardActive"
                               IsChecked="True"
+                              ToolTip="Mark this saved card active."
                               HorizontalAlignment="Left"
                               VerticalAlignment="Center" />
                 </StackPanel>
@@ -448,10 +450,12 @@
                             Margin="0,0,12,0"
                             Content="Add"
                             Style="{StaticResource DialogPrimary}"
+                            ToolTip="Add or update this card row."
                             Click="OnBankCardAddOrUpdateClick" />
                     <Button x:Name="BtnBankCardClearRow"
                             Content="Clear Row"
                             Style="{StaticResource DialogSecondary}"
+                            ToolTip="Clear the card entry fields."
                             Click="OnBankCardClearRowClick" />
                 </StackPanel>
 
@@ -500,10 +504,12 @@
                         <Button x:Name="BtnBankCardEditSelected"
                                 Content="Edit"
                                 Style="{StaticResource GridActionEditButton}"
+                                ToolTip="Edit the selected saved card."
                                 Click="OnBankCardEditClick" />
                         <Button x:Name="BtnBankCardDeleteSelected"
                                 Content="Delete"
                                 Style="{StaticResource GridActionDeleteButton}"
+                                ToolTip="Delete the selected saved card."
                                 Click="OnBankCardDeleteClick" />
                     </StackPanel>
                 </Grid>
@@ -589,10 +595,12 @@
                         Content="Save"
                         Style="{StaticResource DialogPrimary}"
                         Margin="0,0,12,0"
+                        ToolTip="Save card changes."
                         Click="OnTabSaveClick" />
                 <Button x:Name="BtnTabCancel"
                         Content="Cancel"
                         Style="{StaticResource DialogSecondary}"
+                        ToolTip="Cancel card changes."
                         Click="OnTabCancelClick" />
             </StackPanel>
         </Grid>

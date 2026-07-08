@@ -81,12 +81,14 @@
                                      Content="In Use"
                                      GroupName="CategoryViewMode"
                                      IsChecked="True"
+                                     ToolTip="Show only categories currently in use."
                                      Checked="CategoryViewRadio_Checked"
                                      VerticalAlignment="Center"
                                      Margin="0,0,12,0"/>
                         <RadioButton x:Name="rbCategoryViewAllActive"
                                      Content="All Categories"
                                      GroupName="CategoryViewMode"
+                                     ToolTip="Show all active categories."
                                      Checked="CategoryViewRadio_Checked"
                                      VerticalAlignment="Center"/>
                     </StackPanel>
@@ -97,6 +99,7 @@
                                 Margin="0,0,0,8">
                         <Button x:Name="btnAddCategory"
                                 Content="Add Category"
+                                ToolTip="Add a new category."
                                 Click="btnAddCategory_Click"
                                 Style="{StaticResource DialogPrimary}"/>
                     </StackPanel>
@@ -144,12 +147,14 @@
                                          Content="Active Items"
                                          GroupName="CategoryItemViewMode"
                                          IsChecked="True"
+                                         ToolTip="Show only active items for the selected category."
                                          Checked="CategoryItemViewRadio_Checked"
                                          VerticalAlignment="Center"
                                          Margin="0,0,12,0"/>
                             <RadioButton x:Name="rbCategoryItemViewAllItems"
                                          Content="All Items"
                                          GroupName="CategoryItemViewMode"
+                                         ToolTip="Show active and inactive items for the selected category."
                                          Checked="CategoryItemViewRadio_Checked"
                                          VerticalAlignment="Center"/>
                         </StackPanel>
@@ -161,6 +166,7 @@
                             <Button x:Name="btnAddCategoryItem"
                                     Content="Add Item"
                                     Visibility="Collapsed"
+                                    ToolTip="Add a new item to the selected category."
                                     Click="btnAddCategoryItem_Click"
                                     Style="{StaticResource DialogPrimary}"/>
                         </StackPanel>
