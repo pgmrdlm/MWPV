@@ -119,7 +119,16 @@
         </Border>
 
         <!-- MENU (Auto) -->
-        <userControls:MenuBar x:Name="MenuBar" Grid.Row="1"/>
+        <Grid Grid.Row="1">
+            <userControls:MenuBar x:Name="MenuBar"/>
+            <Border x:Name="MenuLockOverlay"
+                    Background="Transparent"
+                    Visibility="Collapsed"
+                    Panel.ZIndex="10"
+                    ToolTipService.ShowDuration="6000"
+                    ToolTipService.InitialShowDelay="250"
+                    ToolTip="You cannot leave item edit mode until you save, cancel, or close the item edit screen."/>
+        </Grid>
 
         <!-- CONTENT VIEWPORT (row *) — Panel hosts its own outer ScrollViewer -->
         <userControls:Panel x:Name="Panel" Grid.Row="2"/>

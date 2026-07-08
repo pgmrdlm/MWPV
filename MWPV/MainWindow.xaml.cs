@@ -47,6 +47,7 @@ namespace MWPV
         public MainWindow()
         {
             InitializeComponent();
+            Panel.NavigationLockChanged += Panel_NavigationLockChanged;
 
             Title = "MWPV - My Windows Password Vault";
             LoadVersionDisplay();
@@ -161,6 +162,8 @@ namespace MWPV
             _uiLockedDown = locked;
 
             TrySetMenuBarEnabled(!locked);
+            if (MenuLockOverlay != null)
+                MenuLockOverlay.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
 
             if (locked)
             {
@@ -170,6 +173,11 @@ namespace MWPV
             {
                 ClearStatus();
             }
+        }
+
+        private void Panel_NavigationLockChanged(object? sender, MWPV.View.UserControls.Panel.NavigationLockChangedEventArgs e)
+        {
+            SetUiLockdown(e.IsLocked, e.Message);
         }
 
         private void TrySetMenuBarEnabled(bool enabled)
