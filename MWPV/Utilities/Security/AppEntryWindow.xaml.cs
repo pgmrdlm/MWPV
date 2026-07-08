@@ -20,6 +20,7 @@
 //     tbCapsWarnVerify
 
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices; // SecureString marshal
 using System.Security;                // SecureString
@@ -69,6 +70,7 @@ namespace Utilities.Security
         // Avoid thrashing UI updates while typing; track per PasswordBox focus session.
         private bool _capsWarnShownForPassword;
         private bool _capsWarnShownForVerify;
+        private bool _allowUpgradeCloseAfterWarning;
 
         public AppEntryWindow()
         {
@@ -493,6 +495,29 @@ namespace Utilities.Security
             HideCapsWarningFor(pbVerifyPassword);
 
             Close();
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            if (DialogResult == true ||
+                MWPV.AppRunState.StartupContext.RunMode != AppRunMode.Upgrade ||
+                _allowUpgradeCloseAfterWarning)
+            {
+                base.OnClosing(e);
+                return;
+            }
+
+            bool closeAnyway = UpgradeCloseWarningPopupHelper.Show(this);
+
+            if (!closeAnyway)
+            {
+                e.Cancel = true;
+                base.OnClosing(e);
+                return;
+            }
+
+            _allowUpgradeCloseAfterWarning = true;
+            base.OnClosing(e);
         }
 
         protected override void OnClosed(EventArgs e)

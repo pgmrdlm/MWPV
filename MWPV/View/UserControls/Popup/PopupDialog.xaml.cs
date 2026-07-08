@@ -37,6 +37,9 @@ namespace MWPV.View.UserControls.Popup
             Abort = 2
         }
 
+        public PopupResult? EnterResult { get; set; }
+        public PopupResult? InitialFocusResult { get; set; }
+
         // =========================
         // Event: host listens
         // =========================
@@ -141,8 +144,7 @@ namespace MWPV.View.UserControls.Popup
             // Keyboard: make sure it feels "forced"
             Loaded += (_, __) =>
             {
-                Focus();
-                Keyboard.Focus(this);
+                ApplyInitialFocus();
             };
         }
 
@@ -242,6 +244,26 @@ namespace MWPV.View.UserControls.Popup
             RaiseCompleted(PopupResult.Cancel);
         }
 
+        private void ApplyInitialFocus()
+        {
+            if (InitialFocusResult == PopupResult.Accept)
+            {
+                btnPrimary.Focus();
+                Keyboard.Focus(btnPrimary);
+                return;
+            }
+
+            if (InitialFocusResult == PopupResult.Cancel && IsSecondaryVisible)
+            {
+                btnSecondary.Focus();
+                Keyboard.Focus(btnSecondary);
+                return;
+            }
+
+            Focus();
+            Keyboard.Focus(this);
+        }
+
         // =========================
         // Enforced behavior
         // =========================
@@ -267,6 +289,12 @@ namespace MWPV.View.UserControls.Popup
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
+                if (EnterResult.HasValue)
+                {
+                    RaiseCompleted(EnterResult.Value);
+                    return;
+                }
+
                 btnPrimary_Click(this, new RoutedEventArgs());
             }
         }
