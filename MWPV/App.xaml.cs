@@ -1,6 +1,8 @@
 ﻿// File: App.xaml.cs — full file (WPF, .NET 8)
 using MWPV.Services;                   // ✅ LogCatalogService (for SESSION_END)
 using MWPV.Services.AppLifecycle;
+using MWPV.Services.Security;
+using Security.Utility.Wiping;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -25,6 +27,7 @@ namespace MWPV
         private EventWaitHandle? _bringToFrontEvent;
         private Thread? _bringToFrontListener;
         private bool _ownsMutex;
+        private static int _sensitiveShutdownCleanupRan;
 
         // ===== Inactivity input hook (app-scoped) =====
         // Any app component can subscribe and reset its inactivity timer.
@@ -267,6 +270,8 @@ namespace MWPV
             }
             catch { /* swallow */ }
 
+            RunSensitiveShutdownCleanup();
+
             // ✅ Unhook inactivity input hook
             UnhookUserInput();
 
@@ -472,7 +477,37 @@ namespace MWPV
             }
             catch
             {
+                RunSensitiveShutdownCleanupFatalLastDitch();
                 Environment.Exit((int)AppExitCode.UnhandledFatalError);
+            }
+        }
+
+        internal static void RunSensitiveShutdownCleanupFatalLastDitch()
+        {
+            RunSensitiveShutdownCleanup();
+        }
+
+        private static void RunSensitiveShutdownCleanup()
+        {
+            if (Interlocked.Exchange(ref _sensitiveShutdownCleanupRan, 1) == 1)
+                return;
+
+            try
+            {
+                SensitiveClipboardService.Shared.ClearIfOwned();
+            }
+            catch
+            {
+                // Shutdown cleanup is best-effort and must never surface UI.
+            }
+
+            try
+            {
+                SensitiveDataCleaner.WipeAll();
+            }
+            catch
+            {
+                // Shutdown cleanup is best-effort and must never mask the original exit reason.
             }
         }
 

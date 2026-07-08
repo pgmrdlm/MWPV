@@ -194,6 +194,7 @@ namespace Utilities.Helpers
             }
             catch
             {
+                MWPV.App.RunSensitiveShutdownCleanupFatalLastDitch();
                 Environment.Exit((int)AppExitCode.UnhandledFatalError);
             }
         }
