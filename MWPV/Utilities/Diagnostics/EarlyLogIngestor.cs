@@ -1,6 +1,5 @@
 ﻿// File: Utilities/Diagnostics/EarlyLogIngestor.cs
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -27,7 +26,6 @@ namespace Utilities.Diagnostics
             var files = Directory.GetFiles(dir, $"*{EarlyLoginFailures.FileExt}", SearchOption.TopDirectoryOnly);
             if (files.Length == 0)
             {
-                Debug.WriteLine("[EarlyIngest] No early files found.");
                 return;
             }
 
@@ -98,7 +96,6 @@ namespace Utilities.Diagnostics
                     var id = LogCatalogService.Insert(req);
                     if (id > 0)
                     {
-                        Debug.WriteLine($"[EarlyIngest] Inserted id={id} from {Path.GetFileName(path)}");
                         inserted++;
                         SecureDelete(path);
                     }
@@ -114,8 +111,6 @@ namespace Utilities.Diagnostics
                     failed++;
                 }
             }
-
-            Debug.WriteLine($"[EarlyIngest] total={total} inserted={inserted} quarantined={quarantined} failed={failed}");
         }
 
         private static string Sha256Hex(byte[] data)

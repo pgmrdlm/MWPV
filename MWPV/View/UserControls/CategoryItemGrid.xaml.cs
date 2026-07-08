@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -49,9 +48,6 @@ namespace MWPV.View.UserControls
             // (Your current XAML uses RelativeSource, so this isn't required, but harmless.)
             DataContext = this;
 
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][CTOR] Initialized. DataContext=self.");
-#endif
         }
 
         // ------------------------------------------------------------
@@ -60,17 +56,11 @@ namespace MWPV.View.UserControls
 
         public void Clear()
         {
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][CLEAR][ENTER]");
-#endif
             _currentCategoryKey = 0;
             _currentCategoryName = string.Empty;
 
             try { BoundCategoryItems.Clear(); } catch { /* ignore */ }
 
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][CLEAR][EXIT]");
-#endif
         }
 
         public void Refresh(
@@ -78,9 +68,6 @@ namespace MWPV.View.UserControls
             string? categoryName = null,
             CategoryItemService.CategoryItemGridViewMode viewMode = CategoryItemService.CategoryItemGridViewMode.ActiveItems)
         {
-#if DEBUG
-            Debug.WriteLine($"[ITEMS_GRID][REFRESH][ENTER] catKey={categoryKey}, catName='{categoryName ?? _currentCategoryName}'");
-#endif
             _currentCategoryKey = categoryKey;
             _viewMode = viewMode;
 
@@ -91,18 +78,11 @@ namespace MWPV.View.UserControls
 
             if (categoryKey <= 0)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEMS_GRID][REFRESH] Skipped (catKey <= 0).");
-                Debug.WriteLine("[ITEMS_GRID][REFRESH][EXIT]");
-#endif
                 return;
             }
 
             try
             {
-#if DEBUG
-                Debug.WriteLine("[ITEMS_GRID][REFRESH] Calling CategoryItemService.LoadCategoryItems(catKey)...");
-#endif
                 var rows = CategoryItemService.LoadCategoryItems(categoryKey, _viewMode);
                 if (rows != null)
                 {
@@ -110,20 +90,10 @@ namespace MWPV.View.UserControls
                         BoundCategoryItems.Add(r);
                 }
 
-#if DEBUG
-                Debug.WriteLine($"[ITEMS_GRID][REFRESH] Loaded rows={BoundCategoryItems.Count} for catKey={categoryKey}, name='{_currentCategoryName}'");
-#endif
             }
-            catch (Exception ex)
+            catch
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEMS_GRID][REFRESH][ERR] {ex}");
-#endif
             }
-
-#if DEBUG
-            Debug.WriteLine("[ITEMS_GRID][REFRESH][EXIT]");
-#endif
         }
 
         // ------------------------------------------------------------
@@ -143,30 +113,18 @@ namespace MWPV.View.UserControls
                 // Extra defensive: ignore blank pills even if style fails to collapse.
                 if (string.IsNullOrWhiteSpace(label))
                 {
-#if DEBUG
-                    Debug.WriteLine("[ITEMS_GRID][CLICK] Ignored (blank label).");
-#endif
                     return;
                 }
 
                 if (!TryParseItemId(tag, out int itemId) || itemId <= 0)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEMS_GRID][CLICK] IGNORE label='{label}' tag='{tag}' (invalid ItemId)");
-#endif
                     return;
                 }
 
-#if DEBUG
-                Debug.WriteLine($"[ITEMS_GRID][CLICK] EDIT label='{label}' ItemId={itemId} catKey={_currentCategoryKey} catName='{_currentCategoryName}'");
-#endif
                 EditRequested?.Invoke(this, itemId);
             }
-            catch (Exception ex)
+            catch
             {
-#if DEBUG
-                Debug.WriteLine("[ITEMS_GRID][CLICK][ERR] " + ex);
-#endif
             }
         }
 

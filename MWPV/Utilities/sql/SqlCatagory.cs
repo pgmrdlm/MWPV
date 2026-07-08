@@ -138,12 +138,10 @@ namespace Utilities.Sql
                 {
                     if (SecureEncryptedDataStore.HasKey(key))
                     {
-                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][HIT ] {key} (secret present)");
                         hits++;
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (secret missing)");
                         misses++;
                     }
                     continue;
@@ -152,7 +150,6 @@ namespace Utilities.Sql
                 // Normal SQL artifact: cache the text
                 if (!SecureEncryptedDataStore.HasKey(key))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (not in secure store)");
                     misses++;
                     continue;
                 }
@@ -163,24 +160,18 @@ namespace Utilities.Sql
                     if (!string.IsNullOrWhiteSpace(sqlText))
                     {
                         _sqlCache[key] = sqlText;
-                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][HIT ] {key}");
                         hits++;
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (empty)");
                         misses++;
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SQLCAT][MISS] {key} (read error: {ex.Message})");
                     misses++;
                 }
             }
-
-            // Final summary
-            System.Diagnostics.Debug.WriteLine($"[SQLCAT] summary: hits={hits} misses={misses} cached={_sqlCache.Count}");
         }
 
         /// <summary>

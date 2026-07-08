@@ -17,7 +17,6 @@ namespace MWPV.Converters
         }*/
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            System.Diagnostics.Debug.WriteLine($"Converter called with value: '{value}'");
             return string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
         }
 

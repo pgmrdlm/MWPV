@@ -53,7 +53,6 @@ using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
@@ -378,10 +377,6 @@ namespace MWPV.Services
             if (!decryptOk)
             {
                 try { SecureEncryptedDataStore.Clear(sedsKey); } catch { }
-
-#if DEBUG
-                Debug.WriteLine($"[CI][BEFORE-SIG] SKIP (decrypt failed) sedsKey={sedsKey} purpose={purpose}");
-#endif
                 return;
             }
 
@@ -399,11 +394,6 @@ namespace MWPV.Services
                     // Store as Base64 string (non-sensitive signature bytes)
                     string b64 = Convert.ToBase64String(sig);
                     SecureEncryptedDataStore.SetString(sedsKey, b64);
-
-#if DEBUG
-                    bool present = !string.IsNullOrWhiteSpace(value);
-                    Debug.WriteLine($"[CI][BEFORE-SIG] CAPTURED sedsKey={sedsKey} purpose={purpose} sigLen={sig.Length} present={present}");
-#endif
                 }
                 finally
                 {
@@ -438,16 +428,9 @@ namespace MWPV.Services
             try
             {
                 CaptureBeforeSignatureToSeds(sigSedsKey, sigPurpose, plain, decOk);
-
-#if DEBUG
-                Debug.WriteLine($"[CI][BEFORE-SIG] itemId={itemId} field={fieldNameForDebug} decOk={decOk} plainLen={(plain == null ? -1 : plain.Length)} cipherLen={(cipherBlob == null ? -1 : cipherBlob.Length)}");
-#endif
             }
-            catch (Exception ex)
+            catch
             {
-#if DEBUG
-                Debug.WriteLine($"[CI][BEFORE-SIG] CAPTURE FAILED itemId={itemId} field={fieldNameForDebug}: {ex}");
-#endif
                 // Fail-safe: clear the key to avoid stale/incorrect comparisons
                 try { SecureEncryptedDataStore.Clear(sigSedsKey); } catch { }
             }
@@ -553,10 +536,6 @@ namespace MWPV.Services
                 AddText(cmd, "@CI_Name", name.Trim());
                 AddInt64Nullable(cmd, "@ExcludeItemId", excludeItemId);
 
-#if DEBUG
-                DebugDumpParams(cmd, "[CAT_ITEM][NAME_EXISTS_GLOBAL][PARAMS]");
-#endif
-
                 using var r = cmd.ExecuteReader();
                 return r.Read();
             }
@@ -592,10 +571,6 @@ namespace MWPV.Services
 
                 AddInt64(cmd, "@CIPaH_ItemId", itemId);
                 AddBlob(cmd, "@CIPaH_PwFp", fp);
-
-#if DEBUG
-                DebugDumpParams(cmd, "[PW_REUSE_365][PARAMS]");
-#endif
 
                 object? scalar = cmd.ExecuteScalar();
                 if (scalar == null || scalar == DBNull.Value)
@@ -649,9 +624,6 @@ namespace MWPV.Services
                 }
                 catch
                 {
-#if DEBUG
-                    Debug.WriteLine("[PW_REUSE_ANYWHERE] SQL asset missing: s_CategoryItemPasswordHistory_check_reuse_anywhere.sql (returning false).");
-#endif
                     return false;
                 }
 
@@ -661,10 +633,6 @@ namespace MWPV.Services
 
                 // IMPORTANT: reuse-check SQL expects @CIPaH_PwFp
                 AddBlob(cmd, "@CIPaH_PwFp", pwFp);
-
-#if DEBUG
-                DebugDumpParams(cmd, "[PW_REUSE_ANYWHERE][BY_FP][PARAMS]");
-#endif
 
                 object? scalar = cmd.ExecuteScalar();
                 if (scalar == null || scalar == DBNull.Value)
@@ -753,12 +721,6 @@ namespace MWPV.Services
             {
                 var sql = LoadSqlRequired("s_CategoryItem_update.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_update.sql");
-                Debug.WriteLine(sql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
@@ -778,19 +740,12 @@ namespace MWPV.Services
                 AddBlobIfSqlUses(cmd, sql, "@CI_AccountPhoneNumber", accountPhoneCipher);
                 AddBlobIfSqlUses(cmd, sql, "@CI_Pin", pinCipher);
 
-#if DEBUG
-                DebugDumpParams(cmd, "[BASIC][DB][ITEM_UPDATE][PARAMS]");
-#endif
-
                 var scalar = cmd.ExecuteScalar();
                 if (scalar == null || scalar == DBNull.Value)
                     throw new InvalidOperationException("Update failed (no RowsAffected returned)");
 
                 int rows = Convert.ToInt32(scalar, CultureInfo.InvariantCulture);
 
-#if DEBUG
-                Debug.WriteLine($"[BASIC][DB][ITEM_UPDATE] itemId={itemId} rowsAffected={rows}");
-#endif
                 return rows;
             }
             catch (Exception ex)
@@ -843,21 +798,11 @@ namespace MWPV.Services
             {
                 var sql = LoadSqlRequired("s_CategoryItem_select_by_id.sql");
 
-#if DEBUG
-                Debug.WriteLine("[SQL][TEXT] >>> s_CategoryItem_select_by_id.sql");
-                Debug.WriteLine(sql);
-                Debug.WriteLine("[SQL][TEXT] <<<");
-#endif
-
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = sql;
 
                 AddInt64(cmd, "@ItemId", itemId);
-
-#if DEBUG
-                DebugDumpParams(cmd, "[BASIC][DB][ITEM_SELECT][PARAMS]");
-#endif
 
                 using var r = cmd.ExecuteReader();
                 if (!r.Read())
@@ -919,10 +864,6 @@ namespace MWPV.Services
                     sigSedsKey: SedsKey_BeforeSig_Pin,
                     sigPurpose: Purpose_CI_Pin_BeforeSig,
                     out pinPlain);
-
-#if DEBUG
-                Debug.WriteLine($"[CI][BEFORE-SIG] COMPLETE itemId={itemId} (Email/Phone/PIN) captured into SEDS. decOk: email={emailDecOk} phone={phoneDecOk} pin={pinDecOk}");
-#endif
 
                 return new CategoryItemBasicRow
                 {
@@ -1941,10 +1882,6 @@ LIMIT 1;";
             AddInt32(cmd, "@IsPrimary", isPrimary ? 1 : 0);
             AddInt32(cmd, "@IsActive", isActive ? 1 : 0);
 
-#if DEBUG
-            DebugDumpParams(cmd, "[BANKCARD][INSERT][PARAMS]");
-#endif
-
             var scalar = cmd.ExecuteScalar();
             if (scalar == null || scalar == DBNull.Value)
                 throw new InvalidOperationException("BankCard insert failed (no Id returned)");
@@ -1995,10 +1932,6 @@ LIMIT 1;";
             AddBlobIfSqlUses(cmd, sql, "@BillingZip", billingZipCipher);
             AddInt32IfSqlUses(cmd, sql, "@IsPrimary", isPrimary ? 1 : 0);
             AddInt32IfSqlUses(cmd, sql, "@IsActive", isActive ? 1 : 0);
-
-#if DEBUG
-            DebugDumpParams(cmd, "[BANKCARD][UPDATE][PARAMS]");
-#endif
 
             return cmd.ExecuteNonQuery();
         }
@@ -2371,10 +2304,6 @@ LIMIT 1;";
 
             AddInt32NullableIfSqlUses(cmd, sql, "@IsActive", isActive);
 
-#if DEBUG
-            DebugDumpParams(cmd, "[CAT_ITEM][INSERT][PARAMS]");
-#endif
-
             var scalar = cmd.ExecuteScalar();
             if (scalar == null || scalar == DBNull.Value)
                 throw new InvalidOperationException("Insert failed (no ItemId returned)");
@@ -2424,10 +2353,6 @@ LIMIT 1;";
 
             // drift-safe: only add if SQL actually uses it
             AddInt32IfSqlUses(cmd, sql, "@FpVersion", fpVersion);
-
-#if DEBUG
-            DebugDumpParams(cmd, "[CAT_ITEM][PW_HIST][INSERT][PARAMS]");
-#endif
 
             var scalar = cmd.ExecuteScalar();
             if (scalar == null || scalar == DBNull.Value)
@@ -2647,21 +2572,6 @@ LIMIT 1;";
             cmd.Parameters.Add(p);
         }
 
-#if DEBUG
-        private static void DebugDumpParams(SqliteCommand cmd, string tag)
-        {
-            Debug.WriteLine(tag);
-
-            foreach (SqliteParameter p in cmd.Parameters)
-            {
-                string v = (p.Value == null || p.Value == DBNull.Value)
-                    ? "NULL"
-                    : (p.Value is byte[] b ? $"BLOB[{b.Length}]" : p.Value.ToString() ?? "");
-
-                Debug.WriteLine($"  {p.ParameterName} = {v} (SqliteType={p.SqliteType})");
-            }
-        }
-#endif
     }
 }
 

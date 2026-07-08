@@ -1,16 +1,15 @@
-// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
+﻿// File: View/UserControls/CategoryItems/CategoryItemBasicPanel.xaml.cs
 //
 // FULL REWRITE
 //
 // Change requested (THIS STEP ONLY):
 // - Increase PIN max length from 6 to 12.
 // - Keep PIN numeric-only.
-// - Update validation message text to 4–12 digits.
+// - Update validation message text to 4â€“12 digits.
 // - No other behavior changes.
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -117,9 +116,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void CategoryItemBasicPanel_Loaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] Loaded");
-#endif
             CacheDefaultFieldVisualsIfNeeded();
             HookUiEventsOnce();
             LoadPasswordLengthSettings();
@@ -139,9 +135,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void CategoryItemBasicPanel_Unloaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] Unloaded");
-#endif
             _revealAutoHide.Stop();
             UnhookUiEvents();
 
@@ -169,9 +162,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             finally
             {
-#if DEBUG
-                Debug.WriteLine($"[BASIC][MODE] CurrentEntityId={_activeEntityId} => {(IsExistingItem ? "EXISTING (VIEW-ONLY)" : "ADD (EDITABLE)")}");
-#endif
             }
         }
 
@@ -238,9 +228,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             UpdateCopyButtonStates();
 
-#if DEBUG
-            Debug.WriteLine($"[BASIC][MODE] Applied: IsExisting={IsExistingItem} EditUnlocked={_editUnlocked} => ViewOnly={viewOnly}");
-#endif
         }
 
         private void UpdateSubmitButtonCaption()
@@ -295,9 +282,6 @@ namespace MWPV.View.UserControls.CategoryItems
             if (!IsExistingItem) return;
             if (!IsViewOnly) return;
 
-#if DEBUG
-            Debug.WriteLine("[BASIC][EDIT] Edit pill clicked -> unlocking edit mode");
-#endif
             _editUnlocked = true;
 
             UpdateCopyButtonStates();
@@ -315,9 +299,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (!IsExistingItem)
             {
-#if DEBUG
-                Debug.WriteLine("[BASIC][POP] Not existing item -> skipping DB populate");
-#endif
                 ApplyModeProtection();
                 return;
             }
@@ -331,9 +312,6 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             if (itemId <= 0) return;
 
-#if DEBUG
-            Debug.WriteLine($"[BASIC][POP] Loading itemId={itemId}");
-#endif
 
             _isPopulating = true;
             try
@@ -347,9 +325,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 var row = CategoryItemService.LoadCategoryItemBasicById(itemId);
                 if (row == null)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[BASIC][POP] DB returned null for itemId={itemId}");
-#endif
                     return;
                 }
 
@@ -362,9 +337,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 if (row.BookMarkOnly == 0)
                 {
                     pwPlain = CategoryItemService.LoadMostRecentPasswordPlainByItemId(itemId);
-#if DEBUG
-                    Debug.WriteLine($"[BASIC][POP] MostRecentPw: {(pwPlain == null ? "NULL" : $"LEN={pwPlain.Length}")}");
-#endif
                 }
 
                 ApplyBasicRowToUi(row, pwPlain);
@@ -507,9 +479,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[BASIC][CATEGORY] Active category choice load failed: {ex}");
-#endif
                 _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
                 if (cmbCategory != null)
                 {
@@ -537,17 +506,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 _sigState.BookMarkOnly.SetOriginal(row.BookMarkOnly == 1);
 
-#if DEBUG
-                Debug.WriteLine($"[BASIC][BEFORE-NON-SIG][{tag}] Loaded originals: " +
-                                $"NameLen={(row.Name?.Length ?? 0)} UserLen={(row.Username?.Length ?? 0)} UrlLen={(row.SignInUrl?.Length ?? 0)} " +
-                                $"DescLen={(row.Description?.Length ?? 0)} BookmarkOnly={row.BookMarkOnly}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[BASIC][BEFORE-NON-SIG][{tag}] FAILED: {ex.GetType().Name} {ex.Message}");
-#endif
             }
         }
 
@@ -625,9 +586,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public void WipeAllForHostClose()
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] WipeAllForHostClose");
-#endif
             ResetUiState();
             WipeSensitiveFields();
         }
@@ -638,9 +596,6 @@ namespace MWPV.View.UserControls.CategoryItems
         /// </summary>
         public void ForceCancelFromHost()
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] ForceCancelFromHost -> raising CancelRequested");
-#endif
             try
             {
                 CancelRequested?.Invoke(this, EventArgs.Empty);
@@ -816,18 +771,12 @@ namespace MWPV.View.UserControls.CategoryItems
             if (itemId <= 0)
             {
                 _sigState.PasswordFingerprint.SetOriginal(null);
-#if DEBUG
-                Debug.WriteLine($"[SIGPW][{tag}] Skipped (invalid itemId)");
-#endif
                 return;
             }
 
             if (chkBookmarkOnly.IsChecked == true)
             {
                 _sigState.PasswordFingerprint.SetOriginal(null);
-#if DEBUG
-                Debug.WriteLine($"[SIGPW][{tag}] BookmarkOnly=1 => ORIGINAL=<null>");
-#endif
                 return;
             }
 
@@ -838,16 +787,10 @@ namespace MWPV.View.UserControls.CategoryItems
 
                 _sigState.PasswordFingerprint.SetOriginal(dbSig);
 
-#if DEBUG
-                Debug.WriteLine($"[SIGPW][{tag}] itemId={itemId} ORIGINAL={(dbSig == null ? "<null>" : Convert.ToHexString(dbSig))}");
-#endif
             }
             catch (Exception ex)
             {
                 _sigState.PasswordFingerprint.SetOriginal(null);
-#if DEBUG
-                Debug.WriteLine($"[SIGPW][{tag}] FAILED to load DB signature: {ex.GetType().Name} {ex.Message}");
-#endif
             }
             finally
             {
@@ -859,14 +802,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] Save clicked");
-#endif
             if (IsViewOnly)
             {
-#if DEBUG
-                Debug.WriteLine("[BASIC] Save suppressed: view-only mode");
-#endif
                 return;
             }
 
@@ -875,9 +812,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void btnCancel_Click(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] Cancel clicked");
-#endif
             CancelRequested?.Invoke(this, EventArgs.Empty);
         }
 
@@ -885,9 +819,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnRevealTimeout()
         {
-#if DEBUG
-            Debug.WriteLine("[BASIC] Reveal timer elapsed, hiding all reveals");
-#endif
             HideAllRevealsAndStopTimer();
             ClearPlainRevealOverlays();
         }
@@ -950,9 +881,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             catch
             {
-#if DEBUG
-                Debug.WriteLine("[BASIC][NAME] Duplicate-check failed (exception).");
-#endif
             }
 
             ClearItemNameError();
@@ -1593,13 +1521,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (!raw.All(char.IsDigit))
             {
-                ShowPinError("PIN must contain digits only (0–9).");
+                ShowPinError("PIN must contain digits only (0â€“9).");
                 return false;
             }
 
             if (raw.Length < PinMinLen || raw.Length > PinMaxLen)
             {
-                ShowPinError("PIN must be 4–12 digits.");
+                ShowPinError("PIN must be 4â€“12 digits.");
                 return false;
             }
 

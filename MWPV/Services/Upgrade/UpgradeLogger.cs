@@ -17,13 +17,11 @@ namespace MWPV.Services.Upgrade
         public void LogPhase(string phase, string message)
         {
             WriteLine($"phase={phase} message={message}");
-            System.Diagnostics.Debug.WriteLine($"[UPGRADE] {phase}: {message}");
         }
 
         public void LogResult(AppExitCode code, string message)
         {
             WriteLine($"result={(int)code} code={code} message={message}");
-            System.Diagnostics.Debug.WriteLine($"[UPGRADE] result={(int)code} {code}: {message}");
         }
 
         public void LogManualRecoveryInstructions(

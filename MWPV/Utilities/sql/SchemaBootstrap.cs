@@ -78,14 +78,6 @@ namespace Utilities.Sql
                 // 4) Everything else: run tolerantly
                 TryExec(conn, sql, stats);
             }
-
-//#if DEBUG
-//            if (VerboseBootstrap)
-//            {
-//                System.Diagnostics.Debug.WriteLine(
-//                    $"[Bootstrap] OK: ran={stats.Ran} skipped: tables={stats.SkippedTables}, cols={stats.SkippedColumns}, indexes={stats.SkippedIndexes}, benignIgnored={stats.BenignIgnored}");
-//            }
-//#endif
         }
 
         private static void TryExec(SqliteConnection conn, string sql, BootstrapStats stats)

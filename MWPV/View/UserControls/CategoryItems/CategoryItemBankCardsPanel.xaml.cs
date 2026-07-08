@@ -17,7 +17,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -253,9 +252,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 EntryLineHasAnyInput() ||
                 _editingRow != null;
 
-#if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] HasHostCloseSessionWork={hasWork} newCardSession={_newCardSessionStarted} hasChanges={_hasChanges} entryLine={EntryLineHasAnyInput()} editingRow={(_editingRow != null)}");
-#endif
 
             return hasWork;
         }
@@ -276,9 +272,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowBankCardError("Bank card entry is disabled for this session.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry disabled.");
-#endif
                 return false;
             }
 
@@ -287,9 +280,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowBankCardError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: entry line still has input.");
-#endif
                 return false;
             }
 
@@ -298,9 +288,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowBankCardError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: blank add session is still pending.");
-#endif
                 return false;
             }
 
@@ -308,9 +295,6 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Save payload blocked: tab validation failed.");
-#endif
                 return false;
             }
 
@@ -320,9 +304,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             rows = _bankCardRows.Select(CloneRow).ToList();
 
-#if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Save payload ready rows={rows.Count}");
-#endif
             return true;
         }
 
@@ -340,16 +321,10 @@ namespace MWPV.View.UserControls.CategoryItems
                 SetErrors(false);
                 UpdateTabButtons();
 
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation completed.");
-#endif
                 return true;
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] Discard preparation failed: {ex}");
-#endif
                 return false;
             }
         }
@@ -530,9 +505,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnRevealTimeout()
         {
-#if DEBUG
-            Debug.WriteLine("[BANK-CARDS-PANEL] Reveal timer elapsed – hiding reveals");
-#endif
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             UpdateTabButtons();
         }
@@ -599,9 +571,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][ERROR] LoadBankCardTypes failed: {ex}");
-#endif
                 _entryDisabled = true;
 
                 ShowBankCardError("Unable to load card types. Bank card entry is disabled for this session.");
@@ -981,9 +950,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (isTrueAddMode)
             {
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] Add-new trigger fired handler=OnBankCardAddOrUpdateClick mode=Add");
-#endif
                 BeginAddNewCardSession();
             }
 
@@ -1142,9 +1108,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearSelectedBankCardDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[BANK-CARDS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
-#endif
                 return;
             }
 
@@ -1156,27 +1119,18 @@ namespace MWPV.View.UserControls.CategoryItems
                     ClearSelectedBankCardDetailSedsBestEffort();
                     _isSelectedProtectedViewActive = false;
                     UpdateTabButtons();
-#if DEBUG
-                    Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Detail not found for itemId={activeItemId.Value} cardId={selected.Id}.");
-#endif
                     return;
                 }
 
                 StoreSelectedBankCardDetailSedsBestEffort(detail);
                 PopulateProtectedViewFromSelectedDetail(detail);
 
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Protected view loaded itemId={activeItemId.Value} cardId={selected.Id}.");
-#endif
             }
             catch (Exception ex)
             {
                 ClearSelectedBankCardDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine($"[BANK-CARDS-PANEL][SELECT] Targeted detail load failed itemId={activeItemId.Value} cardId={selected.Id}: {ex}");
-#endif
             }
         }
 
@@ -1853,9 +1807,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _newCardSessionStarted = true;
 
-#if DEBUG
-            Debug.WriteLine("[BANK-CARDS-PANEL][HOST-CLOSE] New-card session started source=AddNewCommand");
-#endif
         }
 
         private bool HasPendingBlankAddAttempt()
@@ -1873,9 +1824,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _newCardSessionStarted = false;
 
-#if DEBUG
-            Debug.WriteLine($"[BANK-CARDS-PANEL][HOST-CLOSE] New-card session cleared source={source}");
-#endif
         }
 
         private static string TrimToMaxChars(string? value)

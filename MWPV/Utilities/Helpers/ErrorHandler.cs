@@ -45,14 +45,6 @@ namespace Utilities.Helpers
             var sev = MapLevel(severity);
             var now = DateTime.UtcNow;
 
-            // Dev visibility
-            try
-            {
-                System.Diagnostics.Debug.WriteLine($"[{now:O}] [{sev.ToShortTag()}] {category}: {message}");
-                if (ex != null) System.Diagnostics.Debug.WriteLine(ex.ToString());
-            }
-            catch { /* ignore debug channel failures */ }
-
             // Optional external sink (fire-and-forget)
             try
             {
@@ -70,7 +62,7 @@ namespace Utilities.Helpers
             }
             catch (Exception sinkEx)
             {
-                try { System.Diagnostics.Debug.WriteLine($"[LOGSINK FAIL] {sinkEx}"); } catch { }
+                _ = sinkEx;
             }
         }
 

@@ -8,7 +8,6 @@
 // - Marshals to UI thread safely before touching UI controls.
 
 using System;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -131,9 +130,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine("[PANEL][HOST-CLOSE][ERR] " + ex);
-#endif
                 _ = FatalErrorPopupHelper.ShowFatalAsync(
                     "MWPV encountered a fatal error while closing and must close.",
                     ex,
@@ -162,9 +158,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine("[PANEL][HOST-CLOSE][PREFLIGHT][ERR] " + ex);
-#endif
                 _ = FatalErrorPopupHelper.ShowFatalAsync(
                     "MWPV encountered a fatal error while closing and must close.",
                     ex,

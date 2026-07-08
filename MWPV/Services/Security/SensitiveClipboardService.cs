@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -324,9 +323,6 @@ namespace MWPV.Services.Security
             }
             catch
             {
-#if DEBUG
-                Debug.WriteLine($"[CLIPBOARD][LOG] Event logging failed: {eventCode}");
-#endif
             }
         }
 
@@ -345,9 +341,6 @@ namespace MWPV.Services.Security
             }
             catch
             {
-#if DEBUG
-                Debug.WriteLine($"[CLIPBOARD][LOG] Failure logging failed: {eventCode}");
-#endif
             }
         }
     }

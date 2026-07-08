@@ -39,10 +39,6 @@ namespace Utilities.Sql
             {
                 // will throw below
             }
-
-//#if DEBUG
-//            System.Diagnostics.Debug.WriteLine($"[SecureSql] Missing script in store: {filename}");
-//#endif
             throw new InvalidOperationException($"SQL script not found in secure store: {filename}");
         }
 

@@ -18,9 +18,6 @@ namespace MWPV.View.UserControls
             {
                 if (e.NewValue is bool b && !b)
                 {
-#if DEBUG
-                    System.Diagnostics.Debug.WriteLine("[LOGS][Details] IsVisible=false -> Clear()");
-#endif
                     Clear();
                 }
             };
@@ -28,9 +25,6 @@ namespace MWPV.View.UserControls
             // Wipe when unloaded (e.g., overlay closed or view swapped)
             Unloaded += (_, __) =>
             {
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine("[LOGS][Details] Unloaded -> Clear()");
-#endif
                 Clear();
             };
         }
@@ -93,9 +87,6 @@ namespace MWPV.View.UserControls
                 return;
             }
 
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine($"[LOGS][Details] Begin LoadFromAsync id={row.Id}");
-#endif
 
             EntryId = row.Id.ToString(CultureInfo.InvariantCulture);
             CreatedText = SafeToUtcText(row.CreatedUtc);
@@ -110,9 +101,6 @@ namespace MWPV.View.UserControls
 
             await RefreshMetaByIdAsync(row.Id).ConfigureAwait(false);
 
-#if DEBUG
-            System.Diagnostics.Debug.WriteLine($"[LOGS][Details] End LoadFromAsync id={row.Id}");
-#endif
         }
 
         /// <summary>

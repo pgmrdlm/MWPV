@@ -10,7 +10,6 @@
 
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
@@ -190,9 +189,6 @@ namespace MWPV
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine("[MAINWINDOW][LOCKDOWN][WARN] Failed to toggle MenuBar: " + ex);
-#endif
             }
         }
 
@@ -375,8 +371,6 @@ namespace MWPV
 
             try
             {
-                Debug.WriteLine("[MAINWINDOW][CLOSE] Cleanup starting.");
-
                 try { _statusMessageSubscription?.Dispose(); } catch { }
                 _statusMessageSubscription = null;
 

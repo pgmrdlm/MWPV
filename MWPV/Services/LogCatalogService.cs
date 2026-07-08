@@ -18,7 +18,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Utilities.Sql;       // SqlCagegory.GetSql(...)
@@ -136,7 +135,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][Insert][FAIL] {ex.GetType().Name}: {ex.Message}");
                 return -1;
             }
         }
@@ -242,7 +240,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][SelectPage][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
 
             return result;
@@ -297,7 +294,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][SelectPageFiltered][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
 
             return result;
@@ -360,7 +356,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][SelectById][FAIL] {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
@@ -402,7 +397,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][SelectActiveLogMessageTemplates][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
 
             return list;
@@ -457,7 +451,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[LOGS][GetComboDetailsByType:{comboTypeCode}][FAIL] {ex.GetType().Name}: {ex.Message}");
             }
 
             return list;

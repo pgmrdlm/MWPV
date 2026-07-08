@@ -27,7 +27,6 @@ using Security.Utility.Crypto.Fields;      // FieldAesCrypto (SEDS key constant)
 using Security.Utility.Wiping;             // SensitiveDataCleaner (central wiping)
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Security.Cryptography;        // CryptographicOperations.FixedTimeEquals
@@ -151,9 +150,6 @@ namespace MWPV.View.UserControls
                 bool isBasic = idx == TabIndexBasic;
                 AppStatus.IsBasicOpen = isBasic;
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][APPSTATUS] IsBasicOpen={isBasic} (SelectedIndex={idx})");
-#endif
             }
             catch
             {
@@ -167,9 +163,6 @@ namespace MWPV.View.UserControls
             {
                 AppStatus.IsBasicOpen = isBasic;
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][APPSTATUS] IsBasicOpen={isBasic} (explicit)");
-#endif
             }
             catch
             {
@@ -182,9 +175,6 @@ namespace MWPV.View.UserControls
             try
             {
                 AppStatus.IsBasicOpen = false;
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][APPSTATUS] IsBasicOpen=false (cleared)");
-#endif
             }
             catch
             {
@@ -237,22 +227,13 @@ namespace MWPV.View.UserControls
                 return;
             try
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
-#endif
                 var rows = CategoryItemService.LoadBankCardsByItemId(itemId);
                 BankCardsPanel.LoadFromHostRows(rows);
                 _bankCardsLoaded = true;
                 _bankCardsLoadedItemId = itemId;
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] OK itemId={itemId} rows={rows.Count}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][LOAD] FAILED itemId={itemId}: {ex}");
-#endif
                 _bankCardsLoaded = false;
                 _bankCardsLoadedItemId = 0;
                 SetStatus("Unable to load Bank Cards.");
@@ -274,22 +255,13 @@ namespace MWPV.View.UserControls
                 return;
             try
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
-#endif
                 var rows = tmp_CategoryItemAccountsService.LoadAccountListRowsByItemId(itemId);
                 AccountsPanel.LoadFromHostRows(rows);
                 _accountsLoaded = true;
                 _accountsLoadedItemId = itemId;
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] OK itemId={itemId} rows={rows.Count}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][LOAD] FAILED itemId={itemId}: {ex}");
-#endif
                 _accountsLoaded = false;
                 _accountsLoadedItemId = 0;
                 SetStatus("Unable to load Accounts.");
@@ -315,22 +287,13 @@ namespace MWPV.View.UserControls
 
             try
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] BEGIN itemId={itemId} forceReload={forceReload}");
-#endif
                 var rows = CategoryItemSecurityQuestionsService.LoadSecurityQuestionListRowsByItemId(itemId);
                 SecurityQuestionsPanel.LoadFromHostRows(rows);
                 _securityQuestionsLoaded = true;
                 _securityQuestionsLoadedItemId = itemId;
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] OK itemId={itemId} rows={rows.Count}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][LOAD] FAILED itemId={itemId}: {ex}");
-#endif
                 _securityQuestionsLoaded = false;
                 _securityQuestionsLoadedItemId = 0;
                 SetStatus("Unable to load Security Questions.");
@@ -452,9 +415,6 @@ namespace MWPV.View.UserControls
                 {
                     if (TryReadBool(name, out bool view))
                     {
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}={view} => {(view ? "VIEW" : "NOT-VIEW")}");
-#endif
                         return view;
                     }
                 }
@@ -464,9 +424,6 @@ namespace MWPV.View.UserControls
                     if (TryReadBool(name, out bool edit))
                     {
                         bool view = !edit;
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}={edit} => view={!edit}");
-#endif
                         return view;
                     }
                 }
@@ -481,21 +438,12 @@ namespace MWPV.View.UserControls
                             string.Equals(s, "ViewOnly", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(s, "ReadOnly", StringComparison.OrdinalIgnoreCase))
                         {
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}='{s}' => VIEW");
-#endif
                             return true;
                         }
 
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][VIEW-DETECT] {name}='{s}' => NOT-VIEW");
-#endif
                     }
                 }
 
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][VIEW-DETECT] No matching view/edit members found => NOT bypassing.");
-#endif
                 return false;
             }
             catch
@@ -540,9 +488,6 @@ namespace MWPV.View.UserControls
                     {
                         m0.Invoke(BasicPanel, null);
                         called = true;
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Called {methodName}()");
-#endif
                         break;
                     }
 
@@ -552,9 +497,6 @@ namespace MWPV.View.UserControls
                     {
                         m1.Invoke(BasicPanel, new object[] { true });
                         called = true;
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Called {methodName}(true)");
-#endif
                         break;
                     }
                 }
@@ -567,9 +509,6 @@ namespace MWPV.View.UserControls
                     {
                         p.SetValue(BasicPanel, value);
                         called = true;
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={value} (property)");
-#endif
                         return;
                     }
 
@@ -578,9 +517,6 @@ namespace MWPV.View.UserControls
                     {
                         f.SetValue(BasicPanel, value);
                         called = true;
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={value} (field)");
-#endif
                     }
                 }
 
@@ -607,9 +543,6 @@ namespace MWPV.View.UserControls
                         {
                             p.SetValue(BasicPanel, "View");
                             called = true;
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}='View' (string)");
-#endif
                             return;
                         }
 
@@ -631,9 +564,6 @@ namespace MWPV.View.UserControls
                             {
                                 p.SetValue(BasicPanel, viewEnum);
                                 called = true;
-#if DEBUG
-                                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={viewEnum} (enum)");
-#endif
                             }
                         }
                     }
@@ -647,9 +577,6 @@ namespace MWPV.View.UserControls
                         {
                             f.SetValue(BasicPanel, "View");
                             called = true;
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}='View' (string field)");
-#endif
                             return;
                         }
 
@@ -671,9 +598,6 @@ namespace MWPV.View.UserControls
                             {
                                 f.SetValue(BasicPanel, viewEnum);
                                 called = true;
-#if DEBUG
-                                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Set {memberName}={viewEnum} (enum field)");
-#endif
                             }
                         }
                     }
@@ -683,9 +607,6 @@ namespace MWPV.View.UserControls
                 TrySetModeLike("PanelMode");
                 TrySetModeLike("EditorMode");
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BASIC-VIEW] Completed best-effort, anyAction={called}");
-#endif
             }
             catch
             {
@@ -717,10 +638,6 @@ namespace MWPV.View.UserControls
                     string b64 = Convert.ToBase64String(sig);
                     SecureEncryptedDataStore.SetString(sedsKey, b64);
 
-#if DEBUG
-                    bool present = !string.IsNullOrWhiteSpace(value);
-                    Debug.WriteLine($"[CI][AFTER-SIG] CAPTURED sedsKey={sedsKey} purpose={purpose} sigLen={sig.Length} present={present}");
-#endif
                 }
                 finally
                 {
@@ -741,16 +658,10 @@ namespace MWPV.View.UserControls
                 CaptureAfterSignatureToSeds(SedsKey_AfterSig_Phone, Purpose_CI_Phone_AfterSig, phonePlain);
                 CaptureAfterSignatureToSeds(SedsKey_AfterSig_Pin, Purpose_CI_Pin_AfterSig, pinPlain);
 
-#if DEBUG
-                Debug.WriteLine("[CI][AFTER-SIG] COMPLETE (Email/Phone/PIN) captured into SEDS.");
-#endif
                 return true;
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[CI][AFTER-SIG] FAILED: {ex}");
-#endif
                 ClearAfterSignatureSedsKeys_BestEffort();
                 return false;
             }
@@ -790,9 +701,6 @@ namespace MWPV.View.UserControls
 
             if (before == null || before.Length == 0)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][PW-SIG] BEFORE missing => treat as CHANGED (will run dup-check + insert).");
-#endif
                 return true;
             }
 
@@ -802,9 +710,6 @@ namespace MWPV.View.UserControls
             {
                 bool same = SigEquals(before, after);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][PW-SIG] COMPARE beforeLen={before.Length} afterLen={after.Length} SAME={(same ? "YES" : "NO")}");
-#endif
                 return !same;
             }
             finally
@@ -911,12 +816,6 @@ namespace MWPV.View.UserControls
                 AfterCategoryName = afterCategoryName
             };
 
-#if DEBUG
-            Debug.WriteLine(
-                "[ITEM-TABS][BASIC-CHANGES] " +
-                $"Pw={changes.PasswordUpdated} Bm={changes.BookmarkToggled} ItemName={changes.CategoryItemNameChanged} Pin={changes.PinUpdated} User={changes.UsernameUpdated} " +
-                $"Url={changes.UrlUpdated} Phone={changes.PhoneUpdated} Email={changes.EmailUpdated} Notes={changes.NotesUpdated} Deactivated={changes.CategoryItemDeactivated} Activated={changes.CategoryItemActivated} Category={changes.CategoryChanged}");
-#endif
 
             return changes;
         }
@@ -1039,15 +938,9 @@ namespace MWPV.View.UserControls
 
                 var logId = TemplateLogWriter.InsertRendered(write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] Inserted CATEGORYITEM_CREATED logId={logId} itemId={itemId} subject='{itemName}'");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][NEW-ITEM] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1125,15 +1018,9 @@ namespace MWPV.View.UserControls
                 write.MessageText = message;
                 var logId = TemplateLogWriter.InsertRendered_BestEffort(write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] Inserted CATEGORYITEM_CHANGED logId={logId} itemId={itemId} subject='{itemName}' seqCount={seqs.Count}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][CHANGED] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1165,15 +1052,9 @@ namespace MWPV.View.UserControls
                     tokens: tokens,
                     write: write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-CREATED] Inserted ACCOUNTS_CREATED logId={logId} itemId={itemId} subject='{itemName}'");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-CREATED] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1205,15 +1086,9 @@ namespace MWPV.View.UserControls
                     tokens: tokens,
                     write: write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-DEACTIVATED] Inserted ACCOUNTS_CHANGED logId={logId} itemId={itemId} subject='{itemName}'");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][ACCOUNTS-DEACTIVATED] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1271,15 +1146,9 @@ namespace MWPV.View.UserControls
                     tokens: tokens,
                     write: write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][BANKCARD] Inserted {eventCode} logId={logId} itemId={itemId} subject='{itemName}' card='{entry.BankCardDisplayName}'");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][BANKCARD] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1314,15 +1183,9 @@ namespace MWPV.View.UserControls
                     tokens: tokens,
                     write: write);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][SECURITYQUESTION] Inserted {eventCode} logId={logId} itemId={itemId} subject='{itemName}' seq={templateSeq}");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][LOG][SECURITYQUESTION] FAILED (best-effort ignored): {ex}");
-#endif
             }
         }
 
@@ -1335,10 +1198,6 @@ namespace MWPV.View.UserControls
 
             _hasPersistedId = HasPersistedIdFromSeds();
 
-#if DEBUG
-            var id = TryGetActiveCategoryItemId();
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForOpen: catKey={categoryKey}, name='{categoryName}', exists={_hasPersistedId}, activeId={(id.HasValue ? id.Value : 0)}");
-#endif
 
             InitializeUiForOpen();
         }
@@ -1351,9 +1210,6 @@ namespace MWPV.View.UserControls
             ClearSedsContext();
             _hasPersistedId = false;
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForAdd: catKey={categoryKey}, name='{categoryName}', exists=false (SEDS cleared)");
-#endif
 
             InitializeUiForOpen();
         }
@@ -1365,10 +1221,6 @@ namespace MWPV.View.UserControls
 
             _hasPersistedId = HasPersistedIdFromSeds();
 
-#if DEBUG
-            var id = TryGetActiveCategoryItemId();
-            Debug.WriteLine($"[ITEM-TABS] ConfigureForEdit: catKey={categoryKey}, name='{categoryName}', exists={_hasPersistedId}, activeId={(id.HasValue ? id.Value : 0)} (SEDS-derived existence)");
-#endif
 
             InitializeUiForOpen();
         }
@@ -1419,9 +1271,6 @@ namespace MWPV.View.UserControls
 
         private void CategoryItemEditorTabs_Loaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] Loaded");
-#endif
             HookPanelsOnce();
 
             if (ItemTabs != null)
@@ -1442,9 +1291,6 @@ namespace MWPV.View.UserControls
 
         private void CategoryItemEditorTabs_Unloaded(object? sender, RoutedEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] Unloaded");
-#endif
             UnhookPanels();
 
             if (ItemTabs != null)
@@ -1472,9 +1318,6 @@ namespace MWPV.View.UserControls
 
             _isClosing = true;
 
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose ENTER");
-#endif
             try
             {
                 TryPreparePanelsForHostClose();
@@ -1483,9 +1326,6 @@ namespace MWPV.View.UserControls
             finally
             {
                 ResetStateForCloseCleanup();
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS] WipeAllForHostClose EXIT");
-#endif
             }
         }
 
@@ -1510,40 +1350,25 @@ namespace MWPV.View.UserControls
         {
             try
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Invoking BasicPanel.WipeAllForHostClose()");
-#endif
                 BasicPanel?.WipeAllForHostClose();
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS] BasicPanel.WipeAllForHostClose failed: {ex}");
-#endif
             }
 
             try { BankCardsPanel?.WipeAllForHostClose(); }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS] BankCardsPanel.WipeAllForHostClose failed: {ex}");
-#endif
             }
 
             try { AccountsPanel?.WipeAllForHostClose(); }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS] AccountsPanel.WipeAllForHostClose failed: {ex}");
-#endif
             }
 
             try { SecurityQuestionsPanel?.WipeAllForHostClose(); }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS] SecurityQuestionsPanel.WipeAllForHostClose failed: {ex}");
-#endif
             }
         }
 
@@ -1554,9 +1379,6 @@ namespace MWPV.View.UserControls
         /// </summary>
         public void ForceCancelFromHost()
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] ForceCancelFromHost -> delegating to BasicPanel");
-#endif
             try
             {
                 BasicPanel?.ForceCancelFromHost();
@@ -1573,22 +1395,13 @@ namespace MWPV.View.UserControls
         /// </summary>
         public bool TryHostClosePreflight()
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] TryHostClosePreflight ENTER");
-#endif
             if (_isClosing)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Already closing -> allowClose=true");
-#endif
                 return true;
             }
 
             if (BasicPanel == null)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] BasicPanel missing -> allowClose=true");
-#endif
                 return true;
             }
 
@@ -1598,43 +1411,27 @@ namespace MWPV.View.UserControls
             bool securityQuestionsHasHostCloseSessionWork = false;
             try { securityQuestionsHasHostCloseSessionWork = SecurityQuestionsPanel?.HasHostCloseSessionWork() ?? false; } catch { }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BANKCARDS] SessionWorkDetected={bankCardsHasHostCloseSessionWork}");
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] SessionWorkDetected={securityQuestionsHasHostCloseSessionWork}");
-#endif
 
             if (bankCardsHasHostCloseSessionWork)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Entering BankCards host-close branch");
-#endif
                 bool bankCardsAllowed = TryResolveBankCardsHostCloseDecision();
                 if (!bankCardsAllowed)
                 {
                     _lastTabIndex = ItemTabs?.SelectedIndex ?? _lastTabIndex;
                     UpdateIsBasicOpenFromUi_BestEffort();
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] TryHostClosePreflight EXIT allowClose=false");
-#endif
                     return false;
                 }
             }
 
             if (securityQuestionsHasHostCloseSessionWork)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] Entering SecurityQuestions host-close branch");
-#endif
                 bool securityQuestionsAllowed = TryResolveSecurityQuestionsHostCloseDecision();
                 if (!securityQuestionsAllowed)
                 {
                     _lastTabIndex = ItemTabs?.SelectedIndex ?? _lastTabIndex;
                     UpdateIsBasicOpenFromUi_BestEffort();
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] TryHostClosePreflight EXIT allowClose=false");
-#endif
                     return false;
                 }
             }
@@ -1642,9 +1439,6 @@ namespace MWPV.View.UserControls
             // Existing item in pure view mode can close without prompting/commit.
             if (IsExistingItemAndBasicPanelIsViewMode())
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BASIC] Existing item in view mode -> allowClose=true");
-#endif
                 return true;
             }
 
@@ -1662,9 +1456,6 @@ namespace MWPV.View.UserControls
                 UpdateIsBasicOpenFromUi_BestEffort();
             }
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][HOST-CLOSE][BASIC] TryHostClosePreflight EXIT allowClose={allowed}");
-#endif
             return allowed;
         }
 
@@ -1694,9 +1485,6 @@ namespace MWPV.View.UserControls
             var activeId = TryGetActiveCategoryItemId();
             bool isExisting = _hasPersistedId && activeId.HasValue && activeId.Value > 0;
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][PERSIST] ENTER trigger={trigger} bookmarkOnly={isBookmarkOnly} hasPersisted={_hasPersistedId} activeId={(activeId.HasValue ? activeId.Value : 0)} isExisting={isExisting}");
-#endif
 
             // =========================
             // EXISTING ITEM
@@ -1705,9 +1493,6 @@ namespace MWPV.View.UserControls
             {
                 if (trigger == PersistTrigger.LeaveBasicTab)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][PERSIST] Existing item (id={activeId!.Value}) leave-tab: no write. bookmarkOnly={isBookmarkOnly}");
-#endif
                     return true;
                 }
 
@@ -1715,9 +1500,6 @@ namespace MWPV.View.UserControls
                 {
                     long itemId = activeId!.Value;
 
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][UPDATE] Existing Save BEGIN itemId={itemId} bookmarkOnly={isBookmarkOnly}");
-#endif
 
                     CategoryItemService.CategoryItemBasicRow? beforeRow = null;
                     try { beforeRow = CategoryItemService.LoadCategoryItemBasicById(itemId); }
@@ -1725,9 +1507,6 @@ namespace MWPV.View.UserControls
 
                     if (beforeRow == null)
                     {
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] BEFORE row load failed itemId={itemId} (non-sensitive compares + logging will be skipped)");
-#endif
                     }
 
                     string name = BasicPanel.GetItemNameTrim();
@@ -1759,23 +1538,14 @@ namespace MWPV.View.UserControls
                     if (rows < 0)
                     {
                         SetStatus("Update failed.");
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] FAILED itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
-#endif
                         return false;
                     }
 
                     if (rows == 0)
                     {
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] NO-OP itemId={itemId} rowsAffected=0 bookmarkOnly={isBookmarkOnly} (treated as success)");
-#endif
                     }
                     else
                     {
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][UPDATE] OK itemId={itemId} rowsAffected={rows} bookmarkOnly={isBookmarkOnly}");
-#endif
                     }
 
                     SetSedsContextForCategoryItem(activeId.Value);
@@ -1784,40 +1554,25 @@ namespace MWPV.View.UserControls
                     if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
                     {
                         SetStatus("Saved, but after-signature capture failed (see debug output).");
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED itemId={itemId} (existing) - treating as save failure.");
-#endif
                         return false;
                     }
 
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] OK itemId={itemId} (existing) after-signatures captured.");
-#endif
 
                     bool passwordChangedByFingerprint = false;
 
                     if (isBookmarkOnly)
                     {
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (bookmark-only) itemId={itemId}");
-#endif
                     }
                     else
                     {
                         string? pw = BasicPanel.GetPasswordPlainOrNull();
 
-#if DEBUG
-                        Debug.WriteLine($"[ITEM-TABS][PW-HIST] Existing Save passwordCheck itemId={itemId} pwIsNull={(pw == null)} pwIsWhite={(string.IsNullOrWhiteSpace(pw))}");
-#endif
 
                         bool shouldInsert = ShouldInsertPasswordHistoryForExistingItem(isBookmarkOnly: false, passwordPlain: pw);
                         passwordChangedByFingerprint = shouldInsert;
 
                         if (!shouldInsert)
                         {
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][PW-HIST] SKIP (unchanged fingerprint) itemId={itemId}");
-#endif
                         }
                         else
                         {
@@ -1833,22 +1588,13 @@ namespace MWPV.View.UserControls
                             }
                             catch (CategoryItemService.DuplicatePasswordWarningException)
                             {
-#if DEBUG
-                                Debug.WriteLine($"[ITEM-TABS][DUP-PW] Duplicate warning (existing itemId={itemId}). Prompting user.");
-#endif
 
                                 if (!PromptDuplicatePasswordAccept())
                                 {
-#if DEBUG
-                                    Debug.WriteLine("[ITEM-TABS][DUP-PW] User canceled duplicate warning (existing). Aborting save.");
-#endif
                                     SetStatus("Save canceled (duplicate password warning).");
                                     return false;
                                 }
 
-#if DEBUG
-                                Debug.WriteLine("[ITEM-TABS][DUP-PW] User accepted duplicate warning (existing). Retrying allowDuplicate=true.");
-#endif
 
                                 pwHistId = CategoryItemService.InsertPasswordHistoryForExistingItem(
                                     itemId: itemId,
@@ -1860,15 +1606,9 @@ namespace MWPV.View.UserControls
                             if (pwHistId <= 0)
                             {
                                 SetStatus("Saved Basic fields, but password history insert failed.");
-#if DEBUG
-                                Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] FAILED itemId={itemId} pwHistId={pwHistId}");
-#endif
                                 return false;
                             }
 
-#if DEBUG
-                            Debug.WriteLine($"[ITEM-TABS][PW-HIST][INSERT] OK itemId={itemId} pwHistId={pwHistId}");
-#endif
                         }
                     }
 
@@ -1910,9 +1650,6 @@ namespace MWPV.View.UserControls
             }
             catch (CategoryItemService.CategoryItemReactivationBlockedException ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Reactivation blocked: {ex.Message}");
-#endif
                 SetStatus(ex.Message);
                 ShowInformationalPopup(
                     title: "Cannot Reactivate Item",
@@ -1922,25 +1659,16 @@ namespace MWPV.View.UserControls
             }
             catch (InvalidOperationException ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Validation failed: {ex.Message}");
-#endif
                 SetStatus(ex.Message);
                 return false;
             }
             catch (ArgumentOutOfRangeException ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] Validation failed: {ex.Message}");
-#endif
                 SetStatus(ex.Message);
                 return false;
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SAVE][EXISTING] FAILED: {ex}");
-#endif
                     SetStatus("Save failed. See debug output.");
                     return false;
                 }
@@ -1951,17 +1679,11 @@ namespace MWPV.View.UserControls
             // =========================
             if (_hasPersistedId && !activeId.HasValue)
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][PERSIST] _hasPersistedId=true but SEDS has no valid ItemId. Treating as NEW.");
-#endif
                 _hasPersistedId = false;
             }
 
             try
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] New item persist BEGIN trigger={trigger} bookmarkOnly={isBookmarkOnly} catKey={_categoryKey} catName='{_categoryName}'");
-#endif
 
                 string name = BasicPanel.GetItemNameTrim();
                 string? desc = BasicPanel.GetDescriptionTrimOrNull();
@@ -1978,9 +1700,6 @@ namespace MWPV.View.UserControls
 
                 if (isBookmarkOnly)
                 {
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][INSERT] PATH=BookmarkOnly => InsertCategoryItemOnly()");
-#endif
                     newId = CategoryItemService.InsertCategoryItemOnly(
                         categoryKey: _categoryKey,
                         name: name,
@@ -1997,9 +1716,6 @@ namespace MWPV.View.UserControls
                 {
                     string? passwordPlain = BasicPanel.GetPasswordPlainOrNull();
 
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][INSERT] PATH=WithPassword => InsertCategoryItemWithPasswordHistory() pwIsNull={(passwordPlain == null)} pwIsWhite={(string.IsNullOrWhiteSpace(passwordPlain))}");
-#endif
 
                     try
                     {
@@ -2019,22 +1735,13 @@ namespace MWPV.View.UserControls
                     }
                     catch (CategoryItemService.DuplicatePasswordWarningException)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][DUP-PW] Duplicate warning (new item). Prompting user.");
-#endif
 
                         if (!PromptDuplicatePasswordAccept())
                         {
-#if DEBUG
-                            Debug.WriteLine("[ITEM-TABS][DUP-PW] User canceled duplicate warning (new). Aborting insert.");
-#endif
                             SetStatus("Save canceled (duplicate password warning).");
                             return false;
                         }
 
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][DUP-PW] User accepted duplicate warning (new). Retrying allowDuplicate=true.");
-#endif
 
                         newId = CategoryItemService.InsertCategoryItemWithPasswordHistory(
                             categoryKey: _categoryKey,
@@ -2055,27 +1762,18 @@ namespace MWPV.View.UserControls
                 if (newId <= 0)
                 {
                     SetStatus("Insert failed (no ItemId returned).");
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED newId={newId} bookmarkOnly={isBookmarkOnly}");
-#endif
                     return false;
                 }
 
                 if (newId > int.MaxValue)
                 {
                     SetStatus("Insert failed (ItemId overflow).");
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][INSERT] FAILED New ItemId={newId} exceeds Int32.MaxValue; cannot store in SEDS Int32.");
-#endif
                     return false;
                 }
 
                 SetSedsContextForCategoryItem((int)newId);
                 _hasPersistedId = true;
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT] OK newId={newId} bookmarkOnly={isBookmarkOnly} => SEDS set (kind={EntityKind_CategoryItem})");
-#endif
 
                 TryWriteNewItemCreatedLog_BestEffort(
                     itemId: newId,
@@ -2086,9 +1784,6 @@ namespace MWPV.View.UserControls
                 if (!TryCaptureAfterSignaturesFromUi(emailPlain, phonePlain, pinPlain))
                 {
                     SetStatus("Inserted, but after-signature capture failed (see debug output).");
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][AFTER-SIG] FAILED newId={newId} (new) - treating as save failure.");
-#endif
                     return false;
                 }
 
@@ -2099,9 +1794,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][INSERT][NEW] FAILED: {ex}");
-#endif
                 SetStatus("Insert failed. See debug output.");
                 return false;
             }
@@ -2124,9 +1816,6 @@ namespace MWPV.View.UserControls
                 debugContext: "DUPLICATE-PASSWORD",
                 safeFallbackResult: PopupDialog.PopupResult.Cancel);
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][DUPLICATE-PASSWORD] Popup result={result}");
-#endif
 
             return result == PopupDialog.PopupResult.Accept;
         }
@@ -2273,9 +1962,6 @@ namespace MWPV.View.UserControls
 
             if (!BasicPanel.TryValidateAllForSubmit(out bool isBookmarkOnly, out bool okName, out bool okPassword, out bool okPin, out bool okEmail, out bool okPhone))
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BASIC-COMMIT] Validation FAILED bookmarkOnly={isBookmarkOnly} okName={okName} okPw={okPassword} okPin={okPin} okEmail={okEmail} okPhone={okPhone}");
-#endif
                 if (ItemTabs != null && ItemTabs.SelectedIndex != TabIndexBasic)
                     ForceSelectTab(TabIndexBasic);
 
@@ -2300,9 +1986,6 @@ namespace MWPV.View.UserControls
 
         private void BasicPanel_SaveRequested(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] BasicPanel SaveRequested");
-#endif
             SetStatus("");
 
             if (BasicPanel == null)
@@ -2328,9 +2011,6 @@ namespace MWPV.View.UserControls
 
         private void BasicPanel_CancelRequested(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] BasicPanel CancelRequested");
-#endif
             HandleCancelAndExitRequest();
         }
 
@@ -2338,18 +2018,12 @@ namespace MWPV.View.UserControls
 
         private void BankCardsPanel_SaveAndExitRequested(object? sender, CategoryItemBankCardsPanel.BankCardsCommitEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] BankCardsPanel SaveAndExitRequested");
-#endif
             TryPersistBankCardsRows(
                 rows: e.Rows ?? Array.Empty<CategoryItemBankCardsPanel.BankCardRow>(),
                 selectBankCardsOnSuccess: true);
         }
         private void BankCardsPanel_CancelAndExitRequested(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] BankCardsPanel CancelAndExitRequested");
-#endif
             HandleCancelAndExitRequest();
         }
 
@@ -2357,18 +2031,12 @@ namespace MWPV.View.UserControls
 
         private void AccountsPanel_SaveAndExitRequested(object? sender, CategoryItemAccountsPanel.AccountsCommitEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] AccountsPanel SaveAndExitRequested");
-#endif
             TryPersistNewAccountsRowsAndReload(
                 e.Rows ?? Array.Empty<CategoryItemAccountsPanel.AccountRow>());
         }
 
         private void AccountsPanel_CancelAndExitRequested(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] AccountsPanel CancelAndExitRequested");
-#endif
             HandleCancelAndExitRequest();
         }
 
@@ -2376,9 +2044,6 @@ namespace MWPV.View.UserControls
 
         private void SecurityQuestionsPanel_SaveAndExitRequested(object? sender, CategoryItemSecurityQuestionsPanel.SecurityQuestionsCommitEventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] SecurityQuestionsPanel SaveAndExitRequested");
-#endif
             TryPersistSecurityQuestionsRows(
                 rows: e.Rows ?? Array.Empty<CategoryItemSecurityQuestionsPanel.SecurityQuestionRow>(),
                 selectSecurityQuestionsOnSuccess: true);
@@ -2386,9 +2051,6 @@ namespace MWPV.View.UserControls
 
         private void SecurityQuestionsPanel_CancelAndExitRequested(object? sender, EventArgs e)
         {
-#if DEBUG
-            Debug.WriteLine("[ITEM-TABS] SecurityQuestionsPanel CancelAndExitRequested");
-#endif
             HandleCancelAndExitRequest();
         }
 
@@ -2416,9 +2078,6 @@ namespace MWPV.View.UserControls
                     BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                     SetStatus("Security Questions are staged, fix Basic tab errors before saving.");
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Blocked by Basic validation.");
-#endif
                     return false;
                 }
 
@@ -2427,27 +2086,15 @@ namespace MWPV.View.UserControls
                     if (ItemTabs != null)
                         ForceSelectTab(TabIndexBasic);
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Blocked by Basic persistence failure.");
-#endif
                     return false;
                 }
             }
 
-#if DEBUG
-            else
-            {
-                Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
-            }
-#endif
 
             var activeId = TryGetActiveCategoryItemId();
             if (!activeId.HasValue || activeId.Value <= 0)
             {
                 SetStatus("Security Questions save failed: missing ItemId context.");
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][SECURITYQUESTIONS][SAVE] Missing ItemId context.");
-#endif
                 return false;
             }
 
@@ -2519,9 +2166,6 @@ namespace MWPV.View.UserControls
                     }
                 }
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][SAVE] itemId={itemId} writes={writes}");
-#endif
 
                 EnsureSecurityQuestionsLoadedForActiveItem(forceReload: true);
                 NotifyPanel_RefreshCategoryItemGrid_BestEffort();
@@ -2537,9 +2181,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][SECURITYQUESTIONS][SAVE] FAILED itemId={itemId}: {ex}");
-#endif
                 SecurityQuestionsPanel?.ShowPersistenceError("Security Questions save failed. See debug output.");
                 SetStatus("Security Questions save failed. See debug output.");
                 return false;
@@ -2556,9 +2197,6 @@ namespace MWPV.View.UserControls
             if (!activeId.HasValue || activeId.Value <= 0)
             {
                 SetStatus("Accounts save failed: missing ItemId context.");
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][ACCOUNTS][SAVE] Missing ItemId context.");
-#endif
                 return false;
             }
 
@@ -2623,9 +2261,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][SAVE] FAILED itemId={itemId}: {ex}");
-#endif
                 bool isDuplicateAccountNumber =
                     ex is InvalidOperationException &&
                     string.Equals(ex.Message, DuplicateAccountNumberMessage, StringComparison.Ordinal);
@@ -2640,9 +2275,6 @@ namespace MWPV.View.UserControls
                 }
                 catch (Exception reloadEx)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][ACCOUNTS][SAVE] RELOAD-AFTER-FAIL FAILED itemId={itemId}: {reloadEx}");
-#endif
                 }
 
                 if (isDuplicateAccountNumber)
@@ -2691,9 +2323,6 @@ namespace MWPV.View.UserControls
                 // EXISTING+VIEW bypass: no validate/write, but still refresh grid (best-effort)
                 if (IsExistingItemAndBasicPanelIsViewMode())
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC (EXISTING+VIEW) => allow switch index={newIndex} (no validation/no writes)");
-#endif
                     NotifyPanel_RefreshCategoryItemGrid_BestEffort();
                     if (newIndex == TabIndexBankCards)
                     {
@@ -2717,9 +2346,6 @@ namespace MWPV.View.UserControls
                 }
                 else
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BASIC => requestedIndex={newIndex}");
-#endif
                     int requestedIndex = newIndex;
 
                     ForceSelectTab(TabIndexBasic);
@@ -2727,9 +2353,6 @@ namespace MWPV.View.UserControls
                     bool allowLeaveBasic = TryValidateAndPersistOnLeaveBasic();
                     if (!allowLeaveBasic)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BASIC BLOCKED -> stay on Basic.");
-#endif
                         _lastTabIndex = TabIndexBasic;
 
                         // Ensure status reflects forced Basic
@@ -2768,18 +2391,12 @@ namespace MWPV.View.UserControls
 
             if (oldIndex == TabIndexBankCards && newIndex != TabIndexBankCards)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BANKCARDS => newIndex={newIndex}");
-#endif
                 if (_suppressLeaveBankCardsOnce)
                 {
                     _suppressLeaveBankCardsOnce = false;
                 }
                 else
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving BANKCARDS => requestedIndex={newIndex}");
-#endif
                     int requestedIndex = newIndex;
 
                     ForceSelectTab(TabIndexBankCards);
@@ -2787,9 +2404,6 @@ namespace MWPV.View.UserControls
                     bool allowLeaveBankCards = PromptLeaveBankCardsBeforeTabSwitch();
                     if (!allowLeaveBankCards)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS CANCELED -> stay on BankCards.");
-#endif
                         _lastTabIndex = TabIndexBankCards;
 
                         UpdateIsBasicOpenFromUi_BestEffort();
@@ -2814,9 +2428,6 @@ namespace MWPV.View.UserControls
 
                     if (!allowLeave)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][TAB] Leave BANKCARDS BLOCKED -> stay on BankCards.");
-#endif
                         _lastTabIndex = TabIndexBankCards;
                         return;
                     }
@@ -2849,18 +2460,12 @@ namespace MWPV.View.UserControls
 
             if (oldIndex == TabIndexSecurityQuestions && newIndex != TabIndexSecurityQuestions)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][TAB] Leaving SECURITYQUESTIONS => newIndex={newIndex}");
-#endif
                 if (_suppressLeaveSecurityQuestionsOnce)
                 {
                     _suppressLeaveSecurityQuestionsOnce = false;
                 }
                 else
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][TAB] Leaving SECURITYQUESTIONS => requestedIndex={newIndex}");
-#endif
                     int requestedIndex = newIndex;
 
                     ForceSelectTab(TabIndexSecurityQuestions);
@@ -2868,9 +2473,6 @@ namespace MWPV.View.UserControls
                     bool allowLeaveSecurityQuestions = PromptLeaveSecurityQuestionsBeforeTabSwitch();
                     if (!allowLeaveSecurityQuestions)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][TAB] Leave SECURITYQUESTIONS CANCELED -> stay on SecurityQuestions.");
-#endif
                         _lastTabIndex = TabIndexSecurityQuestions;
 
                         UpdateIsBasicOpenFromUi_BestEffort();
@@ -2893,9 +2495,6 @@ namespace MWPV.View.UserControls
 
                     if (!allowLeave)
                     {
-#if DEBUG
-                        Debug.WriteLine("[ITEM-TABS][TAB] Leave SECURITYQUESTIONS BLOCKED -> stay on SecurityQuestions.");
-#endif
                         _lastTabIndex = TabIndexSecurityQuestions;
                         return;
                     }
@@ -3025,9 +2624,6 @@ namespace MWPV.View.UserControls
 
             if (!hasPanel)
             {
-#if DEBUG
-                Debug.WriteLine(panelMissingDebugMessage);
-#endif
                 return true;
             }
 
@@ -3048,52 +2644,28 @@ namespace MWPV.View.UserControls
         {
             var decision = getDecision();
 
-#if DEBUG
-            Debug.WriteLine($"{debugPrefix} Prompt result={decision}");
-#endif
 
             switch (decision)
             {
                 case HostCloseDecision.SaveAndExit:
-#if DEBUG
-                    Debug.WriteLine($"{debugPrefix} Branch=SaveAndExit");
-#endif
                     if (!saveAndExit())
                     {
-#if DEBUG
-                        Debug.WriteLine($"{debugPrefix} SaveAndExit failed -> allowClose=false");
-#endif
                         return false;
                     }
 
-#if DEBUG
-                    Debug.WriteLine($"{debugPrefix} SaveAndExit succeeded -> allowClose=true");
-#endif
                     return true;
 
                 case HostCloseDecision.ExitWithoutSave:
-#if DEBUG
-                    Debug.WriteLine($"{debugPrefix} Branch=ExitWithoutSave");
-#endif
                     if (!exitWithoutSave())
                     {
-#if DEBUG
-                        Debug.WriteLine($"{debugPrefix} ExitWithoutSave failed -> allowClose=false");
-#endif
                         return false;
                     }
 
-#if DEBUG
-                    Debug.WriteLine($"{debugPrefix} ExitWithoutSave -> allowClose=true");
-#endif
                     return true;
 
                 default:
                     onCancelExit?.Invoke();
 
-#if DEBUG
-                    Debug.WriteLine($"{debugPrefix} Branch=CancelExit -> allowClose=false");
-#endif
                     return false;
             }
         }
@@ -3108,9 +2680,6 @@ namespace MWPV.View.UserControls
 
             if (!BankCardsPanel.TryBuildHostCloseSavePayload(out var rows))
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][BANKCARDS] Host-close save payload not available -> allowClose=false");
-#endif
                 return false;
             }
 
@@ -3127,9 +2696,6 @@ namespace MWPV.View.UserControls
 
             if (!SecurityQuestionsPanel.TryBuildHostCloseSavePayload(out var rows))
             {
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][HOST-CLOSE][SECURITYQUESTIONS] Host-close save payload not available -> allowClose=false");
-#endif
                 return false;
             }
 
@@ -3160,9 +2726,6 @@ namespace MWPV.View.UserControls
                     BasicPanel.FocusFirstError(okName, okPassword, okPin, okEmail, okPhone, isBookmarkOnly);
                     SetStatus("Bank Cards are staged, fix Basic tab errors before saving.");
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Blocked by Basic validation.");
-#endif
                     return false;
                 }
 
@@ -3171,26 +2734,14 @@ namespace MWPV.View.UserControls
                     if (ItemTabs != null)
                         ForceSelectTab(TabIndexBasic);
 
-#if DEBUG
-                    Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Blocked by Basic persistence failure.");
-#endif
                     return false;
                 }
             }
-#if DEBUG
-            else
-            {
-                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Existing+VIEW => bypass Basic validate/persist.");
-            }
-#endif
 
             var activeId = TryGetActiveCategoryItemId();
             if (!activeId.HasValue || activeId.Value <= 0)
             {
                 SetStatus("Save failed: missing ItemId context.");
-#if DEBUG
-                Debug.WriteLine("[ITEM-TABS][BANKCARDS][SAVE] Missing ItemId context.");
-#endif
                 return false;
             }
 
@@ -3224,9 +2775,6 @@ namespace MWPV.View.UserControls
 
                 var saveResult = CategoryItemService.SaveBankCardsByItemIdWithLogResult(itemId, serviceRows);
                 int writes = saveResult.Writes;
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] itemId={itemId} writes={writes} logEntries={saveResult.LogEntries.Count}");
-#endif
                 if (writes < 0)
                 {
                     SetStatus("Bank Cards save failed. See debug output.");
@@ -3255,9 +2803,6 @@ namespace MWPV.View.UserControls
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][BANKCARDS][SAVE] FAILED itemId={itemId}: {ex}");
-#endif
                 SetStatus("Bank Cards save failed. See debug output.");
                 return false;
             }
@@ -3286,9 +2831,6 @@ namespace MWPV.View.UserControls
                 secondaryText: "More Options",
                 debugContext: step1DebugContext);
 
-#if DEBUG
-            Debug.WriteLine($"{resultDebugPrefix} Popup step1 result={first}");
-#endif
 
             if (first == PopupDialog.PopupResult.Accept)
                 return TwoStepHostClosePopupDecision.SaveAndExit;
@@ -3300,9 +2842,6 @@ namespace MWPV.View.UserControls
                 secondaryText: "Cancel",
                 debugContext: step2DebugContext);
 
-#if DEBUG
-            Debug.WriteLine($"{resultDebugPrefix} Popup step2 result={second}");
-#endif
 
             if (second == PopupDialog.PopupResult.Accept)
                 return TwoStepHostClosePopupDecision.ExitWithoutSave;
@@ -3401,9 +2940,6 @@ namespace MWPV.View.UserControls
                 var hostPanel = FindPanelHost();
                 if (hostPanel == null)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup host not found -> safe fallback {safeFallbackResult}");
-#endif
                     return safeFallbackResult;
                 }
 
@@ -3412,9 +2948,6 @@ namespace MWPV.View.UserControls
 
                 if (overlayHost == null || overlayContent == null)
                 {
-#if DEBUG
-                    Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup overlay not found -> safe fallback {safeFallbackResult}");
-#endif
                     return safeFallbackResult;
                 }
 
@@ -3449,16 +2982,10 @@ namespace MWPV.View.UserControls
 
                 Dispatcher.PushFrame(frame);
 
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup completed result={result}");
-#endif
                 return result;
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ITEM-TABS][{debugContext}] Custom popup failed -> safe fallback {safeFallbackResult}: {ex}");
-#endif
                 return safeFallbackResult;
             }
         }
@@ -3490,9 +3017,6 @@ namespace MWPV.View.UserControls
                 debugContext: "LEAVE-BASIC",
                 safeFallbackResult: PopupDialog.PopupResult.Cancel);
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][LEAVE-BASIC] Popup result={result}");
-#endif
 
             return result == PopupDialog.PopupResult.Accept;
         }
@@ -3511,9 +3035,6 @@ namespace MWPV.View.UserControls
                 debugContext: "LEAVE-BANKCARDS",
                 safeFallbackResult: PopupDialog.PopupResult.Cancel);
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][LEAVE-BANKCARDS] Popup result={result}");
-#endif
 
             return result == PopupDialog.PopupResult.Accept;
         }
@@ -3533,9 +3054,6 @@ namespace MWPV.View.UserControls
                 debugContext: "LEAVE-SECURITYQUESTIONS",
                 safeFallbackResult: PopupDialog.PopupResult.Cancel);
 
-#if DEBUG
-            Debug.WriteLine($"[ITEM-TABS][LEAVE-SECURITYQUESTIONS] Popup result={result}");
-#endif
 
             return result == PopupDialog.PopupResult.Accept;
         }

@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using System;
 using Utilities.Helpers;
 using Utilities.Sql;
@@ -120,9 +120,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine($"[APPSETTINGS][SensitiveClipboardClearSeconds] fallback: {ex.GetType().Name}");
-#endif
                 return FallbackSensitiveClipboardClearSeconds;
             }
         }

@@ -16,7 +16,6 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -242,9 +241,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 EntryLineHasAnyInput() ||
                 _editingRow != null;
 
-#if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] HasHostCloseSessionWork={hasWork} newAccountSession={_newAccountSessionStarted} hasChanges={_hasChanges} entryLine={EntryLineHasAnyInput()} editingRow={(_editingRow != null)}");
-#endif
 
             return hasWork;
         }
@@ -265,9 +261,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowAccountError("Account entry is disabled for this session.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: entry disabled.");
-#endif
                 return false;
             }
 
@@ -276,9 +269,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: entry line still has input.");
-#endif
                 return false;
             }
 
@@ -287,9 +277,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ShowAccountError("Finish Add/Update or Clear Row before saving.");
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: blank add session is still pending.");
-#endif
                 return false;
             }
 
@@ -297,9 +284,6 @@ namespace MWPV.View.UserControls.CategoryItems
             {
                 SetErrors(true);
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Save payload blocked: tab validation failed.");
-#endif
                 return false;
             }
 
@@ -309,9 +293,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             rows = _accountRows.Select(CloneRow).ToList();
 
-#if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] Save payload ready rows={rows.Count}");
-#endif
             return true;
         }
 
@@ -329,16 +310,10 @@ namespace MWPV.View.UserControls.CategoryItems
                 SetErrors(false);
                 UpdateTabButtons();
 
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Discard preparation completed.");
-#endif
                 return true;
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] Discard preparation failed: {ex}");
-#endif
                 return false;
             }
         }
@@ -512,9 +487,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void OnRevealTimeout()
         {
-#if DEBUG
-            Debug.WriteLine("[ACCOUNTS-PANEL] Reveal timer elapsed; hiding reveals");
-#endif
             HideRevealsAndStopTimer(clearRevealOverlays: true);
             UpdateTabButtons();
         }
@@ -577,9 +549,6 @@ namespace MWPV.View.UserControls.CategoryItems
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[ACCOUNTS-PANEL][ERROR] LoadAccountTypes failed: {ex}");
-#endif
                 _entryDisabled = true;
                 ShowAccountError("Unable to load account types. Account entry is disabled for this session.");
                 EnableEntryControls(false);
@@ -818,9 +787,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             if (isTrueAddMode)
             {
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] Add-new trigger fired handler=OnAccountAddOrUpdateClick mode=Add");
-#endif
                 BeginAddNewAccountSession();
             }
 
@@ -974,9 +940,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearSelectedAccountDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[ACCOUNTS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
-#endif
                 return;
             }
 
@@ -989,17 +952,11 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearSelectedAccountDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine($"[ACCOUNTS-PANEL][SELECT] Detail not found for itemId={activeItemId.Value} rowId={selected.Id}.");
-#endif
                 return;
             }
 
             StoreSelectedAccountDetailSedsBestEffort(selected.Id, accountNumberForEdit);
             PopulateProtectedViewFromSelectedDetail(selected, accountNumberForEdit);
-#if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][SELECT] Protected view loaded itemId={activeItemId.Value} rowId={selected.Id}.");
-#endif
         }
 
         private void PopulateProtectedViewFromSelectedDetail(AccountRow row, string accountNumber)
@@ -1424,9 +1381,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _newAccountSessionStarted = true;
 
-#if DEBUG
-            Debug.WriteLine("[ACCOUNTS-PANEL][HOST-CLOSE] New-account session started source=AddNewCommand");
-#endif
         }
 
         private bool HasPendingBlankAddAttempt()
@@ -1444,9 +1398,6 @@ namespace MWPV.View.UserControls.CategoryItems
 
             _newAccountSessionStarted = false;
 
-#if DEBUG
-            Debug.WriteLine($"[ACCOUNTS-PANEL][HOST-CLOSE] New-account session cleared source={source}");
-#endif
         }
 
         private static string TrimToMaxChars(string? value)

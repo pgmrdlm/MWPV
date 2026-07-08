@@ -10,7 +10,6 @@
 // - No encryption, no persistence, no extra state.
 
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Windows.Threading;
 using Utilities.Helpers;
@@ -49,9 +48,6 @@ namespace MWPV.Services
             };
             _timer.Tick += OnTimerTick;
 
-#if DEBUG
-            Log($"CTOR timeout={_timeout.TotalSeconds:0}s priority=Background dispatcher={Dispatcher.CurrentDispatcher.Thread.ManagedThreadId}");
-#endif
         }
 
         public TimeSpan Timeout => _timeout;
@@ -66,10 +62,6 @@ namespace MWPV.Services
 
             _started = true;
 
-#if DEBUG
-            Log("START (hooked App.UserActivityDetected)");
-#endif
-
             Reset(); // start countdown immediately
         }
 
@@ -83,9 +75,6 @@ namespace MWPV.Services
 
             _started = false;
 
-#if DEBUG
-            Log("STOP (unhooked App.UserActivityDetected, timer stopped)");
-#endif
         }
 
         public void Reset()
@@ -98,16 +87,10 @@ namespace MWPV.Services
             _timer.Interval = _timeout;
             _timer.Start();
 
-#if DEBUG
-            Log($"RESET (timer restarted, interval={_timeout.TotalSeconds:0}s)");
-#endif
         }
 
         private void OnUserActivityDetected()
         {
-#if DEBUG
-            Log("ACTIVITY (App.UserActivityDetected) -> Reset()");
-#endif
             // Any keystroke/mouse click/wheel inside MWPV resets the timer.
             // Keep it simple and cheap.
             try { Reset(); } catch { /* swallow */ }
@@ -118,67 +101,35 @@ namespace MWPV.Services
             // Stop first to avoid re-entrancy loops while we run actions.
             try { _timer.Stop(); } catch { /* swallow */ }
 
-#if DEBUG
-            Log("TICK (timeout reached) ENTER");
-#endif
-
             bool sensitiveOpen = false;
 
             try
             {
                 sensitiveOpen = _isSensitiveContextOpen();
 
-#if DEBUG
-                Log($"TICK isSensitiveContextOpen() => {sensitiveOpen}");
-#endif
-
                 // If the sensitive context (Basic tab) is open, force the existing Cancel path.
                 if (sensitiveOpen)
                 {
-#if DEBUG
-                    Log("TICK calling forceCancelSensitiveContext()");
-#endif
                     _forceCancelSensitiveContext();
-
-#if DEBUG
-                    Log("TICK forceCancelSensitiveContext() returned");
-#endif
                 }
             }
-            catch (Exception ex)
+            catch
             {
-#if DEBUG
-                Log("TICK ERROR during sensitive handling: " + ex.GetType().Name + " " + ex.Message);
-#endif
                 // Never crash on timeout handling.
             }
 
             try
             {
-#if DEBUG
-                Log("TICK calling lockAction()");
-#endif
                 // Lock action (your Hello gate / lock UI) is injected by caller.
                 _lockAction();
-
-#if DEBUG
-                Log("TICK lockAction() returned");
-#endif
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Log("TICK ERROR during lockAction: " + ex.GetType().Name + " " + ex.Message);
-#endif
                 _ = FatalErrorPopupHelper.ShowFatalAsync(
                     "MWPV encountered a fatal error while handling inactivity timeout and must close.",
                     ex,
                     "The inactivity lock action failed after timeout handling reached the final shutdown/lock stage.");
             }
-
-#if DEBUG
-            Log("TICK EXIT (timer remains stopped until caller resets after unlock)");
-#endif
 
             // After lock is initiated, we do NOT automatically restart the timer here.
             // The caller should restart/reset after unlock (or keep it stopped while locked),
@@ -196,25 +147,9 @@ namespace MWPV.Services
             if (_disposed) return;
             _disposed = true;
 
-#if DEBUG
-            Log("DISPOSE ENTER");
-#endif
-
             Stop();
 
             try { _timer.Tick -= OnTimerTick; } catch { /* swallow */ }
-
-#if DEBUG
-            Log("DISPOSE EXIT");
-#endif
         }
-
-#if DEBUG
-        private static void Log(string message)
-        {
-            // Keep this dead-simple: one line per event, easy to grep in Output.
-            Debug.WriteLine($"[INACTIVITY] {DateTime.Now:HH:mm:ss.fff} [T{Thread.CurrentThread.ManagedThreadId}] {message}");
-        }
-#endif
     }
 }

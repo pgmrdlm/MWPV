@@ -4,7 +4,6 @@ using MWPV.Services.AppLifecycle;
 using MWPV.Services.Security;
 using Security.Utility.Wiping;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -35,13 +34,6 @@ namespace MWPV
         public static event Action? UserActivityDetected;
 
         private bool _inputHooked;
-
-#if DEBUG
-        private static void Dbg(string msg)
-        {
-            Debug.WriteLine($"[APP][INACTIVITY-HOOK] {DateTime.Now:HH:mm:ss.fff} [T{Thread.CurrentThread.ManagedThreadId}] {msg}");
-        }
-#endif
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -91,9 +83,6 @@ namespace MWPV
                 Directory.CreateDirectory(EarlyLoginFailures.QuarantineDir);
                 // NOTE: We intentionally DO NOT call EarlyLogIngestor.IngestAll() here.
                 // Ingest runs ONLY after a successful key/database login.
-                //#if DEBUG
-                //                System.Diagnostics.Debug.WriteLine("[EarlyIngest] Startup: skipping ingest until post-login.");
-                //#endif
             }
             catch (Exception ex)
             {
@@ -311,16 +300,10 @@ namespace MWPV
                 InputManager.Current.PreProcessInput += OnPreProcessInput;
                 _inputHooked = true;
 
-#if DEBUG
-                Dbg("HOOKED InputManager.Current.PreProcessInput");
-#endif
             }
             catch
             {
                 // best-effort: if hooking fails, app still runs
-#if DEBUG
-                Dbg("HOOK FAILED (exception suppressed)");
-#endif
             }
         }
 
@@ -332,16 +315,10 @@ namespace MWPV
             {
                 InputManager.Current.PreProcessInput -= OnPreProcessInput;
 
-#if DEBUG
-                Dbg("UNHOOKED InputManager.Current.PreProcessInput");
-#endif
             }
             catch
             {
                 // swallow
-#if DEBUG
-                Dbg("UNHOOK FAILED (exception suppressed)");
-#endif
             }
             finally
             {
@@ -366,9 +343,6 @@ namespace MWPV
                 {
                     if (keyArgs.RoutedEvent == Keyboard.KeyDownEvent)
                     {
-#if DEBUG
-                        Dbg($"ACTIVITY KeyDown key={keyArgs.Key} systemKey={keyArgs.SystemKey} originalSource={keyArgs.OriginalSource?.GetType().Name ?? "<null>"}");
-#endif
                         UserActivityDetected?.Invoke();
                     }
                     return;
@@ -378,9 +352,6 @@ namespace MWPV
                 {
                     if (mouseBtnArgs.RoutedEvent == Mouse.MouseDownEvent)
                     {
-#if DEBUG
-                        Dbg($"ACTIVITY MouseDown button={mouseBtnArgs.ChangedButton} clicks={mouseBtnArgs.ClickCount} originalSource={mouseBtnArgs.OriginalSource?.GetType().Name ?? "<null>"}");
-#endif
                         UserActivityDetected?.Invoke();
                     }
                     return;
@@ -388,9 +359,6 @@ namespace MWPV
 
                 if (input is MouseWheelEventArgs wheelArgs)
                 {
-#if DEBUG
-                    Dbg($"ACTIVITY MouseWheel delta={wheelArgs.Delta} originalSource={wheelArgs.OriginalSource?.GetType().Name ?? "<null>"}");
-#endif
                     UserActivityDetected?.Invoke();
                     return;
                 }
@@ -398,9 +366,6 @@ namespace MWPV
             catch
             {
                 // swallow: never let input hook crash the app
-#if DEBUG
-                Dbg("OnPreProcessInput ERROR (exception suppressed)");
-#endif
             }
         }
 

@@ -1,7 +1,6 @@
 ﻿// Utilities/Security/SensitiveDataCleaner.cs
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;           // Debug.WriteLine traces (always-on)
 using System.IO;
 using System.Security;
 using System.Security.Cryptography;
@@ -21,8 +20,7 @@ namespace Security.Utility.Wiping;
 /// - Memory side: register buffers/stores; App calls WipeAll() on normal/abnormal shutdown.
 ///
 /// Notes:
-/// - Traces use Debug.WriteLine and are NOT wrapped in #if DEBUG (you'll see them if a listener is attached).
-/// - No secrets are ever printed.
+/// - Shutdown cleanup is intentionally silent; callers should not depend on diagnostic output here.
 /// </summary>
 public static class SensitiveDataCleaner
 {
@@ -41,7 +39,6 @@ public static class SensitiveDataCleaner
     {
         if (wipeAction == null) return;
         _actions.Add(wipeAction);
-        Debug.WriteLine("[CLEANER] Registered wipe action (custom).");
     }
 
     /// <summary>Register any object that knows how to wipe itself.</summary>
@@ -52,7 +49,6 @@ public static class SensitiveDataCleaner
         {
             try { wipable.Wipe(); } catch { /* swallow */ }
         });
-        Debug.WriteLine("[CLEANER] Registered wipe action (ISensitiveWipe).");
     }
 
     /// <summary>
@@ -63,7 +59,6 @@ public static class SensitiveDataCleaner
     {
         if (Interlocked.Exchange(ref _wiped, 1) == 1)
         {
-            Debug.WriteLine("[WIPE] SensitiveDataCleaner.WipeAll skipped (already executed).");
             return;
         }
 
@@ -74,8 +69,6 @@ public static class SensitiveDataCleaner
             catch { /* swallow */ }
             ran++;
         }
-
-        Debug.WriteLine($"[WIPE] SensitiveDataCleaner.WipeAll executed. registry_actions_ran={ran}");
 
         // Best-effort: force collection/compaction to trim residuals
         try
@@ -150,7 +143,6 @@ public static class SensitiveDataCleaner
 
             File.Delete(fi.FullName);
             bool deleted = !File.Exists(fi.FullName);
-            Debug.WriteLine($"[SECDEL] file='{Path.GetFileName(path)}' deleted={deleted}");
             return deleted;
         }
         catch
@@ -201,7 +193,6 @@ public static class SensitiveDataCleaner
                 }
                 catch { }
             }
-            Debug.WriteLine($"[SECDEL] dir='{dir}' pattern='{searchPattern}' total={total} deleted={deleted}");
         }
     }
 
@@ -239,7 +230,6 @@ public static class SensitiveDataCleaner
                 total++;
                 if (SecureDeleteFile(file)) deleted++;
             }
-            Debug.WriteLine($"[SECDEL] sweep early residuals total={total} deleted={deleted}");
             return (total, deleted);
         }
         catch
@@ -277,7 +267,6 @@ public static class SensitiveDataCleaner
             }
         }
         catch { }
-        Debug.WriteLine($"[SECDEL] purge quarantine olderThanDays={olderThanDays} total={total} removed={removed}");
         return (total, removed);
     }
 
@@ -375,17 +364,6 @@ public static class SensitiveDataCleaner
     public static bool SecureFileDelete(string path, int overwritePasses = 1, bool shredName = true, bool finalZeroPass = true)
         => SecureDeleteFile(path, overwritePasses, shredName);
 
-    // ===== Optional runtime diagnostics (always available) =====
-    public static void DebugStatus(string? note = null)
-    {
-        Debug.WriteLine($"[DEBUG] SensitiveDataCleaner: wiped={_wiped != 0}, pending_actions={_actions.Count}" +
-            (string.IsNullOrEmpty(note) ? "" : $" note={note}"));
-    }
-
-    public static void DebugPing(string? note = null)
-    {
-        Debug.WriteLine("[DEBUG] SensitiveDataCleaner ping " + (note ?? ""));
-    }
 }
 
 /// <summary>Implement on classes that hold secrets in memory so the cleaner can wipe them.</summary>

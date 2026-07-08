@@ -1,9 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -598,9 +597,6 @@ namespace MWPV.View.UserControls.CategoryItems
                 ClearSelectedSecurityQuestionDetailSedsBestEffort();
                 _isSelectedProtectedViewActive = false;
                 UpdateTabButtons();
-#if DEBUG
-                Debug.WriteLine("[SECURITY-QUESTIONS-PANEL][SELECT] Missing active ItemId context; targeted detail load skipped.");
-#endif
                 return;
             }
 

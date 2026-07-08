@@ -14,7 +14,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 
@@ -86,9 +85,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[TEMPLATE-LOG][InsertFromTemplates_BestEffort] FAIL: {ex.GetType().Name}: {ex.Message}");
-#endif
                 return -1;
             }
         }
@@ -133,9 +129,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[TEMPLATE-LOG][InsertRendered_BestEffort] FAIL: {ex.GetType().Name}: {ex.Message}");
-#endif
                 return -1;
             }
         }
@@ -166,9 +159,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[TEMPLATE-LOG][RenderTemplate_BestEffort] FAIL: {ex.GetType().Name}: {ex.Message}");
-#endif
                 return null;
             }
         }
@@ -218,9 +208,6 @@ namespace MWPV.Services
             }
             catch (Exception ex)
             {
-#if DEBUG
-                Debug.WriteLine($"[TEMPLATE-LOG][BuildMessageFromTemplates_BestEffort] FAIL: {ex.GetType().Name}: {ex.Message}");
-#endif
                 return null;
             }
         }

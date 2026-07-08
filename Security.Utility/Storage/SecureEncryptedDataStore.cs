@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Security.Utility.Wiping;
@@ -57,27 +56,7 @@ public static class SecureEncryptedDataStore
         // Register once with the global cleaner
         SensitiveDataCleaner.Register(new StoreWiper());
 
-        Debug.WriteLine("[STORE] Initialized (session AES key generated, wiper registered).");
     }
-
-#if DEBUG
-    private static void DebugCaller(string op, string? detail = null)
-    {
-        try
-        {
-            // 0 = this method
-            // 1 = the immediate caller (Clear/ClearAll/WipeAll)
-            // 2+ = the real external caller we care about
-            var st = new StackTrace(skipFrames: 2, fNeedFileInfo: true);
-            Debug.WriteLine($"[STORE][CALLER] {op}" + (string.IsNullOrWhiteSpace(detail) ? "" : $" ({detail})"));
-            Debug.WriteLine(st.ToString());
-        }
-        catch
-        {
-            // Never let diagnostics interfere with runtime.
-        }
-    }
-#endif
 
     // =========================
     //            SET
@@ -208,7 +187,6 @@ public static class SecureEncryptedDataStore
             }
 
             _store[key] = copy;
-            //Debug.WriteLine($"[STORE] Set entry (total={_store.Count}).");
         }
 
         // Wipe our temporary combined buffer
@@ -237,8 +215,6 @@ public static class SecureEncryptedDataStore
             // IMPORTANT: copy ciphertext while under lock so Clear/WipeAll can't zero it mid-decrypt.
             combinedCopy = new byte[combined.Length];
             Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
-
-            //Debug.WriteLine($"[STORE] Get bytes (entries={_store.Count}).");
 
             // Decrypt under the same lock so Key cannot be wiped mid-decrypt.
             // NOTE: DecryptWithEmbeddedNonce_NoLock allocates new plaintext buffer.
@@ -370,9 +346,7 @@ public static class SecureEncryptedDataStore
         lock (_gate)
         {
             ThrowIfWiped();
-            bool exists = _store.ContainsKey(key);
-            //Debug.WriteLine($"[STORE] HasKey={exists} (entries={_store.Count}).");
-            return exists;
+            return _store.ContainsKey(key);
         }
     }
 
@@ -391,10 +365,6 @@ public static class SecureEncryptedDataStore
         if (string.IsNullOrWhiteSpace(key))
             return;
 
-#if DEBUG
-        DebugCaller("Clear(key)", key);
-#endif
-
         lock (_gate)
         {
             ThrowIfWiped();
@@ -402,17 +372,12 @@ public static class SecureEncryptedDataStore
             {
                 Array.Clear(combined, 0, combined.Length);
                 _store.Remove(key);
-                Debug.WriteLine($"[STORE] Cleared one entry (entries={_store.Count}).");
             }
         }
     }
 
     public static void ClearAll()
     {
-#if DEBUG
-        DebugCaller("ClearAll()");
-#endif
-
         lock (_gate)
         {
             ThrowIfWiped();
@@ -421,7 +386,6 @@ public static class SecureEncryptedDataStore
                 Array.Clear(kvp.Value, 0, kvp.Value.Length);
             }
             _store.Clear();
-            Debug.WriteLine("[STORE] Cleared all entries (entries=0).");
         }
     }
 
@@ -430,7 +394,6 @@ public static class SecureEncryptedDataStore
         lock (_gate)
         {
             ThrowIfWiped();
-           // Debug.WriteLine($"[STORE] Keys requested (entries={_store.Count}).");
             return new List<string>(_store.Keys);
         }
     }
@@ -442,15 +405,10 @@ public static class SecureEncryptedDataStore
     /// </summary>
     public static void WipeAll()
     {
-#if DEBUG
-        DebugCaller("WipeAll()");
-#endif
-
         lock (_gate)
         {
             if (_wiped)
             {
-                Debug.WriteLine("[WIPE] Store.WipeAll skipped (already wiped).");
                 return;
             }
 
@@ -466,7 +424,6 @@ public static class SecureEncryptedDataStore
                 Array.Clear(Key, 0, Key.Length);
 
             _wiped = true;
-            Debug.WriteLine("[WIPE] Store.WipeAll executed (entries=0, key zeroed).");
         }
     }
 
@@ -542,24 +499,4 @@ public static class SecureEncryptedDataStore
         return plain;
     }
 
-    // =========================
-    //    OPTIONAL DIAGNOSTICS
-    // =========================
-
-    public static void DebugDumpKeys()
-    {
-        lock (_gate)
-        {
-            Debug.WriteLine($"[DEBUG] Store dump: wiped={_wiped}, entries={_store.Count}");
-        }
-    }
-
-    public static void DebugStatus(string? note = null)
-    {
-        lock (_gate)
-        {
-            Debug.WriteLine($"[DEBUG] Store status: wiped={_wiped}, entries={_store.Count}" +
-                            (string.IsNullOrEmpty(note) ? "" : $" note={note}"));
-        }
-    }
 }

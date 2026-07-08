@@ -55,13 +55,29 @@ namespace Security.Utility.Crypto
                 //    (If your schema stores them differently, adjust or remove these checks.)
                 if (!string.IsNullOrWhiteSpace(ks.secrets.logPayloadKey))
                 {
-                    var k = Convert.FromBase64String(ks.secrets.logPayloadKey); // throws on bad base64
-                    if (k.Length != 32) return false;
+                    byte[]? k = null;
+                    try
+                    {
+                        k = Convert.FromBase64String(ks.secrets.logPayloadKey); // throws on bad base64
+                        if (k.Length != 32) return false;
+                    }
+                    finally
+                    {
+                        SensitiveDataCleaner.WipeByteArray(ref k);
+                    }
                 }
                 if (!string.IsNullOrWhiteSpace(ks.secrets.userSecretsKey))
                 {
-                    var k = Convert.FromBase64String(ks.secrets.userSecretsKey); // throws on bad base64
-                    if (k.Length != 32) return false;
+                    byte[]? k = null;
+                    try
+                    {
+                        k = Convert.FromBase64String(ks.secrets.userSecretsKey); // throws on bad base64
+                        if (k.Length != 32) return false;
+                    }
+                    finally
+                    {
+                        SensitiveDataCleaner.WipeByteArray(ref k);
+                    }
                 }
 
                 // 6) Basic sanity for SQL map (present and strings present)

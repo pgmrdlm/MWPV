@@ -3,7 +3,6 @@ using MWPV.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -138,9 +137,8 @@ namespace MWPV.View.UserControls
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Debug.WriteLine($"[LOGS][Types][FAIL] {ex}");
                 // Worst case: we still have just "All" in the list, which is fine.
             }
 
@@ -211,7 +209,6 @@ namespace MWPV.View.UserControls
                 if (!silent)
                     MessageBox.Show($"Failed to load logs:\n{ex.Message}", "Logs",
                                     MessageBoxButton.OK, MessageBoxImage.Error);
-                Debug.WriteLine($"[LOGS][LoadPage][FAIL] {ex}");
             }
         }
 
@@ -259,7 +256,6 @@ namespace MWPV.View.UserControls
                         "Logs.Details.Fail"
                     );
                 }
-                Debug.WriteLine($"[LOGS][Details][FAIL] {ex}");
             }
         }
 
