@@ -432,6 +432,10 @@ namespace Utilities.Security
                         return;
                     }
 
+                    AppStatusMessageService.Publish(
+                        "Upgrade completed successfully.",
+                        AppStatusMessageKind.Success,
+                        TimeSpan.FromSeconds(10));
                 }
 
                 // 📦 Load additional SQL logic from key archive

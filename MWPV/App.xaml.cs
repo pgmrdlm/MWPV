@@ -183,10 +183,17 @@ namespace MWPV
                     try { EarlyLoginFailures.Write("EarlyIngestor", "Post-login ingest failed", ex: ex); } catch { }
                 }
 
-                // Quiet one-line status to show after MainWindow is up (only if there were pending files)
-                string? startupStatus = null;
                 if (pending > 0)
-                    startupStatus = $"{pending} prior invalid login attempt(s) were ingested into the audit log.";
+                {
+                    string statusMessage = pending == 1
+                        ? "1 prior invalid login attempt was ingested into the audit log."
+                        : $"{pending} prior invalid login attempts were ingested into the audit log.";
+
+                    AppStatusMessageService.Publish(
+                        statusMessage,
+                        AppStatusMessageKind.Info,
+                        TimeSpan.FromSeconds(8));
+                }
 
                 // Create and show main window, THEN restore normal shutdown behavior
                 if (!Dispatcher.HasShutdownStarted)
@@ -200,15 +207,6 @@ namespace MWPV
                     // ✅ Inactivity input hook: keystrokes + mouse clicks/wheel inside MWPV
                     HookUserInput();
 
-                    // ✅ CHANGE: route through MainWindow helper so it auto-hides & clears on input
-                    if (!string.IsNullOrWhiteSpace(startupStatus))
-                    {
-                        try
-                        {
-                            (main as MainWindow)?.ShowStartupStatus(startupStatus, TimeSpan.FromSeconds(8));
-                        }
-                        catch { /* best-effort; if MainWindow not ready, silently ignore */ }
-                    }
                 }
             }
             catch (Exception ex)

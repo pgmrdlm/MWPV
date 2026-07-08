@@ -25,6 +25,10 @@ namespace MWPV
     {
         // ---- Status line auto-hide timer ----
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer();
+        private static readonly TimeSpan StatusInputClearDelay = TimeSpan.FromSeconds(3);
+        private IDisposable? _statusMessageSubscription;
+        private bool _statusClearableByInput = true;
+        private DateTime _statusShownUtc = DateTime.MinValue;
 
         // ---- Close orchestration ----
         private bool _closingCleanupInProgress;
@@ -47,8 +51,8 @@ namespace MWPV
             Title = "MWPV - My Windows Password Vault";
             LoadVersionDisplay();
 
-            PreviewKeyDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
-            PreviewMouseDown += (_, __) => { if (!_uiLockedDown) ClearStatus(); };
+            PreviewKeyDown += (_, __) => TryClearStatusFromUserInput();
+            PreviewMouseDown += (_, __) => TryClearStatusFromUserInput();
 
             _statusTimer.Tick += (_, __) =>
             {
@@ -57,6 +61,9 @@ namespace MWPV
             };
 
             Closing += MainWindow_Closing;
+            Loaded += (_, __) => ApplyMaximizedWorkArea();
+            StateChanged += (_, __) => ApplyMaximizedWorkArea();
+            _statusMessageSubscription = AppStatusMessageService.Subscribe(OnAppStatusMessagePublished);
 
             // ============================================================
             // Inactivity timer wiring (terminate app on timeout)
@@ -131,6 +138,18 @@ namespace MWPV
             }
 
             VersionDisplayText.Text = $"App: {appVersion}  DB: {dbVersion}";
+        }
+
+        private void ApplyMaximizedWorkArea()
+        {
+            if (WindowState != WindowState.Maximized)
+                return;
+
+            var workArea = SystemParameters.WorkArea;
+            MaxWidth = workArea.Width;
+            MaxHeight = workArea.Height;
+            Left = workArea.Left;
+            Top = workArea.Top;
         }
 
         // ============================================================
@@ -216,6 +235,20 @@ namespace MWPV
         // ============================================================
 
         public void ShowStartupStatus(string message, TimeSpan? autoHide = null)
+            => ShowStatusMessage(message, autoHide, clearOnUserInput: true);
+
+        private void OnAppStatusMessagePublished(AppStatusMessage message)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => OnAppStatusMessagePublished(message)));
+                return;
+            }
+
+            ShowStatusMessage(message.Text, message.AutoClearAfter, message.ClearOnUserInput);
+        }
+
+        private void ShowStatusMessage(string message, TimeSpan? autoHide, bool clearOnUserInput)
         {
             if (string.IsNullOrWhiteSpace(message))
             {
@@ -225,6 +258,9 @@ namespace MWPV
 
             StatusText.Text = message;
             StatusText.Visibility = Visibility.Visible;
+            StatusBannerHost.Visibility = Visibility.Visible;
+            _statusClearableByInput = clearOnUserInput;
+            _statusShownUtc = DateTime.UtcNow;
 
             _statusTimer.Stop();
 
@@ -238,12 +274,31 @@ namespace MWPV
         private void ClearStatus()
         {
             _statusTimer.Stop();
+            _statusClearableByInput = true;
+            _statusShownUtc = DateTime.MinValue;
 
             if (StatusText.Visibility != Visibility.Collapsed)
             {
                 StatusText.Visibility = Visibility.Collapsed;
                 StatusText.Text = string.Empty;
             }
+
+            if (StatusBannerHost.Visibility != Visibility.Visible)
+                StatusBannerHost.Visibility = Visibility.Visible;
+        }
+
+        private void TryClearStatusFromUserInput()
+        {
+            if (_uiLockedDown || !_statusClearableByInput)
+                return;
+
+            if (_statusShownUtc == DateTime.MinValue)
+                return;
+
+            if (DateTime.UtcNow - _statusShownUtc < StatusInputClearDelay)
+                return;
+
+            ClearStatus();
         }
 
         // ============================================================
@@ -313,6 +368,9 @@ namespace MWPV
             try
             {
                 Debug.WriteLine("[MAINWINDOW][CLOSE] Cleanup starting.");
+
+                try { _statusMessageSubscription?.Dispose(); } catch { }
+                _statusMessageSubscription = null;
 
                 try { _inactivity?.Dispose(); } catch { }
                 _inactivity = null;
