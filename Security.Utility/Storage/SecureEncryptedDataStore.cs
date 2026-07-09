@@ -253,6 +253,45 @@ public static class SecureEncryptedDataStore
         }
     }
 
+    /// <summary>
+    /// Try get plaintext bytes and return a Security.Utility technical result.
+    /// The result does not include message text, exception text, plaintext,
+    /// ciphertext, keys, passwords, sensitive paths, or caller actions.
+    /// </summary>
+    public static SecurityUtilityResult TryGetBytesResult(string key, out byte[] plainBytes)
+    {
+        plainBytes = Array.Empty<byte>();
+
+        if (string.IsNullOrWhiteSpace(key))
+            return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+        lock (_gate)
+        {
+            if (_wiped)
+                return Result(SecurityUtilityReturnCode.SecureStoreUnavailable, SecurityUtilityResultKind.Abend);
+
+            if (!_store.TryGetValue(key, out var combined))
+                return Result(SecurityUtilityReturnCode.SecureStoreKeyMissing, SecurityUtilityResultKind.Failure);
+
+            var combinedCopy = new byte[combined.Length];
+            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
+
+            try
+            {
+                plainBytes = DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+            }
+            catch (CryptographicException)
+            {
+                return Result(SecurityUtilityReturnCode.ProtectedDataDecryptFailed, SecurityUtilityResultKind.Abend);
+            }
+            catch
+            {
+                return Result(SecurityUtilityReturnCode.UnknownSecurityFailure, SecurityUtilityResultKind.Abend);
+            }
+        }
+    }
+
     /// <summary>Get plaintext chars (UTF-8). Caller MUST wipe the returned buffer after use.</summary>
     public static char[] GetChars(string key)
     {
@@ -327,6 +366,40 @@ public static class SecureEncryptedDataStore
                 | (bytes[3] << 24);
 
             return true;
+        }
+        finally
+        {
+            Array.Clear(bytes, 0, bytes.Length);
+        }
+    }
+
+    /// <summary>
+    /// Try get a 32-bit integer and return a Security.Utility technical result.
+    /// The result reports only code and seriousness; callers decide behavior.
+    /// </summary>
+    public static SecurityUtilityResult TryGetInt32Result(string key, out int value)
+    {
+        value = 0;
+
+        var result = TryGetBytesResult(key, out var bytes);
+        if (!result.Succeeded)
+            return result;
+
+        if (bytes.Length != 4)
+        {
+            if (bytes.Length != 0) Array.Clear(bytes, 0, bytes.Length);
+            return Result(SecurityUtilityReturnCode.ProtectedDataMalformed, SecurityUtilityResultKind.Abend);
+        }
+
+        try
+        {
+            value =
+                bytes[0]
+                | (bytes[1] << 8)
+                | (bytes[2] << 16)
+                | (bytes[3] << 24);
+
+            return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
         }
         finally
         {
@@ -498,5 +571,14 @@ public static class SecureEncryptedDataStore
 
         return plain;
     }
+
+    private static SecurityUtilityResult Result(
+        SecurityUtilityReturnCode code,
+        SecurityUtilityResultKind kind)
+        => new()
+        {
+            Code = code,
+            Kind = kind
+        };
 
 }

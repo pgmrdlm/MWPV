@@ -169,6 +169,61 @@ namespace Security.Utility.Crypto.Fields
             }
         }
 
+        /// <summary>
+        /// Attempts to decrypt bytes and returns a Security.Utility technical result.
+        /// The result reports only what happened and how serious it is; it does not
+        /// include message text, exception text, protected payloads, keys, passwords,
+        /// sensitive paths, or caller actions.
+        /// </summary>
+        public static SecurityUtilityResult TryDecryptBytesResult(
+            string masterKeySedsName,
+            string purpose,
+            byte[]? blob,
+            out byte[] plaintext)
+        {
+            plaintext = Array.Empty<byte>();
+
+            if (string.IsNullOrWhiteSpace(masterKeySedsName))
+                return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+            if (string.IsNullOrWhiteSpace(purpose))
+                return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+            if (blob is null || blob.Length == 0)
+                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+
+            if (blob.Length < MinBlobLen || blob[0] != BlobVersionV1)
+                return Result(SecurityUtilityReturnCode.ProtectedDataMalformed, SecurityUtilityResultKind.Abend);
+
+            var keyResult = ValidateRequiredKeyForResult(masterKeySedsName);
+            if (!keyResult.Succeeded)
+                return keyResult;
+
+            try
+            {
+                if (TryDecryptBytes(masterKeySedsName, purpose, blob, out plaintext))
+                    return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+
+                return Result(SecurityUtilityReturnCode.ProtectedDataDecryptFailed, SecurityUtilityResultKind.Abend);
+            }
+            catch (ArgumentException)
+            {
+                return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+            }
+            catch (InvalidOperationException)
+            {
+                return Result(SecurityUtilityReturnCode.CryptoKeyMissing, SecurityUtilityResultKind.Failure);
+            }
+            catch (CryptographicException)
+            {
+                return Result(SecurityUtilityReturnCode.ProtectedDataDecryptFailed, SecurityUtilityResultKind.Abend);
+            }
+            catch
+            {
+                return Result(SecurityUtilityReturnCode.UnknownSecurityFailure, SecurityUtilityResultKind.Abend);
+            }
+        }
+
         // ----------------------------
         // Public: Encrypt (chars -> blob) and wipe input
         // ----------------------------
@@ -225,6 +280,45 @@ namespace Security.Utility.Crypto.Fields
             }
         }
 
+        /// <summary>
+        /// Attempts to decrypt UTF-8 character data and returns a Security.Utility
+        /// technical result without returning message text or exception details.
+        /// </summary>
+        public static SecurityUtilityResult TryDecryptCharsResult(
+            string masterKeySedsName,
+            string purpose,
+            byte[]? blob,
+            out char[] chars)
+        {
+            chars = Array.Empty<char>();
+
+            var result = TryDecryptBytesResult(masterKeySedsName, purpose, blob, out var plainBytes);
+            if (!result.Succeeded)
+                return result;
+
+            if (plainBytes.Length == 0)
+                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+
+            try
+            {
+                var decoder = Encoding.UTF8.GetDecoder();
+                int charCount = decoder.GetCharCount(plainBytes, 0, plainBytes.Length);
+                var tmp = new char[charCount];
+                decoder.GetChars(plainBytes, 0, plainBytes.Length, tmp, 0, flush: true);
+
+                chars = tmp;
+                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+            }
+            catch (ArgumentException)
+            {
+                return Result(SecurityUtilityReturnCode.ProtectedDataMalformed, SecurityUtilityResultKind.Abend);
+            }
+            finally
+            {
+                Array.Clear(plainBytes, 0, plainBytes.Length);
+            }
+        }
+
         // ==========================================================
         // Internals
         // ==========================================================
@@ -242,6 +336,23 @@ namespace Security.Utility.Crypto.Fields
             }
 
             return key;
+        }
+
+        private static SecurityUtilityResult ValidateRequiredKeyForResult(string sedsName)
+        {
+            if (!SecureEncryptedDataStore.TryGetBytes(sedsName, out var key) || key.Length == 0)
+                return Result(SecurityUtilityReturnCode.CryptoKeyMissing, SecurityUtilityResultKind.Failure);
+
+            try
+            {
+                return key.Length == 32
+                    ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                    : Result(SecurityUtilityReturnCode.CryptoKeyInvalid, SecurityUtilityResultKind.Abend);
+            }
+            finally
+            {
+                Array.Clear(key, 0, key.Length);
+            }
         }
 
         // HKDF-SHA256 (extract+expand) to derive a per-purpose 32-byte subkey from the master key.
@@ -296,5 +407,14 @@ namespace Security.Utility.Crypto.Fields
                 Array.Clear(prk, 0, prk.Length);
             }
         }
+
+        private static SecurityUtilityResult Result(
+            SecurityUtilityReturnCode code,
+            SecurityUtilityResultKind kind)
+            => new()
+            {
+                Code = code,
+                Kind = kind
+            };
     }
 }

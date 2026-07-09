@@ -153,6 +153,31 @@ public static class SensitiveDataCleaner
     }
 
     /// <summary>
+    /// Securely delete a file and return a Security.Utility technical result.
+    /// The result does not include message text, exception text, file paths, or
+    /// caller actions.
+    /// </summary>
+    public static SecurityUtilityResult SecureDeleteFileResult(
+        string path,
+        int passes = 1,
+        bool shredName = true)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+        try
+        {
+            return SecureDeleteFile(path, passes, shredName, throwOnError: false)
+                ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                : Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
+        }
+        catch
+        {
+            return Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
+        }
+    }
+
+    /// <summary>
     /// Securely delete all files matching pattern in a directory. Returns (total, deleted) counts.
     /// Named param kept as 'overwritePasses' for back-compat.
     /// </summary>
@@ -193,6 +218,43 @@ public static class SensitiveDataCleaner
                 }
                 catch { }
             }
+        }
+    }
+
+    /// <summary>
+    /// Securely delete files in a directory and return a Security.Utility technical result.
+    /// The result does not include message text, exception text, file paths, or caller actions.
+    /// </summary>
+    public static SecurityUtilityResult SecureDeleteDirectoryResult(
+        string dir,
+        string searchPattern = "*",
+        SearchOption option = SearchOption.TopDirectoryOnly,
+        int overwritePasses = 1,
+        bool shredNames = true,
+        bool finalZeroPass = true,
+        bool removeDirectories = false)
+    {
+        if (string.IsNullOrWhiteSpace(dir))
+            return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+        try
+        {
+            var (total, deleted) = SecureDeleteDirectory(
+                dir,
+                searchPattern,
+                option,
+                overwritePasses,
+                shredNames,
+                finalZeroPass,
+                removeDirectories);
+
+            return total == deleted
+                ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                : Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
+        }
+        catch
+        {
+            return Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
         }
     }
 
@@ -363,6 +425,15 @@ public static class SensitiveDataCleaner
     // Back-compat method alias
     public static bool SecureFileDelete(string path, int overwritePasses = 1, bool shredName = true, bool finalZeroPass = true)
         => SecureDeleteFile(path, overwritePasses, shredName);
+
+    private static SecurityUtilityResult Result(
+        SecurityUtilityReturnCode code,
+        SecurityUtilityResultKind kind)
+        => new()
+        {
+            Code = code,
+            Kind = kind
+        };
 
 }
 

@@ -65,6 +65,46 @@ namespace Security.Utility.Storage
             return true;
         }
 
+        /// <summary>
+        /// Validates password policy and returns only a Security.Utility technical result.
+        /// No user-facing message text, password value, exception text, or caller action
+        /// is returned.
+        /// </summary>
+        public static SecurityUtilityResult ValidatePasswordPolicyResult(string password, string verifyPassword)
+            => ValidatePasswordPolicyResult(password, verifyPassword, MinimumLength);
+
+        /// <summary>
+        /// Validates password policy and returns only a Security.Utility technical result.
+        /// No user-facing message text, password value, exception text, or caller action
+        /// is returned.
+        /// </summary>
+        public static SecurityUtilityResult ValidatePasswordPolicyResult(
+            string password,
+            string verifyPassword,
+            int minimumLength)
+        {
+            if (password is null || verifyPassword is null)
+                return Result(SecurityUtilityReturnCode.InvalidInput, SecurityUtilityResultKind.Failure);
+
+            minimumLength = Math.Max(minimumLength, MinimumLength);
+
+            if (password != verifyPassword)
+                return Result(SecurityUtilityReturnCode.PasswordPolicyFailed, SecurityUtilityResultKind.Failure);
+
+            if (password.Length < minimumLength)
+                return Result(SecurityUtilityReturnCode.PasswordPolicyFailed, SecurityUtilityResultKind.Failure);
+
+            int conditionsMet = 0;
+            if (password.Any(char.IsUpper)) conditionsMet++;
+            if (password.Any(char.IsLower)) conditionsMet++;
+            if (password.Any(char.IsDigit)) conditionsMet++;
+            if (password.Any(ch => !char.IsLetterOrDigit(ch))) conditionsMet++;
+
+            return conditionsMet >= 3
+                ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                : Result(SecurityUtilityReturnCode.PasswordPolicyFailed, SecurityUtilityResultKind.Failure);
+        }
+
         // Generate a password into target[], meeting >=3/4 categories (strong specials set)
         public static void Generate(ref char[] target, int length)
         {
@@ -154,5 +194,14 @@ namespace Security.Utility.Storage
                 (a[i], a[j]) = (a[j], a[i]);
             }
         }
+
+        private static SecurityUtilityResult Result(
+            SecurityUtilityReturnCode code,
+            SecurityUtilityResultKind kind)
+            => new()
+            {
+                Code = code,
+                Kind = kind
+            };
     }
 }

@@ -66,6 +66,20 @@ namespace Security.Utility.Wiping
         }
 
         /// <summary>
+        /// Wipes every row and clears the collection, returning only a Security.Utility
+        /// technical result. No message text, exception text, sensitive values, or caller
+        /// actions are returned.
+        /// </summary>
+        public static SecurityUtilityResult WipeAndClearResult<T>(IList<T>? rows)
+            where T : class, ISensitiveWipe
+        {
+            var wipeResult = WipeAndClear(rows, debugLog: null);
+            return wipeResult.AllOk
+                ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                : Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
+        }
+
+        /// <summary>
         /// Same as WipeAndClear, but works with any IEnumerable by wiping the items
         /// and optionally calling a provided clear action (ObservableCollection, etc.).
         /// </summary>
@@ -115,6 +129,31 @@ namespace Security.Utility.Wiping
             debugLog?.Invoke($"[ROW-WIPE] end: attempted={attempted} ok={wipedOk} failed={wipeFailed}");
             return new WipeResult(attempted, wipedOk, wipeFailed, null);
         }
+
+        /// <summary>
+        /// Wipes rows and invokes the supplied clear action, returning only a Security.Utility
+        /// technical result. No message text, exception text, sensitive values, or caller
+        /// actions are returned.
+        /// </summary>
+        public static SecurityUtilityResult WipeAndClearResult<T>(
+            IEnumerable<T>? rows,
+            Action? clearAction)
+            where T : class, ISensitiveWipe
+        {
+            var wipeResult = WipeAndClear(rows, clearAction, debugLog: null);
+            return wipeResult.AllOk
+                ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
+                : Result(SecurityUtilityReturnCode.SecureDeleteFailed, SecurityUtilityResultKind.Failure);
+        }
+
+        private static SecurityUtilityResult Result(
+            SecurityUtilityReturnCode code,
+            SecurityUtilityResultKind kind)
+            => new()
+            {
+                Code = code,
+                Kind = kind
+            };
     }
 
     /// <summary>
