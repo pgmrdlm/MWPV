@@ -22,6 +22,7 @@ namespace MWPV.View.UserControls
     public partial class Panel : UserControl
     {
         private AddCategoryInline? _addCategoryInline;
+        private AppSettingsPanel? _appSettingsPanel;
         private CategoryItemEditorTabs? _categoryItemEdit;
 
         private bool _isHandlingInlineEvent;
@@ -108,6 +109,11 @@ namespace MWPV.View.UserControls
             UnwireCategoryGridEvents();
             UnwireCategoryItemGridEvents();
             UnwireOverlayEvents();
+            if (_appSettingsPanel != null)
+            {
+                _appSettingsPanel.SaveRequested -= AppSettingsPanel_SaveRequested;
+                _appSettingsPanel.CancelRequested -= AppSettingsPanel_CancelRequested;
+            }
 
             ForceClosePopupIfAny();
         }
@@ -444,6 +450,10 @@ namespace MWPV.View.UserControls
 
         private void ShowCategoryForm()
         {
+            if (SplitRoot != null) SplitRoot.Visibility = Visibility.Visible;
+            if (AppSettingsWorkspaceHost != null) AppSettingsWorkspaceHost.Visibility = Visibility.Collapsed;
+            if (txtLeftPaneTitle != null) txtLeftPaneTitle.Visibility = Visibility.Visible;
+            if (CategoryViewOptionsPanel != null) CategoryViewOptionsPanel.Visibility = Visibility.Visible;
             AddCategoryHost.Visibility = Visibility.Visible;
             CategoryGrid.Visibility = Visibility.Collapsed;
             btnAddCategory.Visibility = Visibility.Collapsed;
@@ -452,11 +462,60 @@ namespace MWPV.View.UserControls
 
         private void ShowCategoryGrid()
         {
+            if (SplitRoot != null) SplitRoot.Visibility = Visibility.Visible;
+            if (AppSettingsWorkspaceHost != null) AppSettingsWorkspaceHost.Visibility = Visibility.Collapsed;
+            if (txtLeftPaneTitle != null)
+            {
+                txtLeftPaneTitle.Text = "Categories";
+                txtLeftPaneTitle.Visibility = Visibility.Visible;
+            }
+            if (CategoryViewOptionsPanel != null) CategoryViewOptionsPanel.Visibility = Visibility.Visible;
             AddCategoryHost.Visibility = Visibility.Collapsed;
             CategoryGrid.Visibility = Visibility.Visible;
             btnAddCategory.Visibility = Visibility.Visible;
             btnAddCategoryItem.Visibility = Visibility.Collapsed;
             txtCategoryItemsTitle.Text = "Category Items";
+        }
+
+        /* =================== App Settings Shell =================== */
+
+        public void ShowAppSettings()
+        {
+            if (_isNavigationLocked || IsEditorOverlayActive || IsPopupOverlayActive)
+            {
+                UpdateLockdownBanner(true);
+                RaiseNavigationLockChanged(true);
+                return;
+            }
+
+            EnsureAppSettingsPanel();
+
+            if (SplitRoot != null) SplitRoot.Visibility = Visibility.Collapsed;
+            if (AppSettingsWorkspaceHost != null) AppSettingsWorkspaceHost.Visibility = Visibility.Visible;
+        }
+
+        private void EnsureAppSettingsPanel()
+        {
+            if (AppSettingsContent == null)
+                return;
+
+            if (_appSettingsPanel != null)
+                return;
+
+            _appSettingsPanel = new AppSettingsPanel();
+            _appSettingsPanel.SaveRequested += AppSettingsPanel_SaveRequested;
+            _appSettingsPanel.CancelRequested += AppSettingsPanel_CancelRequested;
+            AppSettingsContent.Content = _appSettingsPanel;
+        }
+
+        private void AppSettingsPanel_SaveRequested(object? sender, EventArgs e)
+        {
+            ShowCategoryGrid();
+        }
+
+        private void AppSettingsPanel_CancelRequested(object? sender, EventArgs e)
+        {
+            ShowCategoryGrid();
         }
 
         private void AddCategoryInline_Submitted(object? sender, CategorySubmittedEventArgs e)

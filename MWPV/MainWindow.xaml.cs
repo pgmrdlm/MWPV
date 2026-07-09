@@ -234,6 +234,23 @@ namespace MWPV
             }
         }
 
+        public void ShowAppSettingsPanel()
+        {
+            if (_uiLockedDown)
+            {
+                ShowStartupStatus(DefaultLockdownMessage, TimeSpan.FromSeconds(6));
+                return;
+            }
+
+            try
+            {
+                Panel?.ShowAppSettings();
+            }
+            catch
+            {
+            }
+        }
+
         // ============================================================
         // Status helpers
         // ============================================================

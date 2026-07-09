@@ -1,0 +1,300 @@
+<UserControl x:Class="MWPV.View.UserControls.AppSettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="600"
+             d:DesignWidth="1000">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="SettingsScreenBackground" Color="#F5F1EA"/>
+        <SolidColorBrush x:Key="SettingsSectionBackground" Color="#FFFDF8"/>
+        <SolidColorBrush x:Key="SettingsSectionBorder" Color="#C8BAAA"/>
+        <SolidColorBrush x:Key="SettingsMutedText" Color="#555555"/>
+
+        <Style x:Key="SettingsSectionBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SettingsSectionBackground}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource SettingsSectionBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,14,14"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource SettingsScreenBackground}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Primary}"
+                Padding="18,12">
+            <StackPanel>
+                <TextBlock Foreground="White"
+                           FontWeight="SemiBold"
+                           FontSize="20"
+                           Text="App Settings"/>
+                <TextBlock Margin="0,4,0,0"
+                           Foreground="White"
+                           Opacity="0.88"
+                           TextWrapping="Wrap"
+                           Text="Manage user-editable application settings."/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1"
+                      Padding="18"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Grid.Column="0"
+                        Style="{StaticResource SettingsSectionBorderStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="16"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14">
+                            <Run Text="Password Generator:"
+                                 FontWeight="SemiBold"/>
+                            <Run Text=" Controls generated passwords for saved items."
+                                 Foreground="{StaticResource SettingsMutedText}"/>
+                        </TextBlock>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Default generated password length"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Used when generating passwords for saved items."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Height="28"
+                                     Margin="10,0"
+                                     Text="12"/>
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource DialogSecondary}"
+                                    ToolTip="Reset this setting to its app-defined default."
+                                    Click="btnReset_Click"
+                                    Content="Reset"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <CheckBox Content="Include symbols when generating passwords"
+                                          IsChecked="True"
+                                          VerticalAlignment="Center"/>
+                                <TextBlock Text="Adds symbols to generated saved-item passwords."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="20,4,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0"
+                        Grid.Column="1"
+                        Style="{StaticResource SettingsSectionBorderStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="16"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14">
+                            <Run Text="Clipboard:"
+                                 FontWeight="SemiBold"/>
+                            <Run Text=" Controls how long copied sensitive values remain on the clipboard."
+                                 Foreground="{StaticResource SettingsMutedText}"/>
+                        </TextBlock>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Auto-clear clipboard after"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Number of seconds before copied sensitive values are cleared."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Height="28"
+                                     Margin="10,0"
+                                     Text="45"/>
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource DialogSecondary}"
+                                    ToolTip="Reset this setting to its app-defined default."
+                                    Click="btnReset_Click"
+                                    Content="Reset"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Grid.Column="0"
+                        Style="{StaticResource SettingsSectionBorderStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="16"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14">
+                            <Run Text="Logging Retention:"
+                                 FontWeight="SemiBold"/>
+                            <Run Text=" Controls how long sign-in and sign-out log entries are kept before purge. Other logs are not purged by this setting."
+                                 Foreground="{StaticResource SettingsMutedText}"/>
+                        </TextBlock>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Log retention days"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Minimum number of days to keep sign-in and sign-out logs before purge."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Height="28"
+                                     Margin="10,0"
+                                     Text="30"/>
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource DialogSecondary}"
+                                    ToolTip="Reset this setting to its app-defined default."
+                                    Click="btnReset_Click"
+                                    Content="Reset"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Grid.Column="1"
+                        Style="{StaticResource SettingsSectionBorderStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="16"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,14">
+                            <Run Text="Backup Retention:"
+                                 FontWeight="SemiBold"/>
+                            <Run Text=" Controls how many backup sets are kept."
+                                 Foreground="{StaticResource SettingsMutedText}"/>
+                        </TextBlock>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="86"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Backup retention count"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Minimum number of backup sets to keep."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Height="28"
+                                     Margin="10,0"
+                                     Text="5"/>
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource DialogSecondary}"
+                                    ToolTip="Reset this setting to its app-defined default."
+                                    Click="btnReset_Click"
+                                    Content="Reset"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="2"
+                Background="#EEE5D8"
+                BorderBrush="{StaticResource SettingsSectionBorder}"
+                BorderThickness="0,1,0,0"
+                Padding="18,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button x:Name="btnResetAll"
+                            Style="{StaticResource DialogSecondary}"
+                            ToolTip="Reset visible settings to their app-defined defaults."
+                            Click="btnReset_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE72C;"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Reset All"/>
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="txtStatus"
+                               Margin="14,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource SettingsMutedText}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button x:Name="btnSave"
+                            Style="{StaticResource DialogPrimary}"
+                            Margin="0,0,12,0"
+                            ToolTip="Save app settings."
+                            Click="btnSave_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE8FB;"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Save"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="btnCancel"
+                            Style="{StaticResource DialogSecondary}"
+                            ToolTip="Discard pending settings changes and return to the workspace."
+                            Click="btnCancel_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE711;"
+                                       Margin="0,0,8,0"/>
+                            <TextBlock Text="Cancel"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

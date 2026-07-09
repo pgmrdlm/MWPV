@@ -40,5 +40,14 @@ namespace MWPV.View.UserControls
                 mw.ShowLogsPanel();
             }
         }
+
+        // Tools -> App Settings...
+        private void mnuToolsAppSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+            {
+                mw.ShowAppSettingsPanel();
+            }
+        }
     }
 }

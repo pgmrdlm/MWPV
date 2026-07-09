@@ -160,6 +160,8 @@
                 <MenuItem Header="_Restore Password DB" Name="mnuToolsRestore"/>
                 <MenuItem Header="_Reset DB Encryption" Name="mnuToolsReset"/>
                 <Separator/>
+                <MenuItem Header="_App Settings..." Name="mnuToolsAppSettings"
+                          Click="mnuToolsAppSettings_Click"/>
                 <MenuItem Header="_View Logs..." Name="mnuToolsViewLogs"
                           Click="mnuToolsViewLogs_Click"/>
             </MenuItem>
