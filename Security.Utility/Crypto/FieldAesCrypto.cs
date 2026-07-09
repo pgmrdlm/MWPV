@@ -118,54 +118,13 @@ namespace Security.Utility.Crypto.Fields
             if (blob[0] != BlobVersionV1) return false;
 
             byte[] master = GetRequiredKeyFromSeds(masterKeySedsName);
-            byte[]? subkey = null;
-            byte[]? aad = null;
-
             try
             {
-                subkey = DeriveSubKey(master, purpose);
-                aad = Encoding.UTF8.GetBytes(purpose);
-
-                var nonce = new byte[NonceSize];
-                var tag = new byte[TagSize];
-
-                Buffer.BlockCopy(blob, 1, nonce, 0, NonceSize);
-                Buffer.BlockCopy(blob, 1 + NonceSize, tag, 0, TagSize);
-
-                int ctLen = blob.Length - (1 + NonceSize + TagSize);
-                if (ctLen < 0) return false;
-
-                var ciphertext = new byte[ctLen];
-                Buffer.BlockCopy(blob, 1 + NonceSize + TagSize, ciphertext, 0, ctLen);
-
-                var plain = new byte[ctLen];
-                try
-                {
-                    using (var gcm = new AesGcm(subkey))
-                    {
-                        gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
-                    }
-
-                    plaintext = plain; // caller must wipe
-                    return true;
-                }
-                catch
-                {
-                    Array.Clear(plain, 0, plain.Length);
-                    return false;
-                }
-                finally
-                {
-                    Array.Clear(nonce, 0, nonce.Length);
-                    Array.Clear(tag, 0, tag.Length);
-                    Array.Clear(ciphertext, 0, ciphertext.Length);
-                }
+                return TryDecryptBytesCore(master, purpose, blob, out plaintext);
             }
             finally
             {
                 Array.Clear(master, 0, master.Length);
-                if (subkey is not null) Array.Clear(subkey, 0, subkey.Length);
-                if (aad is not null) Array.Clear(aad, 0, aad.Length);
             }
         }
 
@@ -195,13 +154,13 @@ namespace Security.Utility.Crypto.Fields
             if (blob.Length < MinBlobLen || blob[0] != BlobVersionV1)
                 return Result(SecurityUtilityReturnCode.ProtectedDataMalformed, SecurityUtilityResultKind.Abend);
 
-            var keyResult = ValidateRequiredKeyForResult(masterKeySedsName);
+            var keyResult = TryGetRequiredKeyForResult(masterKeySedsName, out var master);
             if (!keyResult.Succeeded)
                 return keyResult;
 
             try
             {
-                if (TryDecryptBytes(masterKeySedsName, purpose, blob, out plaintext))
+                if (TryDecryptBytesCore(master, purpose, blob, out plaintext))
                     return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
 
                 return Result(SecurityUtilityReturnCode.ProtectedDataDecryptFailed, SecurityUtilityResultKind.Abend);
@@ -221,6 +180,10 @@ namespace Security.Utility.Crypto.Fields
             catch
             {
                 return Result(SecurityUtilityReturnCode.UnknownSecurityFailure, SecurityUtilityResultKind.Abend);
+            }
+            finally
+            {
+                Array.Clear(master, 0, master.Length);
             }
         }
 
@@ -338,20 +301,72 @@ namespace Security.Utility.Crypto.Fields
             return key;
         }
 
-        private static SecurityUtilityResult ValidateRequiredKeyForResult(string sedsName)
+        private static SecurityUtilityResult TryGetRequiredKeyForResult(string sedsName, out byte[] key)
         {
-            if (!SecureEncryptedDataStore.TryGetBytes(sedsName, out var key) || key.Length == 0)
+            key = Array.Empty<byte>();
+
+            if (!SecureEncryptedDataStore.TryGetBytes(sedsName, out key) || key.Length == 0)
                 return Result(SecurityUtilityReturnCode.CryptoKeyMissing, SecurityUtilityResultKind.Failure);
+
+            if (key.Length == 32)
+                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+
+            Array.Clear(key, 0, key.Length);
+            key = Array.Empty<byte>();
+            return Result(SecurityUtilityReturnCode.CryptoKeyInvalid, SecurityUtilityResultKind.Abend);
+        }
+
+        private static bool TryDecryptBytesCore(byte[] master, string purpose, byte[] blob, out byte[] plaintext)
+        {
+            plaintext = Array.Empty<byte>();
+
+            byte[]? subkey = null;
+            byte[]? aad = null;
 
             try
             {
-                return key.Length == 32
-                    ? Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success)
-                    : Result(SecurityUtilityReturnCode.CryptoKeyInvalid, SecurityUtilityResultKind.Abend);
+                subkey = DeriveSubKey(master, purpose);
+                aad = Encoding.UTF8.GetBytes(purpose);
+
+                var nonce = new byte[NonceSize];
+                var tag = new byte[TagSize];
+
+                Buffer.BlockCopy(blob, 1, nonce, 0, NonceSize);
+                Buffer.BlockCopy(blob, 1 + NonceSize, tag, 0, TagSize);
+
+                int ctLen = blob.Length - (1 + NonceSize + TagSize);
+                if (ctLen < 0) return false;
+
+                var ciphertext = new byte[ctLen];
+                Buffer.BlockCopy(blob, 1 + NonceSize + TagSize, ciphertext, 0, ctLen);
+
+                var plain = new byte[ctLen];
+                try
+                {
+                    using (var gcm = new AesGcm(subkey))
+                    {
+                        gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
+                    }
+
+                    plaintext = plain; // caller must wipe
+                    return true;
+                }
+                catch
+                {
+                    Array.Clear(plain, 0, plain.Length);
+                    return false;
+                }
+                finally
+                {
+                    Array.Clear(nonce, 0, nonce.Length);
+                    Array.Clear(tag, 0, tag.Length);
+                    Array.Clear(ciphertext, 0, ciphertext.Length);
+                }
             }
             finally
             {
-                Array.Clear(key, 0, key.Length);
+                if (subkey is not null) Array.Clear(subkey, 0, subkey.Length);
+                if (aad is not null) Array.Clear(aad, 0, aad.Length);
             }
         }
 

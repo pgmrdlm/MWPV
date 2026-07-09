@@ -225,33 +225,7 @@ public static class SecureEncryptedDataStore
 
     /// <summary>Try get plaintext bytes. Returns false if missing (no exception).</summary>
     public static bool TryGetBytes(string key, out byte[] plainBytes)
-    {
-        plainBytes = Array.Empty<byte>();
-
-        if (string.IsNullOrWhiteSpace(key))
-            return false;
-
-        lock (_gate)
-        {
-            if (_wiped) return false;
-            if (!_store.TryGetValue(key, out var combined))
-                return false;
-
-            var combinedCopy = new byte[combined.Length];
-            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
-
-            try
-            {
-                plainBytes = DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
-                return true;
-            }
-            catch
-            {
-                // Treat tamper/wrong-key as failure for "Try" API.
-                return false;
-            }
-        }
-    }
+        => TryGetBytesResult(key, out plainBytes).Succeeded;
 
     /// <summary>
     /// Try get plaintext bytes and return a Security.Utility technical result.
@@ -349,29 +323,7 @@ public static class SecureEncryptedDataStore
 
     /// <summary>Try get a 32-bit integer (little-endian). Returns false if missing or invalid.</summary>
     public static bool TryGetInt32(string key, out int value)
-    {
-        value = 0;
-        if (!TryGetBytes(key, out var bytes) || bytes.Length != 4)
-        {
-            if (bytes.Length != 0) Array.Clear(bytes, 0, bytes.Length);
-            return false;
-        }
-
-        try
-        {
-            value =
-                bytes[0]
-                | (bytes[1] << 8)
-                | (bytes[2] << 16)
-                | (bytes[3] << 24);
-
-            return true;
-        }
-        finally
-        {
-            Array.Clear(bytes, 0, bytes.Length);
-        }
-    }
+        => TryGetInt32Result(key, out value).Succeeded;
 
     /// <summary>
     /// Try get a 32-bit integer and return a Security.Utility technical result.
