@@ -21,6 +21,7 @@ using MWPV.Services;
 using MWPV.Session;                        // AppStatus (IsBasicOpen)
 using MWPV.View.UserControls.CategoryItems;
 using MWPV.View.UserControls.Popup;
+using Security.Utility;
 using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS)
 using Security.Utility.Crypto.Signatures;  // SensitiveValueSignature (HMAC signature)
 using Security.Utility.Crypto.Fields;      // FieldAesCrypto (SEDS key constant)
@@ -36,6 +37,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;               // VisualTreeHelper
 using System.Windows.Threading;
+using Utilities.Helpers;
 
 namespace MWPV.View.UserControls
 {
@@ -627,7 +629,7 @@ namespace MWPV.View.UserControls
         {
             string value = plain ?? string.Empty;
 
-            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+            byte[] keyBytes = GetUserSecretsKeyBytesOrThrow("after signature capture");
 
             try
             {
@@ -671,7 +673,7 @@ namespace MWPV.View.UserControls
 
         private static byte[] ComputePasswordFingerprint(string passwordPlain)
         {
-            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+            byte[] keyBytes = GetUserSecretsKeyBytesOrThrow("password fingerprint comparison");
             try
             {
                 return SensitiveValueSignature.Compute(passwordPlain ?? string.Empty, keyBytes, purpose: Purpose_PwFingerprint);
@@ -687,6 +689,19 @@ namespace MWPV.View.UserControls
             if (a == null || b == null) return false;
             if (a.Length != b.Length) return false;
             return CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        private static byte[] GetUserSecretsKeyBytesOrThrow(string operation)
+        {
+            var result = SecureEncryptedDataStore.TryGetBytesResult(FieldAesCrypto.SedsKey_UserSecretsKey, out var keyBytes);
+            if (result.Succeeded)
+                return keyBytes;
+
+            ErrorHandler.Warn(
+                "Security.Utility",
+                $"UserSecretsKey read failed during {operation}. SecurityUtilityCode={result.Code}; SecurityUtilityKind={result.Kind}.");
+
+            throw new InvalidOperationException("Required security key material is unavailable.");
         }
 
         private bool ShouldInsertPasswordHistoryForExistingItem(bool isBookmarkOnly, string? passwordPlain)

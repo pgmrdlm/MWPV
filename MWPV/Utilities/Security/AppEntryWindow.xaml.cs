@@ -367,11 +367,11 @@ namespace Utilities.Security
                     }
 
                     // Verify SQLite key file/password before storing credentials in SEDS.
-                    if (!ValidateExistingSqliteKeyFile(keyArchivePath, pwChars, out string validationReason))
+                    if (!ValidateExistingSqliteKeyFile(keyArchivePath, pwChars, out var validationResult))
                     {
                         EarlyLoginFailures.Record(
                             EDT.InvalidPasswordOrKeyFile,
-                            $"Invalid SQLite key-file password, schema, or payload. Path='{keyArchivePath}'. Reason='{validationReason}'"
+                            BuildSecurityUtilityResultLogMessage("Invalid SQLite key-file password, schema, or payload.", validationResult)
                         );
 
                         SurfaceLoggedError("Invalid Key File Password or invalid key file selected.");
@@ -385,13 +385,18 @@ namespace Utilities.Security
 
                     // === Read-only JSON/base64 validation — existing keyfile ONLY ===
                     var service = new ServiceSetUp();
-                    bool jsonOk = KeyProvisioner.ValidateKeysetJson(service.LoadKeysetJsonBytes);
+                    var keysetResult = KeyProvisioner.ValidateKeysetJsonResult(service.LoadKeysetJsonBytes);
 
-                    if (!jsonOk)
+                    if (!keysetResult.Succeeded)
                     {
+                        EarlyLoginFailures.Record(
+                            EDT.InvalidPasswordOrKeyFile,
+                            BuildSecurityUtilityResultLogMessage("Read-only keyset validation failed after key-file verification.", keysetResult)
+                        );
+
                         _ = FatalErrorPopupHelper.ShowFatalAsync(
                             "The selected key file is corrupt and the application must close.",
-                            details: "Read-only keyset validation failed for keyset.json after archive verification.");
+                            details: BuildSecurityUtilityResultLogMessage("Read-only keyset validation failed for keyset.json after archive verification.", keysetResult));
                         return;
                     }
                 }
@@ -580,25 +585,22 @@ namespace Utilities.Security
             return diff == 0;
         }
 
-        private static bool ValidateExistingSqliteKeyFile(string keyFilePath, char[] keyPassword, out string reason)
+        private static bool ValidateExistingSqliteKeyFile(string keyFilePath, char[] keyPassword, out SecurityUtilityResult result)
         {
-            reason = string.Empty;
+            result = SecurityUtilityValidationFailure(SecurityUtilityReturnCode.InvalidInput);
 
             if (string.IsNullOrWhiteSpace(keyFilePath))
             {
-                reason = "Key file path is empty.";
                 return false;
             }
 
             if (!File.Exists(keyFilePath))
             {
-                reason = "Key file does not exist.";
                 return false;
             }
 
             if (keyPassword == null || keyPassword.Length == 0)
             {
-                reason = "Key file password is empty.";
                 return false;
             }
 
@@ -610,32 +612,38 @@ namespace Utilities.Security
 
                 if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
                 {
-                    reason = "Key file path is invalid.";
                     return false;
                 }
 
-                if (!KeyFileStore.CanOpenAndValidateSchema(directory, fileName, keyPassword, out reason))
+                if (!KeyFileStore.CanOpenAndValidateSchema(directory, fileName, keyPassword, out _))
+                {
+                    result = SecurityUtilityValidationFailure(SecurityUtilityReturnCode.KeysetInvalid);
                     return false;
+                }
 
                 payloadBytes = KeyFileStore.ReadPayloadBytes(directory, fileName, keyPassword, payloadId: 1);
                 if (payloadBytes.Length == 0)
                 {
-                    reason = "Key file payload row 1 is empty.";
+                    result = SecurityUtilityValidationFailure(SecurityUtilityReturnCode.RequiredPayloadMissing);
                     return false;
                 }
 
                 byte[] payloadForValidation = payloadBytes;
-                if (!KeyProvisioner.ValidateKeysetJson(() => payloadForValidation))
+                result = KeyProvisioner.ValidateKeysetJsonResult(() => payloadForValidation);
+                if (!result.Succeeded)
                 {
-                    reason = "Key file payload row 1 is not a valid keyset.";
                     return false;
                 }
 
                 return true;
             }
-            catch (Exception ex)
+            catch
             {
-                reason = ex.Message;
+                result = new SecurityUtilityResult
+                {
+                    Code = SecurityUtilityReturnCode.UnknownSecurityFailure,
+                    Kind = SecurityUtilityResultKind.Abend
+                };
                 return false;
             }
             finally
@@ -644,6 +652,18 @@ namespace Utilities.Security
                     Array.Clear(payloadBytes, 0, payloadBytes.Length);
             }
         }
+
+        private static SecurityUtilityResult SecurityUtilityValidationFailure(SecurityUtilityReturnCode code)
+            => new()
+            {
+                Code = code,
+                Kind = code == SecurityUtilityReturnCode.InvalidInput
+                    ? SecurityUtilityResultKind.Failure
+                    : SecurityUtilityResultKind.Abend
+            };
+
+        private static string BuildSecurityUtilityResultLogMessage(string prefix, SecurityUtilityResult result)
+            => $"{prefix} SecurityUtilityCode={result.Code}; SecurityUtilityKind={result.Kind}.";
 
         // ========= SecureString helpers =========
 

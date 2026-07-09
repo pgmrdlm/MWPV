@@ -48,6 +48,7 @@
 
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using Security.Utility;
 using Security.Utility.Crypto.Fields;    // FieldAesCrypto (AES-GCM portable)
 using Security.Utility.Storage;          // SecureEncryptedDataStore (SEDS)
 using System;
@@ -329,30 +330,26 @@ namespace MWPV.Services
                 return true;
             }
 
+            var result = FieldAesCrypto.TryDecryptBytesResult(
+                masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
+                purpose: purpose,
+                blob: cipherBlob,
+                out var plainBytes);
+
+            if (!result.Succeeded)
+            {
+                LogSecurityUtilityResult("CategoryItem field decrypt failed.", result);
+                return false;
+            }
+
             try
             {
-                if (!FieldAesCrypto.TryDecryptBytes(
-                        masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
-                        purpose: purpose,
-                        blob: cipherBlob,
-                        out var plainBytes))
-                {
-                    return false;
-                }
-
-                try
-                {
-                    plain = Encoding.UTF8.GetString(plainBytes);
-                    return true;
-                }
-                finally
-                {
-                    Array.Clear(plainBytes, 0, plainBytes.Length);
-                }
+                plain = Encoding.UTF8.GetString(plainBytes);
+                return true;
             }
-            catch
+            finally
             {
-                return false;
+                Array.Clear(plainBytes, 0, plainBytes.Length);
             }
         }
 
@@ -383,7 +380,7 @@ namespace MWPV.Services
             // Normalize: null -> empty string (stable signature)
             string value = plain ?? string.Empty;
 
-            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+            byte[] keyBytes = GetUserSecretsKeyBytesOrThrow("before signature capture");
 
             try
             {
@@ -458,7 +455,7 @@ namespace MWPV.Services
         {
             // IMPORTANT: We assume SEDS returns a COPY of the key bytes.
             // If it ever returns a live reference, wiping here would be catastrophic.
-            byte[] keyBytes = SecureEncryptedDataStore.GetBytes(FieldAesCrypto.SedsKey_UserSecretsKey);
+            byte[] keyBytes = GetUserSecretsKeyBytesOrThrow("password fingerprint");
 
             try
             {
@@ -471,6 +468,23 @@ namespace MWPV.Services
             {
                 Array.Clear(keyBytes, 0, keyBytes.Length);
             }
+        }
+
+        private static byte[] GetUserSecretsKeyBytesOrThrow(string operation)
+        {
+            var result = SecureEncryptedDataStore.TryGetBytesResult(FieldAesCrypto.SedsKey_UserSecretsKey, out var keyBytes);
+            if (result.Succeeded)
+                return keyBytes;
+
+            LogSecurityUtilityResult($"UserSecretsKey read failed during {operation}.", result);
+            throw new InvalidOperationException("Required security key material is unavailable.");
+        }
+
+        private static void LogSecurityUtilityResult(string prefix, SecurityUtilityResult result)
+        {
+            ErrorHandler.Warn(
+                "Security.Utility",
+                $"{prefix} SecurityUtilityCode={result.Code}; SecurityUtilityKind={result.Kind}.");
         }
 
         /// <summary>
@@ -951,11 +965,13 @@ namespace MWPV.Services
                 }
                 else
                 {
-                    if (FieldAesCrypto.TryDecryptBytes(
-                            masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
-                            purpose: Purpose_CIPaH_PasswordHistory,
-                            blob: cipher,
-                            out var plainBytes))
+                    var decryptResult = FieldAesCrypto.TryDecryptBytesResult(
+                        masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
+                        purpose: Purpose_CIPaH_PasswordHistory,
+                        blob: cipher,
+                        out var plainBytes);
+
+                    if (decryptResult.Succeeded)
                     {
                         try
                         {
@@ -966,6 +982,10 @@ namespace MWPV.Services
                         {
                             Array.Clear(plainBytes, 0, plainBytes.Length);
                         }
+                    }
+                    else
+                    {
+                        LogSecurityUtilityResult("Password history decrypt failed.", decryptResult);
                     }
                 }
 

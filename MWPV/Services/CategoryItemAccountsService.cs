@@ -1,6 +1,7 @@
 // File: MWPV/Services/tmp_CategoryItemAccountsService.cs
 using Microsoft.Data.Sqlite;
 using MWPV.Models;
+using Security.Utility;
 using Security.Utility.Crypto.Fields;
 using System;
 using System.Collections.Generic;
@@ -610,31 +611,34 @@ namespace MWPV.Services
             if (cipherBlob is null || cipherBlob.Length == 0)
                 return true;
 
-            try
-            {
-                if (!FieldAesCrypto.TryDecryptBytes(
-                        masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
-                        purpose: purpose,
-                        blob: cipherBlob,
-                        out var plainBytes))
-                {
-                    return false;
-                }
+            var result = FieldAesCrypto.TryDecryptBytesResult(
+                masterKeySedsName: FieldAesCrypto.SedsKey_UserSecretsKey,
+                purpose: purpose,
+                blob: cipherBlob,
+                out var plainBytes);
 
-                try
-                {
-                    plain = Encoding.UTF8.GetString(plainBytes);
-                    return true;
-                }
-                finally
-                {
-                    Array.Clear(plainBytes, 0, plainBytes.Length);
-                }
-            }
-            catch
+            if (!result.Succeeded)
             {
+                LogSecurityUtilityResult("Account field decrypt failed.", result);
                 return false;
             }
+
+            try
+            {
+                plain = Encoding.UTF8.GetString(plainBytes);
+                return true;
+            }
+            finally
+            {
+                Array.Clear(plainBytes, 0, plainBytes.Length);
+            }
+        }
+
+        private static void LogSecurityUtilityResult(string prefix, SecurityUtilityResult result)
+        {
+            ErrorHandler.Warn(
+                "Security.Utility",
+                $"{prefix} SecurityUtilityCode={result.Code}; SecurityUtilityKind={result.Kind}.");
         }
 
         private static string MaskPanLast4(string? accountNumberPlain)

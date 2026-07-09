@@ -118,13 +118,16 @@ namespace MWPV.Services.Upgrade
                 }
 
                 var (directory, fileName) = SplitKeyFilePath(keyFilePath);
-                if (!KeyFileStore.CanOpenAndValidateSchema(directory, fileName, keyPassword, out var reason))
+                if (!KeyFileStore.CanOpenAndValidateSchema(directory, fileName, keyPassword, out _))
                 {
                     return UpgradeStepResult.Failure(
                         "ValidateKeyFile",
                         UpgradeFailureCategory.KeyFileValidation,
                         AppExitCode.UpgradeKeyFileValidationFailed,
-                        $"Key-file schema validation failed: {reason}");
+                        BuildSecurityUtilityResultMessage(
+                            "Key-file schema validation failed.",
+                            SecurityUtilityReturnCode.KeysetInvalid,
+                            SecurityUtilityResultKind.Abend));
                 }
 
                 payloadBytes = KeyFileStore.ReadPayloadBytes(directory, fileName, keyPassword, KeysetPayloadId);
@@ -134,17 +137,28 @@ namespace MWPV.Services.Upgrade
                         "ValidateKeyFile",
                         UpgradeFailureCategory.KeyFileValidation,
                         AppExitCode.UpgradeKeyFileValidationFailed,
-                        "Key-file payload row 1 is empty.");
+                        BuildSecurityUtilityResultMessage(
+                            "Key-file payload row 1 is empty.",
+                            SecurityUtilityReturnCode.RequiredPayloadMissing,
+                            SecurityUtilityResultKind.Abend));
                 }
 
                 byte[] validationBytes = payloadBytes.ToArray();
-                if (!KeyProvisioner.ValidateKeysetJson(() => validationBytes))
+                try
                 {
-                    return UpgradeStepResult.Failure(
-                        "ValidateKeyFile",
-                        UpgradeFailureCategory.KeyFileValidation,
-                        AppExitCode.UpgradeKeyFileValidationFailed,
-                        "Key-file payload row 1 is not valid keyset JSON.");
+                    var keysetResult = KeyProvisioner.ValidateKeysetJsonResult(() => validationBytes);
+                    if (!keysetResult.Succeeded)
+                    {
+                        return UpgradeStepResult.Failure(
+                            "ValidateKeyFile",
+                            UpgradeFailureCategory.KeyFileValidation,
+                            AppExitCode.UpgradeKeyFileValidationFailed,
+                            BuildSecurityUtilityResultMessage("Key-file payload row 1 is not valid keyset JSON.", keysetResult));
+                    }
+                }
+                finally
+                {
+                    Array.Clear(validationBytes, 0, validationBytes.Length);
                 }
 
                 var json = Encoding.UTF8.GetString(payloadBytes);
@@ -177,6 +191,15 @@ namespace MWPV.Services.Upgrade
                 UpgradeFailureCategory.KeyFileRewrite,
                 AppExitCode.UpgradeKeyFileRewriteFailed,
                 "Key-file rewrite is not implemented yet.");
+
+        private static string BuildSecurityUtilityResultMessage(string prefix, SecurityUtilityResult result)
+            => $"{prefix} SecurityUtilityCode={result.Code}; SecurityUtilityKind={result.Kind}.";
+
+        private static string BuildSecurityUtilityResultMessage(
+            string prefix,
+            SecurityUtilityReturnCode code,
+            SecurityUtilityResultKind kind)
+            => $"{prefix} SecurityUtilityCode={code}; SecurityUtilityKind={kind}.";
 
         public UpgradeStepResult ValidatePlaceholder() =>
             UpgradeStepResult.Failure(
