@@ -86,28 +86,22 @@
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
-                            <TextBox Grid.Column="1"
+                            <TextBox x:Name="txtPasswordMinimum"
+                                     Grid.Column="1"
                                      Height="28"
                                      Margin="10,0"
                                      Text="12"/>
                             <Button Grid.Column="2"
                                     Style="{StaticResource DialogSecondary}"
                                     ToolTip="Reset this setting to its app-defined default."
-                                    Click="btnReset_Click"
+                                    Click="btnResetPasswordMinimum_Click"
                                     Content="Reset"/>
                         </Grid>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <CheckBox Content="Include symbols"
-                                          IsChecked="True"
-                                          VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Grid>
+                        <CheckBox x:Name="chkIncludeSymbols"
+                                  Content="Include symbols"
+                                  IsChecked="True"
+                                  VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -137,14 +131,15 @@
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
-                            <TextBox Grid.Column="1"
+                            <TextBox x:Name="txtClipboardClearSeconds"
+                                     Grid.Column="1"
                                      Height="28"
                                      Margin="10,0"
                                      Text="45"/>
                             <Button Grid.Column="2"
                                     Style="{StaticResource DialogSecondary}"
                                     ToolTip="Reset this setting to its app-defined default."
-                                    Click="btnReset_Click"
+                                    Click="btnResetClipboard_Click"
                                     Content="Reset"/>
                         </Grid>
                     </StackPanel>
@@ -176,14 +171,15 @@
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
-                            <TextBox Grid.Column="1"
+                            <TextBox x:Name="txtLogRetentionDays"
+                                     Grid.Column="1"
                                      Height="28"
                                      Margin="10,0"
                                      Text="30"/>
                             <Button Grid.Column="2"
                                     Style="{StaticResource DialogSecondary}"
                                     ToolTip="Reset this setting to its app-defined default."
-                                    Click="btnReset_Click"
+                                    Click="btnResetLogRetention_Click"
                                     Content="Reset"/>
                         </Grid>
                     </StackPanel>
@@ -215,14 +211,15 @@
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
-                            <TextBox Grid.Column="1"
+                            <TextBox x:Name="txtBackupRetentionCount"
+                                     Grid.Column="1"
                                      Height="28"
                                      Margin="10,0"
                                      Text="5"/>
                             <Button Grid.Column="2"
                                     Style="{StaticResource DialogSecondary}"
                                     ToolTip="Reset this setting to its app-defined default."
-                                    Click="btnReset_Click"
+                                    Click="btnResetBackupRetention_Click"
                                     Content="Reset"/>
                         </Grid>
                     </StackPanel>
@@ -247,7 +244,7 @@
                     <Button x:Name="btnResetAll"
                             Style="{StaticResource DialogSecondary}"
                             ToolTip="Reset visible settings to their app-defined defaults."
-                            Click="btnReset_Click">
+                            Click="btnResetAll_Click">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock FontFamily="Segoe MDL2 Assets"
                                        Text="&#xE72C;"

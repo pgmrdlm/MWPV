@@ -489,6 +489,7 @@ namespace MWPV.View.UserControls
             }
 
             EnsureAppSettingsPanel();
+            _appSettingsPanel?.LoadSettings();
 
             if (SplitRoot != null) SplitRoot.Visibility = Visibility.Collapsed;
             if (AppSettingsWorkspaceHost != null) AppSettingsWorkspaceHost.Visibility = Visibility.Visible;

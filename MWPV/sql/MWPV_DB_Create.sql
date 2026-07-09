@@ -1,11 +1,16 @@
 
 /* ============================================================================
-   MWPV - 01.16 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.17 FRESH CREATE SCRIPT DRAFT
 
    Purpose:
-   - Create a fresh database at schema version 01.16
+   - Create a fresh database at schema version 01.17
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.17 changes reflected here:
+   - AppSettings editable settings columns added:
+     AS_PW_IncludeSymbols, AS_LogRetentionDays, AS_BackupRetentionCount
+   - Fresh install version stamp updated to 01.17
 
    01.16 changes reflected here:
    - BasicTab category item name-change template repair for DBs that already reached 01.15
@@ -206,7 +211,10 @@ CREATE TABLE AppSettings (
     AS_PW_Incriments       INTEGER NOT NULL,
     AS_PW_Inctriment_Steps INTEGER NOT NULL,
     AS_DisplayCategoriesWithItems INTEGER NOT NULL DEFAULT 1 CHECK (AS_DisplayCategoriesWithItems IN (0,1)),
-    SensitiveClipboardClearSeconds INTEGER NOT NULL DEFAULT 45 CHECK (SensitiveClipboardClearSeconds BETWEEN 5 AND 300)
+    SensitiveClipboardClearSeconds INTEGER NOT NULL DEFAULT 45 CHECK (SensitiveClipboardClearSeconds BETWEEN 5 AND 300),
+    AS_PW_IncludeSymbols INTEGER NOT NULL DEFAULT 1 CHECK (AS_PW_IncludeSymbols IN (0,1)),
+    AS_LogRetentionDays INTEGER NOT NULL DEFAULT 30 CHECK (AS_LogRetentionDays >= 30),
+    AS_BackupRetentionCount INTEGER NOT NULL DEFAULT 5 CHECK (AS_BackupRetentionCount >= 5)
 );
 
 -- Log message templates
@@ -614,22 +622,28 @@ INSERT INTO AppSettings (
     AS_PW_Incriments,
     AS_PW_Inctriment_Steps,
     AS_DisplayCategoriesWithItems,
-    SensitiveClipboardClearSeconds
+    SensitiveClipboardClearSeconds,
+    AS_PW_IncludeSymbols,
+    AS_LogRetentionDays,
+    AS_BackupRetentionCount
 )
 SELECT
     12,
     10,
     10,
     1,
-    45
+    45,
+    1,
+    30,
+    5
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.16',
+    '01.17',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.16',
+    'Fresh database created at version 01.17',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

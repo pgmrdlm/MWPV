@@ -11,13 +11,20 @@ namespace MWPV.Services
     public static class AppSettingsService
     {
         private const string Sql_AppSettingsSelect = "s_AppSettings_select.sql";
+        private const string Sql_AppSettingsUpdateEditable = "s_AppSettings_update_editable.sql";
         private const int FallbackPasswordMinimum = 12;
         private const int FallbackPasswordIncrement = 10;
         private const int FallbackPasswordEntryCount = 10;
+        private const bool FallbackPasswordIncludeSymbols = true;
         private const bool FallbackDisplayCategoriesWithItems = true;
         private const int FallbackSensitiveClipboardClearSeconds = 45;
-        private const int MinimumSensitiveClipboardClearSeconds = 5;
-        private const int MaximumSensitiveClipboardClearSeconds = 300;
+        private const int MinimumSensitiveClipboardClearSeconds = 15;
+        private const int MaximumSensitiveClipboardClearSeconds = 180;
+        private const int FallbackLogRetentionDays = 30;
+        private const int FallbackBackupRetentionCount = 5;
+        private const int MinimumEditablePasswordMinimum = 12;
+        private const int MinimumLogRetentionDays = 30;
+        private const int MinimumBackupRetentionCount = 5;
         private const int AbsolutePasswordMinimum = 8;
         private const int AbsolutePasswordIncrementMinimum = 1;
         private const int AbsolutePasswordEntryCountMinimum = 1;
@@ -108,20 +115,126 @@ namespace MWPV.Services
         {
             try
             {
+                var sql = LoadSqlRequired(Sql_AppSettingsSelect);
+
                 using var conn = DatabaseHelper.GetAppOpenConnection();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT SensitiveClipboardClearSeconds FROM AppSettings LIMIT 1;";
+                cmd.CommandText = sql;
 
-                var value = cmd.ExecuteScalar();
-                if (value == null || value == DBNull.Value)
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
                     return FallbackSensitiveClipboardClearSeconds;
 
-                return ClampSensitiveClipboardSeconds(Convert.ToInt32(value));
+                return ClampSensitiveClipboardSeconds(ReadOptionalInt32(
+                    reader,
+                    "SensitiveClipboardClearSeconds",
+                    FallbackSensitiveClipboardClearSeconds));
             }
             catch (Exception ex)
             {
                 return FallbackSensitiveClipboardClearSeconds;
             }
+        }
+
+        public static EditableAppSettings LoadEditableSettings()
+        {
+            try
+            {
+                var sql = LoadSqlRequired(Sql_AppSettingsSelect);
+
+                using var conn = DatabaseHelper.GetAppOpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read())
+                    return EditableAppSettings.Defaults();
+
+                return new EditableAppSettings
+                {
+                    SavedItemPasswordMinimum = Math.Max(
+                        ReadOptionalInt32(reader, "AS_PW_Minimum", FallbackPasswordMinimum),
+                        MinimumEditablePasswordMinimum),
+                    IncludeSymbols = ReadOptionalInt32(
+                        reader,
+                        "AS_PW_IncludeSymbols",
+                        FallbackPasswordIncludeSymbols ? 1 : 0) != 0,
+                    ClipboardClearSeconds = ClampSensitiveClipboardSeconds(ReadOptionalInt32(
+                        reader,
+                        "SensitiveClipboardClearSeconds",
+                        FallbackSensitiveClipboardClearSeconds)),
+                    LogRetentionDays = Math.Max(
+                        ReadOptionalInt32(reader, "AS_LogRetentionDays", FallbackLogRetentionDays),
+                        MinimumLogRetentionDays),
+                    BackupRetentionCount = Math.Max(
+                        ReadOptionalInt32(reader, "AS_BackupRetentionCount", FallbackBackupRetentionCount),
+                        MinimumBackupRetentionCount)
+                };
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.Abend(ex, "Error loading editable AppSettings");
+                return EditableAppSettings.Defaults();
+            }
+        }
+
+        public static bool TryValidateEditableSettings(EditableAppSettings? settings, out string message)
+        {
+            message = string.Empty;
+
+            if (settings == null)
+            {
+                message = "App settings are unavailable.";
+                return false;
+            }
+
+            if (settings.SavedItemPasswordMinimum < MinimumEditablePasswordMinimum)
+            {
+                message = "Saved-item password minimum must be at least 12.";
+                return false;
+            }
+
+            if (settings.ClipboardClearSeconds < MinimumSensitiveClipboardClearSeconds ||
+                settings.ClipboardClearSeconds > MaximumSensitiveClipboardClearSeconds)
+            {
+                message = "Clipboard auto-clear must be between 15 and 180 seconds.";
+                return false;
+            }
+
+            if (settings.LogRetentionDays < MinimumLogRetentionDays)
+            {
+                message = "Log retention must be at least 30 days.";
+                return false;
+            }
+
+            if (settings.BackupRetentionCount < MinimumBackupRetentionCount)
+            {
+                message = "Backup retention must be at least 5 backup sets.";
+                return false;
+            }
+
+            return true;
+        }
+
+        public static void SaveEditableSettings(EditableAppSettings settings)
+        {
+            if (!TryValidateEditableSettings(settings, out var message))
+                throw new ArgumentException(message, nameof(settings));
+
+            var sql = LoadSqlRequired(Sql_AppSettingsUpdateEditable);
+
+            using var conn = DatabaseHelper.GetAppOpenConnection();
+            using var tx = conn.BeginTransaction();
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@AS_PW_Minimum", settings.SavedItemPasswordMinimum);
+            cmd.Parameters.AddWithValue("@AS_PW_IncludeSymbols", settings.IncludeSymbols ? 1 : 0);
+            cmd.Parameters.AddWithValue("@SensitiveClipboardClearSeconds", settings.ClipboardClearSeconds);
+            cmd.Parameters.AddWithValue("@AS_LogRetentionDays", settings.LogRetentionDays);
+            cmd.Parameters.AddWithValue("@AS_BackupRetentionCount", settings.BackupRetentionCount);
+            cmd.ExecuteNonQuery();
+            tx.Commit();
         }
 
         private static int ClampSensitiveClipboardSeconds(int value)
@@ -149,6 +262,40 @@ namespace MWPV.Services
                 catch { return fallback; }
             }
         }
+
+        private static int ReadOptionalInt32(SqliteDataReader reader, string columnName, int fallback)
+        {
+            try
+            {
+                int ordinal = reader.GetOrdinal(columnName);
+                if (reader.IsDBNull(ordinal))
+                    return fallback;
+
+                return ReadInt32(reader, ordinal, fallback);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+    }
+
+    public sealed class EditableAppSettings
+    {
+        public int SavedItemPasswordMinimum { get; set; }
+        public bool IncludeSymbols { get; set; }
+        public int ClipboardClearSeconds { get; set; }
+        public int LogRetentionDays { get; set; }
+        public int BackupRetentionCount { get; set; }
+
+        public static EditableAppSettings Defaults() => new()
+        {
+            SavedItemPasswordMinimum = 12,
+            IncludeSymbols = true,
+            ClipboardClearSeconds = 45,
+            LogRetentionDays = 30,
+            BackupRetentionCount = 5
+        };
     }
 
     public sealed record PasswordLengthSettings(int Minimum, int Increment, int EntryCount)

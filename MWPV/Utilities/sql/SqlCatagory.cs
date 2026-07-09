@@ -92,6 +92,7 @@ namespace Utilities.Sql
 
             // AppSettings
             "s_AppSettings_select.sql",
+            "s_AppSettings_update_editable.sql",
 
             // DDL included in archive for completeness
             "MWPV_DB_Create.sql"
