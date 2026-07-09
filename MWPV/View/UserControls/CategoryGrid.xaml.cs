@@ -25,11 +25,13 @@ namespace MWPV.View.UserControls
             public int Key { get; }
             public string Name { get; }
             public string Description { get; }
-            public CategorySelected(int key, string name, string? description = null)
+            public bool IsActive { get; }
+            public CategorySelected(int key, string name, string? description = null, bool isActive = true)
             {
                 Key = key;
                 Name = name ?? string.Empty;
                 Description = description ?? string.Empty;
+                IsActive = isActive;
             }
         }
 
@@ -107,14 +109,14 @@ namespace MWPV.View.UserControls
 
         private void OnCategorySelected(object sender, CategoryCellEventArgs e)
         {
-            var payload = new CategorySelected(e.Key, e.Name, e.Description);
+            var payload = new CategorySelected(e.Key, e.Name, e.Description, e.IsActive);
             var args = new CategorySelectedRoutedEventArgs(SelectedCategoryChangedEvent, this, payload);
             RaiseEvent(args);
         }
 
         private void OnCategoryEditRequested(object sender, CategoryCellEventArgs e)
         {
-            var payload = new CategorySelected(e.Key, e.Name, e.Description);
+            var payload = new CategorySelected(e.Key, e.Name, e.Description, e.IsActive);
             var args = new CategorySelectedRoutedEventArgs(EditCategoryRequestedEvent, this, payload);
             RaiseEvent(args);
         }

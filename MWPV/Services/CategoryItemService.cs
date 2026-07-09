@@ -96,6 +96,10 @@ namespace MWPV.Services
         private const string Purpose_CI_Pin_BeforeSig = "CI.Pin.BeforeSig.V1";
 
         private const int CurrentFingerprintVersion = 1;
+        private const string InactiveCategoryAssignmentMessage =
+            "This item is assigned to an inactive category. Move it to an active category or reactivate the category before saving changes.";
+        private const string NewItemActiveCategoryRequiredMessage =
+            "Select an active category before saving this item.";
 
         // ============================================================
         // SEDS keys for BEFORE signatures (Base64 strings)
@@ -721,8 +725,17 @@ namespace MWPV.Services
         {
             if (itemId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(itemId), "itemId must be > 0.");
-            if (categoryKey <= 0)
-                throw new ArgumentOutOfRangeException(nameof(categoryKey), "A valid category is required.");
+            var before = LoadCategoryItemBasicById(itemId);
+
+            if (before != null && !before.ParentCategoryIsActive)
+            {
+                ValidateInactiveSourceRepairMove(before, categoryKey);
+            }
+            else if (categoryKey <= 0)
+            {
+                throw new InvalidOperationException("Select an active category.");
+            }
+
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
             if (bookMarkOnly.HasValue)
@@ -774,6 +787,24 @@ namespace MWPV.Services
             var category = CategoryService.LoadCategoryByKey(categoryKey);
             if (category == null || !category.IsActive)
                 throw new InvalidOperationException("Select an active category.");
+        }
+
+        private static void ValidateActiveDestinationCategory(int categoryKey, string message)
+        {
+            var category = CategoryService.LoadCategoryByKey(categoryKey);
+            if (category == null || !category.IsActive)
+                throw new InvalidOperationException(message);
+        }
+
+        private static void ValidateInactiveSourceRepairMove(CategoryItemBasicRow before, int destinationCategoryKey)
+        {
+            if (destinationCategoryKey <= 0)
+                throw new InvalidOperationException(InactiveCategoryAssignmentMessage);
+
+            if (before.CategoryKey == destinationCategoryKey)
+                throw new InvalidOperationException(InactiveCategoryAssignmentMessage);
+
+            ValidateActiveDestinationCategory(destinationCategoryKey, InactiveCategoryAssignmentMessage);
         }
 
         private static void ValidateCategoryItemReactivationAllowed(long itemId, int? requestedIsActive, int destinationCategoryKey)
@@ -2014,10 +2045,12 @@ LIMIT 1;";
             byte[]? pinCipher,
             int? isActive = null)
         {
-            if (categoryKey < 0)
-                throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
+            if (categoryKey <= 0)
+                throw new InvalidOperationException(NewItemActiveCategoryRequiredMessage);
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
+
+            ValidateActiveDestinationCategory(categoryKey, NewItemActiveCategoryRequiredMessage);
 
             if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
                 throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");
@@ -2138,8 +2171,8 @@ LIMIT 1;";
             byte[] pwFp,
             int fpVersion)
         {
-            if (categoryKey < 0)
-                throw new ArgumentOutOfRangeException(nameof(categoryKey), "categoryKey cannot be negative.");
+            if (categoryKey <= 0)
+                throw new InvalidOperationException(NewItemActiveCategoryRequiredMessage);
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("name is required.", nameof(name));
             if (pwCipher is null)
@@ -2148,6 +2181,8 @@ LIMIT 1;";
                 throw new ArgumentException("pwFp is required.", nameof(pwFp));
             if (fpVersion <= 0)
                 throw new ArgumentOutOfRangeException(nameof(fpVersion), "fpVersion must be > 0.");
+
+            ValidateActiveDestinationCategory(categoryKey, NewItemActiveCategoryRequiredMessage);
 
             if (CategoryItemNameExistsGlobal(name, excludeItemId: null))
                 throw new InvalidOperationException("Category item name already exists (global uniqueness rule).");

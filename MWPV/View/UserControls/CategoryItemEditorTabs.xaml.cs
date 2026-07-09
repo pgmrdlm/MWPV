@@ -1266,6 +1266,7 @@ namespace MWPV.View.UserControls
 
             // IMPORTANT: sync status for inactivity timer
             UpdateIsBasicOpenFromUi_BestEffort();
+            Dispatcher.BeginInvoke(new Action(SyncRepairOnlyUiFromBasicPanel));
 
             _hasPersistedId = HasPersistedIdFromSeds();
 
@@ -1300,6 +1301,7 @@ namespace MWPV.View.UserControls
 
             // IMPORTANT: sync status for inactivity timer
             UpdateIsBasicOpenFromUi_BestEffort();
+            Dispatcher.BeginInvoke(new Action(SyncRepairOnlyUiFromBasicPanel));
 
             SetStatus("");
         }
@@ -1536,6 +1538,21 @@ namespace MWPV.View.UserControls
                     int? isActive = BasicPanel.GetIsActiveInt();
                     int? bookMarkOnly = isBookmarkOnly ? 1 : 0;
                     int categoryKey = BasicPanel.GetSelectedCategoryKeyForExistingEdit();
+                    bool repairOnlyExisting = beforeRow?.ParentCategoryIsActive == false;
+
+                    if (repairOnlyExisting && beforeRow != null)
+                    {
+                        name = beforeRow.Name;
+                        desc = beforeRow.Description;
+                        username = beforeRow.Username;
+                        url = beforeRow.SignInUrl;
+                        emailPlain = beforeRow.AccountEmailPlain;
+                        phonePlain = beforeRow.AccountPhonePlain;
+                        pinPlain = beforeRow.PinPlain;
+                        isActive = beforeRow.IsActive ?? 1;
+                        bookMarkOnly = beforeRow.BookMarkOnly;
+                        isBookmarkOnly = beforeRow.BookMarkOnly == 1;
+                    }
 
                     int rows = CategoryItemService.UpdateCategoryItemBasic(
                         itemId: itemId,
@@ -1575,7 +1592,7 @@ namespace MWPV.View.UserControls
 
                     bool passwordChangedByFingerprint = false;
 
-                    if (isBookmarkOnly)
+                    if (isBookmarkOnly || repairOnlyExisting)
                     {
                     }
                     else
@@ -1869,10 +1886,12 @@ namespace MWPV.View.UserControls
                 BasicPanel.SaveRequested -= BasicPanel_SaveRequested;
                 BasicPanel.CancelRequested -= BasicPanel_CancelRequested;
                 BasicPanel.PasswordValidationFailed -= BasicPanel_PasswordValidationFailed;
+                BasicPanel.RepairOnlyChanged -= BasicPanel_RepairOnlyChanged;
 
                 BasicPanel.SaveRequested += BasicPanel_SaveRequested;
                 BasicPanel.CancelRequested += BasicPanel_CancelRequested;
                 BasicPanel.PasswordValidationFailed += BasicPanel_PasswordValidationFailed;
+                BasicPanel.RepairOnlyChanged += BasicPanel_RepairOnlyChanged;
             }
 
             if (BankCardsPanel != null)
@@ -1915,6 +1934,7 @@ namespace MWPV.View.UserControls
                 BasicPanel.SaveRequested -= BasicPanel_SaveRequested;
                 BasicPanel.CancelRequested -= BasicPanel_CancelRequested;
                 BasicPanel.PasswordValidationFailed -= BasicPanel_PasswordValidationFailed;
+                BasicPanel.RepairOnlyChanged -= BasicPanel_RepairOnlyChanged;
             }
 
             if (BankCardsPanel != null)
@@ -2019,14 +2039,50 @@ namespace MWPV.View.UserControls
 
             // After saving: reload Basic to force VIEW mode (resets edit-unlock)
             // Yes, this costs extra I/O. That's intentional for correctness.
-            BasicPanel.PopulateFromDbForCurrentEntity();
+              BasicPanel.PopulateFromDbForCurrentEntity();
+              SyncRepairOnlyUiFromBasicPanel();
 
-            SetStatus("");
-        }
+              SetStatus("");
+          }
 
         private void BasicPanel_CancelRequested(object? sender, EventArgs e)
         {
             HandleCancelAndExitRequest();
+        }
+
+        private void BasicPanel_RepairOnlyChanged(object? sender, EventArgs e)
+        {
+            SyncRepairOnlyUiFromBasicPanel();
+        }
+
+        private void SyncRepairOnlyUiFromBasicPanel()
+        {
+            bool repairOnly = false;
+            try { repairOnly = BasicPanel?.IsRepairOnly == true; } catch { repairOnly = false; }
+
+            if (ItemTabs == null)
+                return;
+
+            SetTabEnabled(TabIndexBasic, true);
+            SetTabEnabled(TabIndexAccounts, !repairOnly);
+            SetTabEnabled(TabIndexBankCards, !repairOnly);
+            SetTabEnabled(TabIndexSecurityQuestions, !repairOnly);
+
+            if (repairOnly && ItemTabs.SelectedIndex != TabIndexBasic)
+            {
+                ForceSelectTab(TabIndexBasic);
+                _lastTabIndex = TabIndexBasic;
+                UpdateIsBasicOpenFromUi_BestEffort();
+            }
+        }
+
+        private void SetTabEnabled(int tabIndex, bool isEnabled)
+        {
+            if (ItemTabs == null || tabIndex < 0 || tabIndex >= ItemTabs.Items.Count)
+                return;
+
+            if (ItemTabs.Items[tabIndex] is TabItem tab)
+                tab.IsEnabled = isEnabled;
         }
 
         /* ======================= Bank Cards integration ======================= */
@@ -2332,6 +2388,14 @@ namespace MWPV.View.UserControls
 
             // IMPORTANT: keep AppStatus in sync for inactivity timer
             UpdateIsBasicOpenFromUi_BestEffort();
+
+            if (!_isClosing && BasicPanel?.IsRepairOnly == true && newIndex != TabIndexBasic)
+            {
+                ForceSelectTab(TabIndexBasic);
+                _lastTabIndex = TabIndexBasic;
+                UpdateIsBasicOpenFromUi_BestEffort();
+                return;
+            }
 
             if (!_isClosing && oldIndex == TabIndexBasic && newIndex != TabIndexBasic)
             {

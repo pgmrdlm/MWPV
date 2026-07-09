@@ -31,6 +31,7 @@ namespace MWPV.View.UserControls.CategoryItems
         public event EventHandler? SaveRequested;
         public event EventHandler? CancelRequested;
         public event EventHandler<string>? PasswordValidationFailed;
+        public event EventHandler? RepairOnlyChanged;
 
         // CI_SecretStorage is NOT NULL in DB
         private const int SecretStorage_Default = 0;
@@ -45,6 +46,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         // Existing items start view-only; the Edit pill unlocks editing.
         private bool _editUnlocked;
+        private bool _repairMoveUnlocked;
 
         // Central truth: "view-only" means existing item AND not unlocked.
         private bool IsViewOnly => IsExistingItem && !_editUnlocked;
@@ -88,7 +90,9 @@ namespace MWPV.View.UserControls.CategoryItems
         private string _lastNameChecked = string.Empty;
         private bool _activeCheckboxLockedByInactiveCategory;
         private int _currentCategoryKey;
+        private CategoryItemService.CategoryItemBasicRow? _loadedBasicRow;
         private IReadOnlyList<CategoryService.CategoryChoice> _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
+        public bool IsRepairOnly => IsExistingItem && _loadedBasicRow?.ParentCategoryIsActive == false;
 
         // PIN rules
         private const int PinMinLen = 4;
@@ -150,6 +154,7 @@ namespace MWPV.View.UserControls.CategoryItems
         {
             _activeEntityId = 0;
             _editUnlocked = false; // existing items start locked each time we load/reload
+            _repairMoveUnlocked = false;
             _lastNameChecked = string.Empty;
             _activeCheckboxLockedByInactiveCategory = false;
 
@@ -168,63 +173,71 @@ namespace MWPV.View.UserControls.CategoryItems
         private void ApplyModeProtection()
         {
             bool viewOnly = IsViewOnly;
+            bool repairOnly = IsRepairOnly;
+            bool locked = viewOnly || repairOnly;
+            bool repairMoveUnlocked = repairOnly && _repairMoveUnlocked;
 
-            // Edit pill: only visible while view-only
+            // Edit pill remains available in repair-only mode, but it only unlocks category movement.
             btnEditPill.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnEditPill.ToolTip = repairOnly
+                ? "Move item to active category"
+                : "Edit this category item.";
+            if (txtEditPillCaption != null)
+                txtEditPillCaption.Text = repairOnly ? "Move" : "Edit";
 
-            // Save must not happen in view-only
-            btnSubmit.IsEnabled = !viewOnly;
+            // Repair-only keeps Save enabled so the item can be moved to an active category.
+            btnSubmit.IsEnabled = !viewOnly || repairOnly;
             UpdateSubmitButtonCaption();
 
             // Cancel always allowed
             btnCancel.IsEnabled = true;
 
             // TextBoxes: read-only keeps content readable/selectable
-            txtItemName.IsReadOnly = viewOnly;
-            txtUsername.IsReadOnly = viewOnly;
-            txtUrl.IsReadOnly = viewOnly;
-            txtDescription.IsReadOnly = viewOnly;
+            txtItemName.IsReadOnly = locked;
+            txtUsername.IsReadOnly = locked;
+            txtUrl.IsReadOnly = locked;
+            txtDescription.IsReadOnly = locked;
 
             // PasswordBoxes cannot be read-only, so disable edit
-            pwdPassword.IsEnabled = !viewOnly;
-            pwdVerify.IsEnabled = !viewOnly;
-            pwdPin.IsEnabled = !viewOnly;
-            pwdEmail.IsEnabled = !viewOnly;
-            txtPhone.IsEnabled = !viewOnly; // PasswordBox named txtPhone
+            pwdPassword.IsEnabled = !locked;
+            pwdVerify.IsEnabled = !locked;
+            pwdPin.IsEnabled = !locked;
+            pwdEmail.IsEnabled = !locked;
+            txtPhone.IsEnabled = !locked; // PasswordBox named txtPhone
 
             // Editing actions should be disabled
-            chkBookmarkOnly.IsEnabled = !viewOnly;
-            chkIsActive.IsEnabled = !viewOnly && !_activeCheckboxLockedByInactiveCategory;
+            chkBookmarkOnly.IsEnabled = !locked;
+            chkIsActive.IsEnabled = !locked && !_activeCheckboxLockedByInactiveCategory;
             chkIsActive.ToolTip = _activeCheckboxLockedByInactiveCategory
                 ? "Reactivate the category first."
                 : "Unchecked Category Items are inactive and hidden from the category item grid.";
             if (CategoryChoicePanel != null)
                 CategoryChoicePanel.Visibility = IsExistingItem ? Visibility.Visible : Visibility.Collapsed;
             if (cmbCategory != null)
-                cmbCategory.IsEnabled = IsExistingItem && !viewOnly;
+                cmbCategory.IsEnabled = IsExistingItem && ((!viewOnly && !repairOnly) || repairMoveUnlocked);
 
             // Replace Generate with Copy in view-only
-            btnGeneratePassword.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
-            btnCopyPassword.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-            cmbPasswordLength.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
-            btnResetPasswordSection.Visibility = viewOnly ? Visibility.Collapsed : Visibility.Visible;
+            btnGeneratePassword.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
+            btnCopyPassword.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
+            cmbPasswordLength.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
+            btnResetPasswordSection.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
             ApplyPasswordGeneratorControlState();
 
             // View-only copy buttons
-            btnCopyPhone.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-            btnCopyEmail.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-            btnCopyPin.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyPhone.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyEmail.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyPin.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
 
             // Username / URL copy buttons (view-only only)
-            btnCopyUsername.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
-            btnCopyUrl.Visibility = viewOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyUsername.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
+            btnCopyUrl.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
 
-            // Reveal actions are allowed even in view-only
-            btnTogglePasswordReveal.IsEnabled = true;
-            btnToggleVerifyReveal.IsEnabled = true;
-            btnTogglePinReveal.IsEnabled = true;
-            btnTogglePhoneReveal.IsEnabled = true;
-            btnToggleEmailReveal.IsEnabled = true;
+            // Reveal actions are allowed in view-only, but not in repair-only.
+            btnTogglePasswordReveal.IsEnabled = !repairOnly;
+            btnToggleVerifyReveal.IsEnabled = !repairOnly;
+            btnTogglePinReveal.IsEnabled = !repairOnly;
+            btnTogglePhoneReveal.IsEnabled = !repairOnly;
+            btnToggleEmailReveal.IsEnabled = !repairOnly;
 
             UpdateCopyButtonStates();
 
@@ -240,6 +253,19 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void UpdateCopyButtonStates()
         {
+            if (IsRepairOnly)
+            {
+                btnCopyPrimaryAccountNumber.IsEnabled = false;
+                btnTogglePrimaryAccountNumberReveal.IsEnabled = false;
+                btnCopyPassword.IsEnabled = false;
+                btnCopyPhone.IsEnabled = false;
+                btnCopyEmail.IsEnabled = false;
+                btnCopyPin.IsEnabled = false;
+                btnCopyUsername.IsEnabled = false;
+                btnCopyUrl.IsEnabled = false;
+                return;
+            }
+
             bool hasPrimaryAccountNumber = !string.IsNullOrEmpty(pwdPrimaryAccountNumber.Password);
             btnCopyPrimaryAccountNumber.IsEnabled = hasPrimaryAccountNumber;
             btnTogglePrimaryAccountNumberReveal.IsEnabled = hasPrimaryAccountNumber;
@@ -280,6 +306,15 @@ namespace MWPV.View.UserControls.CategoryItems
         private void btnEditPill_Click(object? sender, RoutedEventArgs e)
         {
             if (!IsExistingItem) return;
+
+            if (IsRepairOnly)
+            {
+                _repairMoveUnlocked = true;
+                UpdateCopyButtonStates();
+                ApplyModeProtection();
+                return;
+            }
+
             if (!IsViewOnly) return;
 
             _editUnlocked = true;
@@ -328,6 +363,7 @@ namespace MWPV.View.UserControls.CategoryItems
                     return;
                 }
 
+                _loadedBasicRow = row;
                 LoadActiveCategoryChoicesForCurrentRow(row);
 
                 _primaryAccountNumberPlain =
@@ -356,6 +392,7 @@ namespace MWPV.View.UserControls.CategoryItems
             finally
             {
                 _isPopulating = false;
+                RepairOnlyChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -526,6 +563,8 @@ namespace MWPV.View.UserControls.CategoryItems
             chkIsActive.IsChecked = true;
             _activeCheckboxLockedByInactiveCategory = false;
             _currentCategoryKey = 0;
+            _repairMoveUnlocked = false;
+            _loadedBasicRow = null;
             _activeCategoryChoices = Array.Empty<CategoryService.CategoryChoice>();
             if (cmbCategory != null)
             {
@@ -545,6 +584,7 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearPinError();
 
             _sigState.Clear();
+            RepairOnlyChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void ResetUiState()
@@ -608,6 +648,9 @@ namespace MWPV.View.UserControls.CategoryItems
 
         public void NormalizeUsernameFromEmailIfEmpty()
         {
+            if (IsRepairOnly)
+                return;
+
             var user = (txtUsername.Text ?? string.Empty).Trim();
             if (user.Length != 0)
                 return;
@@ -632,6 +675,16 @@ namespace MWPV.View.UserControls.CategoryItems
             out bool okPhone)
         {
             isBookmarkOnly = chkBookmarkOnly.IsChecked == true;
+
+            if (IsRepairOnly)
+            {
+                okName = true;
+                okPassword = true;
+                okPin = true;
+                okEmail = true;
+                okPhone = true;
+                return true;
+            }
 
             okName = ValidateItemName(forSubmit: true);
             okPassword = ValidatePasswordForSubmission(isBookmarkOnly, out _);
@@ -738,6 +791,9 @@ namespace MWPV.View.UserControls.CategoryItems
             return 0;
         }
 
+        public CategoryItemService.CategoryItemBasicRow? GetLoadedBasicRowSnapshot()
+            => _loadedBasicRow;
+
         public string? GetPasswordPlainOrNull()
         {
             var pw = pwdPassword.Password;
@@ -802,7 +858,7 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void btnSubmit_Click(object? sender, RoutedEventArgs e)
         {
-            if (IsViewOnly)
+            if (IsViewOnly && !IsRepairOnly)
             {
                 return;
             }

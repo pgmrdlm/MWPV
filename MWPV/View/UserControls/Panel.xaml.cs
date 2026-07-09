@@ -28,6 +28,7 @@ namespace MWPV.View.UserControls
 
         private int _selectedCategoryKey;
         private string _selectedCategoryName = string.Empty;
+        private bool _selectedCategoryIsActive;
         private CategoryItemService.CategoryItemGridViewMode _categoryItemViewMode =
             CategoryItemService.CategoryItemGridViewMode.ActiveItems;
 
@@ -291,8 +292,11 @@ namespace MWPV.View.UserControls
             var sel = CategoryGrid.GetSelectedCategory(e);
             _selectedCategoryKey = sel.Key;
             _selectedCategoryName = sel.Name ?? string.Empty;
+            _selectedCategoryIsActive = sel.IsActive;
 
-            btnAddCategoryItem.Visibility = Visibility.Visible;
+            btnAddCategoryItem.Visibility = _selectedCategoryIsActive
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             txtCategoryItemsTitle.Text = string.IsNullOrWhiteSpace(_selectedCategoryName)
                 ? "Category Items"
                 : $"Category Items — {_selectedCategoryName}";
@@ -338,6 +342,7 @@ namespace MWPV.View.UserControls
         {
             _selectedCategoryKey = 0;
             _selectedCategoryName = string.Empty;
+            _selectedCategoryIsActive = false;
 
             if (btnAddCategoryItem != null)
                 btnAddCategoryItem.Visibility = Visibility.Collapsed;
@@ -468,7 +473,7 @@ namespace MWPV.View.UserControls
                     e.CategoryKey == _selectedCategoryKey &&
                     (e.IsActive || CategoryGrid.CategoryViewMode == CategoryViewMode.AllActive))
                 {
-                    RestoreSelectedCategoryContext(e.CategoryKey, e.Name);
+                    RestoreSelectedCategoryContext(e.CategoryKey, e.Name, e.IsActive);
                 }
                 else if (e.Mode == CategoryFormMode.Edit &&
                          e.CategoryKey == _selectedCategoryKey &&
@@ -497,26 +502,30 @@ namespace MWPV.View.UserControls
 
                 int selectedKey = _selectedCategoryKey;
                 string selectedName = _selectedCategoryName;
+                bool selectedIsActive = _selectedCategoryIsActive;
 
                 ShowCategoryGrid();
                 SafeRefreshCategories();
                 if (wasEditingSelectedCategory)
-                    RestoreSelectedCategoryContext(selectedKey, selectedName);
+                    RestoreSelectedCategoryContext(selectedKey, selectedName, selectedIsActive);
                 _addCategoryInline?.ConfigureForAdd();
             }
             finally { _isHandlingInlineEvent = false; }
         }
 
-        private void RestoreSelectedCategoryContext(int categoryKey, string categoryName)
+        private void RestoreSelectedCategoryContext(int categoryKey, string categoryName, bool isActive)
         {
             if (categoryKey <= 0)
                 return;
 
             _selectedCategoryKey = categoryKey;
             _selectedCategoryName = categoryName ?? string.Empty;
+            _selectedCategoryIsActive = isActive;
 
             if (btnAddCategoryItem != null)
-                btnAddCategoryItem.Visibility = Visibility.Visible;
+                btnAddCategoryItem.Visibility = _selectedCategoryIsActive
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
 
             if (txtCategoryItemsTitle != null)
             {
@@ -555,6 +564,7 @@ namespace MWPV.View.UserControls
         {
             if (IsPopupOverlayActive) return;
             if (_selectedCategoryKey <= 0) return;
+            if (!_selectedCategoryIsActive) return;
 
             ClearActiveEntityForAdd();
             CreateAndShowEditorOverlay(_selectedCategoryKey, _selectedCategoryName);

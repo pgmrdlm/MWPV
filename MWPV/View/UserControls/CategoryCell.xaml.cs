@@ -106,22 +106,24 @@ namespace MWPV.View.UserControls
             if (key <= 0 || string.IsNullOrWhiteSpace(CategoryName))
                 return false;
 
-            args = new CategoryCellEventArgs(key, CategoryName, CategoryDescription);
+            args = new CategoryCellEventArgs(key, CategoryName, CategoryDescription, IsCategoryActive != false);
             return true;
         }
     }
 
     public sealed class CategoryCellEventArgs : EventArgs
     {
-        public CategoryCellEventArgs(int key, string name, string? description)
+        public CategoryCellEventArgs(int key, string name, string? description, bool isActive)
         {
             Key = key;
             Name = name ?? string.Empty;
             Description = description ?? string.Empty;
+            IsActive = isActive;
         }
 
         public int Key { get; }
         public string Name { get; }
         public string Description { get; }
+        public bool IsActive { get; }
     }
 }
