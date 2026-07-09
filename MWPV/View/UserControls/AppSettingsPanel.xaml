@@ -67,9 +67,9 @@
                         <TextBlock FontSize="16"
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,14">
-                            <Run Text="Password Generator:"
+                            <Run Text="Saved Item Passwords:"
                                  FontWeight="SemiBold"/>
-                            <Run Text=" Controls generated passwords for saved items."
+                            <Run Text=" Controls password rules for saved items."
                                  Foreground="{StaticResource SettingsMutedText}"/>
                         </TextBlock>
 
@@ -80,9 +80,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Default generated password length"
+                                <TextBlock Text="Default / Minimum:"
                                            FontWeight="Bold"/>
-                                <TextBlock Text="Used when generating passwords for saved items."
+                                <TextBlock Text="Minimum length for saved-item passwords."
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
@@ -103,13 +103,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <CheckBox Content="Include symbols when generating passwords"
+                                <CheckBox Content="Include symbols"
                                           IsChecked="True"
                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="Adds symbols to generated saved-item passwords."
-                                           Foreground="{StaticResource SettingsMutedText}"
-                                           TextWrapping="Wrap"
-                                           Margin="20,4,0,0"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -135,9 +131,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Auto-clear clipboard after"
+                                <TextBlock Text="Auto-clear clipboard after:"
                                            FontWeight="Bold"/>
-                                <TextBlock Text="Number of seconds before copied sensitive values are cleared."
+                                <TextBlock Text="Allowed range: 15-180 seconds. Default: 45."
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
@@ -174,9 +170,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Log retention days"
+                                <TextBlock Text="Default / Minimum:"
                                            FontWeight="Bold"/>
-                                <TextBlock Text="Minimum number of days to keep sign-in and sign-out logs before purge."
+                                <TextBlock Text="Applies only to sign-in/sign-out logs."
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
@@ -213,9 +209,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="Backup retention count"
+                                <TextBlock Text="Default / Minimum:"
                                            FontWeight="Bold"/>
-                                <TextBlock Text="Minimum number of backup sets to keep."
+                                <TextBlock Text="Minimum backup sets retained."
                                            Foreground="{StaticResource SettingsMutedText}"
                                            TextWrapping="Wrap"/>
                             </StackPanel>
