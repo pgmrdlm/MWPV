@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using MWPV.Services;
@@ -12,6 +13,20 @@ namespace MWPV.View.UserControls
 
         private bool _isLoading;
         private bool _isDirty;
+        private EditableAppSettings? _loadedBaseline;
+        private readonly HashSet<string> _pendingIndividualResetKeys = new(StringComparer.Ordinal);
+        private bool _pendingResetAll;
+
+        private const string SettingPasswordMinimum = "AS_PW_Minimum";
+        private const string SettingIncludeSymbols = "AS_PW_IncludeSymbols";
+        private const string SettingClipboardClearSeconds = "SensitiveClipboardClearSeconds";
+        private const string SettingLogRetentionDays = "AS_LogRetentionDays";
+        private const string SettingBackupRetentionCount = "AS_BackupRetentionCount";
+
+        private const string LogUpdateForm = "AppSettings";
+        private const string LogEventUpdated = "APP_SETTING_UPDATED";
+        private const string LogEventReset = "APP_SETTING_RESET";
+        private const string LogEventResetAll = "APP_SETTING_RESET_ALL";
 
         public bool IsDirty => _isDirty;
 
@@ -32,7 +47,10 @@ namespace MWPV.View.UserControls
             _isLoading = true;
             try
             {
-                ApplyToUi(AppSettingsService.LoadEditableSettings());
+                var loaded = AppSettingsService.LoadEditableSettings();
+                ApplyToUi(loaded);
+                _loadedBaseline = CopySettings(loaded);
+                ClearResetTracking();
                 SetStatus(string.Empty);
                 _isDirty = false;
             }
@@ -94,13 +112,27 @@ namespace MWPV.View.UserControls
         {
             ResetPasswordMinimum();
             ResetIncludeSymbols();
+            _pendingIndividualResetKeys.Add(SettingPasswordMinimum);
+            _pendingIndividualResetKeys.Add(SettingIncludeSymbols);
         }
 
-        private void btnResetClipboard_Click(object sender, RoutedEventArgs e) => ResetClipboard();
+        private void btnResetClipboard_Click(object sender, RoutedEventArgs e)
+        {
+            ResetClipboard();
+            _pendingIndividualResetKeys.Add(SettingClipboardClearSeconds);
+        }
 
-        private void btnResetLogRetention_Click(object sender, RoutedEventArgs e) => ResetLogRetention();
+        private void btnResetLogRetention_Click(object sender, RoutedEventArgs e)
+        {
+            ResetLogRetention();
+            _pendingIndividualResetKeys.Add(SettingLogRetentionDays);
+        }
 
-        private void btnResetBackupRetention_Click(object sender, RoutedEventArgs e) => ResetBackupRetention();
+        private void btnResetBackupRetention_Click(object sender, RoutedEventArgs e)
+        {
+            ResetBackupRetention();
+            _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
+        }
 
         private void btnResetAll_Click(object sender, RoutedEventArgs e)
         {
@@ -109,6 +141,13 @@ namespace MWPV.View.UserControls
             ResetClipboard();
             ResetLogRetention();
             ResetBackupRetention();
+            _pendingResetAll = true;
+            _pendingIndividualResetKeys.Clear();
+            _pendingIndividualResetKeys.Add(SettingPasswordMinimum);
+            _pendingIndividualResetKeys.Add(SettingIncludeSymbols);
+            _pendingIndividualResetKeys.Add(SettingClipboardClearSeconds);
+            _pendingIndividualResetKeys.Add(SettingLogRetentionDays);
+            _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
         }
 
         private bool TryReadPendingSettings(out EditableAppSettings settings, out string message)
@@ -161,7 +200,18 @@ namespace MWPV.View.UserControls
 
             try
             {
+                var changes = BuildChanges(_loadedBaseline, settings);
                 AppSettingsService.SaveEditableSettings(settings);
+                try
+                {
+                    WriteChangeLogsBestEffort(changes, settings);
+                }
+                catch
+                {
+                    // Logging is best-effort and must not fail a committed settings save.
+                }
+                _loadedBaseline = CopySettings(settings);
+                ClearResetTracking();
                 _isDirty = false;
                 const string savedMessage = "App settings saved.";
                 SetStatus(savedMessage);
@@ -182,8 +232,144 @@ namespace MWPV.View.UserControls
 
         private void btnCancel_Click(object sender, RoutedEventArgs e)
         {
+            ClearResetTracking();
             _isDirty = false;
             CancelRequested?.Invoke(this, EventArgs.Empty);
         }
+
+        private static EditableAppSettings CopySettings(EditableAppSettings settings) => new()
+        {
+            SavedItemPasswordMinimum = settings.SavedItemPasswordMinimum,
+            IncludeSymbols = settings.IncludeSymbols,
+            ClipboardClearSeconds = settings.ClipboardClearSeconds,
+            LogRetentionDays = settings.LogRetentionDays,
+            BackupRetentionCount = settings.BackupRetentionCount
+        };
+
+        private static List<SettingChange> BuildChanges(
+            EditableAppSettings? baseline,
+            EditableAppSettings pending)
+        {
+            var changes = new List<SettingChange>();
+            if (baseline == null)
+                return changes;
+
+            if (baseline.SavedItemPasswordMinimum != pending.SavedItemPasswordMinimum)
+                changes.Add(new SettingChange(
+                    SettingPasswordMinimum,
+                    pending.SavedItemPasswordMinimum == EditableAppSettings.Defaults().SavedItemPasswordMinimum,
+                    $"changed to {pending.SavedItemPasswordMinimum}"));
+
+            if (baseline.IncludeSymbols != pending.IncludeSymbols)
+                changes.Add(new SettingChange(
+                    SettingIncludeSymbols,
+                    pending.IncludeSymbols == EditableAppSettings.Defaults().IncludeSymbols,
+                    pending.IncludeSymbols ? "changed to enabled" : "changed to disabled"));
+
+            if (baseline.ClipboardClearSeconds != pending.ClipboardClearSeconds)
+                changes.Add(new SettingChange(
+                    SettingClipboardClearSeconds,
+                    pending.ClipboardClearSeconds == EditableAppSettings.Defaults().ClipboardClearSeconds,
+                    $"changed to {pending.ClipboardClearSeconds} seconds"));
+
+            if (baseline.LogRetentionDays != pending.LogRetentionDays)
+                changes.Add(new SettingChange(
+                    SettingLogRetentionDays,
+                    pending.LogRetentionDays == EditableAppSettings.Defaults().LogRetentionDays,
+                    $"changed to {pending.LogRetentionDays} days"));
+
+            if (baseline.BackupRetentionCount != pending.BackupRetentionCount)
+                changes.Add(new SettingChange(
+                    SettingBackupRetentionCount,
+                    pending.BackupRetentionCount == EditableAppSettings.Defaults().BackupRetentionCount,
+                    $"changed to {pending.BackupRetentionCount}"));
+
+            return changes;
+        }
+
+        private void WriteChangeLogsBestEffort(
+            IReadOnlyList<SettingChange> changes,
+            EditableAppSettings saved)
+        {
+            if (changes.Count == 0)
+                return;
+
+            if (_pendingResetAll && SettingsEqual(saved, EditableAppSettings.Defaults()))
+            {
+                WriteLogBestEffort(LogEventResetAll, 3, "AppSettings", new Dictionary<string, string?>());
+                return;
+            }
+
+            var updatedDescriptions = new List<string>();
+            var resetDescriptions = new List<string>();
+
+            foreach (var change in changes)
+            {
+                bool isReset = _pendingIndividualResetKeys.Contains(change.SettingName) && change.IsDefaultValue;
+                if (isReset)
+                    resetDescriptions.Add(change.SettingName);
+                else
+                    updatedDescriptions.Add($"{change.SettingName} {change.ChangeDescription}");
+            }
+
+            if (updatedDescriptions.Count > 0)
+                WriteSummaryLogBestEffort(LogEventUpdated, 1, updatedDescriptions);
+
+            if (resetDescriptions.Count > 0)
+                WriteSummaryLogBestEffort(LogEventReset, 2, resetDescriptions);
+        }
+
+        private static void WriteSummaryLogBestEffort(
+            string eventCode,
+            int templateSeq,
+            IReadOnlyList<string> descriptions)
+        {
+            var tokens = new Dictionary<string, string?>
+            {
+                ["ChangeDescription"] = string.Join("; ", descriptions)
+            };
+
+            WriteLogBestEffort(eventCode, templateSeq, "AppSettings", tokens);
+        }
+
+        private static void WriteLogBestEffort(
+            string eventCode,
+            int templateSeq,
+            string subjectText,
+            IReadOnlyDictionary<string, string?> tokens)
+        {
+            var write = new TemplateLogWriter.WriteRequest
+            {
+                Level = "INFO",
+                Source = "AppSettings",
+                EventCode = eventCode,
+                SubjectText = subjectText,
+                KeySetVersion = 1
+            };
+
+            TemplateLogWriter.InsertFromTemplates_BestEffort(
+                updateForm: LogUpdateForm,
+                seqsInOrder: new[] { templateSeq },
+                tokens: tokens,
+                write: write);
+        }
+
+        private static bool SettingsEqual(EditableAppSettings left, EditableAppSettings right) =>
+            left.SavedItemPasswordMinimum == right.SavedItemPasswordMinimum &&
+            left.IncludeSymbols == right.IncludeSymbols &&
+            left.ClipboardClearSeconds == right.ClipboardClearSeconds &&
+            left.LogRetentionDays == right.LogRetentionDays &&
+            left.BackupRetentionCount == right.BackupRetentionCount;
+
+        private void ClearResetTracking()
+        {
+            _pendingIndividualResetKeys.Clear();
+            _pendingResetAll = false;
+        }
+
+        private sealed record SettingChange(
+            string SettingName,
+            bool IsDefaultValue,
+            string ChangeDescription);
     }
 }

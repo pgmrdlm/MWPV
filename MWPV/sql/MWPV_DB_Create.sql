@@ -7,6 +7,12 @@
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
 
+   01.19 changes reflected here:
+   - AppSettings templates updated for per-save summary logging
+
+   01.18 changes reflected here:
+   - AppSettings change logging templates added
+
    01.17 changes reflected here:
    - AppSettings editable settings columns added:
      AS_PW_IncludeSymbols, AS_LogRetentionDays, AS_BackupRetentionCount
@@ -287,6 +293,33 @@ WHERE NOT EXISTS (
     FROM LogMessageTemplate t
     WHERE t.UpdateForm = v.UpdateForm
       AND t.Seq        = v.Seq
+);
+
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT 'AppSettings', 1, 'App settings were updated: #ChangeDescription#.', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate
+    WHERE UpdateForm = 'AppSettings'
+      AND Seq = 1
+);
+
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT 'AppSettings', 2, 'App settings were reset to default: #ChangeDescription#.', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate
+    WHERE UpdateForm = 'AppSettings'
+      AND Seq = 2
+);
+
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT 'AppSettings', 3, 'All app settings were reset to their default values.', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate
+    WHERE UpdateForm = 'AppSettings'
+      AND Seq = 3
 );
 
 INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
@@ -641,9 +674,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.17',
+    '01.19',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.17',
+    'Fresh database created at version 01.19',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
