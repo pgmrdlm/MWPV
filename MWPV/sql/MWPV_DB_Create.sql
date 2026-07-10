@@ -1,11 +1,14 @@
 
 /* ============================================================================
-   MWPV - 01.17 FRESH CREATE SCRIPT DRAFT
+   MWPV - 01.20 FRESH CREATE SCRIPT
 
    Purpose:
-   - Create a fresh database at schema version 01.17
+   - Create a fresh database at schema version 01.20
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.20 changes reflected here:
+   - App Settings Logs filter added for all AppSettings event codes
 
    01.19 changes reflected here:
    - AppSettings templates updated for per-save summary logging
@@ -549,7 +552,8 @@ WITH v(Seq, Code, Description) AS (
       (17, 'SECURITYQUESTION_CREATED', 'Security question created'),
       (18, 'SECURITYQUESTION_CHANGED', 'Security question changed'),
       (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated'),
-      (20, 'CATEGORY_UPDATED', 'Category updated')
+      (20, 'CATEGORY_UPDATED', 'Category updated'),
+      (21, 'APP_SETTINGS', 'App Settings')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -674,9 +678,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.19',
+    '01.20',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.19',
+    'Fresh database created at version 01.20',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

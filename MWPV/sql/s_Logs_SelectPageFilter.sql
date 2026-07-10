@@ -19,6 +19,16 @@ SELECT
     OSVersion,
     InstallType
 FROM Logs
-WHERE (@filter_code IS NULL OR EventCode = @filter_code)
+WHERE
+    @filter_code IS NULL
+    OR EventCode = @filter_code
+    OR (
+        @filter_code = 'APP_SETTINGS'
+        AND EventCode IN (
+            'APP_SETTING_UPDATED',
+            'APP_SETTING_RESET',
+            'APP_SETTING_RESET_ALL'
+        )
+    )
 ORDER BY CreatedUtc DESC
 LIMIT @limit OFFSET @offset;
