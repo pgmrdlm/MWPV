@@ -188,32 +188,49 @@ namespace MWPV.Services
                 return false;
             }
 
-            if (settings.SavedItemPasswordMinimum < MinimumEditablePasswordMinimum)
-            {
-                message = "Saved-item password minimum must be at least 12.";
-                return false;
-            }
+            var result = ValidateEditableSettings(settings);
+            message = result.FirstError;
+            return result.IsValid;
+        }
 
-            if (settings.ClipboardClearSeconds < MinimumSensitiveClipboardClearSeconds ||
-                settings.ClipboardClearSeconds > MaximumSensitiveClipboardClearSeconds)
-            {
-                message = "Clipboard auto-clear must be between 15 and 180 seconds.";
-                return false;
-            }
+        public static EditableAppSettingsValidationResult ValidateEditableSettings(
+            EditableAppSettings settings)
+        {
+            ArgumentNullException.ThrowIfNull(settings);
 
-            if (settings.LogRetentionDays < MinimumLogRetentionDays)
-            {
-                message = "Log retention must be at least 30 days.";
-                return false;
-            }
+            return ValidateEditableSettings(
+                settings.SavedItemPasswordMinimum,
+                settings.ClipboardClearSeconds,
+                settings.LogRetentionDays,
+                settings.BackupRetentionCount);
+        }
 
-            if (settings.BackupRetentionCount < MinimumBackupRetentionCount)
+        public static EditableAppSettingsValidationResult ValidateEditableSettings(
+            int? savedItemPasswordMinimum,
+            int? clipboardClearSeconds,
+            int? logRetentionDays,
+            int? backupRetentionCount)
+        {
+            return new EditableAppSettingsValidationResult
             {
-                message = "Backup retention must be at least 5 backup sets.";
-                return false;
-            }
-
-            return true;
+                PasswordMinimumError = savedItemPasswordMinimum.HasValue &&
+                                       savedItemPasswordMinimum.Value < MinimumEditablePasswordMinimum
+                    ? "Saved-item password minimum must be at least 12."
+                    : string.Empty,
+                ClipboardClearSecondsError = clipboardClearSeconds.HasValue &&
+                                             (clipboardClearSeconds.Value < MinimumSensitiveClipboardClearSeconds ||
+                                              clipboardClearSeconds.Value > MaximumSensitiveClipboardClearSeconds)
+                    ? "Clipboard auto-clear must be between 15 and 180 seconds."
+                    : string.Empty,
+                LogRetentionDaysError = logRetentionDays.HasValue &&
+                                        logRetentionDays.Value < MinimumLogRetentionDays
+                    ? "Log retention must be at least 30 days."
+                    : string.Empty,
+                BackupRetentionCountError = backupRetentionCount.HasValue &&
+                                            backupRetentionCount.Value < MinimumBackupRetentionCount
+                    ? "Backup retention must be at least 5 backup sets."
+                    : string.Empty
+            };
         }
 
         public static void SaveEditableSettings(EditableAppSettings settings)
@@ -296,6 +313,25 @@ namespace MWPV.Services
             LogRetentionDays = 30,
             BackupRetentionCount = 5
         };
+    }
+
+    public sealed class EditableAppSettingsValidationResult
+    {
+        public string PasswordMinimumError { get; init; } = string.Empty;
+        public string ClipboardClearSecondsError { get; init; } = string.Empty;
+        public string LogRetentionDaysError { get; init; } = string.Empty;
+        public string BackupRetentionCountError { get; init; } = string.Empty;
+
+        public bool IsValid => string.IsNullOrEmpty(PasswordMinimumError) &&
+                               string.IsNullOrEmpty(ClipboardClearSecondsError) &&
+                               string.IsNullOrEmpty(LogRetentionDaysError) &&
+                               string.IsNullOrEmpty(BackupRetentionCountError);
+
+        public string FirstError =>
+            !string.IsNullOrEmpty(PasswordMinimumError) ? PasswordMinimumError :
+            !string.IsNullOrEmpty(ClipboardClearSecondsError) ? ClipboardClearSecondsError :
+            !string.IsNullOrEmpty(LogRetentionDaysError) ? LogRetentionDaysError :
+            BackupRetentionCountError;
     }
 
     public sealed record PasswordLengthSettings(int Minimum, int Increment, int EntryCount)

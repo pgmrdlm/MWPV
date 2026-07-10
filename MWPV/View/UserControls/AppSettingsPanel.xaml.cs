@@ -13,6 +13,7 @@ namespace MWPV.View.UserControls
 
         private bool _isLoading;
         private bool _isDirty;
+        private bool _validationAttempted;
         private EditableAppSettings? _loadedBaseline;
         private readonly HashSet<string> _pendingIndividualResetKeys = new(StringComparer.Ordinal);
         private bool _pendingResetAll;
@@ -33,10 +34,10 @@ namespace MWPV.View.UserControls
         public AppSettingsPanel()
         {
             InitializeComponent();
-            txtPasswordMinimum.TextChanged += (_, __) => MarkDirty();
-            txtClipboardClearSeconds.TextChanged += (_, __) => MarkDirty();
-            txtLogRetentionDays.TextChanged += (_, __) => MarkDirty();
-            txtBackupRetentionCount.TextChanged += (_, __) => MarkDirty();
+            txtPasswordMinimum.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.PasswordMinimum);
+            txtClipboardClearSeconds.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.ClipboardClearSeconds);
+            txtLogRetentionDays.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.LogRetentionDays);
+            txtBackupRetentionCount.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.BackupRetentionCount);
             chkIncludeSymbols.Checked += (_, __) => MarkDirty();
             chkIncludeSymbols.Unchecked += (_, __) => MarkDirty();
             Loaded += (_, __) => LoadSettings();
@@ -51,6 +52,8 @@ namespace MWPV.View.UserControls
                 ApplyToUi(loaded);
                 _loadedBaseline = CopySettings(loaded);
                 ClearResetTracking();
+                ClearValidationErrors();
+                _validationAttempted = false;
                 SetStatus(string.Empty);
                 _isDirty = false;
             }
@@ -76,6 +79,14 @@ namespace MWPV.View.UserControls
 
             _isDirty = true;
             SetStatus(string.Empty);
+        }
+
+        private void HandleFieldEdited(ValidationCard card)
+        {
+            MarkDirty();
+
+            if (!_isLoading && _validationAttempted)
+                ValidateSingleCard(card);
         }
 
         private void ResetPasswordMinimum()
@@ -148,20 +159,34 @@ namespace MWPV.View.UserControls
             _pendingIndividualResetKeys.Add(SettingClipboardClearSeconds);
             _pendingIndividualResetKeys.Add(SettingLogRetentionDays);
             _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
+            ClearValidationErrors();
         }
 
-        private bool TryReadPendingSettings(out EditableAppSettings settings, out string message)
+        private bool ValidateAllPendingSettings(out EditableAppSettings settings)
         {
             settings = new EditableAppSettings();
-            message = string.Empty;
+            ClearValidationErrors();
 
-            if (!TryReadInt(txtPasswordMinimum.Text, "Saved-item password minimum", out int passwordMinimum, out message) ||
-                !TryReadInt(txtClipboardClearSeconds.Text, "Clipboard auto-clear", out int clipboardSeconds, out message) ||
-                !TryReadInt(txtLogRetentionDays.Text, "Log retention", out int logRetentionDays, out message) ||
-                !TryReadInt(txtBackupRetentionCount.Text, "Backup retention", out int backupRetentionCount, out message))
-            {
-                return false;
-            }
+            bool passwordParsed = TryReadInt(txtPasswordMinimum.Text, "Saved-item password minimum", out int passwordMinimum, out var passwordError);
+            bool clipboardParsed = TryReadInt(txtClipboardClearSeconds.Text, "Clipboard auto-clear", out int clipboardSeconds, out var clipboardError);
+            bool logParsed = TryReadInt(txtLogRetentionDays.Text, "Log retention", out int logRetentionDays, out var logError);
+            bool backupParsed = TryReadInt(txtBackupRetentionCount.Text, "Backup retention", out int backupRetentionCount, out var backupError);
+
+            SetCardError(txtPasswordMinimumError, passwordError);
+            SetCardError(txtClipboardClearSecondsError, clipboardError);
+            SetCardError(txtLogRetentionDaysError, logError);
+            SetCardError(txtBackupRetentionCountError, backupError);
+
+            var rangeValidation = AppSettingsService.ValidateEditableSettings(
+                passwordParsed ? passwordMinimum : null,
+                clipboardParsed ? clipboardSeconds : null,
+                logParsed ? logRetentionDays : null,
+                backupParsed ? backupRetentionCount : null);
+
+            if (passwordParsed) SetCardError(txtPasswordMinimumError, rangeValidation.PasswordMinimumError);
+            if (clipboardParsed) SetCardError(txtClipboardClearSecondsError, rangeValidation.ClipboardClearSecondsError);
+            if (logParsed) SetCardError(txtLogRetentionDaysError, rangeValidation.LogRetentionDaysError);
+            if (backupParsed) SetCardError(txtBackupRetentionCountError, rangeValidation.BackupRetentionCountError);
 
             settings.SavedItemPasswordMinimum = passwordMinimum;
             settings.IncludeSymbols = chkIncludeSymbols.IsChecked == true;
@@ -169,8 +194,73 @@ namespace MWPV.View.UserControls
             settings.LogRetentionDays = logRetentionDays;
             settings.BackupRetentionCount = backupRetentionCount;
 
-            return AppSettingsService.TryValidateEditableSettings(settings, out message);
+            return !HasValidationErrors();
         }
+
+        private void ValidateSingleCard(ValidationCard card)
+        {
+            switch (card)
+            {
+                case ValidationCard.PasswordMinimum:
+                    ValidateSingleValue(txtPasswordMinimum, txtPasswordMinimumError, "Saved-item password minimum", card);
+                    break;
+                case ValidationCard.ClipboardClearSeconds:
+                    ValidateSingleValue(txtClipboardClearSeconds, txtClipboardClearSecondsError, "Clipboard auto-clear", card);
+                    break;
+                case ValidationCard.LogRetentionDays:
+                    ValidateSingleValue(txtLogRetentionDays, txtLogRetentionDaysError, "Log retention", card);
+                    break;
+                case ValidationCard.BackupRetentionCount:
+                    ValidateSingleValue(txtBackupRetentionCount, txtBackupRetentionCountError, "Backup retention", card);
+                    break;
+            }
+        }
+
+        private static void ValidateSingleValue(TextBox input, TextBlock errorControl, string label, ValidationCard card)
+        {
+            if (!TryReadInt(input.Text, label, out int value, out var parseError))
+            {
+                SetCardError(errorControl, parseError);
+                return;
+            }
+
+            var result = AppSettingsService.ValidateEditableSettings(
+                card == ValidationCard.PasswordMinimum ? value : null,
+                card == ValidationCard.ClipboardClearSeconds ? value : null,
+                card == ValidationCard.LogRetentionDays ? value : null,
+                card == ValidationCard.BackupRetentionCount ? value : null);
+
+            string rangeError = card switch
+            {
+                ValidationCard.PasswordMinimum => result.PasswordMinimumError,
+                ValidationCard.ClipboardClearSeconds => result.ClipboardClearSecondsError,
+                ValidationCard.LogRetentionDays => result.LogRetentionDaysError,
+                ValidationCard.BackupRetentionCount => result.BackupRetentionCountError,
+                _ => string.Empty
+            };
+
+            SetCardError(errorControl, rangeError);
+        }
+
+        private void ClearValidationErrors()
+        {
+            SetCardError(txtPasswordMinimumError, string.Empty);
+            SetCardError(txtClipboardClearSecondsError, string.Empty);
+            SetCardError(txtLogRetentionDaysError, string.Empty);
+            SetCardError(txtBackupRetentionCountError, string.Empty);
+        }
+
+        private static void SetCardError(TextBlock control, string? message)
+        {
+            control.Text = message ?? string.Empty;
+            control.Visibility = string.IsNullOrEmpty(control.Text) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private bool HasValidationErrors() =>
+            !string.IsNullOrEmpty(txtPasswordMinimumError.Text) ||
+            !string.IsNullOrEmpty(txtClipboardClearSecondsError.Text) ||
+            !string.IsNullOrEmpty(txtLogRetentionDaysError.Text) ||
+            !string.IsNullOrEmpty(txtBackupRetentionCountError.Text);
 
         private static bool TryReadInt(string? text, string label, out int value, out string message)
         {
@@ -192,11 +282,9 @@ namespace MWPV.View.UserControls
 
         private void btnSave_Click(object sender, RoutedEventArgs e)
         {
-            if (!TryReadPendingSettings(out var settings, out var validationMessage))
-            {
-                SetStatus(validationMessage);
+            _validationAttempted = true;
+            if (!ValidateAllPendingSettings(out var settings))
                 return;
-            }
 
             try
             {
@@ -233,6 +321,8 @@ namespace MWPV.View.UserControls
         private void btnCancel_Click(object sender, RoutedEventArgs e)
         {
             ClearResetTracking();
+            ClearValidationErrors();
+            _validationAttempted = false;
             _isDirty = false;
             CancelRequested?.Invoke(this, EventArgs.Empty);
         }
@@ -371,5 +461,13 @@ namespace MWPV.View.UserControls
             string SettingName,
             bool IsDefaultValue,
             string ChangeDescription);
+
+        private enum ValidationCard
+        {
+            PasswordMinimum,
+            ClipboardClearSeconds,
+            LogRetentionDays,
+            BackupRetentionCount
+        }
     }
 }

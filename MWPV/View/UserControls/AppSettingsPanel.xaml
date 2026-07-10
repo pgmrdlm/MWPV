@@ -98,6 +98,13 @@
                                     Content="Reset"/>
                         </Grid>
 
+                        <TextBlock x:Name="txtPasswordMinimumError"
+                                   Foreground="Red"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"/>
+
                         <CheckBox x:Name="chkIncludeSymbols"
                                   Content="Include symbols"
                                   IsChecked="True"
@@ -142,6 +149,13 @@
                                     Click="btnResetClipboard_Click"
                                     Content="Reset"/>
                         </Grid>
+
+                        <TextBlock x:Name="txtClipboardClearSecondsError"
+                                   Foreground="Red"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
 
@@ -182,6 +196,13 @@
                                     Click="btnResetLogRetention_Click"
                                     Content="Reset"/>
                         </Grid>
+
+                        <TextBlock x:Name="txtLogRetentionDaysError"
+                                   Foreground="Red"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
 
@@ -222,6 +243,13 @@
                                     Click="btnResetBackupRetention_Click"
                                     Content="Reset"/>
                         </Grid>
+
+                        <TextBlock x:Name="txtBackupRetentionCountError"
+                                   Foreground="Red"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
             </Grid>
