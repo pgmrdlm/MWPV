@@ -52,7 +52,7 @@ public sealed class BackupServiceTests
         string database = Path.Combine(sources, "MWPV.db"); string key = Path.Combine(sources, "vault.pv");
         File.WriteAllText(database, "database"); File.WriteAllText(key, "key");
         var service = new BackupService(); BackupCreateResult created = await service.CreateAsync(Request(root, database, key));
-        File.AppendAllText(Path.Combine(created.Backup!.BackupFolder, "files", "PasswordDatabase.db"), "tampered");
+        File.AppendAllText(Path.Combine(created.Backup!.BackupFolder, "files", "MWPV.db"), "tampered");
         BackupVerifyResult verified = await service.VerifyAsync(created.Backup.BackupFolder);
         Assert.Equal(BackupOperationStatus.VerificationFailed, verified.Status);
     }
@@ -135,7 +135,7 @@ public sealed class BackupServiceTests
         ApplicationName = "MWPV", ApplicationVersion = "1.0.0",
         Files =
         [
-            new() { Role = "PasswordDatabase", SourcePath = database, DestinationRelativePath = "files/PasswordDatabase.db", Required = true },
+            new() { Role = "PasswordDatabase", SourcePath = database, DestinationRelativePath = "files/MWPV.db", Required = true },
             new() { Role = "PasswordDatabaseWal", SourcePath = database + "-wal", DestinationRelativePath = "files/PasswordDatabase.wal", Required = false },
             new() { Role = "KeyFileDatabase", SourcePath = key, DestinationRelativePath = "files/KeyFileDatabase.pv", Required = true }
         ]

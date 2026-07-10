@@ -378,7 +378,7 @@ namespace MWPV.Services.Upgrade
             ApplicationVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? string.Empty,
             Files =
             [
-                new() { Role = "PasswordDatabase", SourcePath = context.PasswordDatabasePath, DestinationRelativePath = "files/PasswordDatabase.db", Required = true },
+                new() { Role = "PasswordDatabase", SourcePath = context.PasswordDatabasePath, DestinationRelativePath = "files/MWPV.db", Required = true },
                 new() { Role = "PasswordDatabaseWal", SourcePath = context.PasswordDatabasePath + "-wal", DestinationRelativePath = "files/PasswordDatabase.wal", Required = false },
                 new() { Role = "PasswordDatabaseShm", SourcePath = context.PasswordDatabasePath + "-shm", DestinationRelativePath = "files/PasswordDatabase.shm", Required = false },
                 new() { Role = "PasswordDatabaseJournal", SourcePath = context.PasswordDatabasePath + "-journal", DestinationRelativePath = "files/PasswordDatabase.journal", Required = false },

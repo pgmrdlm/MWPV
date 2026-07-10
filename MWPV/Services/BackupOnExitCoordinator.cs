@@ -66,7 +66,7 @@ namespace MWPV.Services
 
         internal static BackupSourceFile[] BuildVaultFiles(string databasePath, string keyFilePath) =>
         [
-            new() { Role = "PasswordDatabase", SourcePath = databasePath, DestinationRelativePath = "files/PasswordDatabase.db", Required = true },
+            new() { Role = "PasswordDatabase", SourcePath = databasePath, DestinationRelativePath = "files/MWPV.db", Required = true },
             new() { Role = "PasswordDatabaseWal", SourcePath = databasePath + "-wal", DestinationRelativePath = "files/PasswordDatabase.wal", Required = false },
             new() { Role = "PasswordDatabaseShm", SourcePath = databasePath + "-shm", DestinationRelativePath = "files/PasswordDatabase.shm", Required = false },
             new() { Role = "PasswordDatabaseJournal", SourcePath = databasePath + "-journal", DestinationRelativePath = "files/PasswordDatabase.journal", Required = false },
