@@ -305,6 +305,8 @@ namespace MWPV.View.UserControls
             {
                 var changes = BuildChanges(_loadedBaseline, settings);
                 AppSettingsService.SaveEditableSettings(settings);
+                if (changes.Count > 0)
+                    VaultSessionStateService.MarkChanged();
                 try
                 {
                     WriteChangeLogsBestEffort(changes, settings);

@@ -5,6 +5,10 @@ using Security.Utility.Wiping;
 using Utilities.Helpers;
 using Utilities.Security;
 using MWPV.Services.AppLifecycle;
+using Backup.Utility;
+using Microsoft.Data.Sqlite;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace MWPV.Services.Upgrade
 {
@@ -28,7 +32,7 @@ namespace MWPV.Services.Upgrade
         private const string SedsKey_KeyPW = "KeyPW";
         private const string SedsKey_KeyFile = "KeyFile";
 
-        private readonly VaultDataBackupService _backupService;
+        private readonly IBackupService _backupService;
         private readonly DbUpgradeVersionReader _versionReader;
         private readonly DbUpgradeExecutor _dbExecutor;
         private readonly KeyFileUpgradeService _keyFileUpgradeService;
@@ -36,7 +40,7 @@ namespace MWPV.Services.Upgrade
 
         public AppUpgradeCoordinator()
             : this(
-                new VaultDataBackupService(),
+                new BackupService(),
                 new DbUpgradeVersionReader(),
                 new DbUpgradeExecutor(),
                 new KeyFileUpgradeService(),
@@ -45,7 +49,7 @@ namespace MWPV.Services.Upgrade
         }
 
         public AppUpgradeCoordinator(
-            VaultDataBackupService backupService,
+            IBackupService backupService,
             DbUpgradeVersionReader versionReader,
             DbUpgradeExecutor dbExecutor,
             KeyFileUpgradeService keyFileUpgradeService,
@@ -144,7 +148,7 @@ namespace MWPV.Services.Upgrade
         {
             context = NormalizeContext(context);
             var logger = new UpgradeLogger(context.LogPath);
-            UpgradeBackupSet? backupSet = null;
+            BackupDescriptor? backupSet = null;
 
             try
             {
@@ -163,35 +167,32 @@ namespace MWPV.Services.Upgrade
                 var catalog = catalogResult.Value;
 
                 logger.LogPhase("Backup", "Creating full vault-data backup set.");
-                var backupResult = _backupService.CreateBackupSet(
-                    context.PasswordDatabasePath,
-                    context.KeyFilePath,
-                    context.BackupRoot);
+                var backupResult = _backupService.CreateAsync(BuildBackupRequest(context)).GetAwaiter().GetResult();
 
-                if (!backupResult.Succeeded || backupResult.Value == null)
+                if (!backupResult.Succeeded || backupResult.Backup == null)
                 {
-                    logger.LogResult(AppExitCode.UpgradeBackupSetCreationFailed, backupResult.Message);
+                    logger.LogResult(AppExitCode.UpgradeBackupSetCreationFailed, backupResult.SafeMessage);
                     logger.LogManualRecoveryInstructions(
                         context,
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         UpgradeFailureCategory.Backup,
-                        backupResult.Message,
+                        backupResult.SafeMessage,
                         backupSet: null,
                         rollback: RollbackResult.NotRequired("Backup set creation failed before automatic rollback could run."));
                     return UpgradeResult.Failure(
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         UpgradeFailureCategory.Backup,
-                        backupResult.Message,
+                        backupResult.SafeMessage,
                         logPath: context.LogPath,
                         backupSetPath: context.BackupRoot,
                         codeBackupPath: context.CodeBackupPath,
-                        exception: backupResult.Exception);
+                        exception: null);
                 }
 
-                backupSet = backupResult.Value;
-                logger.LogPhase("Backup", $"Backup set created: {backupSet.BackupSetId}");
+                backupSet = backupResult.Backup;
+                logger.LogPhase("Backup", $"Backup set created: {backupSet.Manifest.BackupSetId}");
 
                 var versionResult = _versionReader.ReadCurrentVersion(
                     context.PasswordDatabasePath,
@@ -306,10 +307,10 @@ namespace MWPV.Services.Upgrade
                 exception: exception);
         }
 
-        private UpgradeResult RollbackAfterFailure(UpgradeStepResult stepResult, UpgradeBackupSet backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
+        private UpgradeResult RollbackAfterFailure(UpgradeStepResult stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
             logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
-            var rollback = _backupService.RestoreBackupSet(backupSet);
+            var rollback = RestoreBackupSet(backupSet, context);
             var finalCode = rollback.Status == RollbackResultStatus.Succeeded
                 ? AppExitCode.UpgradeFailedRollbackSucceeded
                 : AppExitCode.UpgradeRollbackFailed;
@@ -332,15 +333,15 @@ namespace MWPV.Services.Upgrade
                 rollbackRequired: true,
                 rollback: rollback,
                 logPath: logger.LogPath,
-                backupSetPath: backupSet.BackupRoot,
+                backupSetPath: backupSet.BackupFolder,
                 codeBackupPath: GetDefaultCodeBackupPath(),
                 exception: stepResult.Exception);
         }
 
-        private UpgradeResult RollbackAfterFailure<T>(UpgradeStepResult<T> stepResult, UpgradeBackupSet backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
+        private UpgradeResult RollbackAfterFailure<T>(UpgradeStepResult<T> stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
             logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
-            var rollback = _backupService.RestoreBackupSet(backupSet);
+            var rollback = RestoreBackupSet(backupSet, context);
             var finalCode = rollback.Status == RollbackResultStatus.Succeeded
                 ? AppExitCode.UpgradeFailedRollbackSucceeded
                 : AppExitCode.UpgradeRollbackFailed;
@@ -363,9 +364,56 @@ namespace MWPV.Services.Upgrade
                 rollbackRequired: true,
                 rollback: rollback,
                 logPath: logger.LogPath,
-                backupSetPath: backupSet.BackupRoot,
+                backupSetPath: backupSet.BackupFolder,
                 codeBackupPath: GetDefaultCodeBackupPath(),
                 exception: stepResult.Exception);
+        }
+
+        private static BackupCreateRequest BuildBackupRequest(UpgradeExecutionContext context) => new()
+        {
+            BackupRoot = context.BackupRoot,
+            FolderPrefix = "MWPV_Backup",
+            BackupType = BackupTypes.Upgrade,
+            ApplicationName = "MWPV",
+            ApplicationVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? string.Empty,
+            Files =
+            [
+                new() { Role = "PasswordDatabase", SourcePath = context.PasswordDatabasePath, DestinationRelativePath = "files/PasswordDatabase.db", Required = true },
+                new() { Role = "PasswordDatabaseWal", SourcePath = context.PasswordDatabasePath + "-wal", DestinationRelativePath = "files/PasswordDatabase.wal", Required = false },
+                new() { Role = "PasswordDatabaseShm", SourcePath = context.PasswordDatabasePath + "-shm", DestinationRelativePath = "files/PasswordDatabase.shm", Required = false },
+                new() { Role = "PasswordDatabaseJournal", SourcePath = context.PasswordDatabasePath + "-journal", DestinationRelativePath = "files/PasswordDatabase.journal", Required = false },
+                new() { Role = "KeyFileDatabase", SourcePath = context.KeyFilePath, DestinationRelativePath = "files/KeyFileDatabase.pv", Required = true }
+            ]
+        };
+
+        private RollbackResult RestoreBackupSet(BackupDescriptor backupSet, UpgradeExecutionContext context)
+        {
+            try
+            {
+                SqliteConnection.ClearAllPools();
+                var destinations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PasswordDatabase"] = context.PasswordDatabasePath,
+                    ["PasswordDatabaseWal"] = context.PasswordDatabasePath + "-wal",
+                    ["PasswordDatabaseShm"] = context.PasswordDatabasePath + "-shm",
+                    ["PasswordDatabaseJournal"] = context.PasswordDatabasePath + "-journal",
+                    ["KeyFileDatabase"] = context.KeyFilePath
+                };
+                BackupRestoreResult restored = _backupService.RestoreAsync(new BackupRestoreRequest
+                {
+                    BackupFolder = backupSet.BackupFolder,
+                    ExpectedBackupType = BackupTypes.Upgrade,
+                    Destinations = destinations,
+                    RemoveTargetsForAbsentOptionalFiles = true
+                }).GetAwaiter().GetResult();
+                return restored.Succeeded
+                    ? RollbackResult.Succeeded(restored.SafeMessage)
+                    : RollbackResult.Failed(restored.SafeMessage);
+            }
+            catch (Exception ex)
+            {
+                return RollbackResult.Failed("Full backup set restore failed.", ex);
+            }
         }
 
         private static UpgradeExecutionContext NormalizeContext(UpgradeExecutionContext context)

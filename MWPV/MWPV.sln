@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security.Utility", "..\Secu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyFileLogic", "KeyFileLogic\KeyFileLogic.csproj", "{0773DABF-CCDF-4B44-8B48-13B30ECAC899}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backup.Utility", "..\Backup.Utility\Backup.Utility.csproj", "{588EB57A-763B-4D54-BAA3-C95C6FD922D4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Backup.Utility.Tests", "..\Backup.Utility.Tests\Backup.Utility.Tests.csproj", "{30706621-1393-45FA-980C-35C2B3904AFB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0773DABF-CCDF-4B44-8B48-13B30ECAC899}.Release|Any CPU.Build.0 = Release|Any CPU
+		{588EB57A-763B-4D54-BAA3-C95C6FD922D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{588EB57A-763B-4D54-BAA3-C95C6FD922D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{588EB57A-763B-4D54-BAA3-C95C6FD922D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{588EB57A-763B-4D54-BAA3-C95C6FD922D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30706621-1393-45FA-980C-35C2B3904AFB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30706621-1393-45FA-980C-35C2B3904AFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30706621-1393-45FA-980C-35C2B3904AFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30706621-1393-45FA-980C-35C2B3904AFB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

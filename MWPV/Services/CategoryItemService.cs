@@ -773,6 +773,9 @@ namespace MWPV.Services
 
                 int rows = Convert.ToInt32(scalar, CultureInfo.InvariantCulture);
 
+                if (rows > 0)
+                    VaultSessionStateService.MarkChanged();
+
                 return rows;
             }
             catch (Exception ex)
@@ -1609,6 +1612,9 @@ LIMIT 1;";
                     throw;
                 }
 
+                if (logEntries.Count > 0)
+                    VaultSessionStateService.MarkChanged();
+
                 return new BankCardSaveResult
                 {
                     Writes = writes,
@@ -2090,6 +2096,8 @@ LIMIT 1;";
                     throw;
                 }
 
+                VaultSessionStateService.MarkChanged();
+
                 // NOTE: Logging removed from service (UI now owns created/change logs).
                 return newItemId;
             }
@@ -2234,6 +2242,8 @@ LIMIT 1;";
                     try { tx.Rollback(); } catch { }
                     throw;
                 }
+
+                VaultSessionStateService.MarkChanged();
 
                 // NOTE: Logging removed from service (UI now owns created/change logs).
                 return newItemId;

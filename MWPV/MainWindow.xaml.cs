@@ -15,7 +15,11 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Threading.Tasks;
 using MWPV.Services;          // InactivityLockService
+using MWPV.Services.AppLifecycle;
+using MWPV.Services.Security;
+using MWPV.View.UserControls.Popup;
 using Utilities.Helpers;
 
 namespace MWPV
@@ -30,8 +34,9 @@ namespace MWPV
         private DateTime _statusShownUtc = DateTime.MinValue;
 
         // ---- Close orchestration ----
-        private bool _closingCleanupInProgress;
-        private bool _allowCloseAfterCleanup;
+        private CloseState _closeState = CloseState.Idle;
+        private bool _forcedCloseIntent;
+        private readonly BackupOnExitCoordinator _backupOnExitCoordinator = new();
 
         // ---- UI Lockdown (editor open) ----
         private bool _uiLockedDown;
@@ -61,6 +66,8 @@ namespace MWPV
             };
 
             Closing += MainWindow_Closing;
+            if (Application.Current != null)
+                Application.Current.SessionEnding += (_, __) => _forcedCloseIntent = true;
             Loaded += (_, __) => ApplyMaximizedWorkArea();
             StateChanged += (_, __) => ApplyMaximizedWorkArea();
             _statusMessageSubscription = AppStatusMessageService.Subscribe(OnAppStatusMessagePublished);
@@ -96,6 +103,7 @@ namespace MWPV
                         try
                         {
                             // Prefer Close() so MainWindow_Closing cleanup runs.
+                            _forcedCloseIntent = true;
                             Close();
                         }
                         catch (Exception ex)
@@ -364,14 +372,15 @@ namespace MWPV
         // Close cleanup
         // ============================================================
 
-        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        private async void MainWindow_Closing(object? sender, CancelEventArgs e)
         {
-            if (_allowCloseAfterCleanup)
+            if (_closeState == CloseState.CloseApproved)
                 return;
 
-            if (_closingCleanupInProgress)
+            e.Cancel = true;
+
+            if (_closeState != CloseState.Idle)
             {
-                e.Cancel = true;
                 return;
             }
 
@@ -379,12 +388,117 @@ namespace MWPV
             try { allowClose = Panel?.TryHostClosePreflight_BestEffort() ?? true; } catch { }
             if (!allowClose)
             {
-                e.Cancel = true;
+                _closeState = CloseState.Idle;
                 return;
             }
 
-            _closingCleanupInProgress = true;
-            e.Cancel = true;
+            if (ShouldBypassBackupPrompt() ||
+                !VaultSessionStateService.VaultDataChangedThisSession ||
+                !AppSettingsService.GetBackupPromptOnExitAfterChanges())
+            {
+                BeginFinalCleanup();
+                return;
+            }
+
+            _closeState = CloseState.PromptActive;
+            PopupDialog.PopupResult decision;
+            try
+            {
+                var popup = new PopupDialog
+                {
+                    EnterResult = PopupDialog.PopupResult.Accept,
+                    InitialFocusResult = PopupDialog.PopupResult.Accept
+                };
+                popup.ConfigureThreeActions(
+                    severity: 0,
+                    title: "Backup Before Closing",
+                    message: "Changes were made to your vault during this session. Would you like to create a backup before closing?",
+                    primaryText: "Create Backup and Close",
+                    alternateText: "Close Without Backup",
+                    cancelText: "Cancel");
+
+                if (Panel == null)
+                {
+                    _closeState = CloseState.Idle;
+                    return;
+                }
+
+                decision = await Panel.ShowPopupAsync(popup);
+            }
+            catch
+            {
+                _closeState = CloseState.Idle;
+                return;
+            }
+
+            if (decision == PopupDialog.PopupResult.Cancel || decision == PopupDialog.PopupResult.Abort)
+            {
+                _closeState = CloseState.Idle;
+                return;
+            }
+
+            if (decision == PopupDialog.PopupResult.Alternate)
+            {
+                BeginFinalCleanup();
+                return;
+            }
+
+            await CreateBackupAndCloseAsync();
+        }
+
+        private bool ShouldBypassBackupPrompt() =>
+            _forcedCloseIntent ||
+            AppExit.FinalCode != AppExitCode.Success ||
+            AppRunState.StartupContext.RunMode == AppRunMode.Upgrade;
+
+        private async Task CreateBackupAndCloseAsync()
+        {
+            _closeState = CloseState.BackupRunning;
+            IsEnabled = false;
+            SensitiveClipboardService.Shared.SuspendDatabaseActivity();
+
+            try
+            {
+                await BackgroundDatabaseActivityGate.SuppressAndWaitForIdleAsync();
+                var result = await _backupOnExitCoordinator.CreateVerifiedBackupAsync();
+                if (!result.Succeeded)
+                {
+                    RestoreAfterBackupFailure();
+                    MessageBox.Show(
+                        "MWPV could not create and verify the backup. The application will remain open. Check that sufficient storage is available and try closing again.",
+                        "Backup Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                BeginFinalCleanup();
+            }
+            catch
+            {
+                RestoreAfterBackupFailure();
+                MessageBox.Show(
+                    "MWPV could not create and verify the backup. The application will remain open. Check that sufficient storage is available and try closing again.",
+                    "Backup Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private void RestoreAfterBackupFailure()
+        {
+            BackgroundDatabaseActivityGate.Resume();
+            SensitiveClipboardService.Shared.ResumeDatabaseActivity();
+            IsEnabled = true;
+            _closeState = CloseState.Idle;
+        }
+
+        private void BeginFinalCleanup()
+        {
+            if (_closeState == CloseState.CleanupRunning || _closeState == CloseState.CloseApproved)
+                return;
+
+            _closeState = CloseState.CleanupRunning;
 
             try
             {
@@ -406,7 +520,7 @@ namespace MWPV
                 {
                     try
                     {
-                        _allowCloseAfterCleanup = true;
+                        _closeState = CloseState.CloseApproved;
                         Close();
                     }
                     catch (Exception ex)
@@ -423,17 +537,12 @@ namespace MWPV
                             try { Application.Current.Shutdown(); } catch { }
                         }
                     }
-                    finally
-                    {
-                        _closingCleanupInProgress = false;
-                    }
                 }),
                 DispatcherPriority.ApplicationIdle);
             }
             catch (Exception ex)
             {
-                _allowCloseAfterCleanup = true;
-                _closingCleanupInProgress = false;
+                _closeState = CloseState.CloseApproved;
 
                 try
                 {
@@ -451,6 +560,15 @@ namespace MWPV
                     DispatcherPriority.Background);
                 }
             }
+        }
+
+        private enum CloseState
+        {
+            Idle,
+            PromptActive,
+            BackupRunning,
+            CleanupRunning,
+            CloseApproved
         }
     }
 }

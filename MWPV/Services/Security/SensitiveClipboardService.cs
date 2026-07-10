@@ -20,6 +20,7 @@ namespace MWPV.Services.Security
         private AutoHideTimer? _timer;
         private byte[]? _ownedHash32;
         private int _ownedLength;
+        private bool _databaseActivitySuspended;
 
         private SensitiveClipboardService()
         {
@@ -175,6 +176,29 @@ namespace MWPV.Services.Security
             }
         }
 
+        public void SuspendDatabaseActivity()
+        {
+            lock (_sync)
+            {
+                _databaseActivitySuspended = true;
+                _timer?.Stop();
+            }
+        }
+
+        public void ResumeDatabaseActivity()
+        {
+            lock (_sync)
+            {
+                _databaseActivitySuspended = false;
+                if (_ownedHash32 != null && _ownedLength > 0)
+                {
+                    var ttl = TimeSpan.FromSeconds(AppSettingsService.GetSensitiveClipboardClearSeconds());
+                    EnsureTimer_NoLock(ttl);
+                    _timer!.Touch(true);
+                }
+            }
+        }
+
         private void EnsureTimer_NoLock(TimeSpan interval)
         {
             if (_timer == null)
@@ -312,6 +336,13 @@ namespace MWPV.Services.Security
         {
             try
             {
+                if (Shared.IsDatabaseActivitySuspended())
+                    return;
+
+                using var lease = BackgroundDatabaseActivityGate.TryEnter();
+                if (lease == null)
+                    return;
+
                 TemplateLogWriter.InsertRendered_BestEffort(new TemplateLogWriter.WriteRequest
                 {
                     Level = "INFO",
@@ -330,6 +361,13 @@ namespace MWPV.Services.Security
         {
             try
             {
+                if (Shared.IsDatabaseActivitySuspended())
+                    return;
+
+                using var lease = BackgroundDatabaseActivityGate.TryEnter();
+                if (lease == null)
+                    return;
+
                 TemplateLogWriter.InsertRendered_BestEffort(new TemplateLogWriter.WriteRequest
                 {
                     Level = "WARN",
@@ -341,6 +379,14 @@ namespace MWPV.Services.Security
             }
             catch
             {
+            }
+        }
+
+        private bool IsDatabaseActivitySuspended()
+        {
+            lock (_sync)
+            {
+                return _databaseActivitySuspended;
             }
         }
     }

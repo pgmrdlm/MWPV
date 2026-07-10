@@ -34,6 +34,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Backup.Utility\Backup.Utility.csproj" />
 		<ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
 		<ProjectReference Include="KeyFileLogic\KeyFileLogic.csproj" />
 	</ItemGroup>

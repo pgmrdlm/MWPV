@@ -131,7 +131,9 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                var rec = await Task.Run(() => LogCatalogService.SelectById(id)).ConfigureAwait(false);
+                var rec = await BackgroundDatabaseActivityGate.RunAsync<LogCatalogService.LogDetailsRecord?>(
+                    () => LogCatalogService.SelectById(id),
+                    suppressedValue: null).ConfigureAwait(false);
                 if (rec == null) return;
 
                 // CreatedUtc refresh (if present)

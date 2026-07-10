@@ -121,8 +121,9 @@ namespace MWPV.View.UserControls
             try
             {
                 // Event-code filters come from the logical log_filters combo family.
-                var dbTypes = await Task.Run(() =>
-                    ComboDetailService.GetByType("log_filters"));
+                var dbTypes = await BackgroundDatabaseActivityGate.RunAsync(
+                    () => ComboDetailService.GetByType("log_filters"),
+                    Array.Empty<MWPV.Models.ComboDetail>());
 
                 foreach (var t in dbTypes.OrderBy(t => t.Seq))
                 {
@@ -196,10 +197,11 @@ namespace MWPV.View.UserControls
                 ListPanel.SelectedItem = null;
                 DetailsPanel.Clear();
 
-                var list = await Task.Run(() =>
-                    _selectedTypeCode.Equals("ALL", StringComparison.OrdinalIgnoreCase)
+                var list = await BackgroundDatabaseActivityGate.RunAsync(
+                    () => _selectedTypeCode.Equals("ALL", StringComparison.OrdinalIgnoreCase)
                         ? LogCatalogService.SelectPage(offset, limit)
-                        : LogCatalogService.SelectPageFiltered(offset, limit, _selectedTypeCode));
+                        : LogCatalogService.SelectPageFiltered(offset, limit, _selectedTypeCode),
+                    Array.Empty<MWPV.Models.Logs>());
 
                 _rows.Clear();
                 foreach (var r in list) _rows.Add(r);

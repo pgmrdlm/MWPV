@@ -1,6 +1,8 @@
 using MWPV.Services.AppLifecycle;
 using System;
 using System.Linq;
+using System.IO;
+using Backup.Utility;
 
 namespace MWPV.Services.Upgrade
 {
@@ -30,7 +32,7 @@ namespace MWPV.Services.Upgrade
             AppExitCode? detailCode,
             UpgradeFailureCategory failureCategory,
             string failureMessage,
-            UpgradeBackupSet? backupSet,
+            BackupDescriptor? backupSet,
             RollbackResult rollback)
         {
             WriteRawLine("");
@@ -41,7 +43,7 @@ namespace MWPV.Services.Upgrade
             WriteRawLine($"Failure category: {failureCategory}");
             WriteRawLine($"Detail code: {FormatCode(detailCode)}");
             WriteRawLine($"Upgrade log location: {ValueOrUnavailable(_logPath)}");
-            WriteRawLine($"Backup set location: {ValueOrUnavailable(backupSet?.BackupRoot ?? context?.BackupRoot)}");
+            WriteRawLine($"Backup set location: {ValueOrUnavailable(backupSet?.BackupFolder ?? context?.BackupRoot)}");
             WriteRawLine($"Failure detail: {ValueOrUnavailable(failureMessage)}");
             WriteRawLine("");
             WriteRawLine("Automatic rollback results:");
@@ -63,41 +65,41 @@ namespace MWPV.Services.Upgrade
             WriteRawLine("");
         }
 
-        private void LogDatabaseRecovery(UpgradeExecutionContext? context, UpgradeBackupSet? backupSet, string failureMessage)
+        private void LogDatabaseRecovery(UpgradeExecutionContext? context, BackupDescriptor? backupSet, string failureMessage)
         {
             WriteRawLine("1. Database restoration");
             WriteRawLine($"What failed: {ValueOrUnavailable(failureMessage)}");
             WriteRawLine($"Restore target location: {ValueOrUnavailable(context?.PasswordDatabasePath)}");
             WriteRawLine("Backup source location:");
 
-            var databaseEntries = backupSet?.Files
+            var databaseEntries = backupSet?.Manifest.Files
                 .Where(file => file.Role.StartsWith("PasswordDatabase", StringComparison.OrdinalIgnoreCase))
-                .ToArray() ?? Array.Empty<BackupFileEntry>();
+                .ToArray() ?? Array.Empty<BackupManifestFile>();
 
             if (databaseEntries.Length == 0)
             {
-                WriteRawLine($"- {ValueOrUnavailable(backupSet?.BackupRoot ?? context?.BackupRoot)}");
+                WriteRawLine($"- {ValueOrUnavailable(backupSet?.BackupFolder ?? context?.BackupRoot)}");
             }
             else
             {
                 foreach (var entry in databaseEntries)
-                    WriteRawLine($"- {entry.Role}: {FormatBackupEntry(entry)}");
+                    WriteRawLine($"- {entry.Role}: {FormatBackupEntry(backupSet, entry)}");
             }
 
             WriteRawLine("Recommended restore action: Copy each present password database backup file to its original target path. Include sidecar files such as -wal, -shm, or -journal when they are listed as present. Remove sidecar files that are listed as not present in the backup set.");
             WriteRawLine("");
         }
 
-        private void LogKeyFileRecovery(UpgradeExecutionContext? context, UpgradeBackupSet? backupSet, string failureMessage)
+        private void LogKeyFileRecovery(UpgradeExecutionContext? context, BackupDescriptor? backupSet, string failureMessage)
         {
             WriteRawLine("2. .pv key-file restoration");
             WriteRawLine($"What failed: {ValueOrUnavailable(failureMessage)}");
             WriteRawLine($"Restore target location: {ValueOrUnavailable(context?.KeyFilePath)}");
 
-            var keyEntry = backupSet?.Files
+            var keyEntry = backupSet?.Manifest.Files
                 .FirstOrDefault(file => string.Equals(file.Role, "KeyFileDatabase", StringComparison.OrdinalIgnoreCase));
 
-            WriteRawLine($"Backup source location: {FormatBackupEntry(keyEntry)}");
+            WriteRawLine($"Backup source location: {FormatBackupEntry(backupSet, keyEntry)}");
             WriteRawLine("Recommended restore action: Copy the backed-up .pv key file to the restore target location and overwrite the upgraded or partially upgraded key file.");
             WriteRawLine("");
         }
@@ -141,15 +143,17 @@ namespace MWPV.Services.Upgrade
         private static string FormatCode(AppExitCode? code) =>
             code.HasValue ? $"{(int)code.Value} ({code.Value})" : "Unavailable";
 
-        private static string FormatBackupEntry(BackupFileEntry? entry)
+        private static string FormatBackupEntry(BackupDescriptor? backupSet, BackupManifestFile? entry)
         {
             if (entry == null)
                 return "Unavailable";
 
             if (!entry.WasPresent)
-                return $"Not present in backup set; original target was {ValueOrUnavailable(entry.OriginalPath)}";
+                return "Not present in backup set; remove the corresponding current sidecar if manual recovery is required.";
 
-            return $"{ValueOrUnavailable(entry.BackupPath)} -> {ValueOrUnavailable(entry.OriginalPath)}";
+            return backupSet == null
+                ? "Unavailable"
+                : ValueOrUnavailable(Path.Combine(backupSet.BackupFolder, entry.DestinationRelativePath));
         }
 
         private static string ValueOrUnavailable(string? value) =>

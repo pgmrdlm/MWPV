@@ -22,6 +22,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Threading;
 
 namespace MWPV.View.UserControls.Popup
 {
@@ -34,7 +35,8 @@ namespace MWPV.View.UserControls.Popup
         {
             Accept = 0,
             Cancel = 1,
-            Abort = 2
+            Abort = 2,
+            Alternate = 3
         }
 
         public PopupResult? EnterResult { get; set; }
@@ -71,6 +73,14 @@ namespace MWPV.View.UserControls.Popup
         public static readonly DependencyProperty IsSecondaryVisibleProperty =
             DependencyProperty.Register(nameof(IsSecondaryVisible), typeof(bool), typeof(PopupDialog),
                 new PropertyMetadata(true, OnSecondaryVisibilityChanged));
+
+        public static readonly DependencyProperty AlternateButtonTextProperty =
+            DependencyProperty.Register(nameof(AlternateButtonText), typeof(string), typeof(PopupDialog),
+                new PropertyMetadata(string.Empty));
+
+        public static readonly DependencyProperty IsAlternateVisibleProperty =
+            DependencyProperty.Register(nameof(IsAlternateVisible), typeof(bool), typeof(PopupDialog),
+                new PropertyMetadata(false, OnAlternateVisibilityChanged));
 
         public static readonly DependencyProperty IsFatalErrorProperty =
             DependencyProperty.Register(nameof(IsFatalError), typeof(bool), typeof(PopupDialog),
@@ -116,6 +126,18 @@ namespace MWPV.View.UserControls.Popup
             set => SetValue(IsSecondaryVisibleProperty, value);
         }
 
+        public string AlternateButtonText
+        {
+            get => (string)GetValue(AlternateButtonTextProperty);
+            set => SetValue(AlternateButtonTextProperty, value);
+        }
+
+        public bool IsAlternateVisible
+        {
+            get => (bool)GetValue(IsAlternateVisibleProperty);
+            set => SetValue(IsAlternateVisibleProperty, value);
+        }
+
         public bool IsFatalError
         {
             get => (bool)GetValue(IsFatalErrorProperty);
@@ -139,6 +161,7 @@ namespace MWPV.View.UserControls.Popup
             // Default visuals
             ApplySeverityVisuals();
             ApplySecondaryVisibility();
+            ApplyAlternateVisibility();
             ApplyFatalState();
 
             // Keyboard: make sure it feels "forced"
@@ -167,10 +190,33 @@ namespace MWPV.View.UserControls.Popup
 
             IsSecondaryVisible = showCancel;
             SecondaryButtonText = string.IsNullOrWhiteSpace(secondaryText) ? "Cancel" : secondaryText;
+            IsAlternateVisible = false;
+            AlternateButtonText = string.Empty;
 
             ApplySeverityVisuals();
             ApplySecondaryVisibility();
+            ApplyAlternateVisibility();
             ApplyFatalState();
+        }
+
+        public void ConfigureThreeActions(
+            int severity,
+            string title,
+            string message,
+            string primaryText,
+            string alternateText,
+            string cancelText = "Cancel")
+        {
+            Configure(
+                severity: severity,
+                title: title,
+                message: message,
+                showCancel: true,
+                primaryText: primaryText,
+                secondaryText: cancelText);
+            AlternateButtonText = alternateText ?? string.Empty;
+            IsAlternateVisible = true;
+            ApplyAlternateVisibility();
         }
 
         // Convenience helpers that match our expected usage:
@@ -212,6 +258,17 @@ namespace MWPV.View.UserControls.Popup
             btnSecondary.Visibility = IsSecondaryVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        private static void OnAlternateVisibilityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is PopupDialog p)
+                p.ApplyAlternateVisibility();
+        }
+
+        private void ApplyAlternateVisibility()
+        {
+            btnAlternate.Visibility = IsAlternateVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private static void OnFatalErrorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is PopupDialog p)
@@ -242,6 +299,18 @@ namespace MWPV.View.UserControls.Popup
         private void btnSecondary_Click(object sender, RoutedEventArgs e)
         {
             RaiseCompleted(PopupResult.Cancel);
+        }
+
+        private void btnAlternate_Click(object sender, RoutedEventArgs e)
+        {
+            RaiseCompleted(PopupResult.Alternate);
+        }
+
+        public void SetActionsEnabled(bool enabled)
+        {
+            btnPrimary.IsEnabled = enabled;
+            btnSecondary.IsEnabled = enabled;
+            btnAlternate.IsEnabled = enabled;
         }
 
         private void ApplyInitialFocus()
@@ -301,6 +370,10 @@ namespace MWPV.View.UserControls.Popup
 
         private void RaiseCompleted(PopupResult result)
         {
+            if (Interlocked.Exchange(ref _completed, 1) != 0)
+                return;
+
+            SetActionsEnabled(false);
             try
             {
                 Completed?.Invoke(result);
@@ -310,5 +383,8 @@ namespace MWPV.View.UserControls.Popup
                 // Swallow: popup should never crash the app.
             }
         }
+
+
+        private int _completed;
     }
 }

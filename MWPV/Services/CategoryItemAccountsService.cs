@@ -263,7 +263,10 @@ namespace MWPV.Services
                 if (scalar == null || scalar == DBNull.Value)
                     throw new InvalidOperationException("CategoryItemAccount insert failed (no Id returned).");
 
-                return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
+                long id = Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
+                if (id > 0)
+                    VaultSessionStateService.MarkChanged();
+                return id;
             }
             catch (Exception ex)
             {
@@ -346,7 +349,10 @@ namespace MWPV.Services
                 AddText(cmd, "@AccountTypeFreeform", string.IsNullOrWhiteSpace(accountTypeFreeform) ? null : accountTypeFreeform);
                 AddInt32(cmd, "@IsActive", isActive ? 1 : 0);
 
-                return cmd.ExecuteNonQuery();
+                int affected = cmd.ExecuteNonQuery();
+                if (affected > 0)
+                    VaultSessionStateService.MarkChanged();
+                return affected;
             }
             catch (Exception ex)
             {

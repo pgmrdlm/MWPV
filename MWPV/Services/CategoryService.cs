@@ -431,6 +431,8 @@ ORDER BY group_id;";
 
             tx.Commit();
 
+            VaultSessionStateService.MarkChanged();
+
             if (newId > 0 && newId <= int.MaxValue)
                 CategorySessionStateService.RememberCreatedCategory((int)newId);
 
@@ -535,7 +537,10 @@ ORDER BY group_id;";
 
             string? changeSummary = BuildCategoryChangeSummary(before, cleanName, desc, isActive);
             if (!string.IsNullOrWhiteSpace(changeSummary))
+            {
+                VaultSessionStateService.MarkChanged();
                 LogCategoryUpdated_BestEffort(categoryKey, cleanName, changeSummary);
+            }
 
             return affected;
         }

@@ -137,6 +137,32 @@ namespace MWPV.Services
             }
         }
 
+        public static bool GetBackupPromptOnExitAfterChanges()
+        {
+            try
+            {
+                var settings = LoadEditableSettings();
+                return settings.BackupPromptOnExitAfterChanges;
+            }
+            catch
+            {
+                return FallbackBackupPromptOnExitAfterChanges;
+            }
+        }
+
+        public static int GetBackupRetentionCount()
+        {
+            try
+            {
+                var settings = LoadEditableSettings();
+                return Math.Max(settings.BackupRetentionCount, MinimumBackupRetentionCount);
+            }
+            catch
+            {
+                return FallbackBackupRetentionCount;
+            }
+        }
+
         public static EditableAppSettings LoadEditableSettings()
         {
             try

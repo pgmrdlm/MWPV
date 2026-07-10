@@ -178,6 +178,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="12"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Secondary (Cancel) -->
@@ -189,9 +190,20 @@
                         <TextBlock Text="{Binding SecondaryButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                     </Button>
 
+                    <!-- Optional alternate action -->
+                    <Button x:Name="btnAlternate"
+                            Grid.Column="3"
+                            Style="{StaticResource DialogSecondary}"
+                            MinWidth="120"
+                            Margin="0,0,12,0"
+                            Visibility="Collapsed"
+                            Click="btnAlternate_Click">
+                        <TextBlock Text="{Binding AlternateButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    </Button>
+
                     <!-- Primary (Accept / Abort) -->
                     <Button x:Name="btnPrimary"
-                            Grid.Column="3"
+                            Grid.Column="4"
                             Style="{StaticResource DialogPrimary}"
                             MinWidth="120"
                             Click="btnPrimary_Click">

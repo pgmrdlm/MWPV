@@ -196,7 +196,10 @@ namespace MWPV.Services
                 if (scalar == null || scalar == DBNull.Value)
                     throw new InvalidOperationException("CategoryItemSecurityQuestion insert failed (no Id returned).");
 
-                return Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
+                long id = Convert.ToInt64(scalar, CultureInfo.InvariantCulture);
+                if (id > 0)
+                    VaultSessionStateService.MarkChanged();
+                return id;
             }
             catch (Exception ex)
             {
@@ -270,7 +273,10 @@ namespace MWPV.Services
                 AddBlob(cmd, "@Answer", answerCipher);
                 AddInt32(cmd, "@IsActive", isActive ? 1 : 0);
 
-                return cmd.ExecuteNonQuery();
+                int affected = cmd.ExecuteNonQuery();
+                if (affected > 0)
+                    VaultSessionStateService.MarkChanged();
+                return affected;
             }
             catch (Exception ex)
             {
@@ -330,7 +336,10 @@ namespace MWPV.Services
                 AddInt64(cmd, "@Id", id);
                 AddInt64(cmd, "@ItemId", itemId);
 
-                return cmd.ExecuteNonQuery();
+                int affected = cmd.ExecuteNonQuery();
+                if (affected > 0)
+                    VaultSessionStateService.MarkChanged();
+                return affected;
             }
             catch (Exception ex)
             {
