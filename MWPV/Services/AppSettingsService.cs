@@ -22,6 +22,7 @@ namespace MWPV.Services
         private const int MaximumSensitiveClipboardClearSeconds = 180;
         private const int FallbackLogRetentionDays = 30;
         private const int FallbackBackupRetentionCount = 5;
+        private const bool FallbackBackupPromptOnExitAfterChanges = true;
         private const int MinimumEditablePasswordMinimum = 12;
         private const int MinimumLogRetentionDays = 30;
         private const int MinimumBackupRetentionCount = 5;
@@ -168,7 +169,11 @@ namespace MWPV.Services
                         MinimumLogRetentionDays),
                     BackupRetentionCount = Math.Max(
                         ReadOptionalInt32(reader, "AS_BackupRetentionCount", FallbackBackupRetentionCount),
-                        MinimumBackupRetentionCount)
+                        MinimumBackupRetentionCount),
+                    BackupPromptOnExitAfterChanges = ReadOptionalInt32(
+                        reader,
+                        "AS_BackupPromptOnExitAfterChanges",
+                        FallbackBackupPromptOnExitAfterChanges ? 1 : 0) != 0
                 };
             }
             catch (Exception ex)
@@ -250,6 +255,9 @@ namespace MWPV.Services
             cmd.Parameters.AddWithValue("@SensitiveClipboardClearSeconds", settings.ClipboardClearSeconds);
             cmd.Parameters.AddWithValue("@AS_LogRetentionDays", settings.LogRetentionDays);
             cmd.Parameters.AddWithValue("@AS_BackupRetentionCount", settings.BackupRetentionCount);
+            cmd.Parameters.AddWithValue(
+                "@AS_BackupPromptOnExitAfterChanges",
+                settings.BackupPromptOnExitAfterChanges ? 1 : 0);
             cmd.ExecuteNonQuery();
             tx.Commit();
         }
@@ -304,6 +312,7 @@ namespace MWPV.Services
         public int ClipboardClearSeconds { get; set; }
         public int LogRetentionDays { get; set; }
         public int BackupRetentionCount { get; set; }
+        public bool BackupPromptOnExitAfterChanges { get; set; }
 
         public static EditableAppSettings Defaults() => new()
         {
@@ -311,7 +320,8 @@ namespace MWPV.Services
             IncludeSymbols = true,
             ClipboardClearSeconds = 45,
             LogRetentionDays = 30,
-            BackupRetentionCount = 5
+            BackupRetentionCount = 5,
+            BackupPromptOnExitAfterChanges = true
         };
     }
 

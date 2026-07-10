@@ -244,6 +244,11 @@
                                     Content="Reset"/>
                         </Grid>
 
+                        <CheckBox x:Name="chkBackupPromptOnExitAfterChanges"
+                                  Margin="0,12,0,0"
+                                  IsChecked="True"
+                                  Content="Ask to create a backup when closing after vault changes"/>
+
                         <TextBlock x:Name="txtBackupRetentionCountError"
                                    Foreground="Red"
                                    FontWeight="Bold"

@@ -11,6 +11,7 @@ SELECT
     SensitiveClipboardClearSeconds,
     AS_PW_IncludeSymbols,
     AS_LogRetentionDays,
-    AS_BackupRetentionCount
+    AS_BackupRetentionCount,
+    AS_BackupPromptOnExitAfterChanges
 FROM AppSettings
 LIMIT 1;

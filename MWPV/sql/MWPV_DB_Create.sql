@@ -1,11 +1,14 @@
 
 /* ============================================================================
-   MWPV - 01.20 FRESH CREATE SCRIPT
+   MWPV - 01.21 FRESH CREATE SCRIPT
 
    Purpose:
-   - Create a fresh database at schema version 01.20
+   - Create a fresh database at schema version 01.21
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.21 changes reflected here:
+   - AppSettings backup-on-exit prompt option added
 
    01.20 changes reflected here:
    - App Settings Logs filter added for all AppSettings event codes
@@ -223,7 +226,8 @@ CREATE TABLE AppSettings (
     SensitiveClipboardClearSeconds INTEGER NOT NULL DEFAULT 45 CHECK (SensitiveClipboardClearSeconds BETWEEN 5 AND 300),
     AS_PW_IncludeSymbols INTEGER NOT NULL DEFAULT 1 CHECK (AS_PW_IncludeSymbols IN (0,1)),
     AS_LogRetentionDays INTEGER NOT NULL DEFAULT 30 CHECK (AS_LogRetentionDays >= 30),
-    AS_BackupRetentionCount INTEGER NOT NULL DEFAULT 5 CHECK (AS_BackupRetentionCount >= 5)
+    AS_BackupRetentionCount INTEGER NOT NULL DEFAULT 5 CHECK (AS_BackupRetentionCount >= 5),
+    AS_BackupPromptOnExitAfterChanges INTEGER NOT NULL DEFAULT 1 CHECK (AS_BackupPromptOnExitAfterChanges IN (0,1))
 );
 
 -- Log message templates
@@ -662,7 +666,8 @@ INSERT INTO AppSettings (
     SensitiveClipboardClearSeconds,
     AS_PW_IncludeSymbols,
     AS_LogRetentionDays,
-    AS_BackupRetentionCount
+    AS_BackupRetentionCount,
+    AS_BackupPromptOnExitAfterChanges
 )
 SELECT
     12,
@@ -672,15 +677,16 @@ SELECT
     45,
     1,
     30,
-    5
+    5,
+    1
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.20',
+    '01.21',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.20',
+    'Fresh database created at version 01.21',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

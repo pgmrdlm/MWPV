@@ -11,7 +11,8 @@ INSERT INTO AppSettings (
     SensitiveClipboardClearSeconds,
     AS_PW_IncludeSymbols,
     AS_LogRetentionDays,
-    AS_BackupRetentionCount
+    AS_BackupRetentionCount,
+    AS_BackupPromptOnExitAfterChanges
 )
 SELECT
     12,
@@ -21,7 +22,8 @@ SELECT
     45,
     1,
     30,
-    5
+    5,
+    1
 WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 
 UPDATE AppSettings
@@ -30,7 +32,8 @@ SET
     AS_PW_IncludeSymbols = @AS_PW_IncludeSymbols,
     SensitiveClipboardClearSeconds = @SensitiveClipboardClearSeconds,
     AS_LogRetentionDays = @AS_LogRetentionDays,
-    AS_BackupRetentionCount = @AS_BackupRetentionCount
+    AS_BackupRetentionCount = @AS_BackupRetentionCount,
+    AS_BackupPromptOnExitAfterChanges = @AS_BackupPromptOnExitAfterChanges
 WHERE rowid = (
     SELECT rowid
     FROM AppSettings

@@ -23,6 +23,7 @@ namespace MWPV.View.UserControls
         private const string SettingClipboardClearSeconds = "SensitiveClipboardClearSeconds";
         private const string SettingLogRetentionDays = "AS_LogRetentionDays";
         private const string SettingBackupRetentionCount = "AS_BackupRetentionCount";
+        private const string SettingBackupPromptOnExitAfterChanges = "AS_BackupPromptOnExitAfterChanges";
 
         private const string LogUpdateForm = "AppSettings";
         private const string LogEventUpdated = "APP_SETTING_UPDATED";
@@ -40,6 +41,8 @@ namespace MWPV.View.UserControls
             txtBackupRetentionCount.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.BackupRetentionCount);
             chkIncludeSymbols.Checked += (_, __) => MarkDirty();
             chkIncludeSymbols.Unchecked += (_, __) => MarkDirty();
+            chkBackupPromptOnExitAfterChanges.Checked += (_, __) => MarkDirty();
+            chkBackupPromptOnExitAfterChanges.Unchecked += (_, __) => MarkDirty();
             Loaded += (_, __) => LoadSettings();
         }
 
@@ -70,6 +73,7 @@ namespace MWPV.View.UserControls
             txtClipboardClearSeconds.Text = settings.ClipboardClearSeconds.ToString();
             txtLogRetentionDays.Text = settings.LogRetentionDays.ToString();
             txtBackupRetentionCount.Text = settings.BackupRetentionCount.ToString();
+            chkBackupPromptOnExitAfterChanges.IsChecked = settings.BackupPromptOnExitAfterChanges;
         }
 
         private void MarkDirty()
@@ -119,6 +123,12 @@ namespace MWPV.View.UserControls
             MarkDirty();
         }
 
+        private void ResetBackupPromptOnExitAfterChanges()
+        {
+            chkBackupPromptOnExitAfterChanges.IsChecked = EditableAppSettings.Defaults().BackupPromptOnExitAfterChanges;
+            MarkDirty();
+        }
+
         private void btnResetPasswordMinimum_Click(object sender, RoutedEventArgs e)
         {
             ResetPasswordMinimum();
@@ -142,7 +152,9 @@ namespace MWPV.View.UserControls
         private void btnResetBackupRetention_Click(object sender, RoutedEventArgs e)
         {
             ResetBackupRetention();
+            ResetBackupPromptOnExitAfterChanges();
             _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
+            _pendingIndividualResetKeys.Add(SettingBackupPromptOnExitAfterChanges);
         }
 
         private void btnResetAll_Click(object sender, RoutedEventArgs e)
@@ -152,6 +164,7 @@ namespace MWPV.View.UserControls
             ResetClipboard();
             ResetLogRetention();
             ResetBackupRetention();
+            ResetBackupPromptOnExitAfterChanges();
             _pendingResetAll = true;
             _pendingIndividualResetKeys.Clear();
             _pendingIndividualResetKeys.Add(SettingPasswordMinimum);
@@ -159,6 +172,7 @@ namespace MWPV.View.UserControls
             _pendingIndividualResetKeys.Add(SettingClipboardClearSeconds);
             _pendingIndividualResetKeys.Add(SettingLogRetentionDays);
             _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
+            _pendingIndividualResetKeys.Add(SettingBackupPromptOnExitAfterChanges);
             ClearValidationErrors();
         }
 
@@ -193,6 +207,7 @@ namespace MWPV.View.UserControls
             settings.ClipboardClearSeconds = clipboardSeconds;
             settings.LogRetentionDays = logRetentionDays;
             settings.BackupRetentionCount = backupRetentionCount;
+            settings.BackupPromptOnExitAfterChanges = chkBackupPromptOnExitAfterChanges.IsChecked == true;
 
             return !HasValidationErrors();
         }
@@ -333,7 +348,8 @@ namespace MWPV.View.UserControls
             IncludeSymbols = settings.IncludeSymbols,
             ClipboardClearSeconds = settings.ClipboardClearSeconds,
             LogRetentionDays = settings.LogRetentionDays,
-            BackupRetentionCount = settings.BackupRetentionCount
+            BackupRetentionCount = settings.BackupRetentionCount,
+            BackupPromptOnExitAfterChanges = settings.BackupPromptOnExitAfterChanges
         };
 
         private static List<SettingChange> BuildChanges(
@@ -373,6 +389,12 @@ namespace MWPV.View.UserControls
                     SettingBackupRetentionCount,
                     pending.BackupRetentionCount == EditableAppSettings.Defaults().BackupRetentionCount,
                     $"changed to {pending.BackupRetentionCount}"));
+
+            if (baseline.BackupPromptOnExitAfterChanges != pending.BackupPromptOnExitAfterChanges)
+                changes.Add(new SettingChange(
+                    SettingBackupPromptOnExitAfterChanges,
+                    pending.BackupPromptOnExitAfterChanges == EditableAppSettings.Defaults().BackupPromptOnExitAfterChanges,
+                    pending.BackupPromptOnExitAfterChanges ? "changed to enabled" : "changed to disabled"));
 
             return changes;
         }
@@ -449,7 +471,8 @@ namespace MWPV.View.UserControls
             left.IncludeSymbols == right.IncludeSymbols &&
             left.ClipboardClearSeconds == right.ClipboardClearSeconds &&
             left.LogRetentionDays == right.LogRetentionDays &&
-            left.BackupRetentionCount == right.BackupRetentionCount;
+            left.BackupRetentionCount == right.BackupRetentionCount &&
+            left.BackupPromptOnExitAfterChanges == right.BackupPromptOnExitAfterChanges;
 
         private void ClearResetTracking()
         {
