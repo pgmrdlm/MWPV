@@ -375,3 +375,7 @@ Key.7z
 # Local app/runtime DBs (keep *source* SQL scripts tracked)
 **/MWPV.db
 **/MWPV_*.db
+!Backup.Utility/
+!Backup.Utility/**
+!Backup.Utility.Tests/
+!Backup.Utility.Tests/**
