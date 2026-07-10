@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Backup.Utility.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0b05e454a0b3c9404e8deb30a870ad8f54f03387")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d1a5aed25382ebec9632ecec0ce5d2e32bdc2a74")]
 [assembly: System.Reflection.AssemblyProductAttribute("Backup.Utility.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Backup.Utility.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
