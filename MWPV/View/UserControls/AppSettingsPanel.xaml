@@ -283,7 +283,7 @@
                             <TextBlock FontFamily="Segoe MDL2 Assets"
                                        Text="&#xE711;"
                                        Margin="0,0,8,0"/>
-                            <TextBlock Text="Cancel"/>
+                            <TextBlock Text="Cancel/Close"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

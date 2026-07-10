@@ -70,6 +70,11 @@ namespace MWPV.View.UserControls
         private const string LockdownMessage =
             "Navigation is disabled while the Category Item editor is open. Close the editor (Save / Cancel / Exit) to continue. This insures data security.";
 
+        private const string AppSettingsLockdownMessage =
+            "Navigation is disabled while App Settings is open. Use Save or Cancel/Close to return.";
+
+        private string _activeNavigationLockMessage = LockdownMessage;
+
         public Panel()
         {
             InitializeComponent();
@@ -217,9 +222,12 @@ namespace MWPV.View.UserControls
 
         /* =================== Navigation Lock + Banner =================== */
 
-        private void SetNavigationLocked(bool locked)
+        private void SetNavigationLocked(bool locked, string? message = null)
         {
             _isNavigationLocked = locked;
+
+            if (locked)
+                _activeNavigationLockMessage = string.IsNullOrWhiteSpace(message) ? LockdownMessage : message;
 
             // Left side
             if (btnAddCategory != null) btnAddCategory.IsEnabled = !locked;
@@ -242,7 +250,7 @@ namespace MWPV.View.UserControls
             try
             {
                 if (LockdownBannerText != null)
-                    LockdownBannerText.Text = locked ? LockdownMessage : string.Empty;
+                    LockdownBannerText.Text = locked ? _activeNavigationLockMessage : string.Empty;
 
                 if (LockdownBanner != null)
                     LockdownBanner.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
@@ -257,7 +265,7 @@ namespace MWPV.View.UserControls
         {
             try
             {
-                string msg = locked ? LockdownMessage : string.Empty;
+                string msg = locked ? _activeNavigationLockMessage : string.Empty;
                 NavigationLockChanged?.Invoke(this, new NavigationLockChangedEventArgs(locked, msg));
             }
             catch
@@ -493,6 +501,8 @@ namespace MWPV.View.UserControls
 
             if (SplitRoot != null) SplitRoot.Visibility = Visibility.Collapsed;
             if (AppSettingsWorkspaceHost != null) AppSettingsWorkspaceHost.Visibility = Visibility.Visible;
+
+            SetNavigationLocked(true, AppSettingsLockdownMessage);
         }
 
         private void EnsureAppSettingsPanel()
@@ -511,12 +521,24 @@ namespace MWPV.View.UserControls
 
         private void AppSettingsPanel_SaveRequested(object? sender, EventArgs e)
         {
-            ShowCategoryGrid();
+            CloseAppSettingsSession();
         }
 
         private void AppSettingsPanel_CancelRequested(object? sender, EventArgs e)
         {
-            ShowCategoryGrid();
+            CloseAppSettingsSession();
+        }
+
+        private void CloseAppSettingsSession()
+        {
+            try
+            {
+                ShowCategoryGrid();
+            }
+            finally
+            {
+                SetNavigationLocked(false);
+            }
         }
 
         private void AddCategoryInline_Submitted(object? sender, CategorySubmittedEventArgs e)
