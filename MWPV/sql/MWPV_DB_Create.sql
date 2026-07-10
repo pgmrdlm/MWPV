@@ -1,11 +1,14 @@
 
 /* ============================================================================
-   MWPV - 01.21 FRESH CREATE SCRIPT
+   MWPV - 01.22 FRESH CREATE SCRIPT
 
    Purpose:
-   - Create a fresh database at schema version 01.21
+   - Create a fresh database at schema version 01.22
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.22 changes reflected here:
+   - Backup-on-exit success log template and Logs filter added
 
    01.21 changes reflected here:
    - AppSettings backup-on-exit prompt option added
@@ -330,6 +333,15 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
+SELECT 'BackupOnExit', 1, 'A verified backup containing #FileCount# file(s) was created while closing MWPV after vault changes.', 1
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM LogMessageTemplate
+    WHERE UpdateForm = 'BackupOnExit'
+      AND Seq = 1
+);
+
+INSERT INTO LogMessageTemplate (UpdateForm, Seq, LogMessage, Active)
 SELECT v.UpdateForm, v.Seq, v.LogMessage, 1
 FROM (
     SELECT 'CategoryUpdates' AS UpdateForm,
@@ -557,7 +569,8 @@ WITH v(Seq, Code, Description) AS (
       (18, 'SECURITYQUESTION_CHANGED', 'Security question changed'),
       (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated'),
       (20, 'CATEGORY_UPDATED', 'Category updated'),
-      (21, 'APP_SETTINGS', 'App Settings')
+      (21, 'APP_SETTINGS', 'App Settings'),
+      (22, 'BACKUP_CREATED_ON_EXIT', 'Backup created on exit')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -684,9 +697,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.21',
+    '01.22',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.21',
+    'Fresh database created at version 01.22',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 
