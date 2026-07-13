@@ -1,0 +1,7 @@
+# .NET build and test output
+bin/
+obj/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
