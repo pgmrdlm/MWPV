@@ -13,7 +13,7 @@
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
-# Mono auto generated files
+# Mono auto-generated files
 mono_crash.*
 
 # Build results
@@ -30,44 +30,44 @@ bld/
 [Bb]in/
 [Oo]bj/
 
-# Logs: anchor to repo root so source folders named "Logs" are not ignored
+# Logs: anchor to repository root so source folders named Logs are not ignored
 /[Ll]og/
 /[Ll]ogs/
-# Allow the UI source folder explicitly (belt & suspenders)
+
+# Explicitly preserve UI source folders named Logs
 !View/UserControls/Logs/
 !MWPV/View/UserControls/Logs/
 
-# Visual Studio 2015/2017 cache/options directory
+# Visual Studio cache/options directory
 .vs/
-# Uncomment if you have tasks that create the project's static files in wwwroot
-#wwwroot/
 
-# Visual Studio 2017 auto generated files
+# Visual Studio generated files
 Generated\ Files/
 
-# MSTest test Results
+# MSTest results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
+*.trx
 
-# NUnit
+# NUnit results
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
 
-# Build Results of an ATL Project
+# ATL build results
 [Dd]ebugPS/
 [Rr]eleasePS/
 dlldata.c
 
-# Benchmark Results
+# Benchmark results
 BenchmarkDotNet.Artifacts/
 
-# .NET Core
+# .NET
 project.lock.json
 project.fragment.lock.json
 artifacts/
 
-# ASP.NET Scaffolding
+# ASP.NET scaffolding
 ScaffoldingReadMe.txt
 
 # StyleCop
@@ -104,7 +104,7 @@ StyleCopReport.xml
 *.svclog
 *.scc
 
-# Chutzpah Test files
+# Chutzpah test files
 _Chutzpah*
 
 # Visual C++ cache files
@@ -124,10 +124,10 @@ ipch/
 *.vspx
 *.sap
 
-# Visual Studio Trace Files
+# Visual Studio trace files
 *.e2e
 
-# TFS 2012 Local Workspace
+# TFS local workspace
 $tf/
 
 # Guidance Automation Toolkit
@@ -148,8 +148,6 @@ _TeamCity*
 coverage*.json
 coverage*.xml
 coverage*.info
-
-# Visual Studio code coverage results
 *.coverage
 *.coveragexml
 
@@ -163,10 +161,10 @@ nCrunchTemp_*
 *.mm.*
 AutoTest.Net/
 
-# Web workbench (sass)
+# Web Workbench
 .sass-cache/
 
-# Installshield output folder
+# InstallShield output
 [Ee]xpress/
 
 # DocProject
@@ -179,16 +177,14 @@ DocProject/Help/*.hhp
 DocProject/Help/Html2
 DocProject/Help/html
 
-# Click-Once directory
+# ClickOnce
 publish/
 
-# Publish Web Output
+# Publish output
 *.[Pp]ublish.xml
 *.azurePubxml
 *.pubxml
 *.publishproj
-
-# Azure publish scripts
 PublishScripts/
 
 # NuGet
@@ -218,7 +214,7 @@ _pkginfo.txt
 *.[Cc]ache
 !?*.[Cc]ache/
 
-# Others
+# Other generated files
 ClientBin/
 ~$*
 *~
@@ -228,12 +224,11 @@ ClientBin/
 *.pfx
 *.publishsettings
 orleans.codegen.cs
-#*.snk
 
 # Bower
 #bower_components/
 
-# RIA/Silverlight
+# RIA / Silverlight
 Generated_Code/
 
 # Upgrade backups
@@ -243,6 +238,12 @@ UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/
 *.rptproj.bak
+
+# Preserve source projects whose names begin with Backup
+!Backup.Utility/
+!Backup.Utility/**
+!Backup.Utility.Tests/
+!Backup.Utility.Tests/**
 
 # SQL Server files
 *.mdf
@@ -268,15 +269,13 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
-# VS6
+# Visual Studio 6
 *.plg
 *.opt
 *.vbw
 *.vbp
 *.dsw
 *.dsp
-*.ncb
-*.aps
 
 # LightSwitch
 **/*.HTMLClient/GeneratedArtifacts
@@ -296,7 +295,7 @@ paket-files/
 # CodeRush
 .cr/personal
 
-# PTVS
+# Python Tools for Visual Studio
 __pycache__/
 *.pyc
 
@@ -321,7 +320,7 @@ ASALocalRun/
 # MSBuild logs
 *.binlog
 
-# NVidia Nsight
+# NVIDIA Nsight
 *.nvuser
 
 # MFractors
@@ -330,11 +329,12 @@ ASALocalRun/
 # Local history
 .localhistory/
 .vshistory/
+.history/
 
-# BeatPulse DB
+# BeatPulse database
 healthchecksdb
 
-# Package Reference Convert backups
+# Package Reference conversion backups
 MigrationBackup/
 
 # Ionide
@@ -343,16 +343,13 @@ MigrationBackup/
 # Fody
 FodyWeavers.xsd
 
-# VS Code
+# Visual Studio Code
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
-
-# VS Code Local History
-.history/
 
 # Windows Installer outputs
 *.cab
@@ -364,33 +361,22 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+# Inno Setup generated installer output
+Installer/Output/
+
 # --- MWPV project-specific ---
-# Secret archives / runtime artifacts
+
+# Secret archives and runtime artifacts
 *.7z
 keys.7z
 Key.7z
 **/DB_Password.txt
 **/keyset.json
 
-# Local app/runtime DBs (keep *source* SQL scripts tracked)
+# Local application/runtime databases
+# Source SQL scripts remain tracked.
 **/MWPV.db
 **/MWPV_*.db
-!Backup.Utility/
-!Backup.Utility/**
-!Backup.Utility.Tests/
-!Backup.Utility.Tests/**
-# .NET build output
-[Bb]in/
-[Oo]bj/
 
-# Visual Studio
-.vs/
-*.user
-*.suo
-
-# Test results
-TestResults/
-*.trx
-
-# Inno Setup generated installer output
-Installer/Output/
+# Accidental stray file
+)

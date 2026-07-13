@@ -254,6 +254,7 @@ namespace MWPV.Services.Upgrade
                     logger.LogPhase("FlagClear", flagClear.Message);
 
                 logger.LogResult(AppExitCode.Success, "Upgrade completed successfully.");
+                AppLifecycleTransitionService.CompleteSuccessfulUpgrade();
                 return UpgradeResult.Success("Upgrade completed successfully.");
             }
             catch (Exception ex)

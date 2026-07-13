@@ -11,5 +11,8 @@ namespace MWPV.Services
 
         public static void MarkChanged() =>
             Interlocked.Exchange(ref _vaultDataChanged, 1);
+
+        public static void Reset() =>
+            Interlocked.Exchange(ref _vaultDataChanged, 0);
     }
 }
