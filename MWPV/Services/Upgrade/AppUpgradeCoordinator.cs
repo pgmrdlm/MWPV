@@ -9,6 +9,8 @@ using Backup.Utility;
 using Microsoft.Data.Sqlite;
 using System.Collections.Generic;
 using System.Reflection;
+using MWPV.SqlCatalog;
+using Utilities.Sql;
 
 namespace MWPV.Services.Upgrade
 {
@@ -154,15 +156,15 @@ namespace MWPV.Services.Upgrade
             {
                 logger.LogPhase("Start", "Authenticated upgrade started.");
 
-                var catalogResult = UpgradeSqlCatalog.LoadInstalled(new UpgradeSqlCatalogOptions
-                {
-                    SqlDirectory = context.SqlDirectory,
-                    RequireAtLeastOneUpgradeScript = true,
-                    LoadAllNormalSqlFiles = true
-                });
+                var currentVersionForCatalog = _versionReader.ReadCurrentVersion(context.PasswordDatabasePath, context.PasswordDatabasePassword);
+                if (!currentVersionForCatalog.Succeeded || string.IsNullOrWhiteSpace(currentVersionForCatalog.Value))
+                    return PreBackupFailure(context, currentVersionForCatalog.DetailCode, UpgradeFailureCategory.SqlCatalog, currentVersionForCatalog.Message, currentVersionForCatalog.Exception, logger);
+                var catalogResult = TrustedSqlCatalog.LoadAndValidateUpgradeDirectory(
+                    context.SqlDirectory ?? DatabaseHelper.GetSqlFolderPath(), currentVersionForCatalog.Value, context.TargetVersion);
 
                 if (!catalogResult.Succeeded || catalogResult.Value == null)
-                    return PreBackupFailure(context, catalogResult.Code, UpgradeFailureCategory.SqlCatalog, catalogResult.Message, catalogResult.Exception, logger);
+                    return PreBackupFailure(context, AppExitCode.UpgradeSqlCatalogMissing, UpgradeFailureCategory.SqlCatalog,
+                        catalogResult.Failures.FirstOrDefault()?.Message ?? "Upgrade SQL package validation failed.", null, logger);
 
                 var catalog = catalogResult.Value;
 
@@ -194,28 +196,14 @@ namespace MWPV.Services.Upgrade
                 backupSet = backupResult.Backup;
                 logger.LogPhase("Backup", $"Backup set created: {backupSet.Manifest.BackupSetId}");
 
-                var versionResult = _versionReader.ReadCurrentVersion(
-                    context.PasswordDatabasePath,
-                    context.PasswordDatabasePassword);
-                if (!versionResult.Succeeded || string.IsNullOrWhiteSpace(versionResult.Value))
-                    return RollbackAfterFailure(versionResult, backupSet, context, logger);
-
-                var planResult = _dbExecutor.BuildPlan(versionResult.Value, catalog, context.TargetVersion);
-                if (!planResult.Succeeded || planResult.Value == null)
-                    return RollbackAfterFailure(planResult, backupSet, context, logger);
-
-                var plan = planResult.Value;
                 var executeResult = _dbExecutor.ExecutePlan(
                     context.PasswordDatabasePath,
                     context.PasswordDatabasePassword,
-                    plan,
                     catalog);
                 if (!executeResult.Succeeded)
                     return RollbackAfterFailure(executeResult, backupSet, context, logger);
 
-                var expectedVersion = string.IsNullOrWhiteSpace(plan.TargetDbVersion)
-                    ? versionResult.Value
-                    : plan.TargetDbVersion;
+                var expectedVersion = catalog.TargetVersion.ToString();
 
                 var dbValidation = _dbExecutor.ValidateDatabase(
                     context.PasswordDatabasePath,
@@ -237,6 +225,8 @@ namespace MWPV.Services.Upgrade
                     catalog);
                 if (!keyValidation.Succeeded)
                     return RollbackAfterFailure(keyValidation, backupSet, context, logger);
+
+                RuntimeSqlStore.ReplaceVerified(catalog.KeyFilePayloadScripts);
 
                 if (SqlStagingCleanupService.TrySecurelyScrubDefaultStagingFolder(out var cleanupException))
                 {

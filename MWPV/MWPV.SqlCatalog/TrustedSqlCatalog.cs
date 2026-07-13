@@ -37,9 +37,21 @@ public static class TrustedSqlCatalog
         var all=baseResult.Value!.FilesByName.Values; var upgrades=path.Value!.Select(x=>all.Single(y=>y.CatalogEntry==x)); var payload=all.Where(x=>x.CatalogEntry.IncludeInKeyFilePayload).OrderBy(x=>x.CatalogEntry.StableOrder);
         return CatalogResult<VerifiedUpgradePackage>.Success(new VerifiedUpgradePackage(current,path.Value!.LastOrDefault()?.UpgradeToVersion ?? current,upgrades,payload,all));
     }
-    public static CatalogResult<VerifiedNewInstallPackage> LoadAndValidateNewInstallDirectory(string path) => Load(path, ValidateNewInstallFiles);
-    public static CatalogResult<VerifiedUpgradePackage> LoadAndValidateUpgradeDirectory(string path,string current,string? target) => Load(path, f=>ValidateUpgradeFiles(current,target,f));
-    private static CatalogResult<T> Load<T>(string path, Func<IReadOnlyList<SqlFileInput>,CatalogResult<T>> validator) { try { if(!Directory.Exists(path)) return CatalogResult<T>.Failure([new(SqlCatalogFailureCode.IoFailure, Message:"SQL directory does not exist.")]); var files=Directory.EnumerateFiles(path,"*",SearchOption.TopDirectoryOnly).Where(x=>string.Equals(Path.GetExtension(x),".sql",StringComparison.OrdinalIgnoreCase)).Select(x=>new SqlFileInput(Path.GetFileName(x),File.ReadAllBytes(x),x)).ToArray(); return validator(files); } catch(Exception ex) { return CatalogResult<T>.Failure([new(SqlCatalogFailureCode.IoFailure, Message:ex.Message)]); } }
+    public static CatalogResult<VerifiedNewInstallPackage> LoadAndValidateNewInstallDirectory(string path) => Load(path, s_entries.Where(x=>x.IncludeInNewInstall), ValidateNewInstallFiles);
+    public static CatalogResult<VerifiedUpgradePackage> LoadAndValidateUpgradeDirectory(string path,string current,string? target)
+    {
+        if(!SqlVersion.TryParse(current,out var parsedCurrent)) return CatalogResult<VerifiedUpgradePackage>.Failure([new(SqlCatalogFailureCode.InvalidVersion,Message:"Invalid current version.")]);
+        SqlVersion? parsedTarget=null;
+        if(target is not null)
+        {
+            if(!SqlVersion.TryParse(target,out var value)) return CatalogResult<VerifiedUpgradePackage>.Failure([new(SqlCatalogFailureCode.InvalidVersion,Message:"Invalid target version.")]);
+            parsedTarget=value;
+        }
+        var plan=Plan(parsedCurrent,parsedTarget); if(!plan.Succeeded) return CatalogResult<VerifiedUpgradePackage>.Failure(plan.Failures);
+        var required=s_entries.Where(x=>x.IncludeInKeyFilePayload).Concat(plan.Value!).Distinct();
+        return Load(path,required,f=>ValidateUpgradeFiles(current,target,f));
+    }
+    private static CatalogResult<T> Load<T>(string path,IEnumerable<SqlCatalogEntry> required, Func<IReadOnlyList<SqlFileInput>,CatalogResult<T>> validator) { try { if(!Directory.Exists(path)) return CatalogResult<T>.Failure([new(SqlCatalogFailureCode.IoFailure, Message:"SQL directory does not exist.")]); var names=required.Select(x=>x.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase); var files=Directory.EnumerateFiles(path,"*",SearchOption.TopDirectoryOnly).Where(x=>string.Equals(Path.GetExtension(x),".sql",StringComparison.OrdinalIgnoreCase)).Where(x=>names.Contains(Path.GetFileName(x))).Select(x=>new SqlFileInput(Path.GetFileName(x),File.ReadAllBytes(x),x)).ToArray(); return validator(files); } catch(Exception ex) { return CatalogResult<T>.Failure([new(SqlCatalogFailureCode.IoFailure, Message:ex.Message)]); } }
     private static CatalogResult<VerifiedNewInstallPackage> Validate(IReadOnlyList<SqlFileInput> files, SqlCatalogEntry[] required, SqlVersion? current, IReadOnlyList<SqlCatalogEntry>? path)
     {
         var failures=ValidateDefinition().ToList(); var sql=files.Where(x=>Path.GetExtension(x.FileName).Equals(".sql",StringComparison.OrdinalIgnoreCase)).ToArray();

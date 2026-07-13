@@ -25,6 +25,7 @@ using System.Text;
 using System.Threading;
 using Utilities.Helpers;                 // ErrorHandler, DatabaseHelper
 using KeyFileLogic;                      // Draft SQLite key-file storage
+using MWPV.SqlCatalog;
 
 namespace Utilities.Security
 {
@@ -57,6 +58,7 @@ namespace Utilities.Security
         // One-time guard so we don't extract keyset.json for every SQL artifact request.
         private static int _keysetLoaded; // 0 = no, 1 = yes
         private static readonly object _keysetLoadLock = new();
+        private static IReadOnlyDictionary<string, string> _loadedSqlPayload = new Dictionary<string, string>(StringComparer.Ordinal);
 
         #endregion
 
@@ -68,7 +70,7 @@ namespace Utilities.Security
         ///   1) SEDS entry (preferred): SchemaFileName
         ///   2) SqlFolder staging file (fallback)
         /// </summary>
-        public string SetUpDataBase()
+        public string SetUpDataBase(VerifiedNewInstallPackage package)
         {
             string? schemaSql = null;
 
@@ -76,7 +78,7 @@ namespace Utilities.Security
             {
                 EnsureLocalFolders();
 
-                schemaSql = TryGetSchemaSqlFromSedsOrDisk();
+                schemaSql = package?.DatabaseCreationScript.SqlText;
                 if (string.IsNullOrWhiteSpace(schemaSql))
                 {
                     throw new InvalidOperationException(
@@ -107,18 +109,18 @@ namespace Utilities.Security
             }
         }
 
-        public string SetUpKeyFile()
+        public string SetUpKeyFile(VerifiedNewInstallPackage package)
         {
             // Production routing draft:
             // SetUpKeyFile() -> SetUpKeyFile_Sqlite()
-            return SetUpKeyFile_Sqlite();
+            return SetUpKeyFile_Sqlite(package);
         }
 
         /// <summary>
         /// Draft SQLite key-file writer. Keeps keyset.json unchanged and stores it as one encrypted
         /// SQLite payload row instead of wrapping it in a 7z archive.
         /// </summary>
-        public string SetUpKeyFile_Sqlite()
+        public string SetUpKeyFile_Sqlite(VerifiedNewInstallPackage package)
         {
             string? keyFilePath = null;
             char[]? keyPw = null;
@@ -136,7 +138,8 @@ namespace Utilities.Security
                 keyPw = GetRequiredKeyPasswordFromSeds();
                 dbPw = GetRequiredDbPasswordFromSeds();
 
-                var sqlMap = LoadSqlMapFromStagingOrSeds();
+                if (package == null) throw new ArgumentNullException(nameof(package));
+                var sqlMap = package.KeyFilePayloadScripts.ToDictionary(x => x.CatalogEntry.FileName, x => x.SqlText, StringComparer.OrdinalIgnoreCase);
                 SeedSedsWithSql(sqlMap);
 
                 logPayloadKey = RandomNumberGenerator.GetBytes(32);
@@ -287,6 +290,14 @@ namespace Utilities.Security
             }
         }
 
+        public static IReadOnlyList<SqlFileInput> GetVerifiedPayloadCandidates()
+        {
+            return _loadedSqlPayload.Select(pair => new SqlFileInput(
+                pair.Key,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(pair.Value ?? string.Empty),
+                "decrypted key-file payload")).ToArray();
+        }
+
         /// <summary>
         /// Minimal loader used by validators. Reads raw bytes of keyset.json from the encrypted archive.
         /// Returns Array.Empty&lt;byte&gt; on failure.
@@ -372,24 +383,6 @@ namespace Utilities.Security
             }
         }
 
-        private static string? TryGetSchemaSqlFromSedsOrDisk()
-        {
-            // Prefer SEDS.
-            if (SecureEncryptedDataStore.HasKey(SchemaFileName))
-            {
-                var fromSeds = SecureEncryptedDataStore.GetString(SchemaFileName);
-                if (!string.IsNullOrWhiteSpace(fromSeds))
-                    return fromSeds;
-            }
-
-            // Fallback to disk staging.
-            var schemaPath = Path.Combine(SqlFolder, SchemaFileName);
-            if (File.Exists(schemaPath))
-                return File.ReadAllText(schemaPath, Encoding.UTF8);
-
-            return null;
-        }
-
         #endregion
 
         #region Internals - archive build helpers
@@ -418,35 +411,6 @@ namespace Utilities.Security
             return dbPw;
         }
 
-        private static Dictionary<string, string> LoadSqlMapFromStagingOrSeds()
-        {
-            var sqlMap = new Dictionary<string, string>(StringComparer.Ordinal);
-
-            // 1) Prefer staging folder if it exists and has sql
-            if (Directory.Exists(SqlFolder))
-            {
-                foreach (var file in Directory.EnumerateFiles(SqlFolder, "*.sql", SearchOption.TopDirectoryOnly))
-                {
-                    var name = Path.GetFileName(file);
-                    var text = File.ReadAllText(file, Encoding.UTF8);
-                    sqlMap[name] = text ?? string.Empty;
-                }
-            }
-
-            if (sqlMap.Count > 0)
-                return sqlMap;
-
-            // 2) Fallback: if schema already in SEDS, at least embed that.
-            //    (If you later build a SqlCatalog, this can be replaced with enumerating catalog names.)
-            if (SecureEncryptedDataStore.HasKey(SchemaFileName))
-            {
-                var schema = SecureEncryptedDataStore.GetString(SchemaFileName) ?? string.Empty;
-                sqlMap[SchemaFileName] = schema;
-            }
-
-            return sqlMap;
-        }
-
         private static void SeedSedsWithSql(Dictionary<string, string> sqlMap)
         {
             foreach (var kv in sqlMap)
@@ -465,11 +429,16 @@ namespace Utilities.Security
             var dbPwChars = KeysetJsonV2.DecodeDbPasswordToChars(ks.secrets.dbPassword);
             SecureEncryptedDataStore.SetAndWipe(DatabaseHelper.DbPasswordKey, dbPwChars);
 
+            var payload = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var kvp in ks.sql)
             {
                 if (!string.IsNullOrWhiteSpace(kvp.Key))
+                {
                     SecureEncryptedDataStore.SetString(kvp.Key, kvp.Value ?? string.Empty);
+                    payload[kvp.Key] = kvp.Value ?? string.Empty;
+                }
             }
+            _loadedSqlPayload = payload;
 
             if (!string.IsNullOrWhiteSpace(ks.secrets.logPayloadKey))
             {

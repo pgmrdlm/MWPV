@@ -17,7 +17,7 @@ namespace MWPV.Services
 
         private static string LoadSqlRequired(string assetName)
         {
-            var sql = SqlCagegory.GetSql(assetName);
+            var sql = RuntimeSqlStore.GetSql(assetName);
             if (string.IsNullOrWhiteSpace(sql))
                 throw new InvalidOperationException($"SQL not loaded: {assetName}");
             return sql;

@@ -17,6 +17,7 @@ public sealed class FocusedCoverageTests
 
     [Fact] public void Missing_creation_file_returns_no_package() => AssertFailure(Without("MWPV_DB_Create.sql"), SqlCatalogFailureCode.MissingRequiredFile);
     [Fact] public void Missing_operational_file_returns_no_package() => AssertFailure(Without("s_Logs_Insert.sql"), SqlCatalogFailureCode.MissingRequiredFile);
+    [Fact] public void Exact_duplicate_required_filename_returns_no_package() { var files=AllFiles(); AssertFailure(files.Append(files.Single(x=>x.FileName=="s_Logs_Insert.sql")).ToArray(),SqlCatalogFailureCode.DuplicateFileName); }
     [Fact] public void Case_only_duplicate_returns_no_package() { var files=AllFiles(); var input=files.Append(files.Single(x=>x.FileName=="s_Logs_Insert.sql") with { FileName="S_LOGS_INSERT.SQL" }).ToArray(); AssertFailure(input,SqlCatalogFailureCode.DuplicateFileName); }
     [Fact] public void Invalid_utf8_bytes_do_not_produce_a_package() { var input=AllFiles().Select(x=>x.FileName=="s_Logs_Insert.sql" ? x with { RawBytes=new byte[] { 0xff, 0xfe } } : x).ToArray(); Assert.False(TrustedSqlCatalog.ValidateNewInstallFiles(input).Succeeded); Assert.Null(TrustedSqlCatalog.ValidateNewInstallFiles(input).Value); }
     [Fact] public void New_install_order_is_deterministic() { var a=TrustedSqlCatalog.ValidateNewInstallFiles(AllFiles()).Value!; var b=TrustedSqlCatalog.ValidateNewInstallFiles(AllFiles().Reverse().ToArray()).Value!; Assert.Equal(a.KeyFilePayloadScripts.Select(x=>x.CatalogEntry.FileName),b.KeyFilePayloadScripts.Select(x=>x.CatalogEntry.FileName)); }
@@ -35,7 +36,83 @@ public sealed class FocusedCoverageTests
     { var original=change is "crlf-lf" or "bom-removed" ? new byte[]{0xef,0xbb,0xbf}.Concat(Encoding.UTF8.GetBytes("select 1;\r\n-- comment\r\n")).ToArray() : Encoding.UTF8.GetBytes("select 1;\n-- comment\n"); var changed=change switch { "character"=>Encoding.UTF8.GetBytes("select 2;\n-- comment\n"), "whitespace"=>Encoding.UTF8.GetBytes("select 1; \n-- comment\n"), "comment"=>Encoding.UTF8.GetBytes("select 1;\n-- changed\n"), "lf-crlf"=>Encoding.UTF8.GetBytes("select 1;\r\n-- comment\r\n"), "crlf-lf"=>Encoding.UTF8.GetBytes("select 1;\n-- comment\n"), "bom-added"=>new byte[]{0xef,0xbb,0xbf}.Concat(original).ToArray(), "bom-removed"=>original[3..], "encoding"=>Encoding.Unicode.GetBytes("select 1;\n-- comment\n"), _=>throw new ArgumentOutOfRangeException(nameof(change)) }; Assert.NotEqual(Convert.ToHexString(SHA256.HashData(original)),Convert.ToHexString(SHA256.HashData(changed))); }
 
     [Fact] public void Missing_directory_returns_io_failure() => Assert.Contains(TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString())).Failures,x=>x.Code==SqlCatalogFailureCode.IoFailure);
-    [Fact] public void Directory_unknown_sql_uses_same_rejection() { var dir=MakeDirectory(includeAll:true); try { File.WriteAllText(Path.Combine(dir,"unknown.sql"),"select 1;"); Assert.Contains(TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(dir).Failures,x=>x.Code==SqlCatalogFailureCode.UnexpectedSqlFile); } finally { Directory.Delete(dir,true); } }
+    [Fact] public void New_install_directory_ignores_unrelated_sql_and_never_returns_or_packages_it()
+    {
+        var dir=MakeDirectory(includeAll:true);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir,"unrelated-maintenance.sql"),"select 1;");
+            var result=TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(dir);
+            Assert.True(result.Succeeded);
+            Assert.DoesNotContain(result.Value!.FilesByName.Keys,x=>x.Equals("unrelated-maintenance.sql",StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Value.KeyFilePayloadScripts,x=>x.CatalogEntry.FileName.Equals("unrelated-maintenance.sql",StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(dir,true); }
+    }
+
+    [Fact] public void Upgrade_directory_ignores_unrelated_sql_and_never_returns_or_packages_it()
+    {
+        var dir=MakeDirectory(includeAll:true);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir,"unrelated-maintenance.sql"),"select 1;");
+            var result=TrustedSqlCatalog.LoadAndValidateUpgradeDirectory(dir,"1.20","1.23");
+            Assert.True(result.Succeeded);
+            Assert.DoesNotContain(result.Value!.FilesByName.Keys,x=>x.Equals("unrelated-maintenance.sql",StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Value.KeyFilePayloadScripts,x=>x.CatalogEntry.FileName.Equals("unrelated-maintenance.sql",StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Value.OrderedUpgradeScripts,x=>x.CatalogEntry.FileName.Equals("unrelated-maintenance.sql",StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(dir,true); }
+    }
+
+    [Fact] public void Upgrade_directory_does_not_load_nonselected_trusted_upgrade_scripts()
+    {
+        var dir=MakeDirectory(includeAll:true);
+        try
+        {
+            File.AppendAllText(Path.Combine(dir,"v00.00_v01.00_Upgrade.sql")," altered but not selected");
+            var result=TrustedSqlCatalog.LoadAndValidateUpgradeDirectory(dir,"1.20","1.23");
+            Assert.True(result.Succeeded);
+            Assert.DoesNotContain(result.Value!.FilesByName.Keys,x=>x.Equals("v00.00_v01.00_Upgrade.sql",StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(dir,true); }
+    }
+
+    [Fact] public void Directory_still_rejects_missing_required_file()
+    {
+        var dir=MakeDirectory(includeAll:true);
+        try
+        {
+            File.Delete(Path.Combine(dir,"s_Logs_Insert.sql"));
+            var result=TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(dir);
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Value);
+            Assert.Contains(result.Failures,x=>x.Code==SqlCatalogFailureCode.MissingRequiredFile && x.FileName=="s_Logs_Insert.sql");
+        }
+        finally { Directory.Delete(dir,true); }
+    }
+
+    [Fact] public void Directory_still_rejects_altered_required_file()
+    {
+        var dir=MakeDirectory(includeAll:true);
+        try
+        {
+            File.AppendAllText(Path.Combine(dir,"s_Logs_Insert.sql")," ");
+            var result=TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(dir);
+            Assert.False(result.Succeeded);
+            Assert.Null(result.Value);
+            Assert.Contains(result.Failures,x=>x.Code==SqlCatalogFailureCode.HashMismatch && x.FileName=="s_Logs_Insert.sql");
+        }
+        finally { Directory.Delete(dir,true); }
+    }
+
+    [Fact] public void Decrypted_payload_inputs_remain_strict_for_unknown_sql()
+    {
+        var result=TrustedSqlCatalog.ValidateNewInstallFiles(AllFiles().Append(new SqlFileInput("unrelated-maintenance.sql",Encoding.UTF8.GetBytes("select 1;"))).ToArray());
+        Assert.False(result.Succeeded);
+        Assert.Null(result.Value);
+        Assert.Contains(result.Failures,x=>x.Code==SqlCatalogFailureCode.UnexpectedSqlFile);
+    }
 
     private static void AssertFailure(SqlFileInput[] files, SqlCatalogFailureCode code) { var result=TrustedSqlCatalog.ValidateNewInstallFiles(files); Assert.False(result.Succeeded); Assert.Null(result.Value); Assert.Contains(result.Failures,x=>x.Code==code); }
     private static SqlFileInput[] Without(string name) => AllFiles().Where(x=>x.FileName!=name).ToArray();

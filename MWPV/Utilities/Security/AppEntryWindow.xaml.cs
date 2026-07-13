@@ -35,6 +35,7 @@ using MWPV.Services.AppLifecycle;
 using MWPV.Services.Upgrade;
 using Utilities.Helpers;              // DatabaseHelper (keep), no popup usage
 using Utilities.Sql;                  // SqlCagegory, SchemaBootstrap
+using MWPV.SqlCatalog;
 using Security.Utility;               // SensitiveDataCleaner, SecureEncryptedDataStore, SecurePassword, ServiceSetUp, KeyArchiveVerifier
 using Utilities.Diagnostics;          // EarlyLoginFailures, EarlyFailType
 using EDT = Utilities.Diagnostics.EarlyFailType;
@@ -333,17 +334,24 @@ namespace Utilities.Security
                     SecureEncryptedDataStore.SetNoWipe(Key_DBPassword, newDbPw);
                     SensitiveDataCleaner.Clear(ref newDbPw);
 
-                    // Setup DB and key file
+                    var packageResult = TrustedSqlCatalog.LoadAndValidateNewInstallDirectory(DatabaseHelper.GetSqlFolderPath());
+                    if (!packageResult.Succeeded || packageResult.Value == null)
+                    {
+                        SurfaceLoggedError("Required SQL package validation failed. Database creation was not started.");
+                        return;
+                    }
+
+                    // Setup DB and key file from one complete verified package.
                     var service = new ServiceSetUp();
 
-                    string resultDb = service.SetUpDataBase();
+                    string resultDb = service.SetUpDataBase(packageResult.Value);
                     if (string.Equals(resultDb, "error", StringComparison.OrdinalIgnoreCase))
                     {
                         SurfaceLoggedError("Database creation failed.");
                         return;
                     }
 
-                    string resultKey = service.SetUpKeyFile();
+                    string resultKey = service.SetUpKeyFile(packageResult.Value);
                     if (resultKey.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
                     {
                         SurfaceLoggedError("Key archive creation failed.");
@@ -443,33 +451,22 @@ namespace Utilities.Security
                         "Upgrade completed successfully.",
                         AppStatusMessageKind.Success,
                         TimeSpan.FromSeconds(10));
+
+                    // The upgrade rewrote the key-file SQL payload. Refresh the in-memory
+                    // keyset before validating/loading the verified runtime SQL package.
+                    ServiceSetUp.EnsureKeySetFromArchive();
                 }
 
-                // 📦 Load additional SQL logic from key archive
-                try
+                var runtimePackage = TrustedSqlCatalog.ValidateNewInstallFiles(ServiceSetUp.GetVerifiedPayloadCandidates());
+                if (!runtimePackage.Succeeded || runtimePackage.Value == null)
                 {
-                    SqlCagegory.EnsureKeysAndLoadAll();
-                }
-                catch (Exception ex)
-                {
-                    _ = FatalErrorPopupHelper.ShowFatalAsync(
-                        "MWPV could not load the required SQL resources and must close.",
-                        ex,
-                        "Required SQL content could not be loaded after successful login.");
+                    var details = string.Join("; ", runtimePackage.Failures.Select(x =>
+                        $"{x.Code}: {x.FileName ?? x.Message ?? "SQL package validation failed."}"));
+                    EarlyLoginFailures.Record("SqlCatalogValidation", details);
+                    SurfaceError($"Required SQL package validation failed.\n\n{details}");
                     return;
                 }
-
-                // 🚨 Guard: must-have scripts check
-                var missing = SqlCagegory.GetMissingMustHaves();
-                if (missing.Length > 0)
-                {
-                    SurfaceLoggedError(
-                        "Required SQL scripts are missing from the key archive: " +
-                        string.Join(", ", missing)
-                    );
-                    // keep the window open for correction
-                    return;
-                }
+                RuntimeSqlStore.ReplaceVerified(runtimePackage.Value.KeyFilePayloadScripts);
 
                 // ✅ Valid login complete, DB open, SQL loaded: write SESSION_START
                 try { LogCatalogService.InsertSessionStart(); } catch { /* best-effort */ }

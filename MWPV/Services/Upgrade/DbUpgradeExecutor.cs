@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using Microsoft.Data.Sqlite;
-using MWPV.Services.MigrationUpgrade;
+using MWPV.SqlCatalog;
 using MWPV.Services.AppLifecycle;
 
 namespace MWPV.Services.Upgrade
@@ -20,66 +20,14 @@ namespace MWPV.Services.Upgrade
             _versionReader = versionReader ?? throw new ArgumentNullException(nameof(versionReader));
         }
 
-        public UpgradeStepResult<MigrationUpgradePlan> BuildPlan(
-            string currentVersion,
-            UpgradeSqlCatalog catalog,
-            string? targetVersion = null)
-        {
-            try
-            {
-                if (catalog == null)
-                {
-                    return UpgradeStepResult<MigrationUpgradePlan>.Failure(
-                        "BuildPlan",
-                        UpgradeFailureCategory.Plan,
-                        AppExitCode.UpgradePlanInvalid,
-                        "Upgrade SQL catalog is required.");
-                }
-
-                var scripts = catalog.UpgradeScripts
-                    .Select(script => new MigrationUpgradeScript
-                    {
-                        FileName = script.FileName
-                    })
-                    .ToArray();
-
-                var plan = MigrationUpgradePlanner.BuildPlan(currentVersion, scripts, targetVersion);
-                if (!plan.IsValid)
-                {
-                    return UpgradeStepResult<MigrationUpgradePlan>.Failure(
-                        "BuildPlan",
-                        UpgradeFailureCategory.Plan,
-                        AppExitCode.UpgradePlanInvalid,
-                        string.Join(Environment.NewLine, plan.Errors));
-                }
-
-                return UpgradeStepResult<MigrationUpgradePlan>.Success(
-                    "BuildPlan",
-                    plan,
-                    plan.IsNoOp
-                        ? $"No upgrade required for version {plan.CurrentDbVersion}."
-                        : $"Planned {plan.RequiredScripts.Count} upgrade script(s) from {plan.CurrentDbVersion} to {plan.TargetDbVersion}.");
-            }
-            catch (Exception ex)
-            {
-                return UpgradeStepResult<MigrationUpgradePlan>.Failure(
-                    "BuildPlan",
-                    UpgradeFailureCategory.Plan,
-                    AppExitCode.UpgradePlanInvalid,
-                    "Upgrade plan creation failed.",
-                    ex);
-            }
-        }
-
         public UpgradeStepResult ExecutePlan(
             string databasePath,
             string? password,
-            MigrationUpgradePlan plan,
-            UpgradeSqlCatalog catalog)
+            VerifiedUpgradePackage package)
         {
             try
             {
-                if (plan == null || catalog == null)
+                if (package == null)
                 {
                     return UpgradeStepResult.Failure(
                         "ExecuteSqlUpgrade",
@@ -88,22 +36,19 @@ namespace MWPV.Services.Upgrade
                         "Upgrade plan and SQL catalog are required.");
                 }
 
-                if (plan.IsNoOp || plan.RequiredScripts.Count == 0)
+                if (package.OrderedUpgradeScripts.Count == 0)
                     return UpgradeStepResult.Success("ExecuteSqlUpgrade", "No SQL upgrade scripts required.");
 
                 using var connection = DbUpgradeVersionReader.OpenConnection(databasePath, password);
-                foreach (var plannedScript in plan.RequiredScripts)
+                foreach (var script in package.OrderedUpgradeScripts)
                 {
-                    var script = catalog.UpgradeScripts.FirstOrDefault(
-                        item => string.Equals(item.FileName, plannedScript.FileName, StringComparison.OrdinalIgnoreCase));
-
-                    if (script == null || string.IsNullOrWhiteSpace(script.SqlText))
+                    if (string.IsNullOrWhiteSpace(script.SqlText))
                     {
                         return UpgradeStepResult.Failure(
                             "ExecuteSqlUpgrade",
                             UpgradeFailureCategory.SqlExecution,
                             AppExitCode.UpgradeSqlExecutionFailed,
-                            $"Planned SQL script was not loaded: {plannedScript.FileName}");
+                            $"Verified SQL script was empty: {script.CatalogEntry.FileName}");
                     }
 
                     using var command = connection.CreateCommand();
@@ -113,7 +58,7 @@ namespace MWPV.Services.Upgrade
 
                 return UpgradeStepResult.Success(
                     "ExecuteSqlUpgrade",
-                    $"Executed {plan.RequiredScripts.Count} SQL upgrade script(s).");
+                    $"Executed {package.OrderedUpgradeScripts.Count} SQL upgrade script(s).");
             }
             catch (Exception ex)
             {

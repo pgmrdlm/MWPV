@@ -79,7 +79,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Logs_Insert.sql");
+                var sql = RuntimeSqlStore.GetSql("s_Logs_Insert.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Logs_Insert.sql");
 
@@ -130,7 +130,7 @@ namespace MWPV.Services
                 if (affected != 1) return -1;
 
                 using var last = cn.CreateCommand();
-                last.CommandText = SqlCagegory.GetSql("s_Logs_LastInsertId.sql");
+                last.CommandText = RuntimeSqlStore.GetSql("s_Logs_LastInsertId.sql");
                 return Convert.ToInt64(last.ExecuteScalar(), CultureInfo.InvariantCulture);
             }
             catch (Exception ex)
@@ -210,7 +210,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Logs_SelectPage.sql");
+                var sql = RuntimeSqlStore.GetSql("s_Logs_SelectPage.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPage.sql");
                 cmd.CommandText = sql;
@@ -259,7 +259,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Logs_SelectPageFilter.sql");
+                var sql = RuntimeSqlStore.GetSql("s_Logs_SelectPageFilter.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Logs_SelectPageFilter.sql");
                 cmd.CommandText = sql;
@@ -332,7 +332,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Logs_SelectById.sql");
+                var sql = RuntimeSqlStore.GetSql("s_Logs_SelectById.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Logs_SelectById.sql");
                 cmd.CommandText = sql;
@@ -375,7 +375,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_LogMessageTemplate_SelectAll.sql");
+                var sql = RuntimeSqlStore.GetSql("s_LogMessageTemplate_SelectAll.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_LogMessageTemplate_SelectAll.sql");
 
@@ -426,7 +426,7 @@ namespace MWPV.Services
                 using var cn = openAppConnection();
                 using var cmd = cn.CreateCommand();
 
-                var sql = SqlCagegory.GetSql("s_Combo_LogsDetailSelectByType.sql");
+                var sql = RuntimeSqlStore.GetSql("s_Combo_LogsDetailSelectByType.sql");
                 if (string.IsNullOrWhiteSpace(sql))
                     throw new InvalidOperationException("SQL not loaded: s_Combo_LogsDetailSelectByType.sql");
                 cmd.CommandText = sql;

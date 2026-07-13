@@ -8,6 +8,7 @@ using KeyFileLogic;
 using Security.Utility;
 using Security.Utility.Crypto;
 using MWPV.Services.AppLifecycle;
+using MWPV.SqlCatalog;
 
 namespace MWPV.Services.Upgrade
 {
@@ -18,7 +19,7 @@ namespace MWPV.Services.Upgrade
         public UpgradeStepResult RewriteSqlPayload(
             string keyFilePath,
             char[] keyPassword,
-            UpgradeSqlCatalog catalog,
+            VerifiedUpgradePackage package,
             bool mergeExistingSql = false)
         {
             byte[]? payloadBytes = null;
@@ -26,7 +27,7 @@ namespace MWPV.Services.Upgrade
 
             try
             {
-                if (catalog == null)
+                if (package == null)
                 {
                     return UpgradeStepResult.Failure(
                         "RewriteKeyFile",
@@ -35,7 +36,7 @@ namespace MWPV.Services.Upgrade
                         "Upgrade SQL catalog is required.");
                 }
 
-                var sqlMap = catalog.GetSqlMapForKeyFileRebuild();
+                var sqlMap = package.KeyFilePayloadScripts.ToDictionary(x => x.CatalogEntry.FileName, x => x.SqlText, StringComparer.OrdinalIgnoreCase);
                 if (sqlMap.Count == 0)
                 {
                     return UpgradeStepResult.Failure(
@@ -92,13 +93,13 @@ namespace MWPV.Services.Upgrade
         public UpgradeStepResult ValidateKeyFile(
             string keyFilePath,
             char[] keyPassword,
-            UpgradeSqlCatalog catalog)
+            VerifiedUpgradePackage package)
         {
             byte[]? payloadBytes = null;
 
             try
             {
-                if (catalog == null)
+                if (package == null)
                 {
                     return UpgradeStepResult.Failure(
                         "ValidateKeyFile",
@@ -107,7 +108,7 @@ namespace MWPV.Services.Upgrade
                         "Upgrade SQL catalog is required.");
                 }
 
-                var requiredSql = catalog.GetSqlMapForKeyFileRebuild().Keys.ToArray();
+                var requiredSql = package.KeyFilePayloadScripts.Select(x => x.CatalogEntry.FileName).ToArray();
                 if (requiredSql.Length == 0)
                 {
                     return UpgradeStepResult.Failure(

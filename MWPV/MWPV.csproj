@@ -37,16 +37,25 @@
 		<ProjectReference Include="..\Backup.Utility\Backup.Utility.csproj" />
 		<ProjectReference Include="..\Security.Utility\Security.Utility.csproj" />
 		<ProjectReference Include="KeyFileLogic\KeyFileLogic.csproj" />
+		<ProjectReference Include="MWPV.SqlCatalog\MWPV.SqlCatalog.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<Compile Remove="KeyFileLogic\**\*.cs" />
 		<Compile Remove="MigrationUpgrade\**\*.cs" />
+		<Compile Remove="MWPV.SqlCatalog\**\*.cs" />
+		<Compile Remove="MWPV.SqlCatalog.Tests\**\*.cs" />
 	</ItemGroup>
 
 	<!-- App resources / content -->
 	<ItemGroup>
-		<None Update="sql\**\*.sql">
+	<None Update="sql\MWPV_DB_Create.sql">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+	<None Update="sql\s_*.sql">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+	<None Update="sql\*_Upgrade.sql">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
