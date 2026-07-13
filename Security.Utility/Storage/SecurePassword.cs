@@ -117,6 +117,35 @@ namespace Security.Utility.Storage
             GenerateInternal(ref target, length, CompatibleSpecials);
         }
 
+        // Generate an alphanumeric password into target[], always including lower, upper, and digit.
+        public static void GenerateAlphanumeric(ref char[] target, int length)
+        {
+            if (length < MinimumLength)
+                throw new ArgumentException($"Password length must be at least {MinimumLength} characters.", nameof(length));
+
+            const string lowers = "abcdefghijklmnopqrstuvwxyz";
+            const string uppers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const string digits = "0123456789";
+
+            var L = lowers.ToCharArray();
+            var U = uppers.ToCharArray();
+            var D = digits.ToCharArray();
+
+            if (target == null || target.Length != length)
+                target = new char[length];
+
+            int pos = 0;
+            target[pos++] = RandomFrom(L);
+            target[pos++] = RandomFrom(U);
+            target[pos++] = RandomFrom(D);
+
+            char[] union = L.Concat(U).Concat(D).ToArray();
+            while (pos < length)
+                target[pos++] = RandomFrom(union);
+
+            Shuffle(target);
+        }
+
         // Optional UI convenience. Avoid if you don’t need it.
         public static string GenerateAsString(int length)
         {
@@ -131,6 +160,15 @@ namespace Security.Utility.Storage
         {
             char[] buf = null!;
             GenerateCompatible(ref buf, length);
+            try { return new string(buf); }
+            finally { Array.Clear(buf, 0, buf.Length); }
+        }
+
+        // Optional UI convenience: alphanumeric generator
+        public static string GenerateAlphanumericAsString(int length)
+        {
+            char[] buf = null!;
+            GenerateAlphanumeric(ref buf, length);
             try { return new string(buf); }
             finally { Array.Clear(buf, 0, buf.Length); }
         }

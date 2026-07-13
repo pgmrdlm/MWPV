@@ -208,6 +208,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="28"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <Grid.ColumnDefinitions>
@@ -312,8 +313,38 @@
                            HorizontalAlignment="Center"/>
             </Button>
 
+            <StackPanel x:Name="pnlSymbolMode"
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="5"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,6,0,0">
+                <TextBlock Text="Symbols:"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0"/>
+                <RadioButton x:Name="rbPasswordSymbolsFull"
+                             Content="Full"
+                             GroupName="PasswordSymbolMode"
+                             IsChecked="True"
+                             ToolTip="Uses the complete MWPV symbol set."
+                             VerticalAlignment="Center"
+                             Margin="0,0,12,0"/>
+                <RadioButton x:Name="rbPasswordSymbolsCompatible"
+                             Content="Compatible"
+                             GroupName="PasswordSymbolMode"
+                             ToolTip="Uses a reduced symbol set accepted by more websites."
+                             VerticalAlignment="Center"
+                             Margin="0,0,12,0"/>
+                <RadioButton x:Name="rbPasswordSymbolsNone"
+                             Content="None"
+                             GroupName="PasswordSymbolMode"
+                             ToolTip="Generates with letters and numbers only."
+                             VerticalAlignment="Center"/>
+            </StackPanel>
+
             <CheckBox x:Name="chkBookmarkOnly"
-                      Grid.Row="1"
+                      Grid.Row="2"
                       Grid.Column="0"
                       Grid.ColumnSpan="5"
                       VerticalAlignment="Center"

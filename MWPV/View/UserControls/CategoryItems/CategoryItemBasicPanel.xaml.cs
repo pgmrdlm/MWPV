@@ -74,6 +74,13 @@ namespace MWPV.View.UserControls.CategoryItems
         private int _passwordDefaultLength;
         private bool _passwordManualEntryMode;
 
+        private enum PasswordSymbolMode
+        {
+            Full,
+            Compatible,
+            None
+        }
+
         // Default visuals
         private Brush? _emailDefaultBorderBrush;
         private Brush? _emailDefaultBackground;
@@ -221,6 +228,7 @@ namespace MWPV.View.UserControls.CategoryItems
             btnCopyPassword.Visibility = viewOnly && !repairOnly ? Visibility.Visible : Visibility.Collapsed;
             cmbPasswordLength.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
             btnResetPasswordSection.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
+            pnlSymbolMode.Visibility = locked ? Visibility.Collapsed : Visibility.Visible;
             ApplyPasswordGeneratorControlState();
 
             // View-only copy buttons
@@ -584,6 +592,7 @@ namespace MWPV.View.UserControls.CategoryItems
             ClearPinError();
 
             _sigState.Clear();
+            ResetSymbolModeSelection();
             RepairOnlyChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -594,6 +603,7 @@ namespace MWPV.View.UserControls.CategoryItems
             HideVerifyRow();
             HideVerifyError();
             ResetPasswordLengthSelection();
+            ResetSymbolModeSelection();
             SetPasswordManualEntryMode(false);
 
             ClearItemNameError();
@@ -1006,7 +1016,8 @@ namespace MWPV.View.UserControls.CategoryItems
 
         private void ApplyPasswordGeneratorControlState()
         {
-            if (btnGeneratePassword == null || cmbPasswordLength == null || btnResetPasswordSection == null)
+            if (btnGeneratePassword == null || cmbPasswordLength == null || btnResetPasswordSection == null ||
+                rbPasswordSymbolsFull == null || rbPasswordSymbolsCompatible == null || rbPasswordSymbolsNone == null)
                 return;
 
             bool editable = !IsViewOnly;
@@ -1014,7 +1025,27 @@ namespace MWPV.View.UserControls.CategoryItems
 
             btnGeneratePassword.IsEnabled = generatorEnabled;
             cmbPasswordLength.IsEnabled = generatorEnabled;
+            rbPasswordSymbolsFull.IsEnabled = generatorEnabled;
+            rbPasswordSymbolsCompatible.IsEnabled = generatorEnabled;
+            rbPasswordSymbolsNone.IsEnabled = generatorEnabled;
             btnResetPasswordSection.IsEnabled = editable;
+        }
+
+        private void ResetSymbolModeSelection()
+        {
+            if (rbPasswordSymbolsFull != null)
+                rbPasswordSymbolsFull.IsChecked = true;
+        }
+
+        private PasswordSymbolMode GetSelectedPasswordSymbolMode()
+        {
+            if (rbPasswordSymbolsCompatible?.IsChecked == true)
+                return PasswordSymbolMode.Compatible;
+
+            if (rbPasswordSymbolsNone?.IsChecked == true)
+                return PasswordSymbolMode.None;
+
+            return PasswordSymbolMode.Full;
         }
 
         private void BtnGeneratePassword_Click(object? sender, RoutedEventArgs e)
@@ -1023,8 +1054,13 @@ namespace MWPV.View.UserControls.CategoryItems
 
             try
             {
-                // CHANGED: use COMPATIBLE generator (picky-site friendly)
-                var generated = SecurePassword.GenerateCompatibleAsString(GetSelectedPasswordLength());
+                int length = GetSelectedPasswordLength();
+                var generated = GetSelectedPasswordSymbolMode() switch
+                {
+                    PasswordSymbolMode.Compatible => SecurePassword.GenerateCompatibleAsString(length),
+                    PasswordSymbolMode.None => SecurePassword.GenerateAlphanumericAsString(length),
+                    _ => SecurePassword.GenerateAsString(length)
+                };
 
                 _settingPwProgrammatically = true;
                 try { SetPassword(generated); }
