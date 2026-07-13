@@ -379,3 +379,18 @@ Key.7z
 !Backup.Utility/**
 !Backup.Utility.Tests/
 !Backup.Utility.Tests/**
+# .NET build output
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Test results
+TestResults/
+*.trx
+
+# Inno Setup generated installer output
+Installer/Output/
