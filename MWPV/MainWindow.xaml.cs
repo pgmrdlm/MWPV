@@ -77,7 +77,7 @@ namespace MWPV
             // ============================================================
 
             _inactivity = new InactivityLockService(
-                timeout: TimeSpan.FromMinutes(5),
+                timeout: TimeSpan.FromMinutes(AppSettingsService.GetInactivityTimeoutMinutes()),
 
                 // Sensitive context = editor overlay is open (regardless of which tab is selected)
                 isSensitiveContextOpen: () => Panel != null && Panel.IsEditorOverlayActive,
@@ -124,7 +124,13 @@ namespace MWPV
                     DispatcherPriority.Background);
                 });
 
+            AppSettingsService.InactivityTimeoutChanged += OnInactivityTimeoutChanged;
             _inactivity.Start();
+        }
+
+        private void OnInactivityTimeoutChanged(int minutes)
+        {
+            _inactivity?.UpdateTimeout(TimeSpan.FromMinutes(minutes));
         }
 
         private void LoadVersionDisplay()
@@ -506,6 +512,7 @@ namespace MWPV
                 _statusMessageSubscription = null;
 
                 try { _inactivity?.Dispose(); } catch { }
+                AppSettingsService.InactivityTimeoutChanged -= OnInactivityTimeoutChanged;
                 _inactivity = null;
 
                 _uiLockedDown = false;

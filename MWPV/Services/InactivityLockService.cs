@@ -1,6 +1,6 @@
 ﻿// File: MWPV/Services/InactivityLockService.cs
 // Purpose:
-// - Owns the 5-minute inactivity timer (MWPV-scoped)
+// - Owns the configured inactivity timer (MWPV-scoped)
 // - Resets on App.UserActivityDetected (keystrokes/mouse clicks inside MWPV)
 // - On timeout: runs existing "Cancel" logic (via injected callback) and then runs a lock callback (also injected)
 //
@@ -19,7 +19,7 @@ namespace MWPV.Services
     internal sealed class InactivityLockService : IDisposable
     {
         private readonly DispatcherTimer _timer;
-        private readonly TimeSpan _timeout;
+        private TimeSpan _timeout;
 
         private readonly Func<bool> _isSensitiveContextOpen;
         private readonly Action _forceCancelSensitiveContext;
@@ -51,6 +51,18 @@ namespace MWPV.Services
         }
 
         public TimeSpan Timeout => _timeout;
+
+        public void UpdateTimeout(TimeSpan timeout)
+        {
+            ThrowIfDisposed();
+            if (timeout <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be > 0.");
+
+            _timeout = timeout;
+            _timer.Interval = timeout;
+            if (_started)
+                Reset();
+        }
 
         public void Start()
         {

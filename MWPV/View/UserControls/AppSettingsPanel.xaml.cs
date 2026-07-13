@@ -19,7 +19,7 @@ namespace MWPV.View.UserControls
         private bool _pendingResetAll;
 
         private const string SettingPasswordMinimum = "AS_PW_Minimum";
-        private const string SettingIncludeSymbols = "AS_PW_IncludeSymbols";
+        private const string SettingInactivityTimeoutMinutes = "AS_InactivityTimeoutMinutes";
         private const string SettingClipboardClearSeconds = "SensitiveClipboardClearSeconds";
         private const string SettingLogRetentionDays = "AS_LogRetentionDays";
         private const string SettingBackupRetentionCount = "AS_BackupRetentionCount";
@@ -36,11 +36,10 @@ namespace MWPV.View.UserControls
         {
             InitializeComponent();
             txtPasswordMinimum.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.PasswordMinimum);
+            txtInactivityTimeoutMinutes.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.InactivityTimeoutMinutes);
             txtClipboardClearSeconds.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.ClipboardClearSeconds);
             txtLogRetentionDays.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.LogRetentionDays);
             txtBackupRetentionCount.TextChanged += (_, __) => HandleFieldEdited(ValidationCard.BackupRetentionCount);
-            chkIncludeSymbols.Checked += (_, __) => MarkDirty();
-            chkIncludeSymbols.Unchecked += (_, __) => MarkDirty();
             chkBackupPromptOnExitAfterChanges.Checked += (_, __) => MarkDirty();
             chkBackupPromptOnExitAfterChanges.Unchecked += (_, __) => MarkDirty();
             Loaded += (_, __) => LoadSettings();
@@ -69,7 +68,7 @@ namespace MWPV.View.UserControls
         private void ApplyToUi(EditableAppSettings settings)
         {
             txtPasswordMinimum.Text = settings.SavedItemPasswordMinimum.ToString();
-            chkIncludeSymbols.IsChecked = settings.IncludeSymbols;
+            txtInactivityTimeoutMinutes.Text = settings.InactivityTimeoutMinutes.ToString();
             txtClipboardClearSeconds.Text = settings.ClipboardClearSeconds.ToString();
             txtLogRetentionDays.Text = settings.LogRetentionDays.ToString();
             txtBackupRetentionCount.Text = settings.BackupRetentionCount.ToString();
@@ -99,9 +98,9 @@ namespace MWPV.View.UserControls
             MarkDirty();
         }
 
-        private void ResetIncludeSymbols()
+        private void ResetInactivityTimeoutMinutes()
         {
-            chkIncludeSymbols.IsChecked = EditableAppSettings.Defaults().IncludeSymbols;
+            txtInactivityTimeoutMinutes.Text = EditableAppSettings.Defaults().InactivityTimeoutMinutes.ToString();
             MarkDirty();
         }
 
@@ -132,9 +131,13 @@ namespace MWPV.View.UserControls
         private void btnResetPasswordMinimum_Click(object sender, RoutedEventArgs e)
         {
             ResetPasswordMinimum();
-            ResetIncludeSymbols();
             _pendingIndividualResetKeys.Add(SettingPasswordMinimum);
-            _pendingIndividualResetKeys.Add(SettingIncludeSymbols);
+        }
+
+        private void btnResetInactivityTimeout_Click(object sender, RoutedEventArgs e)
+        {
+            ResetInactivityTimeoutMinutes();
+            _pendingIndividualResetKeys.Add(SettingInactivityTimeoutMinutes);
         }
 
         private void btnResetClipboard_Click(object sender, RoutedEventArgs e)
@@ -160,7 +163,7 @@ namespace MWPV.View.UserControls
         private void btnResetAll_Click(object sender, RoutedEventArgs e)
         {
             ResetPasswordMinimum();
-            ResetIncludeSymbols();
+            ResetInactivityTimeoutMinutes();
             ResetClipboard();
             ResetLogRetention();
             ResetBackupRetention();
@@ -168,7 +171,7 @@ namespace MWPV.View.UserControls
             _pendingResetAll = true;
             _pendingIndividualResetKeys.Clear();
             _pendingIndividualResetKeys.Add(SettingPasswordMinimum);
-            _pendingIndividualResetKeys.Add(SettingIncludeSymbols);
+            _pendingIndividualResetKeys.Add(SettingInactivityTimeoutMinutes);
             _pendingIndividualResetKeys.Add(SettingClipboardClearSeconds);
             _pendingIndividualResetKeys.Add(SettingLogRetentionDays);
             _pendingIndividualResetKeys.Add(SettingBackupRetentionCount);
@@ -182,28 +185,34 @@ namespace MWPV.View.UserControls
             ClearValidationErrors();
 
             bool passwordParsed = TryReadInt(txtPasswordMinimum.Text, "Saved-item password minimum", out int passwordMinimum, out var passwordError);
+            bool inactivityParsed = TryReadInt(txtInactivityTimeoutMinutes.Text, "Inactivity timeout", out int inactivityTimeoutMinutes, out var inactivityError);
             bool clipboardParsed = TryReadInt(txtClipboardClearSeconds.Text, "Clipboard auto-clear", out int clipboardSeconds, out var clipboardError);
             bool logParsed = TryReadInt(txtLogRetentionDays.Text, "Log retention", out int logRetentionDays, out var logError);
             bool backupParsed = TryReadInt(txtBackupRetentionCount.Text, "Backup retention", out int backupRetentionCount, out var backupError);
 
-            SetCardError(txtPasswordMinimumError, passwordError);
             SetCardError(txtClipboardClearSecondsError, clipboardError);
             SetCardError(txtLogRetentionDaysError, logError);
             SetCardError(txtBackupRetentionCountError, backupError);
 
             var rangeValidation = AppSettingsService.ValidateEditableSettings(
                 passwordParsed ? passwordMinimum : null,
+                inactivityParsed ? inactivityTimeoutMinutes : null,
                 clipboardParsed ? clipboardSeconds : null,
                 logParsed ? logRetentionDays : null,
                 backupParsed ? backupRetentionCount : null);
 
-            if (passwordParsed) SetCardError(txtPasswordMinimumError, rangeValidation.PasswordMinimumError);
+            SetCardError(
+                txtPasswordMinimumError,
+                !string.IsNullOrEmpty(passwordError) ? passwordError : rangeValidation.PasswordMinimumError);
+            SetCardError(
+                txtInactivityTimeoutMinutesError,
+                !string.IsNullOrEmpty(inactivityError) ? inactivityError : rangeValidation.InactivityTimeoutMinutesError);
             if (clipboardParsed) SetCardError(txtClipboardClearSecondsError, rangeValidation.ClipboardClearSecondsError);
             if (logParsed) SetCardError(txtLogRetentionDaysError, rangeValidation.LogRetentionDaysError);
             if (backupParsed) SetCardError(txtBackupRetentionCountError, rangeValidation.BackupRetentionCountError);
 
             settings.SavedItemPasswordMinimum = passwordMinimum;
-            settings.IncludeSymbols = chkIncludeSymbols.IsChecked == true;
+            settings.InactivityTimeoutMinutes = inactivityTimeoutMinutes;
             settings.ClipboardClearSeconds = clipboardSeconds;
             settings.LogRetentionDays = logRetentionDays;
             settings.BackupRetentionCount = backupRetentionCount;
@@ -221,6 +230,9 @@ namespace MWPV.View.UserControls
                     break;
                 case ValidationCard.ClipboardClearSeconds:
                     ValidateSingleValue(txtClipboardClearSeconds, txtClipboardClearSecondsError, "Clipboard auto-clear", card);
+                    break;
+                case ValidationCard.InactivityTimeoutMinutes:
+                    ValidateSingleValue(txtInactivityTimeoutMinutes, txtInactivityTimeoutMinutesError, "Inactivity timeout", card);
                     break;
                 case ValidationCard.LogRetentionDays:
                     ValidateSingleValue(txtLogRetentionDays, txtLogRetentionDaysError, "Log retention", card);
@@ -241,6 +253,7 @@ namespace MWPV.View.UserControls
 
             var result = AppSettingsService.ValidateEditableSettings(
                 card == ValidationCard.PasswordMinimum ? value : null,
+                card == ValidationCard.InactivityTimeoutMinutes ? value : null,
                 card == ValidationCard.ClipboardClearSeconds ? value : null,
                 card == ValidationCard.LogRetentionDays ? value : null,
                 card == ValidationCard.BackupRetentionCount ? value : null);
@@ -248,6 +261,7 @@ namespace MWPV.View.UserControls
             string rangeError = card switch
             {
                 ValidationCard.PasswordMinimum => result.PasswordMinimumError,
+                ValidationCard.InactivityTimeoutMinutes => result.InactivityTimeoutMinutesError,
                 ValidationCard.ClipboardClearSeconds => result.ClipboardClearSecondsError,
                 ValidationCard.LogRetentionDays => result.LogRetentionDaysError,
                 ValidationCard.BackupRetentionCount => result.BackupRetentionCountError,
@@ -260,6 +274,7 @@ namespace MWPV.View.UserControls
         private void ClearValidationErrors()
         {
             SetCardError(txtPasswordMinimumError, string.Empty);
+            SetCardError(txtInactivityTimeoutMinutesError, string.Empty);
             SetCardError(txtClipboardClearSecondsError, string.Empty);
             SetCardError(txtLogRetentionDaysError, string.Empty);
             SetCardError(txtBackupRetentionCountError, string.Empty);
@@ -273,6 +288,7 @@ namespace MWPV.View.UserControls
 
         private bool HasValidationErrors() =>
             !string.IsNullOrEmpty(txtPasswordMinimumError.Text) ||
+            !string.IsNullOrEmpty(txtInactivityTimeoutMinutesError.Text) ||
             !string.IsNullOrEmpty(txtClipboardClearSecondsError.Text) ||
             !string.IsNullOrEmpty(txtLogRetentionDaysError.Text) ||
             !string.IsNullOrEmpty(txtBackupRetentionCountError.Text);
@@ -347,7 +363,7 @@ namespace MWPV.View.UserControls
         private static EditableAppSettings CopySettings(EditableAppSettings settings) => new()
         {
             SavedItemPasswordMinimum = settings.SavedItemPasswordMinimum,
-            IncludeSymbols = settings.IncludeSymbols,
+            InactivityTimeoutMinutes = settings.InactivityTimeoutMinutes,
             ClipboardClearSeconds = settings.ClipboardClearSeconds,
             LogRetentionDays = settings.LogRetentionDays,
             BackupRetentionCount = settings.BackupRetentionCount,
@@ -368,11 +384,11 @@ namespace MWPV.View.UserControls
                     pending.SavedItemPasswordMinimum == EditableAppSettings.Defaults().SavedItemPasswordMinimum,
                     $"changed to {pending.SavedItemPasswordMinimum}"));
 
-            if (baseline.IncludeSymbols != pending.IncludeSymbols)
+            if (baseline.InactivityTimeoutMinutes != pending.InactivityTimeoutMinutes)
                 changes.Add(new SettingChange(
-                    SettingIncludeSymbols,
-                    pending.IncludeSymbols == EditableAppSettings.Defaults().IncludeSymbols,
-                    pending.IncludeSymbols ? "changed to enabled" : "changed to disabled"));
+                    SettingInactivityTimeoutMinutes,
+                    pending.InactivityTimeoutMinutes == EditableAppSettings.Defaults().InactivityTimeoutMinutes,
+                    $"changed to {pending.InactivityTimeoutMinutes} minutes"));
 
             if (baseline.ClipboardClearSeconds != pending.ClipboardClearSeconds)
                 changes.Add(new SettingChange(
@@ -470,7 +486,7 @@ namespace MWPV.View.UserControls
 
         private static bool SettingsEqual(EditableAppSettings left, EditableAppSettings right) =>
             left.SavedItemPasswordMinimum == right.SavedItemPasswordMinimum &&
-            left.IncludeSymbols == right.IncludeSymbols &&
+            left.InactivityTimeoutMinutes == right.InactivityTimeoutMinutes &&
             left.ClipboardClearSeconds == right.ClipboardClearSeconds &&
             left.LogRetentionDays == right.LogRetentionDays &&
             left.BackupRetentionCount == right.BackupRetentionCount &&
@@ -490,6 +506,7 @@ namespace MWPV.View.UserControls
         private enum ValidationCard
         {
             PasswordMinimum,
+            InactivityTimeoutMinutes,
             ClipboardClearSeconds,
             LogRetentionDays,
             BackupRetentionCount

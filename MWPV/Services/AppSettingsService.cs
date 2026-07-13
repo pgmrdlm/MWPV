@@ -15,7 +15,9 @@ namespace MWPV.Services
         private const int FallbackPasswordMinimum = 12;
         private const int FallbackPasswordIncrement = 10;
         private const int FallbackPasswordEntryCount = 10;
-        private const bool FallbackPasswordIncludeSymbols = true;
+        private const int FallbackInactivityTimeoutMinutes = 4;
+        private const int MinimumInactivityTimeoutMinutes = 1;
+        private const int MaximumInactivityTimeoutMinutes = 7;
         private const bool FallbackDisplayCategoriesWithItems = true;
         private const int FallbackSensitiveClipboardClearSeconds = 45;
         private const int MinimumSensitiveClipboardClearSeconds = 15;
@@ -29,6 +31,8 @@ namespace MWPV.Services
         private const int AbsolutePasswordMinimum = 8;
         private const int AbsolutePasswordIncrementMinimum = 1;
         private const int AbsolutePasswordEntryCountMinimum = 1;
+
+        public static event Action<int>? InactivityTimeoutChanged;
 
         private static string LoadSqlRequired(string assetName)
         {
@@ -182,10 +186,10 @@ namespace MWPV.Services
                     SavedItemPasswordMinimum = Math.Max(
                         ReadOptionalInt32(reader, "AS_PW_Minimum", FallbackPasswordMinimum),
                         MinimumEditablePasswordMinimum),
-                    IncludeSymbols = ReadOptionalInt32(
+                    InactivityTimeoutMinutes = ClampInactivityTimeoutMinutes(ReadOptionalInt32(
                         reader,
-                        "AS_PW_IncludeSymbols",
-                        FallbackPasswordIncludeSymbols ? 1 : 0) != 0,
+                        "AS_InactivityTimeoutMinutes",
+                        FallbackInactivityTimeoutMinutes)),
                     ClipboardClearSeconds = ClampSensitiveClipboardSeconds(ReadOptionalInt32(
                         reader,
                         "SensitiveClipboardClearSeconds",
@@ -231,6 +235,7 @@ namespace MWPV.Services
 
             return ValidateEditableSettings(
                 settings.SavedItemPasswordMinimum,
+                settings.InactivityTimeoutMinutes,
                 settings.ClipboardClearSeconds,
                 settings.LogRetentionDays,
                 settings.BackupRetentionCount);
@@ -238,6 +243,7 @@ namespace MWPV.Services
 
         public static EditableAppSettingsValidationResult ValidateEditableSettings(
             int? savedItemPasswordMinimum,
+            int? inactivityTimeoutMinutes,
             int? clipboardClearSeconds,
             int? logRetentionDays,
             int? backupRetentionCount)
@@ -247,6 +253,11 @@ namespace MWPV.Services
                 PasswordMinimumError = savedItemPasswordMinimum.HasValue &&
                                        savedItemPasswordMinimum.Value < MinimumEditablePasswordMinimum
                     ? "Saved-item password minimum must be at least 12."
+                    : string.Empty,
+                InactivityTimeoutMinutesError = inactivityTimeoutMinutes.HasValue &&
+                                                (inactivityTimeoutMinutes.Value < MinimumInactivityTimeoutMinutes ||
+                                                 inactivityTimeoutMinutes.Value > MaximumInactivityTimeoutMinutes)
+                    ? "Inactivity timeout must be between 1 and 7 minutes."
                     : string.Empty,
                 ClipboardClearSecondsError = clipboardClearSeconds.HasValue &&
                                              (clipboardClearSeconds.Value < MinimumSensitiveClipboardClearSeconds ||
@@ -269,6 +280,8 @@ namespace MWPV.Services
             if (!TryValidateEditableSettings(settings, out var message))
                 throw new ArgumentException(message, nameof(settings));
 
+            bool inactivityTimeoutChanged =
+                LoadEditableSettings().InactivityTimeoutMinutes != settings.InactivityTimeoutMinutes;
             var sql = LoadSqlRequired(Sql_AppSettingsUpdateEditable);
 
             using var conn = DatabaseHelper.GetAppOpenConnection();
@@ -277,7 +290,7 @@ namespace MWPV.Services
             cmd.Transaction = tx;
             cmd.CommandText = sql;
             cmd.Parameters.AddWithValue("@AS_PW_Minimum", settings.SavedItemPasswordMinimum);
-            cmd.Parameters.AddWithValue("@AS_PW_IncludeSymbols", settings.IncludeSymbols ? 1 : 0);
+            cmd.Parameters.AddWithValue("@AS_InactivityTimeoutMinutes", settings.InactivityTimeoutMinutes);
             cmd.Parameters.AddWithValue("@SensitiveClipboardClearSeconds", settings.ClipboardClearSeconds);
             cmd.Parameters.AddWithValue("@AS_LogRetentionDays", settings.LogRetentionDays);
             cmd.Parameters.AddWithValue("@AS_BackupRetentionCount", settings.BackupRetentionCount);
@@ -286,6 +299,18 @@ namespace MWPV.Services
                 settings.BackupPromptOnExitAfterChanges ? 1 : 0);
             cmd.ExecuteNonQuery();
             tx.Commit();
+
+            if (inactivityTimeoutChanged)
+            {
+                try { InactivityTimeoutChanged?.Invoke(settings.InactivityTimeoutMinutes); }
+                catch { }
+            }
+        }
+
+        public static int GetInactivityTimeoutMinutes()
+        {
+            try { return LoadEditableSettings().InactivityTimeoutMinutes; }
+            catch { return FallbackInactivityTimeoutMinutes; }
         }
 
         private static int ClampSensitiveClipboardSeconds(int value)
@@ -298,6 +323,11 @@ namespace MWPV.Services
 
             return value;
         }
+
+        private static int ClampInactivityTimeoutMinutes(int value) =>
+            value < MinimumInactivityTimeoutMinutes || value > MaximumInactivityTimeoutMinutes
+                ? FallbackInactivityTimeoutMinutes
+                : value;
 
         private static int ReadInt32(SqliteDataReader reader, int ordinal, int fallback)
         {
@@ -334,7 +364,7 @@ namespace MWPV.Services
     public sealed class EditableAppSettings
     {
         public int SavedItemPasswordMinimum { get; set; }
-        public bool IncludeSymbols { get; set; }
+        public int InactivityTimeoutMinutes { get; set; }
         public int ClipboardClearSeconds { get; set; }
         public int LogRetentionDays { get; set; }
         public int BackupRetentionCount { get; set; }
@@ -343,7 +373,7 @@ namespace MWPV.Services
         public static EditableAppSettings Defaults() => new()
         {
             SavedItemPasswordMinimum = 12,
-            IncludeSymbols = true,
+            InactivityTimeoutMinutes = 4,
             ClipboardClearSeconds = 45,
             LogRetentionDays = 30,
             BackupRetentionCount = 5,
@@ -354,17 +384,20 @@ namespace MWPV.Services
     public sealed class EditableAppSettingsValidationResult
     {
         public string PasswordMinimumError { get; init; } = string.Empty;
+        public string InactivityTimeoutMinutesError { get; init; } = string.Empty;
         public string ClipboardClearSecondsError { get; init; } = string.Empty;
         public string LogRetentionDaysError { get; init; } = string.Empty;
         public string BackupRetentionCountError { get; init; } = string.Empty;
 
         public bool IsValid => string.IsNullOrEmpty(PasswordMinimumError) &&
+                               string.IsNullOrEmpty(InactivityTimeoutMinutesError) &&
                                string.IsNullOrEmpty(ClipboardClearSecondsError) &&
                                string.IsNullOrEmpty(LogRetentionDaysError) &&
                                string.IsNullOrEmpty(BackupRetentionCountError);
 
         public string FirstError =>
             !string.IsNullOrEmpty(PasswordMinimumError) ? PasswordMinimumError :
+            !string.IsNullOrEmpty(InactivityTimeoutMinutesError) ? InactivityTimeoutMinutesError :
             !string.IsNullOrEmpty(ClipboardClearSecondsError) ? ClipboardClearSecondsError :
             !string.IsNullOrEmpty(LogRetentionDaysError) ? LogRetentionDaysError :
             BackupRetentionCountError;

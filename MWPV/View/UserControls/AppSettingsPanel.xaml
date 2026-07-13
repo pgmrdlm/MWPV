@@ -104,11 +104,6 @@
                                    TextWrapping="Wrap"
                                    Margin="0,8,0,0"
                                    Visibility="Collapsed"/>
-
-                        <CheckBox x:Name="chkIncludeSymbols"
-                                  Content="Include symbols"
-                                  IsChecked="True"
-                                  VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -119,9 +114,9 @@
                         <TextBlock FontSize="16"
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,14">
-                            <Run Text="Clipboard:"
+                            <Run Text="Session Security:"
                                  FontWeight="SemiBold"/>
-                            <Run Text=" Controls how long copied sensitive values remain on the clipboard."
+                            <Run Text=" Controls clipboard clearing and automatic closing after inactivity."
                                  Foreground="{StaticResource SettingsMutedText}"/>
                         </TextBlock>
 
@@ -149,6 +144,44 @@
                                     Click="btnResetClipboard_Click"
                                     Content="Reset"/>
                         </Grid>
+
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Close after inactivity:"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Allowed range: 1-7 minutes. Default: 4."
+                                           Foreground="{StaticResource SettingsMutedText}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <TextBox x:Name="txtInactivityTimeoutMinutes"
+                                     Grid.Column="1"
+                                     Height="28"
+                                     Margin="10,0"
+                                     Width="42"
+                                     HorizontalAlignment="Left"
+                                     Text="4"/>
+                            <TextBlock Grid.Column="1"
+                                       Margin="58,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Text="minutes"/>
+                            <Button Grid.Column="2"
+                                    Style="{StaticResource DialogSecondary}"
+                                    ToolTip="Reset this setting to its app-defined default."
+                                    Click="btnResetInactivityTimeout_Click"
+                                    Content="Reset"/>
+                        </Grid>
+
+                        <TextBlock x:Name="txtInactivityTimeoutMinutesError"
+                                   Foreground="Red"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0"
+                                   Visibility="Collapsed"/>
 
                         <TextBlock x:Name="txtClipboardClearSecondsError"
                                    Foreground="Red"

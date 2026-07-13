@@ -9,7 +9,7 @@ INSERT INTO AppSettings (
     AS_PW_Inctriment_Steps,
     AS_DisplayCategoriesWithItems,
     SensitiveClipboardClearSeconds,
-    AS_PW_IncludeSymbols,
+    AS_InactivityTimeoutMinutes,
     AS_LogRetentionDays,
     AS_BackupRetentionCount,
     AS_BackupPromptOnExitAfterChanges
@@ -20,7 +20,7 @@ SELECT
     10,
     1,
     45,
-    1,
+    4,
     30,
     5,
     1
@@ -29,7 +29,7 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 UPDATE AppSettings
 SET
     AS_PW_Minimum = @AS_PW_Minimum,
-    AS_PW_IncludeSymbols = @AS_PW_IncludeSymbols,
+    AS_InactivityTimeoutMinutes = @AS_InactivityTimeoutMinutes,
     SensitiveClipboardClearSeconds = @SensitiveClipboardClearSeconds,
     AS_LogRetentionDays = @AS_LogRetentionDays,
     AS_BackupRetentionCount = @AS_BackupRetentionCount,

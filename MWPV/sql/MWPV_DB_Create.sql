@@ -1,11 +1,14 @@
 
 /* ============================================================================
-   MWPV - 01.22 FRESH CREATE SCRIPT
+   MWPV - 01.23 FRESH CREATE SCRIPT
 
    Purpose:
-   - Create a fresh database at schema version 01.22
+   - Create a fresh database at schema version 01.23
    - Seed reference data required by the current schema
    - Stamp the database version immediately on fresh install
+
+   01.23 changes reflected here:
+   - AppSettings inactivity timeout replaces the retired global symbols setting.
 
    01.22 changes reflected here:
    - Backup-on-exit success log template and Logs filter added
@@ -24,7 +27,7 @@
 
    01.17 changes reflected here:
    - AppSettings editable settings columns added:
-     AS_PW_IncludeSymbols, AS_LogRetentionDays, AS_BackupRetentionCount
+     AS_InactivityTimeoutMinutes, AS_LogRetentionDays, AS_BackupRetentionCount
    - Fresh install version stamp updated to 01.17
 
    01.16 changes reflected here:
@@ -227,7 +230,7 @@ CREATE TABLE AppSettings (
     AS_PW_Inctriment_Steps INTEGER NOT NULL,
     AS_DisplayCategoriesWithItems INTEGER NOT NULL DEFAULT 1 CHECK (AS_DisplayCategoriesWithItems IN (0,1)),
     SensitiveClipboardClearSeconds INTEGER NOT NULL DEFAULT 45 CHECK (SensitiveClipboardClearSeconds BETWEEN 5 AND 300),
-    AS_PW_IncludeSymbols INTEGER NOT NULL DEFAULT 1 CHECK (AS_PW_IncludeSymbols IN (0,1)),
+    AS_InactivityTimeoutMinutes INTEGER NOT NULL DEFAULT 4 CHECK (AS_InactivityTimeoutMinutes BETWEEN 1 AND 7),
     AS_LogRetentionDays INTEGER NOT NULL DEFAULT 30 CHECK (AS_LogRetentionDays >= 30),
     AS_BackupRetentionCount INTEGER NOT NULL DEFAULT 5 CHECK (AS_BackupRetentionCount >= 5),
     AS_BackupPromptOnExitAfterChanges INTEGER NOT NULL DEFAULT 1 CHECK (AS_BackupPromptOnExitAfterChanges IN (0,1))
@@ -677,7 +680,7 @@ INSERT INTO AppSettings (
     AS_PW_Inctriment_Steps,
     AS_DisplayCategoriesWithItems,
     SensitiveClipboardClearSeconds,
-    AS_PW_IncludeSymbols,
+    AS_InactivityTimeoutMinutes,
     AS_LogRetentionDays,
     AS_BackupRetentionCount,
     AS_BackupPromptOnExitAfterChanges
@@ -688,7 +691,7 @@ SELECT
     10,
     1,
     45,
-    1,
+    4,
     30,
     5,
     1
@@ -697,9 +700,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.22',
+    '01.23',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.22',
+    'Fresh database created at version 01.23',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

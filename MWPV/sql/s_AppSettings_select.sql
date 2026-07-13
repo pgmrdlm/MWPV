@@ -9,7 +9,7 @@ SELECT
     AS_PW_Inctriment_Steps,
     AS_DisplayCategoriesWithItems,
     SensitiveClipboardClearSeconds,
-    AS_PW_IncludeSymbols,
+    AS_InactivityTimeoutMinutes,
     AS_LogRetentionDays,
     AS_BackupRetentionCount,
     AS_BackupPromptOnExitAfterChanges
