@@ -152,7 +152,8 @@
     <Grid>
         <Menu>
             <MenuItem Header="_File">
-                <MenuItem Header="E_xit" Name="mnuFileExit"/>
+                <MenuItem Header="E_xit" Name="mnuFileExit"
+                          Click="mnuFileExit_Click"/>
             </MenuItem>
 
             <MenuItem x:Name="ToolsMenu" Header="_Tools">

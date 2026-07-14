@@ -52,6 +52,16 @@ namespace MWPV.View.UserControls
 
         public void SetToolsNavigationEnabled(bool enabled) => ToolsMenu.IsEnabled = enabled;
 
+        // File -> Exit follows the MainWindow close path so its Closing handler
+        // remains the single authority for prompting, cleanup, and termination.
+        private void mnuFileExit_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+            {
+                mw.Close();
+            }
+        }
+
         private async void mnuToolsPurgeLogs_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

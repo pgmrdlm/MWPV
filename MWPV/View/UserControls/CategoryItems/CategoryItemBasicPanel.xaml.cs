@@ -18,6 +18,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using MWPV.Services;
 using MWPV.Utilities.Helpers;
+using MWPV.Utilities.Security;
 using MWPV.Utilities.UI;
 using MWPV.Utilities.Signatures;
 using Security.Utility.Storage;            // SecureEncryptedDataStore (SEDS) + SecurePassword
@@ -1315,6 +1316,15 @@ namespace MWPV.View.UserControls.CategoryItems
                 }
             }
 
+            // Existing passwords that are proven unchanged by their original keyed
+            // fingerprint are grandfathered. No original plaintext is retained.
+            if (IsExistingPasswordProvenUnchanged(pw))
+            {
+                HideStrengthRow();
+                HideVerifyError();
+                return true;
+            }
+
             UpdateStrengthPanelForPolicy();
             if (!SecurePassword.IsPasswordValid(pw, pw, _passwordMinimum, out _))
             {
@@ -1326,6 +1336,29 @@ namespace MWPV.View.UserControls.CategoryItems
             HideVerifyError();
             HideStrengthRow();
             return true;
+        }
+
+        private bool IsExistingPasswordProvenUnchanged(string submittedPassword)
+        {
+            if (!IsExistingItem)
+                return false;
+
+            byte[]? originalFingerprint = null;
+            try
+            {
+                originalFingerprint = GetOriginalPasswordFingerprintCopy();
+                return PasswordFingerprintComparer.Compare(submittedPassword, originalFingerprint)
+                    == PasswordFingerprintComparisonResult.Unchanged;
+            }
+            catch
+            {
+                // An unavailable comparison must never grandfather a password.
+                return false;
+            }
+            finally
+            {
+                SensitiveDataCleaner.Zero(originalFingerprint);
+            }
         }
 
         private void ShowStrengthRow()

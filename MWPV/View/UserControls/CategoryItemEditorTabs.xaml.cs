@@ -19,6 +19,7 @@
 
 using MWPV.Services;
 using MWPV.Session;                        // AppStatus (IsBasicOpen)
+using MWPV.Utilities.Security;
 using MWPV.View.UserControls.CategoryItems;
 using MWPV.View.UserControls.Popup;
 using Security.Utility;
@@ -30,7 +31,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Security.Cryptography;        // CryptographicOperations.FixedTimeEquals
 using System.Reflection;                  // BindingFlags
 using System.Windows;
 using System.Windows.Controls;
@@ -104,11 +104,6 @@ namespace MWPV.View.UserControls
         private const string SedsKey_AfterSig_Email = "CI.AfterSig.Email";
         private const string SedsKey_AfterSig_Phone = "CI.AfterSig.Phone";
         private const string SedsKey_AfterSig_Pin = "CI.AfterSig.Pin";
-
-        // ============================================================
-        // PASSWORD FINGERPRINT COMPARE (THIS SESSION)
-        // ============================================================
-        private const string Purpose_PwFingerprint = SensitiveValueSignature.DefaultPurpose; // MUST match DB stored sig algorithm
 
         // ============================================================
         // LOGGING
@@ -669,28 +664,6 @@ namespace MWPV.View.UserControls
             }
         }
 
-        /* ======================= PASSWORD COMPARE HELPERS ======================= */
-
-        private static byte[] ComputePasswordFingerprint(string passwordPlain)
-        {
-            byte[] keyBytes = GetUserSecretsKeyBytesOrThrow("password fingerprint comparison");
-            try
-            {
-                return SensitiveValueSignature.Compute(passwordPlain ?? string.Empty, keyBytes, purpose: Purpose_PwFingerprint);
-            }
-            finally
-            {
-                SensitiveDataCleaner.Zero(keyBytes);
-            }
-        }
-
-        private static bool SigEquals(byte[] a, byte[] b)
-        {
-            if (a == null || b == null) return false;
-            if (a.Length != b.Length) return false;
-            return CryptographicOperations.FixedTimeEquals(a, b);
-        }
-
         private static byte[] GetUserSecretsKeyBytesOrThrow(string operation)
         {
             var result = SecureEncryptedDataStore.TryGetBytesResult(FieldAesCrypto.SedsKey_UserSecretsKey, out var keyBytes);
@@ -719,18 +692,14 @@ namespace MWPV.View.UserControls
                 return true;
             }
 
-            byte[] after = ComputePasswordFingerprint(passwordPlain!);
-
             try
             {
-                bool same = SigEquals(before, after);
-
-                return !same;
+                return PasswordFingerprintComparer.Compare(passwordPlain, before)
+                    != PasswordFingerprintComparisonResult.Unchanged;
             }
             finally
             {
                 SensitiveDataCleaner.Zero(before);
-                SensitiveDataCleaner.Zero(after);
             }
         }
 
