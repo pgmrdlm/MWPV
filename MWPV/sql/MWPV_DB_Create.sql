@@ -573,7 +573,8 @@ WITH v(Seq, Code, Description) AS (
       (19, 'SECURITYQUESTION_DEACTIVATED', 'Security question deactivated'),
       (20, 'CATEGORY_UPDATED', 'Category updated'),
       (21, 'APP_SETTINGS', 'App Settings'),
-      (22, 'BACKUP_CREATED_ON_EXIT', 'Backup created on exit')
+      (22, 'BACKUP_CREATED_ON_EXIT', 'Backup created on exit'),
+      (23, 'LOG_PURGE_COMPLETED', 'Session log purge completed')
 
 )
 INSERT INTO ComboDetail (ComboTypeId, Seq, Code, Description, Active)
@@ -700,9 +701,9 @@ WHERE NOT EXISTS (SELECT 1 FROM AppSettings);
 -- Fresh install database version stamp
 INSERT INTO DbVersion (Version, AppliedOn, Description, IsCurrent)
 SELECT
-    '01.23',
+    '01.24',
     strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-    'Fresh database created at version 01.23',
+    'Fresh database created at version 01.24',
     1
 WHERE NOT EXISTS (SELECT 1 FROM DbVersion);
 

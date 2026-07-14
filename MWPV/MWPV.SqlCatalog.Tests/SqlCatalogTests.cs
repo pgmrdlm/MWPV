@@ -11,7 +11,7 @@ public sealed class SqlCatalogTests
     [Fact]
     public void Catalog_has_safe_unique_lowercase_hashes_and_one_creation_script()
     {
-        Assert.Equal(76, TrustedSqlCatalog.Entries.Count);
+        Assert.Equal(79, TrustedSqlCatalog.Entries.Count);
         Assert.Single(TrustedSqlCatalog.Entries, x => x.Role.HasFlag(SqlScriptRole.DatabaseCreation));
         Assert.All(TrustedSqlCatalog.Entries, x =>
         {
@@ -20,6 +20,26 @@ public sealed class SqlCatalogTests
         });
         Assert.Equal(TrustedSqlCatalog.Entries.Count, TrustedSqlCatalog.Entries.Select(x => x.FileName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
+
+    [Fact]
+    public void Two_component_versions_compare_by_numeric_components()
+    {
+        Assert.True(SqlVersion.TryParse("1.24", out var expected));
+        Assert.True(SqlVersion.TryParse("01.24", out var padded));
+        Assert.True(SqlVersion.TryParse("01.23", out var prior));
+        Assert.Equal(0, expected.CompareTo(padded));
+        Assert.NotEqual(0, expected.CompareTo(prior));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("1")]
+    [InlineData("1.24.0")]
+    [InlineData("one.24")]
+    [InlineData("01.x")]
+    public void Malformed_or_missing_versions_are_rejected(string? value) =>
+        Assert.False(SqlVersion.TryParse(value, out _));
 
     [Fact]
     public void Production_inventory_and_raw_byte_hashes_match_compiled_catalog()

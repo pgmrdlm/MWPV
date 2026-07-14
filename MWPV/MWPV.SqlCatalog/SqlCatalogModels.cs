@@ -23,7 +23,7 @@ public readonly record struct SqlVersion : IComparable<SqlVersion>
         if (string.IsNullOrWhiteSpace(text)) return false;
         var clean = text.Trim().TrimStart('v', 'V');
         var source = clean.Split('.', StringSplitOptions.None);
-        if (source.Length == 0 || source.Any(x => !int.TryParse(x, out _))) return false;
+        if (source.Length != 2 || source.Any(x => !int.TryParse(x, out _))) return false;
         version = new SqlVersion(clean, source.Select(int.Parse).ToArray()); return true;
     }
     public static SqlVersion Parse(string text) => TryParse(text, out var v) ? v : throw new ArgumentException("Invalid SQL version.", nameof(text));

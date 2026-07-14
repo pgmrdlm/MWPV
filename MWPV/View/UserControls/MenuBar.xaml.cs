@@ -49,5 +49,11 @@ namespace MWPV.View.UserControls
                 mw.ShowAppSettingsPanel();
             }
         }
+
+        private async void mnuToolsPurgeLogs_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                await mw.PurgeLogsAsync();
+        }
     }
 }

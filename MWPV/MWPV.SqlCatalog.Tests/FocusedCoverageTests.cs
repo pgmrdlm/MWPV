@@ -9,8 +9,8 @@ public sealed class FocusedCoverageTests
 {
     private static readonly string SqlRoot = FindSqlRoot();
 
-    [Fact] public void Catalog_contains_all_51_operational_scripts() => Assert.Equal(51, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.NormalOperational));
-    [Fact] public void Catalog_contains_all_24_supported_upgrade_scripts() => Assert.Equal(24, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.Upgrade));
+    [Fact] public void Catalog_contains_all_53_operational_scripts() => Assert.Equal(53, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.NormalOperational));
+    [Fact] public void Catalog_contains_all_25_supported_upgrade_scripts() => Assert.Equal(25, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.Upgrade));
     [Fact] public void Catalog_excludes_test_and_obsolete_creation_scripts() { Assert.DoesNotContain(TrustedSqlCatalog.Entries, x => x.FileName == "CategoryItemTestData.sql"); Assert.DoesNotContain(TrustedSqlCatalog.Entries, x => x.FileName.StartsWith("V", StringComparison.OrdinalIgnoreCase) && x.FileName.Contains("MWPV_DB_Create")); }
     [Fact] public void Catalog_upgrade_transitions_are_unique_and_forward() { var upgrades=TrustedSqlCatalog.Entries.Where(x=>x.Role==SqlScriptRole.Upgrade).ToArray(); Assert.Equal(upgrades.Length, upgrades.Select(x=>$"{x.UpgradeFromVersion}-{x.UpgradeToVersion}").Distinct().Count()); Assert.All(upgrades,x=>Assert.True(x.UpgradeFromVersion!.Value.CompareTo(x.UpgradeToVersion!.Value)<0)); }
     [Fact] public void Catalog_order_is_stable_and_entries_view_is_read_only() { Assert.Equal(TrustedSqlCatalog.Entries.OrderBy(x=>x.StableOrder).Select(x=>x.FileName), TrustedSqlCatalog.Entries.Select(x=>x.FileName)); Assert.False(TrustedSqlCatalog.Entries is IList<SqlCatalogEntry> { IsReadOnly: false }); }
@@ -22,9 +22,21 @@ public sealed class FocusedCoverageTests
     [Fact] public void Invalid_utf8_bytes_do_not_produce_a_package() { var input=AllFiles().Select(x=>x.FileName=="s_Logs_Insert.sql" ? x with { RawBytes=new byte[] { 0xff, 0xfe } } : x).ToArray(); Assert.False(TrustedSqlCatalog.ValidateNewInstallFiles(input).Succeeded); Assert.Null(TrustedSqlCatalog.ValidateNewInstallFiles(input).Value); }
     [Fact] public void New_install_order_is_deterministic() { var a=TrustedSqlCatalog.ValidateNewInstallFiles(AllFiles()).Value!; var b=TrustedSqlCatalog.ValidateNewInstallFiles(AllFiles().Reverse().ToArray()).Value!; Assert.Equal(a.KeyFilePayloadScripts.Select(x=>x.CatalogEntry.FileName),b.KeyFilePayloadScripts.Select(x=>x.CatalogEntry.FileName)); }
 
-    [Fact] public void Upgrade_to_123_without_target_uses_highest_reachable_version() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.20",null,AllFiles()); Assert.True(r.Succeeded); Assert.Equal("1.23",r.Value!.TargetVersion.ToString()); }
+    [Fact] public void Upgrade_to_124_without_target_uses_highest_reachable_version() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.20",null,AllFiles()); Assert.True(r.Succeeded); Assert.Equal("1.24",r.Value!.TargetVersion.ToString()); }
+    [Fact] public void Terminal_124_without_target_returns_empty_no_op_route() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("01.24",null,AllFiles()); Assert.True(r.Succeeded); Assert.Empty(r.Value!.OrderedUpgradeScripts); Assert.Equal("01.24",r.Value.TargetVersion.ToString()); }
+    [Fact] public void Terminal_124_with_equivalent_padded_target_returns_empty_no_op_route() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.24","01.24",AllFiles()); Assert.True(r.Succeeded); Assert.Empty(r.Value!.OrderedUpgradeScripts); Assert.Equal("1.24",r.Value.TargetVersion.ToString()); }
+    [Fact] public void Upgrade_from_123_to_124_selects_the_migration() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("01.23","1.24",AllFiles()); Assert.True(r.Succeeded); Assert.Equal(["v01.23_v01.24_Upgrade.sql"],r.Value!.OrderedUpgradeScripts.Select(x=>x.CatalogEntry.FileName)); }
+    [Fact] public void Unknown_current_version_is_rejected() => Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("1.99",null,AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.UnsupportedVersionTransition);
+    [Fact] public void Terminal_version_rejects_downgrade_and_higher_unreachable_target() { Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("1.24","1.23",AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.UnsupportedVersionTransition); Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("1.24","1.25",AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.NoValidUpgradePath); }
+    [Fact] public void Synthetic_future_terminal_version_has_no_hard_coded_dependency()
+    {
+        var edge = new SqlCatalogEntry("v02.00_v02.01_Upgrade.sql", new string('a', 64), SqlScriptRole.Upgrade, false, false, SqlVersion.Parse("2.00"), SqlVersion.Parse("2.01"), 1);
+        var result = TrustedSqlCatalog.PlanForVersions([edge], SqlVersion.Parse("02.01"), null);
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Value!);
+    }
     [Fact] public void Upgrade_rejects_unsupported_current_version() => Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("9.99",null,AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.UnsupportedVersionTransition);
-    [Fact] public void Upgrade_rejects_unsupported_target_version() => Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("1.20","1.24",AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.NoValidUpgradePath);
+    [Fact] public void Upgrade_rejects_unsupported_target_version() => Assert.Contains(TrustedSqlCatalog.ValidateUpgradeFiles("1.20","1.25",AllFiles()).Failures,x=>x.Code==SqlCatalogFailureCode.NoValidUpgradePath);
     [Fact] public void Missing_upgrade_script_returns_no_package() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.20","1.23",Without("v01.22_v01.23_Upgrade.sql")); Assert.False(r.Succeeded); Assert.Null(r.Value); Assert.Contains(r.Failures,x=>x.Code==SqlCatalogFailureCode.MissingRequiredFile); }
     [Fact] public void Missing_upgrade_payload_script_returns_no_package() { var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.20","1.23",Without("s_Logs_Insert.sql")); Assert.False(r.Succeeded); Assert.Null(r.Value); }
     [Fact] public void Altered_later_upgrade_script_returns_no_package() { var files=AllFiles().Select(x=>x.FileName=="v01.22_v01.23_Upgrade.sql" ? x with { RawBytes=x.RawBytes.ToArray().Append((byte)' ').ToArray() } :x).ToArray(); var r=TrustedSqlCatalog.ValidateUpgradeFiles("1.20","1.23",files); Assert.False(r.Succeeded); Assert.Null(r.Value); Assert.Empty(r.Value?.OrderedUpgradeScripts ?? []); }

@@ -37,6 +37,8 @@ namespace MWPV
         private CloseState _closeState = CloseState.Idle;
         private bool _forcedCloseIntent;
         private readonly BackupOnExitCoordinator _backupOnExitCoordinator = new();
+        private readonly LogPurgeCoordinator _logPurgeCoordinator = new();
+        private bool _maintenanceInProgress;
 
         // ---- UI Lockdown (editor open) ----
         private bool _uiLockedDown;
@@ -265,6 +267,76 @@ namespace MWPV
             }
         }
 
+        public async Task PurgeLogsAsync()
+        {
+            if (_maintenanceInProgress || _uiLockedDown)
+                return;
+
+            try
+            {
+                var preview = await _logPurgeCoordinator.GetPreviewAsync();
+                if (preview.Total == 0)
+                {
+                    AppStatusMessageService.Publish("No session logs are older than the retention cutoff.", AppStatusMessageKind.Info, TimeSpan.FromSeconds(8));
+                    return;
+                }
+
+                string cutoffLocal = preview.CutoffUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
+                var answer = MessageBox.Show(
+                    $"Purge SESSION_START and SESSION_END logs older than {cutoffLocal}?\n\n" +
+                    $"Retention: {preview.RetentionDays} days\nQualifying rows: {preview.Total}\n" +
+                    $"SESSION_START: {preview.Starts}\nSESSION_END: {preview.Ends}\n\n" +
+                    "A verified full vault backup will be created before deletion.",
+                    "Purge retained session logs", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                if (answer != MessageBoxResult.OK)
+                {
+                    AppStatusMessageService.Publish("Session log purge canceled. No changes were made.", AppStatusMessageKind.Info, TimeSpan.FromSeconds(8));
+                    return;
+                }
+
+                var result = await RunExclusiveLogPurgeAsync(stage => _logPurgeCoordinator.PurgeAsync(DateTimeOffset.UtcNow, stage));
+                if (!result.Succeeded)
+                {
+                    AppStatusMessageService.Publish("Session log purge failed. No logs were deleted.", AppStatusMessageKind.Warning, TimeSpan.FromSeconds(10));
+                    return;
+                }
+                if (result.Deleted.Total == 0)
+                {
+                    AppStatusMessageService.Publish("No session logs are older than the retention cutoff.", AppStatusMessageKind.Info, TimeSpan.FromSeconds(8));
+                    return;
+                }
+                AppStatusMessageService.Publish($"Session log purge complete. Removed {result.Deleted.Starts} starts and {result.Deleted.Ends} ends. Verified backup created.", AppStatusMessageKind.Success, TimeSpan.FromSeconds(12));
+            }
+            catch
+            {
+                AppStatusMessageService.Publish("Session log purge failed. No logs were deleted.", AppStatusMessageKind.Warning, TimeSpan.FromSeconds(10));
+            }
+        }
+
+        public async Task<T> RunExclusiveLogPurgeAsync<T>(Func<Action<string>, Task<T>> operation)
+        {
+            if (_maintenanceInProgress)
+                throw new InvalidOperationException("Maintenance is already in progress.");
+            _maintenanceInProgress = true;
+            IsEnabled = false;
+            MaintenanceOverlay.Visibility = Visibility.Visible;
+            MaintenanceStageText.Text = "Creating and verifying backup before log purge...";
+            SensitiveClipboardService.Shared.SuspendDatabaseActivity();
+            try
+            {
+                await BackgroundDatabaseActivityGate.SuppressAndWaitForIdleAsync();
+                return await operation(stage => Dispatcher.Invoke(() => MaintenanceStageText.Text = stage));
+            }
+            finally
+            {
+                BackgroundDatabaseActivityGate.Resume();
+                SensitiveClipboardService.Shared.ResumeDatabaseActivity();
+                MaintenanceOverlay.Visibility = Visibility.Collapsed;
+                IsEnabled = true;
+                _maintenanceInProgress = false;
+            }
+        }
+
         // ============================================================
         // Status helpers
         // ============================================================
@@ -380,6 +452,11 @@ namespace MWPV
 
         private async void MainWindow_Closing(object? sender, CancelEventArgs e)
         {
+            if (_maintenanceInProgress)
+            {
+                e.Cancel = true;
+                return;
+            }
             if (_closeState == CloseState.CloseApproved)
                 return;
 

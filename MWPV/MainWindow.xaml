@@ -152,5 +152,15 @@
                        HorizontalAlignment="Stretch"
                        TextAlignment="Center"/>
         </Border>
+
+        <Grid x:Name="MaintenanceOverlay" Grid.RowSpan="4" Background="#80000000" Visibility="Collapsed" Panel.ZIndex="100">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center" Background="White" CornerRadius="8" Padding="28" MinWidth="420">
+                <StackPanel>
+                    <TextBlock Text="Maintenance in progress" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="MaintenanceStageText" Margin="0,14,0,12" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <ProgressBar IsIndeterminate="True" Height="16"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

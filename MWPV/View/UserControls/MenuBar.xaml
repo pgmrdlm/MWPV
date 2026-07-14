@@ -156,10 +156,10 @@
             </MenuItem>
 
             <MenuItem Header="_Tools">
-                <MenuItem Header="_Backup Password DB"  Name="mnuToolsBackup"/>
-                <MenuItem Header="_Restore Password DB" Name="mnuToolsRestore"/>
                 <MenuItem Header="_Reset DB Encryption" Name="mnuToolsReset"/>
                 <Separator/>
+                <MenuItem Header="_Purge Logs..." Name="mnuToolsPurgeLogs"
+                          Click="mnuToolsPurgeLogs_Click"/>
                 <MenuItem Header="_App Settings..." Name="mnuToolsAppSettings"
                           Click="mnuToolsAppSettings_Click"/>
                 <MenuItem Header="_View Logs..." Name="mnuToolsViewLogs"

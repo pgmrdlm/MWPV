@@ -90,7 +90,7 @@ namespace MWPV.Services.Upgrade
                         versionResult.Exception);
                 }
 
-                if (!string.Equals(versionResult.Value, expectedVersion, StringComparison.OrdinalIgnoreCase))
+                if (!VersionsMatch(expectedVersion, versionResult.Value))
                 {
                     return UpgradeStepResult.Failure(
                         "ValidateDatabase",
@@ -165,6 +165,13 @@ namespace MWPV.Services.Upgrade
                 """;
             command.Parameters.AddWithValue("$name", tableName);
             return command.ExecuteScalar() != null;
+        }
+
+        internal static bool VersionsMatch(string? expectedVersion, string? storedVersion)
+        {
+            return SqlVersion.TryParse(expectedVersion, out var expected) &&
+                   SqlVersion.TryParse(storedVersion, out var stored) &&
+                   expected.CompareTo(stored) == 0;
         }
     }
 }

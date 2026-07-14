@@ -1,4 +1,3 @@
--- Retained only for compatibility. Purge only session start/end rows older than the UTC cutoff.
 DELETE FROM Logs
 WHERE EventCode IN ('SESSION_START', 'SESSION_END')
   AND julianday(WhenUtc) < julianday(@CutoffUtc);
