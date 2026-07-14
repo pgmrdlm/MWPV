@@ -11,7 +11,6 @@ public sealed class FocusedCoverageTests
 
     [Fact] public void Catalog_contains_all_53_operational_scripts() => Assert.Equal(53, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.NormalOperational));
     [Fact] public void Catalog_contains_all_25_supported_upgrade_scripts() => Assert.Equal(25, TrustedSqlCatalog.Entries.Count(x => x.Role == SqlScriptRole.Upgrade));
-    [Fact] public void Catalog_excludes_test_and_obsolete_creation_scripts() { Assert.DoesNotContain(TrustedSqlCatalog.Entries, x => x.FileName == "CategoryItemTestData.sql"); Assert.DoesNotContain(TrustedSqlCatalog.Entries, x => x.FileName.StartsWith("V", StringComparison.OrdinalIgnoreCase) && x.FileName.Contains("MWPV_DB_Create")); }
     [Fact] public void Catalog_upgrade_transitions_are_unique_and_forward() { var upgrades=TrustedSqlCatalog.Entries.Where(x=>x.Role==SqlScriptRole.Upgrade).ToArray(); Assert.Equal(upgrades.Length, upgrades.Select(x=>$"{x.UpgradeFromVersion}-{x.UpgradeToVersion}").Distinct().Count()); Assert.All(upgrades,x=>Assert.True(x.UpgradeFromVersion!.Value.CompareTo(x.UpgradeToVersion!.Value)<0)); }
     [Fact] public void Catalog_order_is_stable_and_entries_view_is_read_only() { Assert.Equal(TrustedSqlCatalog.Entries.OrderBy(x=>x.StableOrder).Select(x=>x.FileName), TrustedSqlCatalog.Entries.Select(x=>x.FileName)); Assert.False(TrustedSqlCatalog.Entries is IList<SqlCatalogEntry> { IsReadOnly: false }); }
 

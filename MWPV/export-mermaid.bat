@@ -2,7 +2,7 @@
 setlocal ENABLEDELAYEDEXPANSION
 
 :: Root folder where your .md diagrams live
-set "INPUTDIR=docs\Security"
+set "INPUTDIR=docs"
 set "OUTFORMAT=png"
 set "THEME=default"
 set "SCALE=2"

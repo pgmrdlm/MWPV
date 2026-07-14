@@ -46,7 +46,7 @@ public sealed class SqlCatalogTests
     {
         var sourceNames = Directory.EnumerateFiles(SqlRoot, "*.sql", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName).Where(x => x == "MWPV_DB_Create.sql" || x!.StartsWith("s_", StringComparison.Ordinal) || x.EndsWith("_Upgrade.sql", StringComparison.OrdinalIgnoreCase))
-            .Where(x => x != "CategoryItemTestData.sql").ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.Equal(TrustedSqlCatalog.Entries.Select(x => x.FileName).OrderBy(x => x), sourceNames.OrderBy(x => x));
         foreach (var entry in TrustedSqlCatalog.Entries)
             Assert.Equal(entry.Sha256Hex, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(SqlRoot, entry.FileName)))).ToLowerInvariant());
