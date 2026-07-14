@@ -764,6 +764,8 @@ namespace MWPV.View.UserControls
         private void LogsOverlay_CloseRequested(object? sender, EventArgs e)
         {
             OverlayHost.Visibility = Visibility.Collapsed;
+            if (Window.GetWindow(this) is MWPV.MainWindow mainWindow)
+                mainWindow.SetLogDisplayToolsNavigationEnabled(true);
         }
 
         /* ======================= POPUP OVERLAY (MODAL) ======================= */

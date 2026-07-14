@@ -155,7 +155,7 @@
                 <MenuItem Header="E_xit" Name="mnuFileExit"/>
             </MenuItem>
 
-            <MenuItem Header="_Tools">
+            <MenuItem x:Name="ToolsMenu" Header="_Tools">
                 <MenuItem Header="_Reset DB Encryption" Name="mnuToolsReset"/>
                 <Separator/>
                 <MenuItem Header="_Purge Logs..." Name="mnuToolsPurgeLogs"

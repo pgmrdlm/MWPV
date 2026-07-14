@@ -50,6 +50,8 @@ namespace MWPV.View.UserControls
             }
         }
 
+        public void SetToolsNavigationEnabled(bool enabled) => ToolsMenu.IsEnabled = enabled;
+
         private async void mnuToolsPurgeLogs_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

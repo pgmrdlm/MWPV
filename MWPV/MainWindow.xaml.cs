@@ -244,6 +244,7 @@ namespace MWPV
             try
             {
                 Panel?.ShowLogs();
+                MenuBar.SetToolsNavigationEnabled(false);
             }
             catch
             {
@@ -316,6 +317,12 @@ namespace MWPV
             {
                 AppStatusMessageService.Publish("Session log purge failed. No logs were deleted.", AppStatusMessageKind.Warning, TimeSpan.FromSeconds(10));
             }
+        }
+
+        public void SetLogDisplayToolsNavigationEnabled(bool enabled)
+        {
+            if (!_uiLockedDown)
+                MenuBar.SetToolsNavigationEnabled(enabled);
         }
 
         public async Task<T> RunExclusiveLogPurgeAsync<T>(Func<Action<string>, Task<T>> operation)
