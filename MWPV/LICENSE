@@ -1,21 +1,95 @@
-MIT License
+MWPV FREE USE AND SOURCE REVIEW LICENSE
 
-Copyright (c) 2025 pgmrdlm
+Copyright © 2026 Daniel Miller. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. DEFINITIONS
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+“Software” means the MWPV application, including its executable files, original source code, documentation, user-interface elements, and other materials distributed by the Author, excluding third-party components provided under separate licenses.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+“Author” means Daniel Miller.
+
+2. FREE-USE LICENSE
+
+Subject to this License, the Author grants you a limited, non-exclusive, non-transferable, revocable, royalty-free license to install, run, and use the Software for any lawful personal or commercial purpose.
+
+You may make a reasonable number of backup or archival copies solely for your own use. You may also make copies that are technically necessary to install, operate, or back up the Software.
+
+No ownership interest in the Software is transferred to you.
+
+3. SOURCE CODE REVIEW
+
+The Author may, at the Author’s sole discretion, provide access to some or all of the Software’s source code for evaluation, audit, security review, or understanding of the Software.
+
+Any source-code access is limited to the purpose and conditions authorized by the Author. Unless the Author gives prior written permission, you may not:
+
+a. copy or retain the source code except as reasonably necessary for the authorized review;
+
+b. publish, distribute, transmit, disclose, or otherwise provide the source code to another person;
+
+c. use the source code in another product, project, or service;
+
+d. modify the source code or create a derivative work based upon it; or
+
+e. compile, distribute, or use a modified version of the Software.
+
+A reviewer may privately disclose findings, vulnerabilities, or recommendations to the Author. Such reports must not include or disclose more of the source code than is reasonably necessary to identify and explain the finding.
+
+Source-code access does not make the Software open-source software and does not grant any rights beyond those expressly stated in this License.
+
+4. RESTRICTIONS
+
+Except where applicable law expressly provides otherwise, or where the Author gives prior written permission, you may not:
+
+a. modify, adapt, translate, or create derivative works from the Software;
+
+b. reverse engineer, decompile, disassemble, or attempt to derive the Software’s source code;
+
+c. reproduce or copy the Software except as expressly permitted by this License;
+
+d. publish, redistribute, sublicense, sell, rent, lease, lend, host, or otherwise transfer or make the Software available to another person;
+
+e. remove, alter, or conceal copyright, license, attribution, trademark, or proprietary notices; or
+
+f. represent an altered or independently created product as MWPV or as an official version authorized by the Author.
+
+Only the Author, or a person expressly authorized in writing by the Author, may create or distribute modified or official versions of the Software.
+
+5. OWNERSHIP
+
+The Software and all copyrightable material originally created for it remain the property of the Author.
+
+The MWPV name, logos, branding, and other identifying materials may not be used in connection with another product or service without the Author’s prior written permission.
+
+Third-party software, libraries, trademarks, and other materials remain the property of their respective owners and are governed by their applicable licenses.
+
+6. TERMINATION
+
+This License terminates automatically if you materially violate its terms.
+
+Upon termination, you must stop using the Software and destroy all copies in your possession or control, except where retention is required by law.
+
+Termination does not limit any rights or remedies available to the Author for a violation occurring before termination.
+
+7. DISCLAIMER OF WARRANTY
+
+THE SOFTWARE IS PROVIDED “AS IS” AND “AS AVAILABLE,” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, SECURITY, ACCURACY, RELIABILITY, OR AVAILABILITY.
+
+THE AUTHOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE, THAT DATA WILL NOT BE LOST, OR THAT THE SOFTWARE WILL MEET YOUR REQUIREMENTS.
+
+8. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, CONSEQUENTIAL, OR OTHER DAMAGES, INCLUDING LOSS OF DATA, PROFITS, BUSINESS, OR USE, ARISING FROM OR RELATED TO THE SOFTWARE OR THIS LICENSE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+9. LICENSE VERSIONS
+
+The Author may publish revised license terms for future versions of the Software.
+
+Unless you separately agree to revised terms, a particular copy or version of the Software remains governed by the license distributed with that copy or version.
+
+10. SEVERABILITY
+
+If any provision of this License is held unenforceable, that provision shall be enforced to the maximum extent permitted, and the remaining provisions shall remain in effect.
+
+11. ENTIRE AGREEMENT
+
+This License constitutes the entire agreement concerning the rights granted to use and review the Software unless the Author and the recipient enter into a separate written agreement.
