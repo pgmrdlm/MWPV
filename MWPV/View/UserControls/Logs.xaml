@@ -18,8 +18,6 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
@@ -58,13 +56,6 @@
                           MaxDropDownHeight="360"/>
             </Border>
 
-            <Button x:Name="btnPurgeSessionLogs"
-                    Grid.Column="6"
-                    Content="Purge retained session logs..."
-                    Style="{StaticResource DialogPrimary}"
-                    Padding="14,4"
-                    Click="PurgeSessionLogs_Click"
-                    ToolTip="Create a verified backup, then purge expired session start and session end logs."/>
         </Grid>
 
         <!-- Main content -->

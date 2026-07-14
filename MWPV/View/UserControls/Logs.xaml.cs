@@ -261,14 +261,6 @@ namespace MWPV.View.UserControls
             }
         }
 
-        private async void PurgeSessionLogs_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is not MainWindow mainWindow)
-                return;
-            await mainWindow.PurgeLogsAsync();
-            await LoadFirstPageAsync(silent: true);
-        }
-
         // --- helper ----------------------------------------------------------
 
         private sealed class LogTypeItem

@@ -277,6 +277,11 @@ namespace MWPV
                 var preview = await _logPurgeCoordinator.GetPreviewAsync();
                 if (preview.Total == 0)
                 {
+                    MessageBox.Show(
+                        $"No session logs are old enough to purge.\n\nThe current retention setting is {preview.RetentionDays} days.",
+                        "Nothing to Purge",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                     AppStatusMessageService.Publish("No session logs are older than the retention cutoff.", AppStatusMessageKind.Info, TimeSpan.FromSeconds(8));
                     return;
                 }
