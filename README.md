@@ -46,7 +46,7 @@ Major repository areas include:
 - `MWPV.SqlCatalog/` — Trusted SQL catalog and package validation
 - `MWPV.SqlCatalog.Tests/` — SQL catalog validation tests
 - `Installer/` — Inno Setup installer project
-- `MWPV/docs/` — Architecture, flow, security, and application documentation
+- `docs/` — Architecture, flow, security, and application documentation
 
 ## Documentation
 
