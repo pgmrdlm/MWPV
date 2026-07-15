@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>document</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      securityLevel: 'loose'
+    });
+    window.addEventListener('load', function() {
+      var converted = new Set();
+
+      document.querySelectorAll('pre').forEach(function(pre) {
+        var code = pre.querySelector('code');
+        var preHasMermaid = pre.className && pre.className.indexOf('mermaid') !== -1;
+        var codeHasMermaid =
+          code &&
+          (code.className || '').match(/(?:^|\s)(?:mermaid|language-mermaid)(?:\s|$)/);
+
+        if (preHasMermaid || codeHasMermaid) {
+          var div = document.createElement('div');
+          div.className = 'mermaid';
+          div.textContent = code ? code.textContent : pre.textContent;
+          if (pre.parentNode) {
+            if (code) {
+              converted.add(code);
+            }
+            pre.parentNode.replaceChild(div, pre);
+          }
+        }
+      });
+
+      // Handle rare cases where mermaid markup exists without a <pre> wrapper
+      document.querySelectorAll('code').forEach(function(code) {
+        var hasMermaid = (code.className || '').indexOf('mermaid') !== -1 || (code.className || '').indexOf('language-mermaid') !== -1;
+        if (!hasMermaid || converted.has(code)) {
+          return;
+        }
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mermaid';
+        wrapper.textContent = code.textContent;
+        if (code.parentNode) {
+          code.parentNode.replaceChild(wrapper, code);
+          converted.add(wrapper);
+        }
+      });
+
+      setTimeout(function() {
+        mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+      }, 100);
+    });
+  </script>
+
+  <style>
+  body {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+      line-height: 1.5;
+      color: #333;
+      background-color: #fafafa;
+      margin: 0 !important;
+      padding: 20px !important;
+      font-size: 14px;
+  }
+
+  table {
+      border-collapse: collapse;
+      min-width: 60%;
+      max-width: 100%;
+      margin: 20px 0;
+      background: white;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+  }
+
+  table tr th {
+      background-color: #143452;
+      color: white;
+      padding: 12px 15px;
+      text-align: left;
+      font-weight: 500;
+  }
+
+  .table-http th,
+  .table-http td,
+  table th,
+  table td {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: normal;
+  }
+
+  .tr-break {
+      background-color: #2d79b717 !important;
+  }
+
+  .tr-break td {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: bold;
+  }
+
+  table tr td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #ecf0f1;
+  }
+
+  table tr:last-child td {
+      border-bottom: none;
+  }
+
+  table tr:nth-child(even) {
+      background-color: #f8f9fa;
+  }
+
+  .highlight {
+      background-color: #fff3cd !important;
+  }
+
+  a {
+      font-size: 14px;
+  }
+
+  code {
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      background: #fff8e4;
+      color: #c99a0d;
+      font-size: 13px;
+  }
+
+  pre code {
+      background-color: transparent;
+  }
+
+  pre {
+      background-color: #000;
+      color: #f8f8f2;
+      padding: 20px;
+      border-radius: 6px;
+      border-left: 4px solid #3498db;
+      overflow-x: auto;
+  }
+
+  pre code.language-php,
+  pre code.language-sql,
+  pre code.language-javascript,
+  pre code.language-bash,
+  pre code.language-shell {
+    background-color: #282c34 !important;
+    color: #abb2bf;
+  }
+
+  /* Syntax Highlighting */
+  code span.kw { color: #c678dd; font-weight: bold; } /* Keyword */
+  code span.dt { color: #e5c07b; } /* Datatype */
+  code span.dv { color: #d19a66; } /* Decimal Value */
+  code span.bn { color: #d19a66; } /* Base N */
+  code span.fl { color: #d19a66; } /* Float */
+  code span.ch { color: #98c379; } /* Char */
+  code span.st { color: #98c379; } /* String */
+  code span.co { color: #5c6370; font-style: italic; } /* Comment */
+  code span.ot { color: #e06c75; } /* Other */
+  code span.al { color: #e06c75; font-weight: bold; } /* Alert */
+  code span.fu { color: #61afef; } /* Function */
+  code span.er { color: #e06c75; font-weight: bold; } /* Error */
+  code span.wa { color: #e06c75; font-style: italic; } /* Warning */
+  code span.cn { color: #d19a66; } /* Constant */
+  code span.sc { color: #e5c07b; } /* Special Char */
+  code span.vs { color: #98c379; } /* Verbatim String */
+  code span.ss { color: #98c379; } /* Special String */
+  code span.im { color: #c678dd; } /* Import */
+  code span.va { color: #e06c75; } /* Variable */
+  code span.cf { color: #c678dd; } /* Control Flow */
+  code span.op { color: #56b6c2; } /* Operator */
+  code span.bu { color: #e5c07b; } /* BuiltIn */
+  code span.ex { color: #d19a66; } /* Extension */
+  code span.pp { color: #e5c07b; } /* Preprocessor */
+  code span.at { color: #d19a66; } /* Attribute */
+  code span.do { color: #5c6370; font-style: italic; } /* Documentation */
+  code span.an { color: #5c6370; font-style: italic; } /* Annotation */
+  code span.cv { color: #5c6370; font-style: italic; } /* Comment Var */
+  code span.in { color: #5c6370; font-style: italic; } /* Information */
+
+  ul, ol {
+      margin: 15px 0;
+      padding-left: 30px;
+  }
+
+  li {
+      margin-bottom: 8px;
+  }
+
+  blockquote {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+      color: #856404;
+  }
+
+  pre code.language-json {
+    background-color: #0d1117 !important;
+    color: #58a6ff !important;
+    display: block;
+    font-size: 14px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    margin: -15px;
+  }
+
+  .table-http code {
+      font-size: 12px;
+  }
+
+  .table-http th:nth-child(1),.table-http td:nth-child(1) { width: 8%; }  /* HTTP Method */
+  .table-http th:nth-child(2),.table-http td:nth-child(2) { width: 15%; } /* URL */
+  .table-http th:nth-child(3),.table-http td:nth-child(3) { width: 19%; } /* Mô tả */
+  .table-http th:nth-child(4),.table-http td:nth-child(4) { width: 43%; } /* RewriteRule */
+  .table-http th:nth-child(5),.table-http td:nth-child(5) { width: 15%; } /* Ví dụ */
+
+  pre, pre.sourceCode {
+      background-color: #c0c4c73b;
+  }
+
+  .sourceCode {
+      overflow: auto;
+  }
+
+  /* Pandoc highlight overrides */
+  pre.sourceCode {
+      background: #f7f7f7;
+      border: 1px solid #e0e0e0;
+      padding: 16px;
+      border-radius: 6px;
+  }
+  .sourceCode code {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 13px;
+      padding: unset !important;
+  }
+  .sourceCode .kw { color: #2a8ad4; font-weight: 700; }    /* keywords */
+  .sourceCode .cf { color: #2a8ad4; font-weight: 700; }    /* control flow */
+  .sourceCode .dt { color: #070707; }                      /* data types */
+  .sourceCode .fu { color: #8b5cf6; }                     /* functions */
+  .sourceCode .op { color: #2a8ad4; }                     /* operators */
+  .sourceCode .st { color: #0aa370; }                     /* strings */
+  .sourceCode .dv,                                     /* decimal values */
+  .sourceCode .bn { color: #c18401; }                     /* numbers */
+  .sourceCode .fl { color: #c18401; }                     /* floats */
+  .sourceCode .ch { color: #0aa370; }                     /* chars */
+  .sourceCode .co { color: #6a737d; font-style: italic; } /* comments */
+  .sourceCode .va { color: #444; }                        /* variables */
+  .sourceCode .cn { color: #c18401; font-weight: 700; }   /* constants */
+  .sourceCode .al { color: #d73a49; font-weight: 700; }   /* alerts */
+  .sourceCode .an { color: #d73a49; font-weight: 700; }   /* annotations */
+  .sourceCode .at { color: #005cc5; }                     /* attributes */
+  .sourceCode .im { color: #005cc5; }                     /* imports */
+
+  #TOC {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+
+  #TOC > ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  #TOC ul {
+    list-style: none;
+    padding-left: 20px;
+  }
+
+  #TOC li {
+    margin: 8px 0;
+  }
+
+  #TOC a {
+    text-decoration: none;
+    color: #0066cc;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  #TOC a:hover {
+    color: #004499;
+    text-decoration: underline;
+  }
+
+  #TOC > ul > li > a {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #333;
+  }
+
+  #TOC ul ul a {
+    font-size: 0.95em;
+    color: #555;
+  }
+
+  hr {
+      background: #cacaca;
+  }
+
+  .w-50 {
+      width: 50%;
+  }
+
+  .w-100 {
+      width: 100%;
+  }
+
+  .max-w-100 {
+      max-width: 100% !important;
+  }
+
+  .shadow-xs {
+      box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+  }
+
+  a {
+      font-size: 14px;
+  }
+
+  code {
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      background: #fff8e4;
+      color: #c99a0d;
+      font-size: 13px;
+  }
+
+  pre code {
+      background-color: transparent;
+  }
+
+  pre {
+      background-color: #000;
+      color: #f8f8f2;
+      padding: 20px;
+      border-radius: 6px;
+      border-left: 4px solid #3498db;
+      overflow-x: auto;
+  }
+
+  pre.sourceCode {
+      border-left: 4px solid #3498db;
+  }
+
+  pre code.language-php,
+  pre code.language-sql,
+  pre code.language-javascript,
+  pre code.language-bash,
+  pre code.language-shell {
+    background-color: #282c34 !important;
+    color: #abb2bf;
+  }
+
+  /* Syntax Highlighting */
+  code span.kw { color: #c678dd; font-weight: bold; } /* Keyword */
+  code span.dt { color: #e5c07b; } /* Datatype */
+  code span.dv { color: #d19a66; } /* Decimal Value */
+  code span.bn { color: #d19a66; } /* Base N */
+  code span.fl { color: #d19a66; } /* Float */
+  code span.ch { color: #98c379; } /* Char */
+  code span.st { color: #98c379; } /* String */
+  code span.co { color: #5c6370; font-style: italic; } /* Comment */
+  code span.ot { color: #e06c75; } /* Other */
+  code span.al { color: #e06c75; font-weight: bold; } /* Alert */
+  code span.fu { color: #61afef; } /* Function */
+  code span.er { color: #e06c75; font-weight: bold; } /* Error */
+  code span.wa { color: #e06c75; font-style: italic; } /* Warning */
+  code span.cn { color: #d19a66; } /* Constant */
+  code span.sc { color: #e5c07b; } /* Special Char */
+  code span.vs { color: #98c379; } /* Verbatim String */
+  code span.ss { color: #98c379; } /* Special String */
+  code span.im { color: #c678dd; } /* Import */
+  code span.va { color: #e06c75; } /* Variable */
+  code span.cf { color: #c678dd; } /* Control Flow */
+  code span.op { color: #56b6c2; } /* Operator */
+  code span.bu { color: #e5c07b; } /* BuiltIn */
+  code span.ex { color: #d19a66; } /* Extension */
+  code span.pp { color: #e5c07b; } /* Preprocessor */
+  code span.at { color: #d19a66; } /* Attribute */
+  code span.do { color: #5c6370; font-style: italic; } /* Documentation */
+  code span.an { color: #5c6370; font-style: italic; } /* Annotation */
+  code span.cv { color: #5c6370; font-style: italic; } /* Comment Var */
+  code span.in { color: #5c6370; font-style: italic; } /* Information */
+
+  ul, ol {
+      margin: 15px 0;
+      padding-left: 30px;
+  }
+
+  li {
+      margin-bottom: 8px;
+  }
+
+  blockquote {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+      color: #856404;
+  }
+
+  pre code.language-json {
+    background-color: #0d1117 !important;
+    color: #58a6ff !important;
+    display: block;
+    font-size: 14px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    margin: -15px;
+  }
+
+  .table-http code {
+      font-size: 12px;
+  }
+
+  .table-http th:nth-child(1),.table-http td:nth-child(1) { width: 8%; }  /* HTTP Method */
+  .table-http th:nth-child(2),.table-http td:nth-child(2) { width: 15%; } /* URL */
+  .table-http th:nth-child(3),.table-http td:nth-child(3) { width: 19%; } /* Mô tả */
+  .table-http th:nth-child(4),.table-http td:nth-child(4) { width: 43%; } /* RewriteRule */
+  .table-http th:nth-child(5),.table-http td:nth-child(5) { width: 15%; } /* Ví dụ */
+
+  pre, pre.sourceCode {
+      background-color: #c0c4c73b;
+  }
+
+  .sourceCode {
+      overflow: auto;
+  }
+
+  /* Pandoc highlight overrides */
+  pre.sourceCode {
+      background: #f7f7f7;
+      border: 1px solid #e0e0e0;
+      padding: 16px;
+      border-radius: 6px;
+      border-left: 4px solid #3498db;
+  }
+  .sourceCode code {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 13px;
+  }
+  .sourceCode .kw { color: #2a8ad4; font-weight: 700; }    /* keywords */
+  .sourceCode .cf { color: #2a8ad4; font-weight: 700; }    /* control flow */
+  .sourceCode .dt { color: #070707; }                      /* data types */
+  .sourceCode .fu { color: #8b5cf6; }                     /* functions */
+  .sourceCode .op { color: #2a8ad4; }                     /* operators */
+  .sourceCode .st { color: #0aa370; }                     /* strings */
+  .sourceCode .dv,                                     /* decimal values */
+  .sourceCode .bn { color: #c18401; }                     /* numbers */
+  .sourceCode .fl { color: #c18401; }                     /* floats */
+  .sourceCode .ch { color: #0aa370; }                     /* chars */
+  .sourceCode .co { color: #6a737d; font-style: italic; } /* comments */
+  .sourceCode .va { color: #444; }                        /* variables */
+  .sourceCode .cn { color: #c18401; font-weight: 700; }   /* constants */
+  .sourceCode .al { color: #d73a49; font-weight: 700; }   /* alerts */
+  .sourceCode .an { color: #d73a49; font-weight: 700; }   /* annotations */
+  .sourceCode .at { color: #005cc5; }                     /* attributes */
+  .sourceCode .im { color: #005cc5; }                     /* imports */
+
+  #TOC {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+
+  #TOC > ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  #TOC ul {
+    list-style: none;
+    padding-left: 20px;
+  }
+
+  #TOC li {
+    margin: 8px 0;
+  }
+
+  #TOC a {
+    text-decoration: none;
+    color: #0066cc;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  #TOC a:hover {
+    color: #004499;
+    text-decoration: underline;
+  }
+
+  #TOC > ul > li > a {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #333;
+  }
+
+  #TOC ul ul a {
+    font-size: 0.95em;
+    color: #555;
+  }
+
+  hr {
+      background: #cacaca;
+  }
+
+  .w-50 {
+      width: 50%;
+  }
+
+  .w-100 {
+      width: 100%;
+  }
+
+  .max-w-100 {
+      max-width: 100% !important;
+  }
+
+  .shadow-xs {
+      box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+  }
+
+  </style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#mwpv-component-responsibilities-and-trust-boundaries"
+id="toc-mwpv-component-responsibilities-and-trust-boundaries">MWPV
+Component Responsibilities and Trust Boundaries</a>
+<ul>
+<li><a href="#purpose" id="toc-purpose">1. Purpose</a></li>
+<li><a href="#architectural-principles"
+id="toc-architectural-principles">2. Architectural Principles</a></li>
+<li><a href="#component-summary" id="toc-component-summary">3. Component
+Summary</a></li>
+<li><a href="#detailed-component-responsibilities"
+id="toc-detailed-component-responsibilities">4. Detailed Component
+Responsibilities</a>
+<ul>
+<li><a href="#mwpv-wpf-application" id="toc-mwpv-wpf-application">MWPV
+WPF Application</a></li>
+<li><a href="#application-ui-and-panels"
+id="toc-application-ui-and-panels">Application UI and Panels</a></li>
+<li><a href="#application-orchestration-and-data-services"
+id="toc-application-orchestration-and-data-services">Application
+Orchestration and Data Services</a></li>
+<li><a href="#sqlcipher-connection-handling-and-data-access"
+id="toc-sqlcipher-connection-handling-and-data-access">SQLCipher
+Connection Handling and Data Access</a></li>
+<li><a href="#mwpv.sqlcatalog-and-trusted-runtime-sql"
+id="toc-mwpv.sqlcatalog-and-trusted-runtime-sql">MWPV.SqlCatalog and
+Trusted Runtime SQL</a></li>
+<li><a href="#security.utility-and-keyfilelogic"
+id="toc-security.utility-and-keyfilelogic">Security.Utility and
+KeyFileLogic</a></li>
+<li><a href="#backup.utility-upgrade-and-installer-integration"
+id="toc-backup.utility-upgrade-and-installer-integration">Backup.Utility,
+Upgrade, and Installer Integration</a></li>
+<li><a href="#logging-session-cleanup-clipboard-and-settings"
+id="toc-logging-session-cleanup-clipboard-and-settings">Logging, Session
+Cleanup, Clipboard, and Settings</a></li>
+</ul></li>
+<li><a href="#trust-boundaries" id="toc-trust-boundaries">5. Trust
+Boundaries</a></li>
+<li><a href="#sensitive-data-ownership"
+id="toc-sensitive-data-ownership">6. Sensitive Data Ownership</a></li>
+<li><a href="#database-and-transaction-boundaries"
+id="toc-database-and-transaction-boundaries">7. Database and Transaction
+Boundaries</a></li>
+<li><a href="#logging-boundaries" id="toc-logging-boundaries">8. Logging
+Boundaries</a></li>
+<li><a href="#backup-and-restore-boundaries"
+id="toc-backup-and-restore-boundaries">9. Backup and Restore
+Boundaries</a></li>
+<li><a href="#upgrade-and-migration-boundaries"
+id="toc-upgrade-and-migration-boundaries">10. Upgrade and Migration
+Boundaries</a></li>
+<li><a href="#prohibited-responsibility-drift"
+id="toc-prohibited-responsibility-drift">11. Prohibited Responsibility
+Drift</a></li>
+<li><a href="#dependency-direction" id="toc-dependency-direction">12.
+Dependency Direction</a></li>
+<li><a href="#maintenance-guidance" id="toc-maintenance-guidance">13.
+Maintenance Guidance</a></li>
+<li><a href="#verification-notes" id="toc-verification-notes">14.
+Verification Notes</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="mwpv-component-responsibilities-and-trust-boundaries">MWPV
+Component Responsibilities and Trust Boundaries</h1>
+<h2 id="purpose">1. Purpose</h2>
+<p>This document defines the ownership, dependency, and trust boundaries
+of the current MWPV implementation. It is for maintainers, security
+reviewers, technical buyers, and future developers. <a
+href="MWPV_High_Level_Flow.md">MWPV_High_Level_Flow.md</a> explains how
+the system moves through startup, runtime, upgrade, and shutdown; this
+document explains what each major component owns and where its authority
+ends.</p>
+<h2 id="architectural-principles">2. Architectural Principles</h2>
+<ul>
+<li>The WPF UI, application orchestration, persistence, security
+utilities, backup utilities, logging, SQL validation, and key-file
+access are separated into identifiable layers or projects.</li>
+<li>Sensitive values are held as <code>char[]</code> or
+<code>byte[]</code> where practical, passed through protected in-process
+storage, and wiped on cleanup paths; immutable strings still exist at
+constrained integration points.</li>
+<li>The password database and key-file database use SQLCipher
+connections. Early login failures use Windows DPAPI before the password
+database is available.</li>
+<li>Rich pre-authentication diagnostics have a deliberately narrower
+persistence boundary: DPAPI-protected early-login files may hold them
+temporarily, while the normal log database retains only limited
+operational metadata and a derived hash on ingestion.</li>
+<li>Runtime services retrieve SQL from <code>RuntimeSqlStore</code>; the
+catalog validates required staged or key-file payload SQL using SHA-256
+before it is published to that store.</li>
+<li>Services own their database commands and, for multi-step writes,
+explicit transactions. Logging calls commonly follow committed work;
+session and early-ingest logging are best effort.</li>
+<li>Utility boundaries return result objects, statuses, or explicit exit
+codes rather than requiring callers to infer success from UI state.</li>
+<li>Shutdown and error paths make best-effort attempts to clear
+MWPV-owned clipboard data and wipe registered sensitive state.</li>
+<li>Component boundaries are intentional: simplifying class counts must
+not move UI policy, business orchestration, SQL trust, cryptography,
+key-file access, or backup policy into an unrelated component.</li>
+</ul>
+<h2 id="component-summary">3. Component Summary</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Component</th>
+<th>Primary Responsibility</th>
+<th>Owns</th>
+<th>May Call</th>
+<th>Must Not Own</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MWPV WPF application</td>
+<td>Process lifecycle and authenticated application flow</td>
+<td>Startup mode, windows, exit state</td>
+<td>UI, services, utilities</td>
+<td>Reusable crypto or generic backup mechanics</td>
+</tr>
+<tr>
+<td>Application UI and panels</td>
+<td>User interaction and presentation</td>
+<td>Controls, prompts, display state</td>
+<td>Application services</td>
+<td>SQL text, connection creation, cryptographic policy</td>
+</tr>
+<tr>
+<td>Application orchestration services</td>
+<td>Use-case coordination</td>
+<td>Category/item/settings/upgrade/exit workflows</td>
+<td>Database helper, runtime SQL, utilities</td>
+<td>UI rendering or installer deployment</td>
+</tr>
+<tr>
+<td>Database access and repository layer</td>
+<td>Execute application data operations</td>
+<td>Commands, parameters, service transactions</td>
+<td>SQLCipher connections, runtime SQL</td>
+<td>SQL file trust decisions</td>
+</tr>
+<tr>
+<td>SQLCipher connection handling</td>
+<td>Open configured encrypted DB connections</td>
+<td>Connection construction and PRAGMAs</td>
+<td>Protected runtime database password</td>
+<td>UI decisions or business workflow</td>
+</tr>
+<tr>
+<td>MWPV.SqlCatalog</td>
+<td>SQL allowlist and validation rules</td>
+<td>Names, hashes, roles, upgrade route planning</td>
+<td>File inputs</td>
+<td>File staging, UI, database execution</td>
+</tr>
+<tr>
+<td>Trusted SQL runtime storage</td>
+<td>In-process verified SQL snapshot</td>
+<td>Published SQL text snapshot</td>
+<td>Verified catalog output</td>
+<td>Disk loading or validation bypass</td>
+</tr>
+<tr>
+<td>Security.Utility</td>
+<td>Shared security primitives</td>
+<td>Crypto, protected store, wiping, security result types</td>
+<td>.NET crypto/DPAPI APIs</td>
+<td>WPF policy or vault business rules</td>
+</tr>
+<tr>
+<td>KeyFileLogic</td>
+<td>SQLCipher key-file database access</td>
+<td>Key-file schema and payload rows</td>
+<td>SQLCipher</td>
+<td>Application login UI or SQL catalog policy</td>
+</tr>
+<tr>
+<td>Backup.Utility</td>
+<td>Generic backup-set operations</td>
+<td>Staging, manifests, hashes, verification, retention, restore</td>
+<td>Filesystem</td>
+<td>Vault business rules or UI prompts</td>
+</tr>
+<tr>
+<td>Logging subsystem</td>
+<td>Normal audit/session log persistence and reads</td>
+<td>Persisted operational metadata, templates, and
+<code>KeySetVersion</code></td>
+<td>Runtime SQL, SQLCipher</td>
+<td>Raw passwords, keys, or rich diagnostic payloads</td>
+</tr>
+<tr>
+<td>Early-login logging</td>
+<td>Pre-authentication failure capture and data-minimized ingest</td>
+<td>DPAPI <code>.elogp</code> files and quarantine</td>
+<td>DPAPI, normal log service after login</td>
+<td>Normal database access before authentication or detailed-payload
+persistence after ingestion</td>
+</tr>
+<tr>
+<td>Upgrade and migration subsystem</td>
+<td>Authenticated upgrade execution and rollback</td>
+<td>Upgrade validation, backup orchestration, execution results</td>
+<td>Catalog, backup, key-file, DB upgrade services</td>
+<td>Installer file deployment</td>
+</tr>
+<tr>
+<td>Installer integration</td>
+<td>Deploy files, stage SQL, update launch marker, code rollback
+copy</td>
+<td>Installation/update actions</td>
+<td>MWPV executable</td>
+<td>Application database mutation</td>
+</tr>
+<tr>
+<td>Session state and shutdown cleanup</td>
+<td>Session flags and final cleanup</td>
+<td>Exit cleanup coordination</td>
+<td>Clipboard service, wiping utility</td>
+<td>Persistent backup implementation</td>
+</tr>
+<tr>
+<td>Sensitive clipboard service</td>
+<td>MWPV-owned clipboard lifecycle</td>
+<td>Ownership marker, timer, clear attempts</td>
+<td>Windows clipboard, settings, log service</td>
+<td>General system clipboard policy</td>
+</tr>
+<tr>
+<td>AppSettings subsystem</td>
+<td>Read/validate/persist application settings</td>
+<td>Setting validation and updates</td>
+<td>Runtime SQL, SQLCipher</td>
+<td>Clipboard implementation or UI layout</td>
+</tr>
+</tbody>
+</table>
+<h2 id="detailed-component-responsibilities">4. Detailed Component
+Responsibilities</h2>
+<h3 id="mwpv-wpf-application">MWPV WPF Application</h3>
+<p><strong>Purpose</strong> — Own the executable lifecycle, startup-mode
+detection, entry dialog, main window, and application exit behavior.</p>
+<p><strong>Owns</strong> — Single-instance handling, modal
+authentication entry, WPF window sequencing, early-log ingestion after
+login, and global shutdown hooks.</p>
+<p><strong>May Call</strong> — Application services,
+<code>Security.Utility</code>, <code>KeyFileLogic</code> through
+setup/login code, <code>MWPV.SqlCatalog</code>, and
+<code>Backup.Utility</code> through coordinators.</p>
+<p><strong>Must Not Own</strong> — Generic cryptographic algorithms,
+backup file protocol, or raw SQL catalog definitions.</p>
+<p><strong>Sensitive Data Exposure</strong> — Receives password input
+transiently through the entry UI; coordinates protected runtime loading
+and final wiping.</p>
+<p><strong>Failure and Result Handling</strong> — Uses
+<code>AppExitCode</code>, <code>AppExit</code>, dialogs, and best-effort
+early logging. Startup authentication failures do not enter normal
+runtime.</p>
+<p><strong>Relevant Implementation Areas</strong> —
+<code>App.xaml.cs</code>, <code>MainWindow.xaml.cs</code>,
+<code>Utilities/Security/AppEntryWindow</code>,
+<code>Services/AppLifecycle</code>.</p>
+<h3 id="application-ui-and-panels">Application UI and Panels</h3>
+<p><strong>Purpose</strong> — Present vault functions and collect user
+actions.</p>
+<p><strong>Owns</strong> — XAML controls, panel state, prompts, and
+display-specific scrubbing.</p>
+<p><strong>May Call</strong> — Application services and status-message
+mechanisms.</p>
+<p><strong>Must Not Own</strong> — Direct database access, trusted SQL
+loading, key-file access, or backup implementation.</p>
+<p><strong>Sensitive Data Exposure</strong> — Password boxes and
+displayed/copyable vault values are UI-facing; UI cleanup removes
+control values but is not the sole runtime wipe boundary.</p>
+<p><strong>Failure and Result Handling</strong> — Surfaces service
+outcomes through status messages and dialogs.</p>
+<p><strong>Relevant Implementation Areas</strong> — <code>View</code>,
+<code>MainWindow</code>, <code>Utilities/UI/UICleaner</code>.</p>
+<h3 id="application-orchestration-and-data-services">Application
+Orchestration and Data Services</h3>
+<p><strong>Purpose</strong> — Implement vault use cases such as
+categories, saved items, settings, logs, exit backup, and upgrade.</p>
+<p><strong>Owns</strong> — Command sequencing, service-level
+transactions, change/session tracking, and domain-specific
+validation.</p>
+<p><strong>May Call</strong> — <code>DatabaseHelper</code>,
+<code>RuntimeSqlStore</code>, parameter helpers,
+<code>Security.Utility</code>, and specialized utility services.</p>
+<p><strong>Must Not Own</strong> — WPF rendering, SQL trust definition,
+or the physical backup format.</p>
+<p><strong>Sensitive Data Exposure</strong> — Some item services obtain
+user-secret keys and manipulate encrypted values and signatures; they
+clear temporary buffers in implemented paths.</p>
+<p><strong>Failure and Result Handling</strong> — Throws or returns
+service results to callers; several operations use guarded cleanup and
+transaction rollback by disposal.</p>
+<p><strong>Relevant Implementation Areas</strong> —
+<code>Services/Category*</code>,
+<code>Services/AppSettingsService</code>,
+<code>Services/BackupOnExitCoordinator</code>,
+<code>Services/Upgrade</code>.</p>
+<h3 id="sqlcipher-connection-handling-and-data-access">SQLCipher
+Connection Handling and Data Access</h3>
+<p><strong>Purpose</strong> — Open the password database using the
+protected database password and execute parameterized service
+commands.</p>
+<p><strong>Owns</strong> —
+<code>DatabaseHelper.GetAppOpenConnection</code>, SQLCipher connection
+construction, foreign-key/secure-delete/WAL PRAGMAs, command parameters,
+and service-scoped transactions.</p>
+<p><strong>May Call</strong> — <code>SecureEncryptedDataStore</code>,
+<code>RuntimeSqlStore</code>, and
+<code>Microsoft.Data.Sqlite</code>.</p>
+<p><strong>Must Not Own</strong> — SQL staging validation, UI prompts,
+or key-file schema.</p>
+<p><strong>Sensitive Data Exposure</strong> — Briefly materializes the
+database password to configure the connection, then wipes the copied
+buffers/string where implemented.</p>
+<p><strong>Failure and Result Handling</strong> — Password-database open
+failure triggers the standardized locked-database path and an
+application exit code. Service writes commit explicitly where they span
+multiple statements.</p>
+<p><strong>Relevant Implementation Areas</strong> —
+<code>Utilities/Helpers/DatabaseHelper.cs</code>,
+<code>Utilities/sql/SqlParameterHelper.cs</code>, data services.</p>
+<h3 id="mwpv.sqlcatalog-and-trusted-runtime-sql">MWPV.SqlCatalog and
+Trusted Runtime SQL</h3>
+<p><strong>Purpose</strong> — Define trusted SQL inventory and prevent
+runtime services from using unvalidated staged SQL.</p>
+<p><strong>Owns</strong> — Catalog entries, SHA-256 values, SQL roles,
+new-install requirements, and upgrade route planning;
+<code>RuntimeSqlStore</code> owns the read-only verified snapshot.</p>
+<p><strong>May Call</strong> — Filesystem inputs for catalog validation;
+services may call the runtime store only after publication.</p>
+<p><strong>Must Not Own</strong> — UI workflow, database connection
+lifecycle, or file staging.</p>
+<p><strong>Sensitive Data Exposure</strong> — Verified SQL text is held
+in process memory. It is not loaded by <code>RuntimeSqlStore</code> from
+disk.</p>
+<p><strong>Failure and Result Handling</strong> — Catalog returns typed
+success/failure results; missing runtime SQL throws at retrieval and
+prevents silent fallback to disk SQL.</p>
+<p><strong>Relevant Implementation Areas</strong> —
+<code>MWPV.SqlCatalog/TrustedSqlCatalog.cs</code>,
+<code>MWPV.SqlCatalog/SqlCatalogModels.cs</code>,
+<code>Utilities/sql/RuntimeSqlStore.cs</code>.</p>
+<h3 id="security.utility-and-keyfilelogic">Security.Utility and
+KeyFileLogic</h3>
+<p><strong>Purpose</strong> — Supply reusable security operations and
+encrypted key-file database access.</p>
+<p><strong>Owns</strong> — <code>SecureEncryptedDataStore</code>, key
+provisioning/serialization, field crypto, hashing, wipe/secure-delete
+helpers, result types, and the <code>KeyFilePayload</code> SQLCipher
+schema/access methods.</p>
+<p><strong>May Call</strong> — .NET cryptography/DPAPI and SQLCipher
+APIs.</p>
+<p><strong>Must Not Own</strong> — WPF prompts, vault categories, SQL
+catalog choices, or installer behavior.</p>
+<p><strong>Sensitive Data Exposure</strong> — Handles database
+password/key-file password copies, keyset material, log and user-secret
+keys, encryption buffers, and key-file payload bytes.</p>
+<p><strong>Failure and Result Handling</strong> — Uses validation/result
+types and exceptions; callers decide UI and exit behavior.</p>
+<p><strong>Relevant Implementation Areas</strong> — sibling
+<code>Security.Utility</code> project;
+<code>KeyFileLogic/KeyFileStore.cs</code>;
+<code>Utilities/Security/ServiceSetUp.cs</code>.</p>
+<h3
+id="backup.utility-upgrade-and-installer-integration">Backup.Utility,
+Upgrade, and Installer Integration</h3>
+<p><strong>Purpose</strong> — Keep generic backup mechanics separate
+from MWPV’s exit/upgrade policy and installer deployment.</p>
+<p><strong>Owns</strong> — <code>Backup.Utility</code> creates staging
+folders, copies requested files, writes/verifies SHA-256 manifests,
+publishes verified folders, applies retention, and restores verified
+upgrade backups when MWPV invokes it. The upgrade coordinator owns
+authenticated upgrade sequencing; the installer owns deployment, SQL
+staging, migration launch, and its application-code rollback copy.</p>
+<p><strong>May Call</strong> — Filesystem; MWPV upgrade/exit
+coordinators may call <code>IBackupService</code>; the coordinator calls
+the catalog, DB upgrade executor, and key-file upgrade service.</p>
+<p><strong>Must Not Own</strong> — UI backup choice, category logic,
+arbitrary source discovery, or direct installer database changes.</p>
+<p><strong>Sensitive Data Exposure</strong> — Backup sets copy the
+SQLCipher password database and encrypted key-file database; plaintext
+secret extraction is not part of the backup request.</p>
+<p><strong>Failure and Result Handling</strong> — Backup operations
+return operation statuses and safe messages. Upgrade maps failures to
+<code>UpgradeResult</code>/<code>AppExitCode</code> and attempts
+verified backup restore after an upgrade failure occurring after backup
+creation.</p>
+<p><strong>Relevant Implementation Areas</strong> — sibling
+<code>Backup.Utility</code>;
+<code>Services/BackupOnExitCoordinator.cs</code>;
+<code>Services/Upgrade</code>; sibling
+<code>Installer/MWPV_Installer.iss</code>.</p>
+<h3 id="logging-session-cleanup-clipboard-and-settings">Logging, Session
+Cleanup, Clipboard, and Settings</h3>
+<p><strong>Purpose</strong> — Persist normal audit/session events,
+capture pre-authentication failures separately, and coordinate bounded
+session behavior.</p>
+<p><strong>Owns</strong> — <code>LogCatalogService</code> log
+writes/reads and templates; early logging owns DPAPI files and
+quarantine; the clipboard service owns MWPV-copied text lifecycle;
+settings own setting validation and persistence; <code>App</code> owns
+final cleanup invocation.</p>
+<p><strong>May Call</strong> — Runtime SQL, password database, DPAPI,
+settings, Windows clipboard, and <code>SensitiveDataCleaner</code>.</p>
+<p><strong>Must Not Own</strong> — Password/key persistence in logs,
+arbitrary exception dumps, generic cryptography, or backup file
+mechanics.</p>
+<p><strong>Sensitive Data Exposure</strong> — Normal logs reside in the
+SQLCipher database. <code>RequestV3.Payload</code>,
+<code>PayloadFmt</code>, and <code>PayloadVer</code> are compatibility
+fields and are not persisted by the current logging schema; this is
+intentional. <code>KeySetVersion</code> is not a compatibility-only
+field and is persisted normally. Before authentication,
+<code>.elogp</code> files may temporarily contain richer DPAPI-protected
+diagnostic information, including categories, messages, related-file
+data, exception messages, and stack traces. On ingestion, the normal log
+database deliberately retains only limited operational metadata and a
+derived hash; it does not retain that richer payload. Clipboard data is
+retained only while MWPV owns it and uses a configured timer/clear
+path.</p>
+<p><strong>Failure and Result Handling</strong> — Normal session logging
+and early ingestion are best effort. Clipboard failures are logged
+through normalized event data; shutdown cleanup remains best effort.</p>
+<p><strong>Relevant Implementation Areas</strong> —
+<code>Services/LogCatalogService.cs</code>,
+<code>Services/TemplateLogWriter.cs</code>,
+<code>Utilities/Diagnostics</code>,
+<code>Services/Security/SensitiveClipboardService.cs</code>,
+<code>Services/AppSettingsService.cs</code>,
+<code>App.xaml.cs</code>.</p>
+<h2 id="trust-boundaries">5. Trust Boundaries</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Boundary</th>
+<th>What crosses</th>
+<th>Protection and decision owner</th>
+<th>Must not bypass</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>User input → WPF</td>
+<td>Password/key-file selection and UI actions</td>
+<td>Entry UI validates input; login flow owns acceptance</td>
+<td>UI must not directly open arbitrary files/DBs without login
+validation</td>
+</tr>
+<tr>
+<td>MWPV → Security.Utility</td>
+<td>Password/key/keyset buffers and security requests</td>
+<td>Utility exposes crypto, protected storage, wiping, and results; MWPV
+owns UX/exit decisions</td>
+<td>Callers must not duplicate security primitives</td>
+</tr>
+<tr>
+<td>MWPV → KeyFileLogic</td>
+<td>Key-file path, password buffer, payload ID</td>
+<td>KeyFileLogic opens SQLCipher key-file and validates schema</td>
+<td>Callers must not access key-file SQLite tables directly</td>
+</tr>
+<tr>
+<td>MWPV → Backup.Utility</td>
+<td>Explicit source files and backup request</td>
+<td>Backup utility validates paths, stages, hashes, verifies, and
+publishes</td>
+<td>Backup utility must not infer vault business policy</td>
+</tr>
+<tr>
+<td>Staged/key-file SQL → catalog</td>
+<td>SQL bytes and file names</td>
+<td>Catalog checks required names, UTF-8 decode, and SHA-256; MWPV owns
+whether to continue</td>
+<td>Services must not load SQL directly from disk</td>
+</tr>
+<tr>
+<td>Catalog → runtime SQL</td>
+<td>Verified SQL objects</td>
+<td><code>RuntimeSqlStore.ReplaceVerified</code> publishes read-only
+snapshot</td>
+<td>Runtime retrieval must not fall back to unverified SQL</td>
+</tr>
+<tr>
+<td>Services → SQLCipher</td>
+<td>Trusted SQL, typed parameters, DB connection</td>
+<td>Services retrieve runtime SQL and bind parameters;
+<code>DatabaseHelper</code> opens encrypted connection</td>
+<td>UI must not embed raw DB work</td>
+</tr>
+<tr>
+<td>Normal logging</td>
+<td>Limited operational fields, including <code>KeySetVersion</code> and
+derived stack hash, into password DB</td>
+<td>SQLCipher protects the database; <code>LogCatalogService</code> owns
+persistence and does not bind compatibility payload fields</td>
+<td>Logs must not receive raw passwords, keys, or rich early-login
+diagnostics</td>
+</tr>
+<tr>
+<td>Early-login logging</td>
+<td>Pre-authentication category/message/related-file/exception
+diagnostic content</td>
+<td>DPAPI CurrentUser protects temporary <code>.elogp</code>; ingestor
+owns data-minimized DB insertion and quarantine</td>
+<td>It must not require normal DB access before login or persist the
+richer payload after ingestion</td>
+</tr>
+<tr>
+<td>Installer → upgrade launch</td>
+<td>Installed files, staged SQL, migration flag</td>
+<td>Installer deploys/stages; MWPV detects mode and performs
+authenticated DB upgrade</td>
+<td>Installer must not mutate application DB</td>
+</tr>
+<tr>
+<td>Backup staging → publication</td>
+<td>Requested encrypted vault/key files and manifest</td>
+<td>Verification occurs before final folder move; backup utility owns
+it</td>
+<td>Consumers must not treat incomplete staging as published backup</td>
+</tr>
+<tr>
+<td>OS facilities</td>
+<td>DPAPI calls and clipboard text</td>
+<td>Windows provides DPAPI/clipboard; MWPV owns use, ownership tracking,
+and cleanup attempts</td>
+<td>Other code must not bypass sensitive clipboard service for normal
+vault copies</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sensitive-data-ownership">6. Sensitive Data Ownership</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Sensitive Material</th>
+<th>Persistent Owner</th>
+<th>Runtime Owner</th>
+<th>Protection</th>
+<th>Expected Lifetime</th>
+<th>Cleanup Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Database password</td>
+<td>Key-file payload</td>
+<td><code>SecureEncryptedDataStore</code></td>
+<td>SQLCipher key-file; protected in-process store</td>
+<td>Authenticated session</td>
+<td>Setup/database helper copies are wiped where implemented; global
+wipe at shutdown</td>
+</tr>
+<tr>
+<td>Key-file database credentials</td>
+<td>User input; not persisted by MWPV as a plaintext setting</td>
+<td>Protected store during session</td>
+<td>SQLCipher key-file authentication</td>
+<td>Login/upgrade operations and session</td>
+<td>Entry/setup/upgrade buffer cleanup</td>
+</tr>
+<tr>
+<td>Log payload key</td>
+<td>Key-file payload</td>
+<td><code>SecureEncryptedDataStore</code></td>
+<td>Key-file SQLCipher plus protected store</td>
+<td>Session</td>
+<td>Setup loader wipes transfer buffer; global wipe covers store</td>
+</tr>
+<tr>
+<td>User-secrets key</td>
+<td>Key-file payload</td>
+<td><code>SecureEncryptedDataStore</code></td>
+<td>Key-file SQLCipher plus protected store</td>
+<td>Session</td>
+<td>Setup loader and item-service temporary buffers</td>
+</tr>
+<tr>
+<td>Trusted SQL text</td>
+<td>Key-file payload after first-run creation</td>
+<td><code>RuntimeSqlStore</code></td>
+<td>Key-file SQLCipher; catalog hash validation before publication</td>
+<td>Session snapshot</td>
+<td>No dedicated runtime-store wipe was confirmed; global
+sensitive-store wiping does not prove SQL snapshot clearing</td>
+</tr>
+<tr>
+<td>User passwords/security answers</td>
+<td>Password database fields and UI input</td>
+<td>UI/services transiently</td>
+<td>SQLCipher; field crypto for implemented user-secret operations</td>
+<td>Operation/UI session</td>
+<td>UI clearing and targeted buffer wipes where implemented</td>
+</tr>
+<tr>
+<td>Clipboard contents</td>
+<td>Windows clipboard</td>
+<td><code>SensitiveClipboardService</code> ownership record</td>
+<td>Windows clipboard plus owned-value hash/timer</td>
+<td>Configured TTL or shutdown</td>
+<td>Clipboard service clears if still owned; shutdown invokes it best
+effort</td>
+</tr>
+<tr>
+<td>Temporary crypto/hash buffers</td>
+<td>None</td>
+<td>Calling utility/service</td>
+<td>In-memory buffers</td>
+<td>Single operation</td>
+<td>Call-site/utility <code>Array.Clear</code> or wipe helpers where
+implemented</td>
+</tr>
+<tr>
+<td>Backup staging data</td>
+<td>Temporary filesystem staging folder</td>
+<td>Backup.Utility</td>
+<td>Source files are encrypted vault/key-file files; manifest hash
+verification</td>
+<td>Until verification/publication/failure cleanup</td>
+<td>Backup.Utility cleanup on failed/canceled creation</td>
+</tr>
+<tr>
+<td>Early-login log payloads</td>
+<td><code>.elogp</code> files before ingestion</td>
+<td>Early logger/ingestor</td>
+<td>DPAPI CurrentUser; richer diagnostics remain outside the normal
+DB</td>
+<td>Until ingestion or quarantine</td>
+<td>Ingestor persists limited metadata plus derived hash, then deletes
+after insertion or moves failures to quarantine</td>
+</tr>
+</tbody>
+</table>
+<h2 id="database-and-transaction-boundaries">7. Database and Transaction
+Boundaries</h2>
+<p><code>DatabaseHelper</code> opens the password database and
+configures SQLCipher connections. Data services retrieve text from
+<code>RuntimeSqlStore</code> and bind values with
+<code>SqliteCommand</code> or <code>SqlParameterHelper</code>; the SQL
+catalog does not execute SQL. Services own transactions when operations
+span multiple writes (<code>CategoryService</code>,
+<code>CategoryItemService</code>, <code>AppSettingsService</code>, and
+log purge are examples). The current implementation writes operational
+logs after the associated work where the caller chooses to log; it does
+not establish a single global transaction/log outbox.</p>
+<p>UI code should invoke services rather than open connections or embed
+database commands. Services should not bypass
+<code>RuntimeSqlStore</code>, because that would bypass the verified SQL
+publication boundary.</p>
+<h2 id="logging-boundaries">8. Logging Boundaries</h2>
+<p>Ordinary authenticated logs are rows in the SQLCipher password
+database, written by <code>LogCatalogService</code> with trusted runtime
+SQL. The service persists limited operational metadata, including level,
+source, event code, timestamps, machine name, application version, crash
+flag, <code>KeySetVersion</code>, and <code>StackHash</code>; templates
+are read through the same service. <code>RequestV3.Payload</code>,
+<code>PayloadFmt</code>, and <code>PayloadVer</code> remain
+compatibility fields and are not persisted by the current logging
+schema. This is intentional. <code>KeySetVersion</code> is not part of
+this compatibility-only behavior and is persisted normally. The current
+normal logging schema has no separate encrypted payload BLOB or
+encrypted-detail field.</p>
+<p>Pre-authentication and invalid-login logging is a separate boundary.
+<code>EarlyLoginFailures</code> writes DPAPI-protected
+<code>.elogp</code> files under the current user account. These
+temporary records may contain richer diagnostic information, including
+categories, messages, related-file information, exception messages,
+exception types, and stack traces. During the logging and security
+review, permanently carrying that full diagnostic payload into the
+normal database logs was identified as an unnecessary sensitive-data
+exposure and diagnostic-data-creep risk.</p>
+<p>After valid key-file/database login, <code>EarlyLogIngestor</code>
+decrypts the <code>.elogp</code> record, derives a hash from the
+original JSON, and calls <code>LogCatalogService</code> with limited
+operational metadata. The richer <code>.elogp</code> payload is
+deliberately not retained in the normal <code>Logs</code> table; the
+source file is deleted after successful ingestion or quarantined on
+failure. This is a deliberate data-minimization and security boundary,
+not a missing logging feature or a logging defect. Future developers
+must not reconnect or persist the richer payload without an explicit
+security and architectural review. Raw passwords, keys, and unrestricted
+diagnostics do not belong in either persistent logging path.</p>
+<h2 id="backup-and-restore-boundaries">9. Backup and Restore
+Boundaries</h2>
+<p>MWPV chooses source files and when to request a backup.
+<code>Backup.Utility</code> validates a rooted request, stages copies,
+writes a manifest, SHA-256 hashes present files, verifies staged and
+published folders, and applies retention. Exit backups are coordinated
+by <code>BackupOnExitCoordinator</code> after a checkpoint and include
+the password database, optional SQLite sidecars, and the key-file
+database. Upgrade backups are created by
+<code>AppUpgradeCoordinator</code> before database/key-file upgrade
+execution.</p>
+<p>Restore is implemented and currently used by
+<code>AppUpgradeCoordinator</code> for rollback after a post-backup
+upgrade failure. It restores a verified upgrade backup to explicitly
+supplied password-database/key-file destinations. No general user-facing
+restore workflow was established from the reviewed source.</p>
+<h2 id="upgrade-and-migration-boundaries">10. Upgrade and Migration
+Boundaries</h2>
+<p>The installer owns application deployment, staging packaged SQL,
+detecting an existing installation, creating an application-code
+rollback copy under Documents, and launching MWPV with the migration
+flag. MWPV detects upgrade mode but does not trust the installer as
+authentication: the entry flow loads the keyset first.</p>
+<p><code>AppUpgradeCoordinator</code> reads the current DB version, asks
+<code>MWPV.SqlCatalog</code> for a verified route, creates a verified
+upgrade backup, executes and validates the DB plan, rewrites/validates
+key-file SQL payload, publishes runtime SQL, scrubs staged SQL where
+possible, and clears the upgrade flag. <code>DbUpgradeExecutor</code>
+owns verified-script execution and DB validation. Upgrade result and
+failure categories cross through <code>UpgradeResult</code> and
+<code>AppExitCode</code>; successful completion returns to normal
+authenticated operation.</p>
+<h2 id="prohibited-responsibility-drift">11. Prohibited Responsibility
+Drift</h2>
+<ul>
+<li>Do not let UI code execute database commands or arbitrary SQL.</li>
+<li>Do not load service SQL from disk after the catalog/runtime-store
+boundary.</li>
+<li>Do not duplicate cryptographic, wipe, or secure-delete behavior
+outside <code>Security.Utility</code> without an explicit boundary
+change.</li>
+<li>Do not bypass <code>KeyFileLogic</code> for key-file payload
+access.</li>
+<li>Do not give <code>Backup.Utility</code> category/item business rules
+or UI choice responsibility.</li>
+<li>Do not log raw secrets, keys, passwords, or unrestricted
+diagnostics.</li>
+<li>Do not reconnect <code>RequestV3.Payload</code>,
+<code>PayloadFmt</code>, or <code>PayloadVer</code>, or persist richer
+early-login diagnostic payloads, without an explicit security and
+architectural review.</li>
+<li>Do not retain decrypted buffers beyond their operation when a
+current cleanup path exists.</li>
+<li>Do not allow installer code to mutate the application database.</li>
+<li>Do not silently merge these responsibilities only to reduce class
+count.</li>
+</ul>
+<h2 id="dependency-direction">12. Dependency Direction</h2>
+<div class="mermaid">
+flowchart LR
+    UI[WPF UI] --&gt; APP[MWPV application and services]
+    INSTALLER[Installer] --&gt; APP
+    APP --&gt; CATALOG[SQL catalog]
+    CATALOG --&gt; RUNTIME[Verified runtime SQL]
+    APP --&gt; RUNTIME
+    APP --&gt; DB[SQLCipher database helper]
+    APP --&gt; SECURITY[Security Utility]
+    APP --&gt; KEYFILE[KeyFileLogic]
+    APP --&gt; BACKUP[Backup Utility]
+    APP --&gt; LOGGING[Logging]
+    DB --&gt; VAULT[Password database]
+    KEYFILE --&gt; KEYDB[Key-file database]
+    LOGGING --&gt; VAULT
+    RUNTIME --&gt; DB
+</div>
+<h2 id="maintenance-guidance">13. Maintenance Guidance</h2>
+<p>For a proposed change:</p>
+<ol type="1">
+<li>Identify the component that owns the decision and data.</li>
+<li>Confirm whether the change crosses an existing trust boundary.</li>
+<li>Check that the proposed owner has the information required to decide
+safely.</li>
+<li>Reuse existing security, backup, SQL, logging, and key-file
+mechanisms rather than duplicating them.</li>
+<li>Stop and document the tradeoff when the change alters an established
+boundary; architectural boundaries must not change silently.</li>
+</ol>
+<h2 id="verification-notes">14. Verification Notes</h2>
+<p><strong>Reviewed projects and areas:</strong>
+<code>MWPV.csproj</code> and <code>MWPV.sln</code>;
+<code>App.xaml.cs</code>, <code>MainWindow.xaml.cs</code>;
+<code>Services</code>, including lifecycle, upgrade, logging, settings,
+backup, and clipboard services; <code>Utilities</code>, including
+security, SQL, diagnostics, and database helpers;
+<code>KeyFileLogic</code>; <code>MWPV.SqlCatalog</code>; sibling
+<code>Security.Utility</code>, <code>Backup.Utility</code>, and
+<code>Installer/MWPV_Installer.iss</code>.</p>
+<p><strong>Established ambiguities:</strong> no dedicated runtime wipe
+of <code>RuntimeSqlStore</code>’s SQL snapshot was confirmed. The
+document therefore does not claim one. No general end-user restore flow
+was found; the confirmed restore use is upgrade rollback.</p>
+<p><strong>Implementation/documentation mismatch and obsolete
+references:</strong> comments and UI filters still use legacy
+terminology such as “archive” and include <code>.7z</code> filters,
+while the active key-file implementation is an encrypted SQLite key-file
+database. Older descriptions of encrypted per-log payload persistence
+are not supported by the current log-write implementation.
+<code>RequestV3.Payload</code>, <code>PayloadFmt</code>, and
+<code>PayloadVer</code> are intentionally non-persisting compatibility
+fields; <code>KeySetVersion</code> is persisted normally. The current
+early-login design intentionally retains richer diagnostics only in
+temporary DPAPI-protected <code>.elogp</code> files and does not carry
+them into the normal <code>Logs</code> table.</p>
+</body>
+</html>

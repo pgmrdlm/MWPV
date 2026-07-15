@@ -9,31 +9,31 @@ This document gives a deliberately broad view of the MWPV WPF application's auth
 ```mermaid
 flowchart LR
     User[User]
-    Installer["MWPV Installer\ninstallation and upgrade launch marker"]
+    Installer["MWPV Installer<br/>installation and upgrade launch marker"]
 
     subgraph Windows["Windows / user environment"]
-        WPF["MWPV WPF application\nmain executable"]
+        WPF["MWPV WPF application<br/>main executable"]
         Clipboard["Windows clipboard"]
-        DPAPI["Windows DPAPI\ncurrent user"]
+        DPAPI["Windows DPAPI<br/>current user"]
         Local["Local application-data filesystem"]
         Docs["User documents filesystem"]
     end
 
     subgraph Libraries["Supporting projects"]
-        Security["Security.Utility DLL\ncrypto, validation, protected runtime storage,\nwiping, secure deletion, result types"]
-        Backup["Backup.Utility DLL\nbackup creation, verification, manifests, retention"]
-        Catalog["MWPV.SqlCatalog project\ntrusted SQL names, hashes, upgrade routes"]
-        KeyLogic["KeyFileLogic project\nSQLCipher key-file access"]
+        Security["Security.Utility DLL<br/>crypto, validation, protected runtime storage,<br/>wiping, secure deletion, result types"]
+        Backup["Backup.Utility DLL<br/>backup creation, verification, manifests, retention"]
+        Catalog["MWPV.SqlCatalog project<br/>trusted SQL names, hashes, upgrade routes"]
+        KeyLogic["KeyFileLogic project<br/>SQLCipher key-file access"]
     end
 
     subgraph ProtectedData["Protected local data"]
-        KeyFile["Encrypted SQLite key-file database\nkeyset and trusted SQL payload"]
-        Vault["SQLCipher password database\nvault data, settings, encrypted audit logs"]
-        Early["Early-login .elogp files\nDPAPI-protected"]
+        KeyFile["Encrypted SQLite key-file database<br/>keyset and trusted SQL payload"]
+        Vault["SQLCipher password database<br/>vault data, settings, encrypted audit logs"]
+        Early["Early-login .elogp files<br/>DPAPI-protected"]
         SqlFiles["Trusted SQL staging files"]
-        RuntimeSql["Verified runtime SQL store\nin protected process memory"]
-        Secrets["Protected runtime secret storage\nkeys and database password"]
-        BackupFolders["Exit and upgrade backup folders\nfiles plus manifest"]
+        RuntimeSql["Verified runtime SQL store<br/>in protected process memory"]
+        Secrets["Protected runtime secret storage<br/>keys and database password"]
+        BackupFolders["Exit and upgrade backup folders<br/>files plus manifest"]
     end
 
     User --> WPF
@@ -52,7 +52,7 @@ flowchart LR
     WPF --> Secrets
     WPF --> Clipboard
     Backup --> BackupFolders
-    Backup --> Docs
+    Installer -->|backs up application files during update| Docs
     Local --- Vault
     Local --- Early
     Local --- SqlFiles
@@ -63,28 +63,28 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Launch["User launches MWPV"] --> Detect["MWPV determines startup mode\nnormal, fresh install, or upgrade"]
-    Detect --> Entry["WPF entry window\ncollects vault password and key-file path"]
+    Launch["User launches MWPV"] --> Detect["MWPV determines startup mode<br/>normal, fresh install, or upgrade"]
+    Detect --> Entry["WPF entry window<br/>collects vault password and key-file path"]
 
-    Entry --> KeyCheck["Validate encrypted SQLite key-file\npassword, schema, and payload"]
-    KeyCheck -->|valid| LoadKeys["Load keyset material into\nprotected runtime secret storage"]
-    LoadKeys --> SqlVerify["Validate trusted SQL payload\nagainst MWPV.SqlCatalog hashes"]
-    SqlVerify --> SqlStore["Place verified SQL in\nruntime SQL store"]
-    SqlStore --> OpenVault["Open SQLCipher password database\nusing loaded database password"]
+    Entry --> KeyCheck["Validate encrypted SQLite key-file<br/>password, schema, and payload"]
+    KeyCheck -->|valid| LoadKeys["Load keyset material into<br/>protected runtime secret storage"]
+    LoadKeys --> SqlVerify["Validate trusted SQL payload<br/>against MWPV.SqlCatalog hashes"]
+    SqlVerify --> SqlStore["Place verified SQL in<br/>runtime SQL store"]
+    SqlStore --> OpenVault["Open SQLCipher password database<br/>using loaded database password"]
     OpenVault --> SessionStart["Write session-start log"]
-    SessionStart --> Ingest["Ingest pending early-login .elogp files\ninto the audit log when present"]
+    SessionStart --> Ingest["Ingest pending early-login .elogp files<br/>into the audit log when present"]
     Ingest --> Main["Main WPF interface"]
 
     subgraph Runtime["Authenticated application operation"]
-        Main --> Services["Application services\ncategories, saved items, settings, logs, exports"]
+        Main --> Services["Application services<br/>categories, saved items, settings, logs, exports"]
         Services --> RuntimeSql
-        Services --> Vault["SQLCipher password database\nvault data and audit logs"]
+        Services --> Vault["SQLCipher password database<br/>vault data and audit logs"]
         Services --> Secrets["Protected runtime secret storage"]
     end
 
-    Early["Early-login .elogp files\nDPAPI-protected"] --> Ingest
+    Early["Early-login .elogp files<br/>DPAPI-protected"] --> Ingest
     SqlPayload["Trusted SQL from encrypted key-file payload"] --> SqlVerify
-    Security["Security.Utility\nvalidation, cryptography, protected storage, wiping"] -.supports.-> KeyCheck
+    Security["Security.Utility<br/>validation, cryptography, protected storage, wiping"] -.supports.-> KeyCheck
     Security -.supports.-> LoadKeys
 ```
 
@@ -94,26 +94,26 @@ flowchart TD
 flowchart TD
     Start["MWPV launch"] --> Mode{"Upgrade mode?"}
     Mode -->|yes| Login["Authenticated key-file and database login"]
-    Login --> UpSql["Validate upgrade SQL\nand determine route"]
-    UpSql --> UpBackup["Backup.Utility creates and verifies\nfull upgrade backup with manifest"]
+    Login --> UpSql["Validate upgrade SQL<br/>and determine route"]
+    UpSql --> UpBackup["Backup.Utility creates and verifies<br/>full upgrade backup with manifest"]
     UpBackup --> UpgradeDb["Apply and validate database upgrade"]
-    UpgradeDb --> RewriteKey["Rewrite and validate key-file\ntrusted SQL payload"]
-    RewriteKey --> Publish["Publish verified runtime SQL,\nsecurely scrub staged SQL when possible,\nclear upgrade flag"]
+    UpgradeDb --> RewriteKey["Rewrite and validate key-file<br/>trusted SQL payload"]
+    RewriteKey --> Publish["Publish verified runtime SQL,<br/>securely scrub staged SQL when possible,<br/>clear upgrade flag"]
     Publish --> Normal["Normal authenticated operation"]
 
     Mode -->|no| Normal
     Installer["Installer"] -->|installation or migration launch marker| Start
-    UpBackup --> UpgradeStore["upgrade-backups\nbackup files and manifest"]
+    UpBackup --> UpgradeStore["upgrade-backups<br/>backup files and manifest"]
 
     Normal --> Close{"User closes MWPV"}
     Close --> EndLog["Write session-end log"]
-    EndLog --> BackupChoice{"Exit backup selected\nand required?"}
-    BackupChoice -->|yes| ExitBackup["Checkpoint database; Backup.Utility\ncreates, verifies, and retains exit backup"]
+    EndLog --> BackupChoice{"Create exit backup?"}
+    BackupChoice -->|yes| ExitBackup["Checkpoint database; Backup.Utility<br/>creates, verifies, and retains exit backup"]
     BackupChoice -->|no| Cleanup
-    ExitBackup --> Cleanup["Clear owned clipboard data;\nwipe sensitive runtime state; close"]
+    ExitBackup --> Cleanup["Clear owned clipboard data;<br/>wipe sensitive runtime state; close"]
     Cleanup --> Exit["Application exits"]
 
-    ExitBackup --> ExitStore["backups\nbackup files and manifest"]
+    ExitBackup --> ExitStore["backups<br/>backup files and manifest"]
     Security["Security.Utility"] -.wiping and secure deletion.-> Cleanup
     Backup["Backup.Utility"] -.verification and retention.-> UpBackup
     Backup -.verification and retention.-> ExitBackup
