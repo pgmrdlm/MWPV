@@ -1,82 +1,139 @@
-# MWPV – My Windows Password Vault
+# MWPV — My Windows Password Vault
 
-## Description
-MWPV is a hardcore security password vault for Windows, designed so normal users get serious protection without wrestling with settings all day. The only time you directly touch the security guts is at **login**.
+MWPV is a Windows desktop password vault designed for personal use. It is built with C# and WPF on .NET 8 and uses an encrypted SQLite database for local storage.
 
-At login you provide:
-- **A password**, and
-- **A password-protected key file** (you choose where it lives)
+The project is currently under active development and is not yet ready for general release.
 
-That key file isn’t a config; it’s the heart of your protection. Move it, rename it, hide it—MWPV won’t open without **both the file and its password**.
+## Project Goals
 
-After login, protection is **defense‑in‑depth**: an attacker generally needs **both** the key file *and* its password to read the vault; and (once column‑level encryption is enabled) certain fields remain separately protected. **If the device is compromised while unlocked, or both the key file and password are exposed, all bets are off.**
+MWPV is intended to provide:
 
-## What’s implemented today
-- **Key file–based unlock** (user-chosen file + password)
-- **Database encryption at rest** via SQLCipher (AES-256)
-- **Early login failure capture** (DPAPI `.elogp`), **ingested on next successful login** with notification and **secure deletion** of the source files
-- **Secure memory handling** (**in‑memory encryption** for retained secrets, wiping of transient plaintext; UI fields cleared via `UICleaner`)
-- **Offline by default** (no background network calls; manual “Check for Updates” only)
+- Local password and account information storage
+- An encrypted application database
+- User-controlled backups and retention
+- Secure password generation
+- Categories for organizing stored items
+- Security questions and other account-related information
+- Operational logging without storing sensitive vault contents
+- Portable and standard Windows installation options
+- Controlled and verified database upgrades
 
-> For design details and diagrams, see **`docs/Security/Security_Documentation.md`**.
+MWPV does not depend on cloud storage for normal operation.
 
-## Planned (near-term)
-- **Password strength meter** in the login UI (warning-only guidance)
-- **Log Viewer UI** (filters, drill-in; shows changed columns; ingest banner)
-- **Column-level encryption** for user-entered sensitive fields using a **separate, randomly generated `UserSecretsKey`** (AES-256-GCM per protected column)
-- Purge/retention policy for logs (e.g., 90 days)
+## Security Design
 
-## Security Architecture (high level)
+MWPV uses several layers of protection, including:
 
-### 1) Login & Key File
-- Key file is an encrypted archive (7-Zip) containing a JSON keyset.
-- Keys inside include:
-  - **`DbPassword`** – opens the SQLCipher database.
-  - **`LogPayloadKey`** – encrypts/decrypts log payloads (AES-GCM).
-  - **`UserSecretsKey`** – reserved for column-level encryption (planned).
-- The key file is unlocked by your password (KDF-derived), then keys are staged **in memory** for the session and wiped when not needed.
+- SQLCipher-encrypted SQLite storage
+- A separate encrypted key-file database
+- Runtime-only access to decrypted secrets
+- AES-256 encryption for selected application data
+- AES-GCM encrypted logging payloads
+- Automatic clearing of sensitive clipboard contents
+- Password-policy enforcement
+- Verification of trusted SQL files before installation or database upgrades
+- Verified backups with SHA-256 file hashes and manifests
 
-### 2) Database Encryption
-- Vault data is stored in an **AES-256 encrypted SQLite (SQLCipher)** database.
-- The database key is never persisted in plaintext and is only present in memory after a successful login.
+No security design should be treated as infallible. The source code is published so that the design and implementation can be reviewed.
 
-### 3) Logging & Early Failures
-- **Before DB unlock:** invalid login attempts are written to **DPAPI-protected** `.elogp` files.
-- **After a successful login:** `.elogp` files are **ingested into the encrypted log tables**, the user gets a **non-blocking notification**, and the original `.elogp` files are **securely deleted**.
-- Log payloads are **AES-GCM** encrypted using `LogPayloadKey`.
+## Repository Structure
 
-### 4) Secure Memory Handling
-- Outside of active cryptographic operations, **sensitive values are encrypted in memory** under a per‑session key; plaintext exists only transiently and is **zeroized immediately** after use.
-- UI secrets (e.g., WPF `PasswordBox`/`TextBox`) are cleared via `UICleaner` immediately after use.
+Major repository areas include:
 
-### 5) Offline-First
-- No background network activity. Only user-initiated update checks go online.
+- `MWPV/` — Main WPF application
+- `Security.Utility/` — Shared security-related functionality
+- `Backup.Utility/` — Backup creation, verification, and retention
+- `MWPV.SqlCatalog/` — Trusted SQL catalog and package validation
+- `MWPV.SqlCatalog.Tests/` — SQL catalog validation tests
+- `Installer/` — Inno Setup installer project
+- `MWPV/docs/` — Architecture, flow, security, and application documentation
 
-## Disaster Recovery
-1. Back up your **encrypted database** and **encrypted key file**.
-2. Install MWPV on the new system.
-3. Copy the database and key file over.
-4. Launch MWPV, select your key file, enter its password—everything’s right where you left it.
+## Documentation
 
-## Security Summary
-- **Key File Protection** – Encrypted archive holding cryptographic keys (password-protected, user-controlled location).
-- **Database Encryption** – Entire vault encrypted with SQLCipher (AES-256).
-- **Logging** – AES-GCM encrypted payloads; DPAPI-protected early login failures ingested on next success.
-- **Secure Memory** – **In‑memory encryption** for retained secrets, plus immediate wiping of transient plaintext; UI fields cleared.
-- **Offline Operation** – No background network access.
+Project documentation is being expanded in preparation for release.
 
-## Roadmap Notes
-- **Column-level encryption**: protected columns will be individually encrypted with **AES-256-GCM**, using a **separate `UserSecretsKey`** (randomly generated at setup and stored only in the encrypted key file).
-- **Password strength meter**: guidance only; policy enforced at submit (min 8 chars; at least 2 of 3: upper/lower/special).
-- **Log Viewer**: full-panel view with filters, drill-in, and ingest banner.
+Current and planned documentation includes:
 
-## Third-Party Credits
-- **7-Zip** — Copyright © 1999–2025 Igor Pavlov  
-  Website: https://www.7-zip.org/  
-- **SQLCipher** — SQLite extension for transparent encryption  
-  Website: https://www.zetetic.net/sqlcipher/
+- High-level application flows
+- Component responsibilities
+- Trust boundaries
+- Database and SQL upgrade handling
+- Backup and restore behavior
+- Logging design
+- Security decisions
+- Installation instructions
+- User help documentation
 
----
+Some documents may be provided in both Markdown and HTML formats for easier viewing.
 
-**This isn’t security theater.** It’s layered, reviewable, and blunt about how it works—because it can be. If you feel you have found any security holes, please tell me 
-so that they can be corrected.  The whole point of this vault is to be as secure as possible.
+## Current Development Status
+
+MWPV remains a work in progress.
+
+Current development work includes:
+
+- Security review and cleanup
+- SQL catalog verification
+- Backup and upgrade validation
+- Logging review and retention behavior
+- Application flow documentation
+- User help screens
+- Installer and release preparation
+
+The current database development baseline is version `01.23`.
+
+No production release should be assumed from the presence of source code, tags, branches, installers, or documentation in this repository.
+
+## Building the Project
+
+MWPV currently targets:
+
+- Windows
+- .NET 8
+- WPF
+- Visual Studio or another compatible .NET development environment
+
+Additional dependencies and build instructions will be documented before release.
+
+## Data and Privacy
+
+This repository must not contain:
+
+- Real password-vault databases
+- Key files
+- User passwords
+- Encryption keys
+- Personal logs
+- Production configuration secrets
+- Signing credentials
+- Private user data
+
+Any sample data included in the future should be fictional and clearly identified as test data.
+
+## Contributions
+
+This repository is publicly visible for review and documentation access.
+
+Direct write access is restricted to the repository owner. External users may review or fork the repository, but changes are not accepted into this repository unless explicitly reviewed and approved by the owner.
+
+## License
+
+MWPV is distributed under the **MWPV Free Use and Source Review License**.
+
+See the root `LICENSE` file for the complete terms.
+
+The presence of publicly available source code does not automatically place the project in the public domain or grant unrestricted commercial rights.
+
+## Disclaimer
+
+MWPV is under active development and may contain defects, incomplete features, or undocumented behavior.
+
+Do not use development builds to store information that you cannot afford to lose. Maintain independent backups of important data.
+
+## Author
+
+Developed by Dan Miller.
+
+Project website:
+
+`https://dansgeekstop.com`
