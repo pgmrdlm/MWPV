@@ -46,11 +46,8 @@ namespace MWPV.Services.Upgrade
             WriteRawLine($"Backup set location: {ValueOrUnavailable(backupSet?.BackupFolder ?? context?.BackupRoot)}");
             WriteRawLine($"Failure detail: {ValueOrUnavailable(failureMessage)}");
             WriteRawLine("");
-            WriteRawLine("Automatic rollback results:");
-            WriteRawLine($"Status: {rollback.Status}");
-            WriteRawLine($"Message: {ValueOrUnavailable(rollback.Message)}");
-            if (rollback.Exception != null)
-                WriteRawLine($"Exception: {rollback.Exception}");
+            WriteRawLine("Automatic vault-data restoration is not performed.");
+            WriteRawLine("The verified upgrade backup is retained for manual recovery.");
             WriteRawLine("");
 
             LogDatabaseRecovery(context, backupSet, failureMessage);
@@ -58,9 +55,8 @@ namespace MWPV.Services.Upgrade
             LogCodeRecovery(context, failureMessage);
 
             WriteRawLine("Important:");
-            WriteRawLine("Review the automatic rollback result above before copying files manually.");
-            WriteRawLine("If automatic rollback succeeded, manual file restoration may not be necessary.");
-            WriteRawLine("If automatic rollback failed or the application still does not start, restore the files listed above from the backup source locations to the restore target locations.");
+            WriteRawLine("Restore both the password database files and the .pv key file from the verified upgrade backup before retrying the application.");
+            WriteRawLine("The installer-created application/code backup is separate from vault-data recovery and is only relevant if application files also need manual restoration.");
             WriteRawLine("============================================================");
             WriteRawLine("");
         }

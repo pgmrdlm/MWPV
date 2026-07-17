@@ -1,236 +1,213 @@
 # MWPV Installer, Upgrade, and Rollback Flow
 
-This document describes the implemented beta flow as of the current repository state. It distinguishes installer deployment from the authenticated, in-application vault upgrade. It does not describe a hypothetical restore service beyond the automatic restore that is present in `AppUpgradeCoordinator`.
+## Change record and scope
 
-Related documents: [high-level flow](MWPV_High_Level_Flow.md), [component responsibilities and trust boundaries](MWPV_Component_Responsibilities_and_Trust_Boundaries.md), [sensitive data in memory](MWPV_Sensitive_Data_In_Memory_Flow.md), and [Security.Utility data flow](Security_Utility_Data_Flow.md).
+This is a design-and-implementation record for staged-SQL ownership and upgrade recovery. It documents both the superseded behavior and the implemented replacement. It covers the current code only.
 
-## Scope and responsibility boundary
+Companion documents: [high-level flow](MWPV_High_Level_Flow.md), [component responsibilities and trust boundaries](MWPV_Component_Responsibilities_and_Trust_Boundaries.md), [sensitive data in memory](MWPV_Sensitive_Data_In_Memory_Flow.md), and [Security.Utility data flow](Security_Utility_Data_Flow.md).
 
-The Inno Setup executable deploys application files and transports SQL files to the selected data root. It detects an update by finding `{app}\MWPV.exe`, backs up the old application directory, and launches the new application with the legacy `migration_flag` argument when `MWPV.db` is present. It launches with `ewNoWait`, so it cannot receive, interpret, or act on the application's eventual exit code (`Installer/MWPV_Installer.iss:376-403, 415-447`).
+### Change history
 
-The application determines whether that argument (or an upgrade flag file) means upgrade mode, authenticates the user, and then owns SQL validation, vault-data backup, migration, post-upgrade validation, automatic vault-data rollback, logging, dialogs, and the process exit code (`MWPV/Services/AppLifecycle/AppStartupDetector.cs:14-38`; `MWPV/Utilities/Security/AppEntryWindow.xaml.cs:435-469`).
-
-| Component | Responsibility | Inputs | Outputs | Failure behavior | Next boundary |
-|---|---|---|---|---|---|
-| Inno Setup | Present pages; stop MWPV; deploy binaries; stage SQL; back up/restore old code during deployment failure | Installer payload, selected install location | `{app}` binaries, staged SQL, optional code rollback copy | Shows Setup error and aborts; restores code only if deployment/staging fails | Application launch |
-| Staged installer files | Untrusted transport of `*.sql` from Setup temp directory to the data root | Embedded SQL | `<data-root>\sql\*.sql` | Copy/extract failure aborts installer | SQL catalog |
-| MWPV startup / entry window | Detect run mode, authenticate, build a new vault or invoke authenticated upgrade | Arguments, DB existence, upgrade pending file, user credentials | Main-window launch or process shutdown | Authentication and startup errors remain application failures | Coordinator / new-install services |
-| `AppUpgradeCoordinator` | Orchestrate validation, backup, migration, validation, cleanup, rollback, logging | Authenticated DB and key-file credentials, staged path | `UpgradeResult` and final code | Pre-backup failure has no rollback; later failure triggers rollback | Backup, executor, key-file service |
-| `MWPV.SqlCatalog` DLL | Define names, SHA-256 hashes, roles, deterministic order, and upgrade graph | Candidate staged SQL bytes | Verified new-install or upgrade package | Rejects missing, changed, empty, duplicate, invalid UTF-8, unsupported-path files | New-install code / executor |
-| Backup utility | Create and verify full vault-data set; restore it on request | DB, optional sidecars, `.pv` key file | Timestamped folder and `manifest.json` | Creation/verification failure stops upgrade; restore failure is reported | Coordinator |
-| `DbUpgradeExecutor` | Execute verified ordered SQL and validate DB version/schema/integrity | Verified package and encrypted DB | Step result | Causes rollback after a backup exists | Coordinator |
-| Rollback logic | Restore verified vault-data files and absent optional-sidecar state | Upgrade backup set and original paths | Restored DB/key file or failure result | Does not restore program binaries; failed rollback remains manual recovery | User/log |
-| Final user-visible result | Report status through popup/log/process code | `UpgradeResult` | Main window on success; fatal dialog and shutdown on failure | Installer itself is already finished and does not consume the code | User/support |
-
-## Clean new installation
-
-```mermaid
-flowchart TD
-  A["User runs MWPV Setup"] --> B["Setup shows license and BeforeInstall information pages"]
-  B --> C["Setup copies application binaries to {app}"]
-  C --> D["Setup extracts embedded SQL to {tmp} and copies it to data-root\\sql"]
-  D --> E["Setup offers normal post-install launch"]
-  E --> F["MWPV finds no MWPV.db and selects FreshInstall mode"]
-  F --> G["User provides new vault/key-file information"]
-  G --> H["Compiled SQL catalog loads and validates new-install package"]
-  H --> I["Application creates encrypted MWPV.db from verified creation SQL"]
-  I --> J["Application writes encrypted .pv key-file payload"]
-  J --> K["Application securely scrubs staging SQL"]
-  K --> L["Application loads and validates decrypted key-file SQL payload"]
-  L --> M["Main window opens"]
-```
-
-Setup includes SQL as `dontcopy` transport files and copies application publish output to `{app}` (`Installer/MWPV_Installer.iss:64-67`). For a clean installation, Setup does not mark the install as an update and displays the usual post-install launch checkbox (`Installer/MWPV_Installer.iss:393-403`). The data root is `%LocalAppData%\MWPV` when the application is installed on the system drive; otherwise it is `<selected-drive>\AppData\Local\MWPV` (`Installer/MWPV_Installer.iss:275-290`).
-
-Fresh-install mode is selected only when `DatabaseHelper.GetAppDbPath()` does not exist (`MWPV/Services/AppLifecycle/AppStartupDetector.cs:31-34`). Before database creation, the entry window loads and validates the complete new-install package from the staging directory (`MWPV/Utilities/Security/AppEntryWindow.xaml.cs:337`). `ServiceSetUp` executes only the verified creation script to initialize the encrypted database, then creates the key-file payload from the verified normal SQL payload (`MWPV/Utilities/Security/ServiceSetUp.cs:73-108`, `112-180`). It scrubs staging after key-file creation (including best-effort cleanup on that path). A subsequent run validates the decrypted key-file payload before populating `RuntimeSqlStore`.
-
-## Existing installation and application-upgrade startup
-
-```mermaid
-flowchart TD
-  A["Setup starts over an existing {app}\\MWPV.exe"] --> B["Setup asks to terminate a running MWPV process"]
-  B --> C["Setup copies current {app} recursively to Documents\\MWPV_Rollback\\code"]
-  C --> D["Setup overwrites program files"]
-  D --> E["Setup stages SQL in data-root\\sql"]
-  E --> F["Setup starts MWPV with migration_flag using ewNoWait"]
-  F --> G["AppStartupDetector selects Upgrade mode"]
-  G --> H["User authenticates existing key file and encrypted database"]
-  H --> I["AppUpgradeCoordinator runs authenticated upgrade"]
-  I --> J["App opens main window after successful upgrade"]
-```
-
-The installer detects an update from the pre-existing executable, not from the data file (`Installer/MWPV_Installer.iss:420-424`). It asks to terminate a detected running process; refusal, task-kill failure, or timeout aborts Setup (`85-159`). Before overwriting code, it deletes the previous code rollback directory and recursively copies the existing application folder to `%UserProfile%\Documents\MWPV_Rollback\code` (`161-246`). That code copy is not manifest-hashed or post-copy verified.
-
-After a successful update deployment, Setup starts MWPV with `migration_flag` only if `MWPV.db` exists in the computed data root (`376-391`, `415-440`). `AppStartupDetector` recognizes that legacy argument as an upgrade request, as well as `--upgrade`, `--migration`, `--migration-flag=<path>`, and `--target-version=<version>` (`MWPV/Services/AppLifecycle/AppStartupDetector.cs:7-78`). An existing `upgrade.pending.json` also selects upgrade mode at startup (`MWPV/App.xaml.cs:39-46`).
-
-The upgrade does not run until the existing key file/password have been validated and session key material loaded. The entry window invokes `RunAuthenticatedUpgrade`, assigns its result to `AppExit`, displays a fatal upgrade dialog on failure, and calls application shutdown with the final code (`MWPV/Utilities/Security/AppEntryWindow.xaml.cs:435-456`). On success it refreshes the in-memory keyset because the key-file payload was rewritten, then validates the decrypted runtime package again (`457-469`).
-
-## Pre-upgrade SQL and package validation
-
-```mermaid
-flowchart TD
-  A["Authenticated upgrade begins"] --> B["Read current DbVersion from encrypted database"]
-  B --> C["Build deterministic catalog path to requested or highest reachable version"]
-  C --> D["Read only required top-level .sql names from staging"]
-  D --> E["Verify required names, non-empty bytes, SHA-256, UTF-8, and catalog definition"]
-  E --> F["Verified upgrade package"]
-  E --> G["Pre-backup failure: log, dialog, exit without rollback"]
-  F --> H["Create full vault-data backup"]
-```
-
-The coordinator reads the current version before it creates a backup and calls `TrustedSqlCatalog.LoadAndValidateUpgradeDirectory` before backup creation (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:159-172`). This ordering is intentional: an invalid transport package cannot trigger a backup or any mutation.
-
-The compiled `MWPV.SqlCatalog` is the authority for exact filenames, SHA-256 digests, roles, stable ordering, and allowed version transitions (`MWPV/MWPV.SqlCatalog/TrustedSqlCatalog.cs:10-24`, `28-55`). Directory loading enumerates only top-level `.sql` files whose names are required by the catalog/package plan. Thus unrelated staged files are ignored in this directory-loading path; they do not enter the verified package. Required files must be present, non-empty, byte-for-byte hash matched, and strict UTF-8 decoded. The in-memory validation API rejects unknown candidates and duplicate names (`55-67`; `MWPV/MWPV.SqlCatalog/SqlCatalogModels.cs:6-12`).
-
-New-install and upgrade packages are deliberately distinct. A new-install package contains the database-creation and normal operational scripts. An upgrade package contains the normal scripts needed for the reloaded key-file payload plus only the ordered upgrade scripts along the catalog path; it rejects invalid versions, downgrade requests, ambiguous paths, unsupported current versions, or no valid requested route (`TrustedSqlCatalog.cs:27-54`, `80-110`). Upgrade scripts are not part of the new-install payload and normal operational scripts are not themselves upgrade edges.
-
-## Backup and ordered migration
-
-```mermaid
-sequenceDiagram
-  participant C as "Upgrade coordinator"
-  participant B as "Backup utility"
-  participant D as "Encrypted MWPV.db"
-  participant K as "Encrypted .pv key file"
-  C->>B: "Create upgrade backup request"
-  B->>B: "Copy files to incomplete staging folder"
-  B->>B: "Write manifest with SHA-256 entries"
-  B->>B: "Verify staged set, move final folder, verify again"
-  B-->>C: "Verified backup descriptor"
-  C->>D: "Execute verified ordered upgrade SQL"
-  C->>D: "Check version, DbVersion table, PRAGMA integrity_check"
-  C->>K: "Rewrite verified normal SQL payload"
-  C->>K: "Reopen and validate schema, keyset, required SQL"
-  C->>C: "Refresh runtime SQL and scrub staging"
-```
-
-The coordinator requests backup type `Upgrade` with prefix `MWPV_Backup` under `<data-root>\upgrade-backups` (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:363-377`). The requested files are:
-
-- required `MWPV.db` as `files/MWPV.db`;
-- optional `MWPV.db-wal`, `MWPV.db-shm`, and `MWPV.db-journal` as named sidecars; and
-- required encrypted key-file database as `files/KeyFileDatabase.pv`.
-
-`BackupService` allocates a timestamped final directory, writes first to a hidden `.incomplete-<GUID>` folder, captures per-file sizes and SHA-256 values in `manifest.json`, verifies the staged folder, atomically moves it to final, and verifies again (`Backup.Utility/BackupService.cs:31-104`, `196-237`). Any backup creation or verification failure returns code 101, logs manual recovery instructions, and does **not** attempt rollback because no accepted backup set exists (`AppUpgradeCoordinator.cs:172-195`). This upgrade path does not call retention/trimming, so upgrade backups are retained indefinitely by this workflow; the utility has a separate retention API but it is not invoked here.
-
-`DbUpgradeExecutor` opens the encrypted database and executes each catalog-ordered verified upgrade script in order. It does not wrap the entire list in an application-level transaction (`MWPV/Services/Upgrade/DbUpgradeExecutor.cs:23-70`). Post-execution validation rereads the version, checks `DbVersion`, and runs `PRAGMA integrity_check` (`74-140`). The key-file service replaces its SQL map from the verified normal-payload package, saves it, reopens it, validates key-file schema and JSON, and verifies the required SQL names (`MWPV/Services/Upgrade/KeyFileUpgradeService.cs:19-88`, `93-184`).
-
-## Failure, rollback, and completion
-
-```mermaid
-flowchart TD
-  A["Failure after verified backup"] --> B["Coordinator clears SQLite pools"]
-  B --> C["Backup utility re-verifies manifest and SHA-256 files"]
-  C --> D["Restore MWPV.db, present sidecars, and .pv using verified temporary copies"]
-  D --> E["Remove optional sidecar targets recorded absent"]
-  E --> F["Restore succeeds"]
-  E --> G["Restore fails"]
-  F --> H["Log instructions, show UPGRADE FAILED dialog, exit 250"]
-  G --> I["Log instructions, show UPGRADE FAILED dialog, exit 300"]
-```
-
-Rollback is triggered for a failure after the verified backup is created: SQL execution, database validation, key-file rewrite, key-file validation, or an unexpected exception after backup. The coordinator clears SQLite connection pools and restores the backup as type `Upgrade` to the original DB and key-file locations. It removes a current optional sidecar if the manifest records it was absent (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:380-406`). The backup utility verifies the set before restoration, verifies each temporary restored copy and the final target SHA-256, and cleans temporary restore files (`Backup.Utility/BackupService.cs:155-194`).
-
-Successful rollback produces final code 250 with the underlying failing detail code preserved in the log/result. Failed rollback produces 300. The UI always shows `UPGRADE FAILED`, gives the log location and final code, and tells the user to review rollback instructions (`MWPV/Utilities/Helpers/UpgradeFailurePopupHelper.cs:26-80`; `MWPV/Services/Upgrade/UpgradeLogger.cs:29-124`). Those instructions include manual restoration locations for vault data, key file, and the installer-created code copy. Manual recovery is not represented here as an automated restore flow.
-
-On success, the application replaces the runtime SQL with verified payload scripts, tries to securely scrub the staging directory (cleanup failure is logged but does not reverse success), tries to delete an upgrade flag file (flag-clear failure is only logged), reports code 0, and transitions runtime mode back to normal (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:229-244`; `UpgradeFlagService.cs:9-27`).
-
-## Installer/application return-code handling
-
-```mermaid
-flowchart LR
-  A["Installer deployment / staging result"] --> B["Setup error or Setup completion"]
-  B --> C["Setup launches application with ewNoWait"]
-  C --> D["Authenticated application upgrade"]
-  D --> E["AppExit.Shutdown(code)"]
-  E --> F["Operating system receives application exit code"]
-  F --> G["Installer does not wait for or map this code"]
-```
-
-| Value | Implemented meaning | Produced/consumed by |
-|---:|---|---|
-| 0 | Success | App completion; default `AppExitCode.Success` |
-| 10 | User cancelled/closed entry/login window | Application |
-| 11 | Authentication failure enum value | Defined, but no direct assignment found in the inspected upgrade/startup path |
-| 12-19 | Unused | No enum values defined |
-| 20 | Fresh install failed | Defined; no direct assignment found in the inspected path |
-| 21-29 | Unused | No enum values defined |
-| 30 | Startup key-file invalid | Defined |
-| 31 | Startup encrypted DB open failure | `DatabaseHelper` calls shutdown with it |
-| 32 | Startup SQL catalog missing | Defined |
-| 100 | Upgrade SQL catalog/context failure | Coordinator pre-backup failure |
-| 101 | Upgrade backup-set creation or verification failure | Coordinator pre-backup failure |
-| 102 | Cannot read current database version | Version reader/coordinator |
-| 103 | Upgrade plan invalid | Defined by executor placeholder; catalog route errors currently surface as 100 instead |
-| 104-109 | Unused | No enum values defined |
-| 110 | SQL upgrade execution failure | Detail code; final is normally 250 or 300 after rollback |
-| 111-119 | Unused | No enum values defined |
-| 120 | Database post-upgrade validation failure | Detail code; final is normally 250 or 300 |
-| 121-199 | Unused | No enum values defined |
-| 210 | Key-file SQL-payload rewrite failure | Detail code; outside the stated 100-199 range |
-| 220 | Key-file post-rewrite validation failure | Detail code; outside the stated 100-199 range |
-| 250 | Upgrade failed but automatic rollback succeeded | Final application exit code |
-| 300 | Automatic rollback failed | Final application exit code |
-| 900 / 999 | Unhandled / unknown fatal application errors | Application |
-
-The actual enum is `MWPV/Services/AppLifecycle/AppExitCode.cs:3-30`. The requested summaries are therefore incomplete: authentication-related values currently include 10 and 11, not the entire 10-19 range; SQL/migration values also include key-file detail values 210 and 220. Crucially, because Setup calls `Exec(..., ewNoWait, ...)`, application codes reach the operating system but are not handled by Inno Setup (`Installer/MWPV_Installer.iss:402-413`).
-
-## File and data movement
-
-| Item | Source | Destination | When | Verified | Temporary / cleanup |
-|---|---|---|---|---|---|
-| Installer source files | Installer build inputs | Setup executable | Build time | No signing verification in script | Setup artifact output is rebuilt by script |
-| Application binaries | `MWPV/bin/Release/net8.0-windows/publish` | `{app}` | Setup install/update | No hash/copy verification in script | Persist; code backup exists for updates |
-| Staged SQL | Embedded `MWPV/sql/*.sql` | `<data-root>\sql` via `{tmp}` | Post-install | No installer hash verification; app catalog verifies required bytes before use | `{tmp}` is Setup temporary; data-root staging is scrubbed after successful vault setup/upgrade where implemented |
-| Password database | Existing `<data-root>\MWPV.db` | Upgrade backup `files/MWPV.db`; restored to source | Before upgrade / rollback | SHA-256 manifest and restore checks | Backup retained by this flow |
-| DB sidecars | `-wal`, `-shm`, `-journal` | Named backup files | Before upgrade / rollback | SHA-256 if present; absent state is recorded | Restore removes a target when recorded absent |
-| Encrypted key-file database | User-selected `.pv` path | `files/KeyFileDatabase.pv`; restored to source | Before upgrade / rollback | SHA-256 backup verification; key-file schema/payload validation after rewrite | Backup retained; runtime buffers are cleared where coded |
-| Upgrade log | Coordinator | `<data-root>\upgrade\upgrade-<UTC timestamp>.log` | Upgrade | Best effort only; log write does not affect recovery | Retention not implemented here |
-| Backup folder | Backup utility staging | `<data-root>\upgrade-backups\MWPV_Backup...` | Before mutation | Manifest SHA-256 verified before and after final move | Hidden incomplete folder is cleaned on failure where possible; final set retained |
-| Manifest | Backup utility | `manifest.json` in backup folder | During backup | Its contents and each file are checked; manifest itself is not cryptographically signed | Retained with backup |
-| Rollback code copy | Existing `{app}` | `Documents\MWPV_Rollback\code` | Before update overwrite | Not hash/manifest verified | Previous copy is deleted before a new copy; retained after install |
-| Upgrade flags | Argument or `<data-root>\upgrade.pending.json` | Application startup context | At startup | No signature/authentication | File is deleted on successful upgrade when supplied; delete failure is logged only |
-
-## User-visible stages and messages
-
-- Setup uses the license and `BeforeInstall.txt` information pages, shows a running-process termination prompt, reports Setup copy/staging/restore errors, and only presents the normal post-install launch checkbox for a non-update.
-- Update Setup launches the application automatically after SQL staging. It does not display app-upgrade progress or app exit codes.
-- The app requires a valid key file/password before upgrading. Authentication failure is shown by existing entry-window behavior rather than an installer dialog.
-- Successful application upgrade publishes “Upgrade completed successfully.” and continues to the main window.
-- Failed upgrade shows a fatal `UPGRADE FAILED` dialog with the log path and final code. The log contains automatic rollback status and manual recovery locations.
-
-## Security Boundaries and Integrity Guarantees
-
-The installer script has no signing directives. Consequently this repository configuration represents an unsigned installer; SmartScreen may show unknown-publisher/reputation warnings. No claim of Authenticode trust is warranted from the current script.
-
-Staged SQL is untrusted transport. The installer merely extracts/copies it. The application selects the data root, asks the compiled catalog for precisely required names, verifies raw-byte SHA-256 values, decodes strict UTF-8, and executes only the verified catalog package. Extras are ignored by the directory adapter but direct in-memory candidate validation rejects unknown names. This protects the application’s use of SQL after startup, but it does not authenticate the installer executable, the staged directory itself, the backup manifest, or the installer code backup.
-
-The password database is opened as an encrypted SQLCipher connection and the `.pv` key-file payload is handled through Security.Utility/KeyFileStore boundaries. Backup integrity is SHA-256 verification, not a signed or MAC-authenticated backup manifest. The key-file is reopened and revalidated after its payload is rewritten. Rollback restores vault data and the key file only; it does not automatically restore installer-deployed application binaries. The installer code copy is an unauthenticated convenience copy for manual recovery.
-
-## Failure Modes and Recovery Expectations
-
-| Failure path | Classification | Implemented outcome |
+| Change | Status | Summary |
 |---|---|---|
-| Setup cannot stop MWPV, back up old code, deploy, or stage SQL | Automatically recoverable only where Setup restores code after deployment/staging failure | Setup shows error/aborts; staging failure invokes code-folder copy-back when available |
-| Authentication/key-file validation fails before coordinator | Manual retry/recovery required | No data migration or coordinator rollback occurs |
-| Current-version/catalog/package failure before backup | Manual recovery required, but no data mutation expected | Code 100/102; log and dialog; no automatic rollback |
-| Backup create/verify failure | Manual recovery required, but no migration attempted | Code 101; no automatic rollback |
-| SQL execution, DB validation, key rewrite/validation failure after backup | Rollback attempted | Restore DB, sidecars, and `.pv`; final 250 on success, 300 on failure |
-| Rollback succeeds | Rollback completed | Vault data and key-file restored from verified backup; program binaries remain the new version |
-| Rollback fails | Unrecoverable from the installer alone | Code 300; follow log’s manual restore instructions from backup and code-copy locations |
-| SQL staging cleanup or upgrade-flag deletion fails after success | Automatically recoverable / maintenance issue | Upgrade stays successful; staged SQL or flag may remain |
+| Staged SQL ownership and manual vault recovery | Implemented | Inno cleans staged SQL on staging/launch failure. MWPV cleans it on every terminal upgrade outcome. Automatic vault-data restore was removed; verified backups are retained for manual database and `.pv` restoration. |
+| Installer program-file backup co-location | Implemented | The installer code rollback copy moved from Documents to `Rollback\code` beneath the same resolved MWPV data root as the vault and upgrade backups. |
+| Installer/application execution model | Intentionally unchanged | Setup remains asynchronous (`ewNoWait`), does not wait for MWPV, and does not interpret MWPV exit codes. No handshake was added. |
 
-## Review Findings, Resolved Issues, and Remaining Limitations
+## Previous behavior and problem discovered
 
-Verified strengths include validation before backup, a compiled raw-byte SQL hash catalog, deterministic upgrade routing, a full DB/key-file backup that includes SQLite sidecars and verifies SHA-256 before restore, post-migration DB integrity checking, key-file reload/validation, and automatic vault-data rollback after a post-backup failure.
+Previously, Inno copied SQL from its temporary extraction folder to `<data-root>\sql` and cleaned that folder only when `StageMwpvSqlFiles` failed. If staging succeeded but MWPV could not be launched, SQL could remain. MWPV cleaned the staged directory only at the end of a successful upgrade. Catalog failure, backup failure, migration failure, key-file failure, validation failure, authentication/startup cancellation, and unexpected failure left staged SQL behind.
 
-The current code also contains corrected/implemented rollback mechanics: rollback clears SQLite pools, restores all tracked vault roles (including absence of optional sidecars), verifies temporary and final targets, and distinguishes successful rollback (250) from failed rollback (300). SQL staging cleanup is now attempted after successful upgrade rather than being assumed complete.
+The prior coordinator also created a verified upgrade backup and then automatically restored the database, sidecars, and `.pv` file after a post-backup failure. It used final codes 250 or 300 to express automatic restore outcome. That was inconsistent with the intended recovery model: the installer’s program-file copy and vault-data recovery are distinct responsibilities, and recovery instructions need to guide the user through a deliberate manual restore from the verified vault backup.
 
-Remaining limitations and beta issues:
+The old user popup said rollback instructions were in the upgrade log and displayed an internal log path and code. This was incomplete as user guidance and exposed implementation details that are not needed to begin recovery.
 
-1. **Correct before next beta:** Setup does not wait for the app and cannot display or act on 250/300 or any other application code. A user can see installer completion while the authenticated migration later fails. This is a documented behavior gap, not an installer/application return-code handoff.
-2. **Correct before next beta:** The existing code rollback copy is deleted before a new copy and is neither atomically created nor integrity verified. It is a manual fallback, not a verified rollback artifact.
-3. **Correct before next beta:** The installer is unsigned in the inspected script, so SmartScreen/unknown-publisher behavior is expected and no installer authenticity guarantee exists.
-4. **Clarify or correct:** `UpgradePlanInvalid` (103) is defined but the active catalog-plan validation path maps failures to 100; the placeholder methods still claim planning/execution is unimplemented although executable implementations exist. This makes code-level diagnosis less precise.
-5. **Clarify or correct:** A failed staging scrub or upgrade-flag delete is nonfatal. Retained staged transport SQL or a retained flag can affect later startup/maintenance and should be made visible/managed.
-6. **Unverifiable from this code alone:** backup retention policy for upgrade backups is not invoked by the upgrade coordinator; final backup retention is therefore indefinite in this flow.
+## Design decision and rationale
 
+### Exact ownership boundary
+
+- **Before successful MWPV process launch:** Inno owns the staged SQL transport files.
+- **After successful MWPV process launch:** MWPV owns the staged SQL transport files and the upgrade attempt.
+
+Successful `Exec` creation is the ownership boundary because the existing architecture deliberately launches MWPV with `ewNoWait`. It is not an acknowledgement that MWPV has completed startup. No installer/application handshake, wait, exit-code mapping, or migration redesign was introduced. If MWPV terminates shortly after launch, its shutdown cleanup is responsible for deleting its staged SQL.
+
+This matches existing layering: Setup transports application assets and starts the process; authenticated application startup owns vault credentials, SQL validation, backup, migration, cleanup, failure reporting, and recovery guidance. It avoids assigning vault-data decisions to Inno or allowing Inno to infer an application result asynchronously.
+
+### Recovery decision
+
+Automatic restoration of vault data was removed. Before any mutation, MWPV still creates and verifies an `Upgrade` backup containing the encrypted password database, present SQLite sidecars, and the encrypted `.pv` key file. The backup is retained after success or failure. On a failure after backup, MWPV leaves the current vault state untouched by restore logic, deletes staged SQL, logs the original failure, and directs the user to Help for manual restoration of **both** the database and `.pv` file from that verified backup.
+
+This preserves the existing backup integrity guarantees without silently overwriting files after a failed migration. Installer program-file rollback remains an independent, installer-owned deployment fallback; it is not vault-data recovery.
+
+## Before-and-after flow
+
+### Superseded flow
+
+```mermaid
+flowchart TD
+  A["Inno stages SQL"] --> B["MWPV launches asynchronously"]
+  B --> C["MWPV validates, backs up, and migrates"]
+  C --> D["Success: MWPV cleans staged SQL"]
+  C --> E["Failure: staged SQL remains"]
+  E --> F["Post-backup failure: coordinator automatically restores vault data"]
+```
+
+The previous design was incomplete because cleanup was success-only in MWPV and launch failure was outside Inno’s cleanup branch. Automatic restore also blurred the separation between installer code rollback and vault recovery.
+
+### Implemented final flow
+
+```mermaid
+flowchart TD
+  A["Inno owns staged SQL"] --> B["Staging succeeds"]
+  B --> C["Inno successfully starts MWPV with ewNoWait"]
+  C --> D["MWPV owns staged SQL"]
+  D --> E["MWPV validates package and creates verified backup"]
+  E --> F["Upgrade succeeds"]
+  E --> G["Any terminal upgrade failure"]
+  F --> H["MWPV deletes staged SQL and continues normally"]
+  G --> I["MWPV deletes staged SQL, preserves backup, and shows Help recovery guidance"]
+```
+
+## Normal success flow
+
+```mermaid
+flowchart TD
+  A["Setup copies application files and stages SQL"] --> B["Setup starts MWPV asynchronously"]
+  B --> C["Authenticated MWPV validates required SQL against compiled SHA-256 catalog"]
+  C --> D["MWPV creates and verifies Upgrade backup"]
+  D --> E["MWPV executes ordered verified migration SQL"]
+  E --> F["MWPV validates database and rewritten .pv payload"]
+  F --> G["MWPV deletes staged SQL"]
+  G --> H["MWPV opens normally"]
+```
+
+The SQL catalog still determines required filenames, byte hashes, strict UTF-8 decoding, and ordered upgrade path before backup (`MWPV/MWPV.SqlCatalog/TrustedSqlCatalog.cs:28-67`). The coordinator creates the verified backup before database mutation and validates the database and key-file payload after migration (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:159-227`). It then deletes the staged SQL files; a cleanup failure is logged without changing the successful upgrade result (`229-240`).
+
+## Installer failure flow
+
+```mermaid
+flowchart TD
+  A["Inno extracts or copies SQL"] --> B["Staging fails"]
+  B --> C["Inno deletes staged SQL"]
+  C --> D["Inno restores program files when its existing deployment rollback applies"]
+  D --> E["Inno aborts"]
+  A --> F["Staging succeeds"]
+  F --> G["Inno cannot start MWPV"]
+  G --> H["Inno deletes staged SQL"]
+  H --> I["Inno aborts"]
+```
+
+`CleanupMwpvSqlStagingFolder` now returns success/failure while deleting every child item under `<data-root>\sql` (`Installer/MWPV_Installer.iss:288-320`). Setup invokes it for staging failure and reports if not all staged SQL could be deleted (`435-443`). `LaunchMwpvAfterUpdate` invokes the same cleanup when `Exec` cannot create MWPV, resets deployment success so existing code-folder recovery remains available, then aborts (`401-420`).
+
+### Program-file rollback location change
+
+**Previous behavior:** Inno copied `{app}` to `%UserProfile%\Documents\MWPV_Rollback\code`. This scattered program-file recovery material away from the MWPV data root, upgrade backup sets, and staging location.
+
+**Implemented behavior:** `GetMwpvRollbackCodeFolder` now calls the existing `GetMwpvDataFolder` resolver and appends `Rollback\code`; it does not calculate another root (`Installer/MWPV_Installer.iss:161-166`, `277-283`). Therefore the installer code-backup path is:
+
+- system-drive install: `%LOCALAPPDATA%\MWPV\Rollback\code`;
+- portable install: `<exe drive>\AppData\Local\MWPV\Rollback\code`.
+
+Backup creation, deletion of the previous code backup, restore source selection, and error messages all continue to use this one helper (`Installer/MWPV_Installer.iss:215-246`). MWPV’s manual-recovery logging resolves the same data-root-relative location from `DatabaseHelper.GetAppDbPath()` (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:74-110`, `386-391`).
+
+This co-locates recovery material without merging responsibilities. The `Rollback\code` copy remains an installer-owned program-file fallback. The verified `<data-root>\upgrade-backups\...` sets remain application-owned vault-data backups for manual restoration of the database and `.pv` file. Neither backup substitutes for the other.
+
+## MWPV failure flow
+
+```mermaid
+flowchart TD
+  A["MWPV owns staged SQL after launch"] --> B["Failure before backup"]
+  A --> C["Failure after verified backup"]
+  B --> D["Delete staged SQL and retain no accepted backup"]
+  C --> E["Delete staged SQL and retain verified backup"]
+  D --> F["Show Help-based recovery guidance"]
+  E --> F
+  F --> G["User manually restores database and .pv when recovery is required"]
+```
+
+`PreBackupFailure` deletes staged SQL before recording the original failure. `CompletePostBackupFailure` replaces the prior automatic restore branches: it deletes staged SQL, retains the verified backup, retains the original step failure as the final result, and records manual recovery instructions (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:273-360`). `RestoreBackupSet` is no longer part of the coordinator flow.
+
+Application shutdown also attempts cleanup while startup remains in Upgrade mode. This covers terminal pre-coordinator exits such as authentication/key-file validation failure or closing the entry flow. A shutdown cleanup failure is written to early logging; it never replaces the original application result (`MWPV/App.xaml.cs:247-310`). A successful coordinator upgrade transitions startup mode to Normal before exit, so it is not reclassified as a failed upgrade.
+
+### Failure matrix
+
+| Failure category | Backup state | Staged SQL handling | Vault-data handling | User-visible result |
+|---|---|---|---|---|
+| Inno extract/copy staging failure | No MWPV backup | Inno deletes it and aborts | No migration began | Setup error |
+| Inno cannot launch MWPV | No MWPV backup | Inno deletes it and aborts | No migration began | Setup error |
+| Authentication/key-file/startup exit in Upgrade mode | No coordinator backup | MWPV shutdown deletes it | No migration began | Existing startup/authentication error |
+| Current-version or catalog validation failure | No accepted backup | Coordinator deletes it | No migration began | Common upgrade failure guidance |
+| Backup creation/verification failure | No accepted backup | Coordinator deletes it | No migration began | Common upgrade failure guidance |
+| SQL migration failure | Verified backup retained | Coordinator deletes it | No automatic restore | Common upgrade failure guidance; use Help |
+| Database validation failure | Verified backup retained | Coordinator deletes it | No automatic restore | Common upgrade failure guidance; use Help |
+| Key-file rewrite/validation failure | Verified backup retained | Coordinator deletes it | No automatic restore | Common upgrade failure guidance; use Help |
+| Unexpected coordinator exception | Depends on whether backup completed | Coordinator deletes it | No automatic restore | Common upgrade failure guidance; use Help |
+| Staged-SQL cleanup failure | Original result unchanged | Failure is logged | No additional vault action | Original success/failure remains authoritative |
+
+## Manual recovery flow
+
+```mermaid
+flowchart TD
+  A["Upgrade fails after verified backup"] --> B["MWPV preserves backup and deletes staged SQL"]
+  B --> C["User opens Help > Recovery"]
+  C --> D["User restores password database and present sidecars from backup"]
+  D --> E["User restores .pv key file from the same backup"]
+  E --> F["User starts MWPV again"]
+```
+
+The backup request remains type `Upgrade` and includes `MWPV.db`, present `-wal`, `-shm`, and `-journal` sidecars, and the `.pv` key-file database (`MWPV/Services/Upgrade/AppUpgradeCoordinator.cs:363-377`). `BackupService` writes a manifest with SHA-256 values, verifies before finalization, and verifies the final set (`Backup.Utility/BackupService.cs:31-104`, `196-237`). No retention/trimming call is made by the upgrade coordinator. This is intentional: verified upgrade backups remain available for manual recovery instead of being removed automatically.
+
+The application log records manual recovery context. The user-facing popup does not disclose log paths, backup paths, database paths, passwords, keys, SQL contents, or exception details. It says: “Open Help > Recovery and follow the manual recovery instructions before trying again. Restore both the vault database and the .pv key file from the verified upgrade backup when Help directs you to do so.” (`MWPV/Utilities/Helpers/UpgradeFailurePopupHelper.cs:67-75`).
+
+## Responsibility and ownership table
+
+| Component | Ownership / responsibility | Failure behavior | Intentionally unchanged |
+|---|---|---|---|
+| Inno Setup | Owns transport SQL until it successfully starts MWPV; deploys program files | Deletes staged SQL on staging or launch failure; aborts | `ewNoWait`; no exit-code handling; no handshake |
+| Staged SQL folder | Temporary transport of application SQL only | Deleted by the current owner on terminal outcome | SQL catalog remains the integrity authority |
+| MWPV startup | Takes ownership after process launch; handles startup/authentication exits | Deletes staged SQL on Upgrade-mode shutdown | Existing login architecture |
+| `AppUpgradeCoordinator` | Owns authenticated upgrade, backup, migration, cleanup, and recovery instructions | Deletes staged SQL on every coordinator failure; retains backup | Ordered migrations and validation sequence |
+| Backup utility | Creates/verifies an upgrade backup | Retains accepted backup for manual recovery | No coordinator retention cleanup |
+| Installer code rollback | Preserves/restores program files at `<data-root>\Rollback\code` during installer deployment failure | Separate from vault-data recovery | Existing code-copy mechanism; shares only the data root |
+| User / Help | Performs vault-data recovery when required | Restores both DB and `.pv` from verified backup | No automatic restore |
+
+## Return-code and asynchronous boundary
+
+Inno continues to call `Exec` with `ewNoWait` (`Installer/MWPV_Installer.iss:405-411`). It only knows whether the process was created; it does not wait for MWPV or consume its exit code. This was retained because process coordination would be a materially different installer/application design.
+
+After this change, a post-backup migration/key-file/database failure retains its original application detail code rather than reporting automatic-restore outcomes 250 or 300. `UpgradeFailedRollbackSucceeded` (250) and `UpgradeRollbackFailed` (300) remain defined legacy enum values but are not produced by the coordinator’s removed automatic-restore path (`MWPV/Services/AppLifecycle/AppExitCode.cs:3-30`).
+
+## Security considerations
+
+Staged SQL is application schema/query transport, not vault secrets. It is still untrusted until the compiled SQL catalog verifies required filenames and SHA-256 bytes. Cleanup is described as deleting or cleaning up staged SQL; the cleanup service’s implementation may make best-effort stronger wiping, but neither the recovery design nor user guidance relies on a guarantee of secure deletion.
+
+The installer remains unsigned by intentional current limitation: distribution is local and the source is publicly reviewable. Windows publisher/SmartScreen warnings remain expected; local distribution and reviewability do not authenticate the executable. The installer script has no signing configuration (`Installer/MWPV_Installer.iss:18-59`).
+
+Verified backup integrity is based on the manifest and SHA-256 verification. The backup is not cryptographically signed. The `.pv` file and encrypted database remain separate restoration targets and must be restored together when Help directs recovery.
+
+## Known limitations and intentionally unchanged behavior
+
+- Successful process creation is an ownership boundary, not proof that MWPV reached coordinator code. Upgrade-mode shutdown cleanup addresses early terminal exits, but a power loss can still interrupt cleanup.
+- Cleanup failures are logged and do not replace the original upgrade result. Residual transport SQL may remain after filesystem or permission failures.
+- Inno’s program-file rollback copy at `<data-root>\Rollback\code` is not a manifest-verified vault-data backup.
+- Inno remains asynchronous; no wait, exit-code interpretation, or handshake was introduced.
+- Upgrade backup retention is intentionally manual: the coordinator does not automatically trim accepted upgrade backups.
+- Existing new-install cleanup remains in `ServiceSetUp`; this change focused on the installer/upgrade ownership boundary.
+
+## Implementation references
+
+- `Installer/MWPV_Installer.iss`: `GetMwpvDataFolder`, `GetMwpvRollbackCodeFolder`, `BackupMwpvAppFolder`, `RestoreMwpvAppFolder`, `CleanupMwpvSqlStagingFolder`, `StageMwpvSqlFiles`, `LaunchMwpvAfterUpdate`, `CurStepChanged`, and `DeinitializeSetup`.
+- `MWPV/Services/Upgrade/AppUpgradeCoordinator.cs`: `PreBackupFailure`, `CompletePostBackupFailure`, and `CleanUpStagedSql`.
+- `MWPV/App.xaml.cs`: `CleanUpUpgradeStagedSqlOnExit`.
+- `MWPV/Utilities/Helpers/UpgradeFailurePopupHelper.cs`: common Help-based failure message.
+- `MWPV/Services/Upgrade/UpgradeLogger.cs`: manual recovery record and separation of vault-data and program-file recovery.
+- `MWPV/Utilities/Security/SqlStagingCleanupService.cs`: physical staged-SQL cleanup implementation.
+
+## Validation results
+
+- `dotnet build MWPV.csproj --no-restore` completed with **0 errors**. Existing compiler warnings remain.
+- Source review confirms `ewNoWait` is retained and no installer application-exit-code handling or handshake was added.
+- Source review confirms Inno invokes staged-SQL cleanup on staging and application-launch failure.
+- Path review confirms system-drive resolution produces `%LOCALAPPDATA%\MWPV\Rollback\code` and portable resolution produces `<exe drive>\AppData\Local\MWPV\Rollback\code` through the existing data-root resolver.
+- Source review confirms coordinator cleanup is invoked for pre-backup failure, post-backup failure, unexpected exception, and success; Upgrade-mode shutdown adds coverage for terminal startup exits.
+- Source review confirms no coordinator call remains to restore the database or `.pv` from the upgrade backup.

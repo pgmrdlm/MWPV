@@ -244,6 +244,8 @@ namespace MWPV
 
         protected override void OnExit(ExitEventArgs e)
         {
+            CleanUpUpgradeStagedSqlOnExit();
+
             // >>> SESSION_END on normal exit (if login happened this run)
             try
             {
@@ -288,6 +290,24 @@ namespace MWPV
             catch { }
 
             base.OnExit(e);
+        }
+
+        private static void CleanUpUpgradeStagedSqlOnExit()
+        {
+            if (AppRunState.StartupContext.RunMode != AppRunMode.Upgrade)
+                return;
+
+            if (!SqlStagingCleanupService.TrySecurelyScrubDefaultStagingFolder(out var cleanupException))
+            {
+                try
+                {
+                    EarlyLoginFailures.Write(
+                        "SqlStagingCleanup",
+                        "Staged SQL cleanup failed during upgrade shutdown.",
+                        ex: cleanupException);
+                }
+                catch { }
+            }
         }
 
         // ===== Inactivity input hook implementation =====

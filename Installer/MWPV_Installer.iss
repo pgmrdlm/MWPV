@@ -158,9 +158,11 @@ begin
     Abort;
   end;
 end;
+function GetMwpvDataFolder(Param: string): string; forward;
+
 function GetMwpvRollbackCodeFolder(): string;
 begin
-  Result := ExpandConstant('{userdocs}\MWPV_Rollback\code');
+  Result := GetMwpvDataFolder('') + '\Rollback\code';
 end;
 
 function CopyFolderContents(SourceDir: string; DestDir: string): Boolean;
@@ -285,12 +287,13 @@ begin
   Result := GetMwpvDataFolder('') + '\sql';
 end;
 
-procedure CleanupMwpvSqlStagingFolder();
+function CleanupMwpvSqlStagingFolder(): Boolean;
 var
   SqlStagingFolder: string;
   FindRec: TFindRec;
   ChildPath: string;
 begin
+  Result := True;
   SqlStagingFolder := AddBackslash(GetMwpvSqlStagingFolder(''));
 
   if not DirExists(SqlStagingFolder) then
@@ -305,9 +308,12 @@ begin
           ChildPath := SqlStagingFolder + FindRec.Name;
 
           if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
-            DelTree(ChildPath, True, True, True)
-          else
-            DeleteFile(ChildPath);
+          begin
+            if not DelTree(ChildPath, True, True, True) then
+              Result := False;
+          end
+          else if not DeleteFile(ChildPath) then
+            Result := False;
         end;
       until not FindNext(FindRec);
     finally
@@ -407,6 +413,10 @@ begin
     ewNoWait,
     ResultCode) then
   begin
+    if not CleanupMwpvSqlStagingFolder() then
+      MsgBox('Setup could not clean up the staged SQL files after MWPV failed to launch.', mbError, MB_OK);
+
+    DeploymentSucceeded := False;
     MsgBox('Setup could not launch MWPV after the update.', mbError, MB_OK);
     Abort;
   end;
@@ -427,7 +437,8 @@ begin
   begin
     if not StageMwpvSqlFiles() then
     begin
-      CleanupMwpvSqlStagingFolder();
+      if not CleanupMwpvSqlStagingFolder() then
+        MsgBox('Setup could not clean up all staged SQL files.', mbError, MB_OK);
 
       if IsUpdateMigrationInstall and BackupCompleted then
         RestoreMwpvAppFolder();

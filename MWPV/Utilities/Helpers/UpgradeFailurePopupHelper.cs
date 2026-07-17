@@ -67,12 +67,10 @@ namespace Utilities.Helpers
         private static string BuildMessage(UpgradeResult result)
         {
             var builder = new StringBuilder();
-            builder.AppendLine("Rollback instructions have been written to the upgrade log.");
+            builder.AppendLine("The upgrade did not complete.");
             builder.AppendLine();
-            builder.AppendLine("Review the log before attempting any manual recovery actions.");
-            builder.AppendLine();
-            builder.AppendLine($"Log File: {ValueOrUnavailable(result.LogPath)}");
-            builder.AppendLine($"Exit Code: {(int)result.FinalExitCode} ({result.FinalExitCode})");
+            builder.AppendLine("Open Help > Recovery and follow the manual recovery instructions before trying again.");
+            builder.AppendLine("Restore both the vault database and the .pv key file from the verified upgrade backup when Help directs you to do so.");
             return builder.ToString().TrimEnd();
         }
 
@@ -90,7 +88,5 @@ namespace Utilities.Helpers
             return Application.Current.MainWindow;
         }
 
-        private static string ValueOrUnavailable(string? value) =>
-            string.IsNullOrWhiteSpace(value) ? "Unavailable" : value.Trim();
     }
 }

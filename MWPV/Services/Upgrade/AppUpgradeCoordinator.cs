@@ -6,8 +6,6 @@ using Utilities.Helpers;
 using Utilities.Security;
 using MWPV.Services.AppLifecycle;
 using Backup.Utility;
-using Microsoft.Data.Sqlite;
-using System.Collections.Generic;
 using System.Reflection;
 using MWPV.SqlCatalog;
 using Utilities.Sql;
@@ -82,10 +80,9 @@ namespace MWPV.Services.Upgrade
                 var dbPath = DatabaseHelper.GetAppDbPath();
                 var keyFilePath = SecureEncryptedDataStore.GetString(SedsKey_KeyFile);
                 var localRoot = Path.GetDirectoryName(dbPath) ?? AppContext.BaseDirectory;
-                var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
                 var backupRoot = Path.Combine(localRoot, "upgrade-backups");
                 var logPath = Path.Combine(localRoot, "upgrade", $"upgrade-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
-                var codeBackupPath = Path.Combine(documentsPath, "MWPV_Rollback", "code");
+                var codeBackupPath = GetDefaultCodeBackupPath();
 
                 var context = new UpgradeExecutionContext
                 {
@@ -110,10 +107,7 @@ namespace MWPV.Services.Upgrade
                 {
                     LogPath = fallbackLogPath,
                     AppInstallDirectory = AppContext.BaseDirectory,
-                    CodeBackupPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                        "MWPV_Rollback",
-                        "code")
+                    CodeBackupPath = GetDefaultCodeBackupPath()
                 };
                 var logger = new UpgradeLogger(fallbackLogPath);
                 logger.LogResult(AppExitCode.UpgradeSqlCatalogMissing, "Upgrade context resolution failed.");
@@ -124,7 +118,7 @@ namespace MWPV.Services.Upgrade
                     UpgradeFailureCategory.Unknown,
                     "Upgrade context resolution failed.",
                     backupSet: null,
-                    rollback: RollbackResult.NotRequired("Upgrade failed before automatic rollback could run."));
+                    rollback: RollbackResult.NotRequired("Automatic vault-data restore is not performed."));
 
                 return UpgradeResult.Failure(
                     AppExitCode.UpgradeSqlCatalogMissing,
@@ -181,7 +175,7 @@ namespace MWPV.Services.Upgrade
                         UpgradeFailureCategory.Backup,
                         backupResult.SafeMessage,
                         backupSet: null,
-                        rollback: RollbackResult.NotRequired("Backup set creation failed before automatic rollback could run."));
+                        rollback: RollbackResult.NotRequired("Automatic vault-data restore is not performed."));
                     return UpgradeResult.Failure(
                         AppExitCode.UpgradeBackupSetCreationFailed,
                         AppExitCode.UpgradeBackupSetCreationFailed,
@@ -201,7 +195,7 @@ namespace MWPV.Services.Upgrade
                     context.PasswordDatabasePassword,
                     catalog);
                 if (!executeResult.Succeeded)
-                    return RollbackAfterFailure(executeResult, backupSet, context, logger);
+                    return CompletePostBackupFailure(executeResult, backupSet, context, logger);
 
                 var expectedVersion = catalog.TargetVersion.ToString();
 
@@ -210,34 +204,25 @@ namespace MWPV.Services.Upgrade
                     context.PasswordDatabasePassword,
                     expectedVersion);
                 if (!dbValidation.Succeeded)
-                    return RollbackAfterFailure(dbValidation, backupSet, context, logger);
+                    return CompletePostBackupFailure(dbValidation, backupSet, context, logger);
 
                 var keyRewrite = _keyFileUpgradeService.RewriteSqlPayload(
                     context.KeyFilePath,
                     context.KeyFilePassword,
                     catalog);
                 if (!keyRewrite.Succeeded)
-                    return RollbackAfterFailure(keyRewrite, backupSet, context, logger);
+                    return CompletePostBackupFailure(keyRewrite, backupSet, context, logger);
 
                 var keyValidation = _keyFileUpgradeService.ValidateKeyFile(
                     context.KeyFilePath,
                     context.KeyFilePassword,
                     catalog);
                 if (!keyValidation.Succeeded)
-                    return RollbackAfterFailure(keyValidation, backupSet, context, logger);
+                    return CompletePostBackupFailure(keyValidation, backupSet, context, logger);
 
                 RuntimeSqlStore.ReplaceVerified(catalog.KeyFilePayloadScripts);
 
-                if (SqlStagingCleanupService.TrySecurelyScrubDefaultStagingFolder(out var cleanupException))
-                {
-                    logger.LogPhase("SqlCleanup", "SQL staging folder cleanup completed.");
-                }
-                else
-                {
-                    logger.LogPhase(
-                        "SqlCleanup",
-                        $"SQL staging folder cleanup failed after successful validation; staged files were left in place. {cleanupException?.Message}");
-                }
+                CleanUpStagedSql(logger);
 
                 var flagClear = _flagService.ClearUpgradeFlag(context.UpgradeFlagFilePath);
                 if (!flagClear.Succeeded)
@@ -257,7 +242,7 @@ namespace MWPV.Services.Upgrade
                         AppExitCode.UnknownFatalError,
                         "Upgrade failed unexpectedly.",
                         ex);
-                    return RollbackAfterFailure(failure, backupSet, context, logger);
+                    return CompletePostBackupFailure(failure, backupSet, context, logger);
                 }
 
                 return PreBackupFailure(
@@ -278,6 +263,7 @@ namespace MWPV.Services.Upgrade
             Exception? exception,
             UpgradeLogger logger)
         {
+            CleanUpStagedSql(logger);
             logger.LogResult(code, message);
             logger.LogManualRecoveryInstructions(
                 context,
@@ -286,7 +272,7 @@ namespace MWPV.Services.Upgrade
                 category,
                 message,
                 backupSet: null,
-                rollback: RollbackResult.NotRequired("Upgrade failed before automatic rollback could run."));
+                rollback: RollbackResult.NotRequired("Automatic vault-data restore is not performed."));
             return UpgradeResult.Failure(
                 code,
                 code,
@@ -298,30 +284,27 @@ namespace MWPV.Services.Upgrade
                 exception: exception);
         }
 
-        private UpgradeResult RollbackAfterFailure(UpgradeStepResult stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
+        private UpgradeResult CompletePostBackupFailure(UpgradeStepResult stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
-            logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
-            var rollback = RestoreBackupSet(backupSet, context);
-            var finalCode = rollback.Status == RollbackResultStatus.Succeeded
-                ? AppExitCode.UpgradeFailedRollbackSucceeded
-                : AppExitCode.UpgradeRollbackFailed;
+            CleanUpStagedSql(logger);
+            var rollback = RollbackResult.NotRequired("Automatic vault-data restore is not performed. Use the verified upgrade backup for manual recovery.");
 
-            logger.LogResult(finalCode, rollback.Message);
+            logger.LogResult(stepResult.DetailCode, stepResult.Message);
             logger.LogManualRecoveryInstructions(
                 context,
-                finalCode,
+                stepResult.DetailCode,
                 stepResult.DetailCode,
                 stepResult.FailureCategory,
                 stepResult.Message,
                 backupSet,
                 rollback);
             return UpgradeResult.Failure(
-                finalCode,
+                stepResult.DetailCode,
                 stepResult.DetailCode,
                 stepResult.FailureCategory,
                 stepResult.Message,
                 backupSetCreated: true,
-                rollbackRequired: true,
+                rollbackRequired: false,
                 rollback: rollback,
                 logPath: logger.LogPath,
                 backupSetPath: backupSet.BackupFolder,
@@ -329,30 +312,27 @@ namespace MWPV.Services.Upgrade
                 exception: stepResult.Exception);
         }
 
-        private UpgradeResult RollbackAfterFailure<T>(UpgradeStepResult<T> stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
+        private UpgradeResult CompletePostBackupFailure<T>(UpgradeStepResult<T> stepResult, BackupDescriptor backupSet, UpgradeExecutionContext context, UpgradeLogger logger)
         {
-            logger.LogPhase("Rollback", $"Failure after backup at {stepResult.StepName}: {stepResult.Message}");
-            var rollback = RestoreBackupSet(backupSet, context);
-            var finalCode = rollback.Status == RollbackResultStatus.Succeeded
-                ? AppExitCode.UpgradeFailedRollbackSucceeded
-                : AppExitCode.UpgradeRollbackFailed;
+            CleanUpStagedSql(logger);
+            var rollback = RollbackResult.NotRequired("Automatic vault-data restore is not performed. Use the verified upgrade backup for manual recovery.");
 
-            logger.LogResult(finalCode, rollback.Message);
+            logger.LogResult(stepResult.DetailCode, stepResult.Message);
             logger.LogManualRecoveryInstructions(
                 context,
-                finalCode,
+                stepResult.DetailCode,
                 stepResult.DetailCode,
                 stepResult.FailureCategory,
                 stepResult.Message,
                 backupSet,
                 rollback);
             return UpgradeResult.Failure(
-                finalCode,
+                stepResult.DetailCode,
                 stepResult.DetailCode,
                 stepResult.FailureCategory,
                 stepResult.Message,
                 backupSetCreated: true,
-                rollbackRequired: true,
+                rollbackRequired: false,
                 rollback: rollback,
                 logPath: logger.LogPath,
                 backupSetPath: backupSet.BackupFolder,
@@ -377,34 +357,12 @@ namespace MWPV.Services.Upgrade
             ]
         };
 
-        private RollbackResult RestoreBackupSet(BackupDescriptor backupSet, UpgradeExecutionContext context)
+        private static void CleanUpStagedSql(UpgradeLogger logger)
         {
-            try
-            {
-                SqliteConnection.ClearAllPools();
-                var destinations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["PasswordDatabase"] = context.PasswordDatabasePath,
-                    ["PasswordDatabaseWal"] = context.PasswordDatabasePath + "-wal",
-                    ["PasswordDatabaseShm"] = context.PasswordDatabasePath + "-shm",
-                    ["PasswordDatabaseJournal"] = context.PasswordDatabasePath + "-journal",
-                    ["KeyFileDatabase"] = context.KeyFilePath
-                };
-                BackupRestoreResult restored = _backupService.RestoreAsync(new BackupRestoreRequest
-                {
-                    BackupFolder = backupSet.BackupFolder,
-                    ExpectedBackupType = BackupTypes.Upgrade,
-                    Destinations = destinations,
-                    RemoveTargetsForAbsentOptionalFiles = true
-                }).GetAwaiter().GetResult();
-                return restored.Succeeded
-                    ? RollbackResult.Succeeded(restored.SafeMessage)
-                    : RollbackResult.Failed(restored.SafeMessage);
-            }
-            catch (Exception ex)
-            {
-                return RollbackResult.Failed("Full backup set restore failed.", ex);
-            }
+            if (SqlStagingCleanupService.TrySecurelyScrubDefaultStagingFolder(out var cleanupException))
+                logger.LogPhase("SqlCleanup", "Staged SQL files deleted.");
+            else
+                logger.LogPhase("SqlCleanup", $"Staged SQL cleanup failed; original upgrade outcome is unchanged. {cleanupException?.Message}");
         }
 
         private static UpgradeExecutionContext NormalizeContext(UpgradeExecutionContext context)
@@ -425,10 +383,10 @@ namespace MWPV.Services.Upgrade
             };
         }
 
-        private static string GetDefaultCodeBackupPath() =>
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "MWPV_Rollback",
-                "code");
+        private static string GetDefaultCodeBackupPath()
+        {
+            var dataRoot = Path.GetDirectoryName(DatabaseHelper.GetAppDbPath()) ?? AppContext.BaseDirectory;
+            return Path.Combine(dataRoot, "Rollback", "code");
+        }
     }
 }
