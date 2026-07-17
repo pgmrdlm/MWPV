@@ -31,17 +31,17 @@ For basic-password history/change handling, the editor captures signatures in se
 
 ```mermaid
 flowchart LR
-  A[User types sensitive value] --> B[PasswordBox / editor control]
-  B --> C[Panel validation and raw row/payload]
-  C --> D{Password unchanged?}
-  D -->|basic password| E[Fingerprint comparison / grandfathering]
-  D -->|other or changed| F[Editor persistence handler]
+  A["User types sensitive value"] --> B["PasswordBox / editor control"]
+  B --> C["Panel validation and raw row/payload"]
+  C --> D{"Password unchanged?"}
+  D -->|basic password| E["Fingerprint comparison / grandfathering"]
+  D -->|other or changed| F["Editor persistence handler"]
   E --> F
-  F --> G[Service UTF-8 bytes]
-  G --> H[Field crypto boundary]
-  H --> I[Cipher blob]
-  I --> J[Database]
-  C --> K[Explicit panel wipe on cancel/close/unload]
+  F --> G["Service UTF-8 bytes"]
+  G --> H["Field crypto boundary"]
+  H --> I["Cipher blob"]
+  I --> J["Database"]
+  C --> K["Explicit panel wipe on cancel/close/unload"]
 ```
 
 ## Existing values: decrypt, mask, reveal, edit, clear
@@ -52,15 +52,15 @@ Panels normally display masked fields. Reveal copies the current protected-contr
 
 ```mermaid
 flowchart LR
-  A[Encrypted database field] --> B[Service decrypt helper]
-  B --> C[temporary decrypted bytes]
-  C --> D[plaintext string / detail row]
-  C --> E[Array.Clear]
-  D --> F[masked UI]
-  F --> G[reveal overlay when requested]
-  G --> H[auto-hide / overlay clear]
-  D --> I[edit payload or selected session value]
-  I --> J[panel close/unload wipe]
+  A["Encrypted database field"] --> B["Service decrypt helper"]
+  B --> C["temporary decrypted bytes"]
+  C --> D["plaintext string / detail row"]
+  C --> E["Array.Clear"]
+  D --> F["masked UI"]
+  F --> G["reveal overlay when requested"]
+  G --> H["auto-hide / overlay clear"]
+  D --> I["edit payload or selected session value"]
+  I --> J["panel close/unload wipe"]
 ```
 
 ## Generated passwords
@@ -69,12 +69,12 @@ The basic editor generates a password into the password/verification controls, t
 
 ```mermaid
 flowchart LR
-  A[Generate button] --> B[generated password]
-  B --> C[password and verify PasswordBox controls]
-  C --> D[validation / strength / match]
-  C --> E[optional reveal or copy]
-  D --> F[normal save encryption flow]
-  C --> G[reset, cancel, unload, or host-close clear]
+  A["Generate button"] --> B["generated password"]
+  B --> C["password and verify PasswordBox controls"]
+  C --> D["validation / strength / match"]
+  C --> E["optional reveal or copy"]
+  D --> F["normal save encryption flow"]
+  C --> G["reset, cancel, unload, or host-close clear"]
 ```
 
 ## Sensitive clipboard handling
@@ -83,13 +83,13 @@ Copy handlers call `ClipboardHelper.TryCopySensitiveText`, which delegates to th
 
 ```mermaid
 flowchart LR
-  A[Copy action / plaintext string] --> B[SensitiveClipboardService]
-  B --> C[Windows Clipboard.SetText]
-  B --> D[fingerprint + length + timer]
-  D --> E{clipboard unchanged?}
-  E -->|yes| F[Clipboard.Clear]
-  E -->|no| G[do not clear another app's clipboard]
-  F --> H[clear owned fingerprint]
+  A["Copy action / plaintext string"] --> B["SensitiveClipboardService"]
+  B --> C["Windows Clipboard.SetText"]
+  B --> D["fingerprint + length + timer"]
+  D --> E{"clipboard unchanged?"}
+  E -->|yes| F["Clipboard.Clear"]
+  E -->|no| G["do not clear another app's clipboard"]
+  F --> H["clear owned fingerprint"]
   G --> H
 ```
 
@@ -99,13 +99,13 @@ MWPV uses `SecureEncryptedDataStore` (SEDS) for login/key material and selected 
 
 ```mermaid
 flowchart LR
-  A[Panel/login char[] or string] --> B[SEDS Set / SetAndWipe]
-  B --> C[secure in-memory store boundary]
-  C --> D[TryGetBytes for copy/display/crypto]
-  D --> E[temporary byte[] and string]
-  E --> F[Array.Clear temporary bytes]
-  E --> G[useful operation completes]
-  G --> H[SEDS Clear selected key or WipeAll at shutdown]
+  A["Panel/login char[] or string"] --> B["SEDS Set / SetAndWipe"]
+  B --> C["secure in-memory store boundary"]
+  C --> D["TryGetBytes for copy/display/crypto"]
+  D --> E["temporary byte[] and string"]
+  E --> F["Array.Clear temporary bytes"]
+  E --> G["useful operation completes"]
+  G --> H["SEDS Clear selected key or WipeAll at shutdown"]
 ```
 
 ## Cleanup paths
@@ -116,12 +116,12 @@ At the app level, normal exit runs the sensitive shutdown routine, which clears 
 
 ```mermaid
 flowchart TB
-  A[Cancel / tab change / control unload] --> B[panel wipe and overlay/timer clear]
-  C[Window close / normal shutdown] --> D[Editor host-close wipe]
-  D --> E[App OnExit: ClearIfOwned + WipeAll]
-  F[Inactivity timeout] --> G[injected cancel callback] --> H[injected lock action]
-  I[Logout path, if host routes to close] --> D
-  J[Unhandled/fatal shutdown] --> K[AppExit then last-ditch cleanup]
+  A["Cancel / tab change / control unload"] --> B["panel wipe and overlay/timer clear"]
+  C["Window close / normal shutdown"] --> D["Editor host-close wipe"]
+  D --> E["App OnExit: ClearIfOwned + WipeAll"]
+  F["Inactivity timeout"] --> G["injected cancel callback"] --> H["injected lock action"]
+  I["Logout path, if host routes to close"] --> D
+  J["Unhandled/fatal shutdown"] --> K["AppExit then last-ditch cleanup"]
   K --> E
 ```
 
