@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "MWPV"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "beta-01.0"
 #define MyAppPublisher "DansGeekStop"
 #define MyAppURL "https://dansgeekstop.com"
 #define MyAppExeName "MWPV.exe"
@@ -21,6 +21,7 @@
 AppId={{D172A2BB-62C1-4637-B0EC-5D360E83E215}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+VersionInfoProductTextVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
@@ -43,14 +44,14 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-LicenseFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\docs\License.txt
-InfoBeforeFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\docs\BeforeInstall.txt
+LicenseFile=C:\Users\pgmrd\My Drive\MWPV\\docs\License.txt
+InfoBeforeFile=C:\Users\pgmrd\My Drive\MWPV\docs\BeforeInstall.txt
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UsePreviousPrivileges=no
 OutputDir={#InstallerOutputDir}
-OutputBaseFilename=MWPV_Setup
+OutputBaseFilename=MWPV-Installer-beta-01.0
 SetupIconFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\Assets\Icons\MWPV.ico
 SolidCompression=yes
 WizardStyle=modern dynamic

@@ -1,0 +1,12 @@
+MWPV Beta Installation
+
+This is a beta release intended for installation and upgrade testing.
+
+Before continuing:
+
+1. Close any running copy of MWPV.
+2. Make sure you have a current backup of your MWPV data.
+3. Do not interrupt the installer while an upgrade is in progress.
+4. Review the license agreement on the next screen.
+
+This beta may contain defects and should not be treated as a final production release.
