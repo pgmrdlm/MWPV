@@ -112,17 +112,25 @@ flowchart LR
 
 Panels subscribe to `Unloaded` and stop reveal timers, clear overlays, and wipe entry fields; full row wipes occur when host-close was requested (`MWPV/View/UserControls/CategoryItems/CategoryItemAccountsPanel.xaml.cs:342-353`; bank-card equivalent `:354-360`). `CategoryItemEditorTabs.WipeAllForHostClose` invokes the basic, card, account, and question panel wipes (`MWPV/View/UserControls/CategoryItemEditorTabs.xaml.cs:1284-1303,1339-1355`). Its cancel path calls this wipe before raising `Canceled` (`:2338-2342`); tab-leave paths invoke `TryAutoCommitAndWipe` (`:2464-2467,2533-2536`).
 
-At the app level, normal exit runs the sensitive shutdown routine, which clears an owned clipboard value and calls `SensitiveDataCleaner.WipeAll`; fatal shutdown has a final best-effort call as well (`MWPV/App.xaml.cs:247-290,431-475`). `InactivityLockService` calls an injected cancel callback before its injected lock action (`MWPV/Services/InactivityLockService.cs:1-10,135-148`), so whether every open editor is wiped on inactivity depends on the callback installed by its host. The inspected code establishes the service contract but does not itself name the editor wipe method. Login-window cancellation/closing clears its controls (`MWPV/Utilities/Security/AppEntryWindow.xaml.cs:413-418,492-538`).
+At the app level, normal exit runs the sensitive shutdown routine, which clears an owned clipboard value and calls `SensitiveDataCleaner.WipeAll`; fatal shutdown has a final best-effort call as well (`MWPV/App.xaml.cs:245-290,431-477`). Login-window cancellation/closing clears its controls (`MWPV/Utilities/Security/AppEntryWindow.xaml.cs:413-418,492-538`).
+
+On inactivity timeout, `InactivityLockService` first invokes its host-supplied cancel callback and then its lock action (`MWPV/Services/InactivityLockService.cs:111-148`). `MainWindow` wires that callback to `Panel.ForceCancelActiveEditor_BestEffort()` (`MWPV/MainWindow.xaml.cs:83-103`), which aborts an active popup and calls `CategoryItemEditorTabs.ForceCancelFromHost()` for an open editor (`MWPV/View/UserControls/Panel.xaml.cs:181-216`). That path uses `HandleCancelAndExitRequest`, performs `WipeAllForHostClose`, and closes the editor (`MWPV/View/UserControls/CategoryItemEditorTabs.xaml.cs:1300-1359,2334-2342`). Thus editor cleanup occurs immediately when the timeout is handled, before any deferred application close.
+
+`MainWindow.RequestInactivityClose` stops the inactivity service, records the inactivity-close intent, and either dispatches a normal forced `Close()` immediately or leaves the intent pending while log-purge maintenance runs (`MWPV/MainWindow.xaml.cs:114-141`). Stopping unsubscribes the activity handler and stops the timer (`MWPV/Services/InactivityLockService.cs:80-90`), so later user activity cannot restart or cancel the pending closure. The dispatcher guard permits only one close dispatch; when maintenance finishes, `RunExclusiveLogPurgeAsync` clears `_maintenanceInProgress` and dispatches the pending close (`MWPV/MainWindow.xaml.cs:143-204,396-418`). The forced-close intent bypasses the backup prompt (`MWPV/MainWindow.xaml.cs:534-616`), then `BeginFinalCleanup` runs the host-close wipe and allows `App.OnExit` to perform clipboard and global sensitive-data cleanup (`MWPV/MainWindow.xaml.cs:660-690`; `MWPV/App.xaml.cs:245-290,455-477`). Maintenance is not interrupted; ordinary manual close remains cancelled while it is in progress (`MWPV/MainWindow.xaml.cs:534-540`).
 
 ```mermaid
 flowchart TB
   A["Cancel / tab change / control unload"] --> B["panel wipe and overlay/timer clear"]
   C["Window close / normal shutdown"] --> D["Editor host-close wipe"]
   D --> E["App OnExit: ClearIfOwned + WipeAll"]
-  F["Inactivity timeout"] --> G["injected cancel callback"] --> H["injected lock action"]
-  I["Logout path, if host routes to close"] --> D
-  J["Unhandled/fatal shutdown"] --> K["AppExit then last-ditch cleanup"]
-  K --> E
+  F["Inactivity timeout"] --> G["force-cancel active editor and wipe"] --> H["stop inactivity service"]
+  H --> I{"Log-purge maintenance in progress?"}
+  I -->|"no"| J["queue one forced Close"]
+  I -->|"yes"| K["record pending inactivity close"]
+  K --> L["maintenance finishes normally"] --> J
+  J --> M["forced close bypasses backup prompt"] --> D
+  N["Unhandled/fatal shutdown"] --> O["AppExit then last-ditch cleanup"]
+  O --> E
 ```
 
 ## Component responsibility
@@ -136,6 +144,7 @@ flowchart TB
 | field persistence services | field plaintext, UTF-8 and cipher bytes | local strings and byte arrays during transform | clear temporary byte/cipher arrays | encrypted database storage |
 | `SensitiveClipboardService` | copied plaintext, ownership fingerprint | Windows Clipboard text; local read string | TTL/explicit/shutdown owned clear; zero fingerprint bytes | Windows Clipboard |
 | `SecureEncryptedDataStore` | login/key/session selected values | boundary; internals not reviewed here | per-key `Clear` and global `WipeAll` are requested by MWPV | in-memory security boundary |
+| `InactivityLockService` / `MainWindow` | active editor state and pending shutdown state | no secret store of its own; coordinates editor cancel and close | timeout cancels/wipes active editor, stops activity tracking, and dispatches one forced close when maintenance permits | normal window close / app shutdown |
 
 ## Sensitive-data lifetime
 
@@ -148,6 +157,7 @@ flowchart TB
 | Clipboard value | copy handler | Windows Clipboard string | configured TTL or explicit/shutdown clear | `ClearIfOwned` | other process, history, clipboard manager, or changed content is outside MWPV control |
 | Temporary crypto buffers | UTF-8/encrypt/decrypt helper | `byte[]` | one crypto operation | `Array.Clear` in `finally` | native/runtime/provider buffers not established by this review |
 | SEDS secret | login/selection set call | security-library-managed storage | until per-key clear or app wipe | `Clear`, `WipeAll` request | internals are explicitly outside this document |
+| Inactivity-close state | inactivity timeout | booleans/dispatcher callback; no plaintext payload | timeout through immediate close, or through log-purge completion | activity service stopped; one queued forced `Close()` after maintenance | global clipboard/SEDS cleanup waits for normal app-exit path; maintenance is intentionally allowed to finish |
 
 ## Logs and diagnostics
 
@@ -163,9 +173,11 @@ In particular, .NET `string` is immutable and may have multiple copies from trim
 
 The session-store and `Security.Utility` internals are not asserted here. This document only records MWPV’s calls into that boundary (`SetAndWipe`, `SetString`, `TryGetBytes`, `Clear`, and `WipeAll`).
 
-## Review findings and uncertainties
+## Review findings, resolved issues, and remaining limitations
 
 * The comments in account/card panel files describe row DTOs as containing raw values (`MWPV/View/UserControls/CategoryItems/CategoryItemAccountsPanel.xaml.cs:8-11`; `MWPV/View/UserControls/CategoryItems/CategoryItemBankCardsPanel.xaml.cs:9-12`). They are intentionally needed for editing/persistence but increase in-memory exposure until the host-close/row wipe runs.
-* The exact host wiring for `InactivityLockService` was not located in the inspected source set. The service promises to invoke injected cancel then lock callbacks, but whether that cancel callback always invokes each editor’s full wipe is therefore unverifiable from the service alone.
-* “Logout” is not a distinct sensitive-cleanup method in the inspected results. The document describes the observed close/shutdown cleanup and treats a logout as protected only when it routes through those host-close/app-exit paths. This is a documentation/security review item, not a claim that logout is unsafe.
+* Resolved finding — documentation review identified an inactivity/maintenance collision: a close requested during log-purge maintenance could not proceed through the normal close gate. The implemented fix immediately cancels and wipes the active editor at timeout, stops the inactivity service, records one pending inactivity close while maintenance runs, and dispatches one normal forced `Close()` after `_maintenanceInProgress` becomes false (`MWPV/MainWindow.xaml.cs:114-204,396-418`). This preserves the existing backup-prompt bypass, does not interrupt maintenance, and defers application-wide clipboard/SEDS cleanup until `BeginFinalCleanup` and `App.OnExit` execute.
+* The pending inactivity close cannot be cancelled by later input: `Stop()` removes the `App.UserActivityDetected` handler and stops the timer before the pending state is recorded (`MWPV/MainWindow.xaml.cs:122-125`; `MWPV/Services/InactivityLockService.cs:80-108`). `_pendingInactivityClose` plus `_inactivityCloseDispatchQueued` prevents more than one deferred dispatcher close from being queued (`MWPV/MainWindow.xaml.cs:143-204`).
+* Ordinary manual close during maintenance remains blocked (`MWPV/MainWindow.xaml.cs:534-540`). Inactivity does not create a reusable lock screen; it closes the application through the normal forced-close path once maintenance permits.
+* Logout is not implemented as a separate in-process action in the inspected source. The observed cleanup is tied to editor cancel, host close, and application exit; this is not a claim that a separate logout feature exists.
 * Existing high-level/trust-boundary documents provide architectural context; this file intentionally concentrates on transient plaintext, control state, copy, and cleanup rather than duplicating their wider system descriptions.
