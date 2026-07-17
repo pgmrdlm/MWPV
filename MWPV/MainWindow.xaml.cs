@@ -36,6 +36,8 @@ namespace MWPV
         // ---- Close orchestration ----
         private CloseState _closeState = CloseState.Idle;
         private bool _forcedCloseIntent;
+        private bool _pendingInactivityClose;
+        private bool _inactivityCloseDispatchQueued;
         private readonly BackupOnExitCoordinator _backupOnExitCoordinator = new();
         private readonly LogPurgeCoordinator _logPurgeCoordinator = new();
         private bool _maintenanceInProgress;
@@ -98,33 +100,7 @@ namespace MWPV
                 },
 
                 // Final action: terminate the application (via normal close path)
-                lockAction: () =>
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        try
-                        {
-                            // Prefer Close() so MainWindow_Closing cleanup runs.
-                            _forcedCloseIntent = true;
-                            Close();
-                        }
-                        catch (Exception ex)
-                        {
-                            try
-                            {
-                                _ = FatalErrorPopupHelper.ShowFatalAsync(
-                                    "MWPV encountered a fatal error while closing after inactivity timeout and must close.",
-                                    ex,
-                                    "Main window close failed during the inactivity shutdown path.");
-                            }
-                            catch
-                            {
-                                try { Application.Current?.Shutdown(); } catch { }
-                            }
-                        }
-                    }),
-                    DispatcherPriority.Background);
-                });
+                lockAction: RequestInactivityClose);
 
             AppSettingsService.InactivityTimeoutChanged += OnInactivityTimeoutChanged;
             _inactivity.Start();
@@ -133,6 +109,98 @@ namespace MWPV
         private void OnInactivityTimeoutChanged(int minutes)
         {
             _inactivity?.UpdateTimeout(TimeSpan.FromMinutes(minutes));
+        }
+
+        private void RequestInactivityClose()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(RequestInactivityClose), DispatcherPriority.Background);
+                return;
+            }
+
+            try { _inactivity?.Stop(); } catch { }
+
+            bool wasPending = _pendingInactivityClose;
+            _pendingInactivityClose = true;
+
+            if (_maintenanceInProgress)
+            {
+                if (!wasPending)
+                {
+                    AppStatusMessageService.Publish(
+                        "Inactivity timeout reached. MWPV will close after maintenance completes.",
+                        AppStatusMessageKind.Info,
+                        TimeSpan.FromSeconds(10));
+                }
+
+                return;
+            }
+
+            DispatchPendingInactivityCloseIfReady();
+        }
+
+        private void DispatchPendingInactivityCloseIfReady()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(DispatchPendingInactivityCloseIfReady), DispatcherPriority.Background);
+                return;
+            }
+
+            if (!_pendingInactivityClose ||
+                _maintenanceInProgress ||
+                _closeState == CloseState.CleanupRunning ||
+                _closeState == CloseState.CloseApproved ||
+                _inactivityCloseDispatchQueued)
+            {
+                return;
+            }
+
+            _inactivityCloseDispatchQueued = true;
+
+            try
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _inactivityCloseDispatchQueued = false;
+
+                    if (!_pendingInactivityClose ||
+                        _maintenanceInProgress ||
+                        _closeState == CloseState.CleanupRunning ||
+                        _closeState == CloseState.CloseApproved)
+                    {
+                        return;
+                    }
+
+                    _pendingInactivityClose = false;
+                    _forcedCloseIntent = true;
+
+                    try
+                    {
+                        // Prefer Close() so MainWindow_Closing cleanup runs.
+                        Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            _ = FatalErrorPopupHelper.ShowFatalAsync(
+                                "MWPV encountered a fatal error while closing after inactivity timeout and must close.",
+                                ex,
+                                "Main window close failed during the inactivity shutdown path.");
+                        }
+                        catch
+                        {
+                            try { Application.Current?.Shutdown(); } catch { }
+                        }
+                    }
+                }), DispatcherPriority.Background);
+            }
+            catch
+            {
+                _inactivityCloseDispatchQueued = false;
+            }
         }
 
         private void LoadVersionDisplay()
@@ -346,6 +414,7 @@ namespace MWPV
                 MaintenanceOverlay.Visibility = Visibility.Collapsed;
                 IsEnabled = true;
                 _maintenanceInProgress = false;
+                DispatchPendingInactivityCloseIfReady();
             }
         }
 
