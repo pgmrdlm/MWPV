@@ -24,7 +24,15 @@ namespace Security.Utility.Crypto.Hash
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
             enc ??= Encoding.UTF8;
-            return Bytes(enc.GetBytes(input));
+            byte[] encoded = enc.GetBytes(input);
+            try
+            {
+                return Bytes(encoded);
+            }
+            finally
+            {
+                Array.Clear(encoded, 0, encoded.Length);
+            }
         }
 
         /// <summary>SHA-256 of byte[] -> 32-byte digest.</summary>
@@ -88,7 +96,15 @@ namespace Security.Utility.Crypto.Hash
         {
             if (input is null) throw new ArgumentNullException(nameof(input));
             enc ??= Encoding.UTF8;
-            return Hex(enc.GetBytes(input));
+            byte[] encoded = enc.GetBytes(input);
+            try
+            {
+                return Hex(encoded);
+            }
+            finally
+            {
+                Array.Clear(encoded, 0, encoded.Length);
+            }
         }
 
         /// <summary>SHA-256 of byte[] -> lowercase hex.</summary>
@@ -157,7 +173,15 @@ namespace Security.Utility.Crypto.Hash
         {
             if (string.IsNullOrEmpty(input)) return "0";
             enc ??= Encoding.UTF8;
-            return ShortHex(enc.GetBytes(input), takeBytes);
+            byte[] encoded = enc.GetBytes(input);
+            try
+            {
+                return ShortHex(encoded, takeBytes);
+            }
+            finally
+            {
+                Array.Clear(encoded, 0, encoded.Length);
+            }
         }
 
         /// <summary>Short SHA-256 hex of byte[] (first <paramref name="takeBytes"/> bytes).</summary>
@@ -241,6 +265,7 @@ namespace Security.Utility.Crypto.Hash
             }
             finally
             {
+                Array.Clear(chars, 0, chars.Length);
                 ArrayPool<char>.Shared.Return(chars);
             }
         }

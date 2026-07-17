@@ -203,8 +203,6 @@ public static class SecureEncryptedDataStore
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Key name is required.", nameof(key));
 
-        byte[] combinedCopy;
-
         lock (_gate)
         {
             ThrowIfWiped();
@@ -213,14 +211,20 @@ public static class SecureEncryptedDataStore
                 throw new KeyNotFoundException("Key not found.");
 
             // IMPORTANT: copy ciphertext while under lock so Clear/WipeAll can't zero it mid-decrypt.
-            combinedCopy = new byte[combined.Length];
-            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
+            var combinedCopy = new byte[combined.Length];
+            try
+            {
+                Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
 
-            // Decrypt under the same lock so Key cannot be wiped mid-decrypt.
-            // NOTE: DecryptWithEmbeddedNonce_NoLock allocates new plaintext buffer.
-            return DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+                // Decrypt under the same lock so Key cannot be wiped mid-decrypt.
+                // NOTE: DecryptWithEmbeddedNonce_NoLock allocates new plaintext buffer.
+                return DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+            }
+            finally
+            {
+                Array.Clear(combinedCopy, 0, combinedCopy.Length);
+            }
         }
-        // (combinedCopy is only ciphertext; no need to wipe here, but it will be GC'd)
     }
 
     /// <summary>Try get plaintext bytes. Returns false if missing (no exception).</summary>
@@ -247,13 +251,19 @@ public static class SecureEncryptedDataStore
             if (!_store.TryGetValue(key, out var combined))
                 return Result(SecurityUtilityReturnCode.SecureStoreKeyMissing, SecurityUtilityResultKind.Failure);
 
-            var combinedCopy = new byte[combined.Length];
-            Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
-
             try
             {
-                plainBytes = DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
-                return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+                var combinedCopy = new byte[combined.Length];
+                try
+                {
+                    Buffer.BlockCopy(combined, 0, combinedCopy, 0, combined.Length);
+                    plainBytes = DecryptWithEmbeddedNonce_NoLock(key, combinedCopy);
+                    return Result(SecurityUtilityReturnCode.Success, SecurityUtilityResultKind.Success);
+                }
+                finally
+                {
+                    Array.Clear(combinedCopy, 0, combinedCopy.Length);
+                }
             }
             catch (CryptographicException)
             {
@@ -498,30 +508,43 @@ public static class SecureEncryptedDataStore
         if (combined is null || combined.Length < NonceSize + TagSize)
             throw new CryptographicException("Ciphertext is too short.");
 
-        byte[] aad = Encoding.UTF8.GetBytes(keyName);
+        byte[]? aad = null;
+        byte[]? nonce = null;
+        byte[]? tag = null;
+        byte[]? ciphertext = null;
+        byte[]? plain = null;
 
-        var nonce = new byte[NonceSize];
-        var tag = new byte[TagSize];
-
-        Buffer.BlockCopy(combined, 0, nonce, 0, NonceSize);
-        Buffer.BlockCopy(combined, NonceSize, tag, 0, TagSize);
-
-        int ctLen = combined.Length - NonceSize - TagSize;
-        var ciphertext = new byte[ctLen];
-        Buffer.BlockCopy(combined, NonceSize + TagSize, ciphertext, 0, ctLen);
-
-        var plain = new byte[ctLen];
-        using (var gcm = new AesGcm(Key))
+        try
         {
-            gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
+            aad = Encoding.UTF8.GetBytes(keyName);
+            nonce = new byte[NonceSize];
+            tag = new byte[TagSize];
+
+            Buffer.BlockCopy(combined, 0, nonce, 0, NonceSize);
+            Buffer.BlockCopy(combined, NonceSize, tag, 0, TagSize);
+
+            int ctLen = combined.Length - NonceSize - TagSize;
+            ciphertext = new byte[ctLen];
+            Buffer.BlockCopy(combined, NonceSize + TagSize, ciphertext, 0, ctLen);
+
+            plain = new byte[ctLen];
+            using (var gcm = new AesGcm(Key))
+            {
+                gcm.Decrypt(nonce, ciphertext, tag, plain, aad);
+            }
+
+            var returnedPlaintext = plain;
+            plain = null;
+            return returnedPlaintext;
         }
-
-        Array.Clear(nonce, 0, nonce.Length);
-        Array.Clear(tag, 0, tag.Length);
-        Array.Clear(ciphertext, 0, ciphertext.Length);
-        Array.Clear(aad, 0, aad.Length);
-
-        return plain;
+        finally
+        {
+            if (plain is not null) Array.Clear(plain, 0, plain.Length);
+            if (ciphertext is not null) Array.Clear(ciphertext, 0, ciphertext.Length);
+            if (tag is not null) Array.Clear(tag, 0, tag.Length);
+            if (nonce is not null) Array.Clear(nonce, 0, nonce.Length);
+            if (aad is not null) Array.Clear(aad, 0, aad.Length);
+        }
     }
 
     private static SecurityUtilityResult Result(
