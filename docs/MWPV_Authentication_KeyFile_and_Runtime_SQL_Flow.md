@@ -117,30 +117,30 @@ At process exit `App.OnExit` calls `SensitiveDataCleaner.WipeAll`.  That registe
 
 ```mermaid
 sequenceDiagram
-    participant App as "App.OnStartup"
-    participant Detector as "AppStartupDetector"
-    participant Entry as "AppEntryWindow"
-    participant KeyFile as "KeyFileStore (.pv)"
-    participant Keyset as "ServiceSetUp / KeysetJsonV2"
-    participant Catalog as "TrustedSqlCatalog"
-    participant Runtime as "RuntimeSqlStore"
-    participant SEDS as "SecureEncryptedDataStore"
-    participant DB as "SQLCipher application DB"
+    participant App as App OnStartup
+    participant Detector as AppStartupDetector
+    participant Entry as AppEntryWindow
+    participant KeyFile as KeyFileStore pv key file
+    participant Keyset as ServiceSetUp and KeysetJsonV2
+    participant Catalog as TrustedSqlCatalog
+    participant Runtime as RuntimeSqlStore
+    participant SEDS as SecureEncryptedDataStore
+    participant DB as SQLCipher application DB
 
-    App->>Detector: "Detect arguments, DB, and upgrade flag"
-    Detector-->>App: "Normal mode"
-    App->>Entry: "Show authentication UI"
-    Entry->>KeyFile: "Open selected .pv with password; validate schema; read row 1"
-    KeyFile-->>Entry: "Keyset payload bytes"
-    Entry->>Keyset: "Validate V2 payload, then load and seed SEDS"
-    Keyset->>SEDS: "Store DB password and optional 32-byte keys"
-    Keyset-->>Entry: "Keyset SQL candidates"
-    Entry->>Catalog: "Validate new-install/key-file SQL package"
-    Catalog-->>Entry: "Verified package or failure"
-    Entry->>Runtime: "ReplaceVerified(key-file payload scripts)"
-    Entry->>DB: "Insert session-start through DatabaseHelper"
-    DB-->>Entry: "Encrypted connection succeeds"
-    Entry-->>App: "Close entry UI; main window can open"
+    App->>Detector: Detect arguments, DB, and upgrade flag
+    Detector-->>App: Normal mode
+    App->>Entry: Show authentication UI
+    Entry->>KeyFile: Open selected pv key file, validate schema, read row 1
+    KeyFile-->>Entry: Keyset payload bytes
+    Entry->>Keyset: Validate V2 payload, then load and seed SEDS
+    Keyset->>SEDS: Store DB password and optional 32 byte keys
+    Keyset-->>Entry: Keyset SQL candidates
+    Entry->>Catalog: Validate new install key file SQL package
+    Catalog-->>Entry: Verified package or failure
+    Entry->>Runtime: ReplaceVerified key file payload scripts
+    Entry->>DB: Insert session start through DatabaseHelper
+    DB-->>Entry: Encrypted connection succeeds
+    Entry-->>App: Close entry UI, main window can open
 ```
 
 The actual code writes `SESSION_START` immediately after runtime SQL population.  The exact timing of every subsequent service database open is demand-driven; the `DatabaseHelper` gate remains the common password/open path.
@@ -154,16 +154,16 @@ On fresh install, `AppEntryWindow` uses a save dialog (default `Kb.pv`) and pass
 ```mermaid
 flowchart TD
     A["Fresh mode: no application DB"] --> B["Entry UI validates selected key-file path and matching password"]
-    B --> C["Generate DB password; store transient runtime value in SEDS"]
+    B --> C["Generate DB password, store transient runtime value in SEDS"]
     C --> D["LoadAndValidateNewInstallDirectory on staged SQL"]
-    D -->|"Invalid"| E["Show logged error; do not create DB"]
-    D -->|"Verified package"| F["SetUpDataBase executes verified creation SQL"]
-    F -->|"Failure"| G["Show logged error; abort entry completion"]
+    D -->|Invalid| E["Show logged error, do not create DB"]
+    D -->|Verified package| F["SetUpDataBase executes verified creation SQL"]
+    F -->|Failure| G["Show logged error, abort entry completion"]
     F --> H["SetUpKeyFile_Sqlite creates V2 keyset in .pv row 1"]
     H --> I["Securely scrub staged SQL folder"]
-    H -->|"Failure"| J["Best-effort staging cleanup; show logged error"]
+    H -->|Failure| J["Best-effort staging cleanup, show logged error"]
     I --> K["Reload V2 keyset and validate key-file SQL against compiled catalog"]
-    K --> L["ReplaceVerified runtime SQL; main vault becomes available"]
+    K --> L["ReplaceVerified runtime SQL, main vault becomes available"]
 ```
 
 The code contains a marked future note that fresh key-file creation does not yet perform a post-save reopen/read/validate before returning.  The later common load does validate it before completing authentication, but this is not an atomic creation-and-verification transaction.
@@ -181,14 +181,14 @@ flowchart TD
     A["Upgrade mode detected"] --> B["Authenticate selected .pv and load V2 keyset"]
     B --> C["RunAuthenticatedUpgrade"]
     C --> D["Validate staged upgrade package and route against compiled catalog"]
-    D -->|"Failure"| X["Retain verified backup if created; clean staged SQL; abort with recovery guidance"]
-    D -->|"Verified"| E["Create and verify upgrade backup"]
+    D -->|Failure| X["Retain verified backup if created, clean staged SQL, abort with recovery guidance"]
+    D -->|Verified| E["Create and verify upgrade backup"]
     E --> F["Execute verified ordered DB migration and validate DB"]
     F --> G["Rewrite .pv payload ID 1 SQL map"]
     G --> H["Validate rewritten key file"]
     H --> I["ReplaceVerified runtime SQL"]
     I --> J["Clean staged SQL"]
-    J --> K["Reload keyset; run normal runtime-package validation"]
+    J --> K["Reload keyset, run normal runtime-package validation"]
     K --> L["Continue normal startup"]
 ```
 
