@@ -140,7 +140,7 @@ This document defines the ownership, dependency, and trust boundaries of the cur
 
 **Purpose** — Keep generic backup mechanics separate from MWPV's exit/upgrade policy and installer deployment.
 
-**Owns** — `Backup.Utility` creates staging folders, copies requested files, writes/verifies SHA-256 manifests, publishes verified folders, applies retention, and restores verified upgrade backups when MWPV invokes it. The upgrade coordinator owns authenticated upgrade sequencing; the installer owns deployment, SQL staging, migration launch, and its application-code rollback copy.
+**Owns** — `Backup.Utility` creates staging folders, copies requested files, writes/verifies SHA-256 manifests, publishes verified folders, applies retention where requested, and exposes a generic verified restore capability. The upgrade coordinator owns authenticated upgrade sequencing and preserves verified upgrade backups for manual recovery; it does not invoke automatic vault-data restore. The installer owns deployment, SQL staging, migration launch, and its separate application-code rollback copy.
 
 **May Call** — Filesystem; MWPV upgrade/exit coordinators may call `IBackupService`; the coordinator calls the catalog, DB upgrade executor, and key-file upgrade service.
 
@@ -148,7 +148,7 @@ This document defines the ownership, dependency, and trust boundaries of the cur
 
 **Sensitive Data Exposure** — Backup sets copy the SQLCipher password database and encrypted key-file database; plaintext secret extraction is not part of the backup request.
 
-**Failure and Result Handling** — Backup operations return operation statuses and safe messages. Upgrade maps failures to `UpgradeResult`/`AppExitCode` and attempts verified backup restore after an upgrade failure occurring after backup creation.
+**Failure and Result Handling** — Backup operations return operation statuses and safe messages. Upgrade maps failures to `UpgradeResult`/`AppExitCode`, deletes staged SQL after MWPV takes ownership, retains any verified upgrade backup, and directs the user to Help recovery instructions. The user must manually restore both the encrypted database and `.pv` key-file database from the same backup set when recovery is required.
 
 **Relevant Implementation Areas** — sibling `Backup.Utility`; `Services/BackupOnExitCoordinator.cs`; `Services/Upgrade`; sibling `Installer/MWPV_Installer.iss`.
 
@@ -218,13 +218,15 @@ After valid key-file/database login, `EarlyLogIngestor` decrypts the `.elogp` re
 
 MWPV chooses source files and when to request a backup. `Backup.Utility` validates a rooted request, stages copies, writes a manifest, SHA-256 hashes present files, verifies staged and published folders, and applies retention. Exit backups are coordinated by `BackupOnExitCoordinator` after a checkpoint and include the password database, optional SQLite sidecars, and the key-file database. Upgrade backups are created by `AppUpgradeCoordinator` before database/key-file upgrade execution.
 
-Restore is implemented and currently used by `AppUpgradeCoordinator` for rollback after a post-backup upgrade failure. It restores a verified upgrade backup to explicitly supplied password-database/key-file destinations. No general user-facing restore workflow was established from the reviewed source.
+**Superseded behavior:** `AppUpgradeCoordinator` previously used the generic restore capability after a post-backup upgrade failure. That automatic vault-data restore was removed because it added complexity and blurred installer program-file rollback with application vault-data recovery.
+
+Current upgrade recovery retains the verified upgrade backup and does not automatically restore the password database or `.pv` key-file database. The user must manually restore both matched assets from the same backup set, following the failure popup's Help recovery direction. The installer program-file copy at `<data-root>\Rollback\code` remains a separate deployment fallback, not a vault-data backup. No general end-user restore workflow was established from the reviewed source.
 
 ## 10. Upgrade and Migration Boundaries
 
-The installer owns application deployment, staging packaged SQL, detecting an existing installation, creating an application-code rollback copy under Documents, and launching MWPV with the migration flag. MWPV detects upgrade mode but does not trust the installer as authentication: the entry flow loads the keyset first.
+The installer owns application deployment, staging packaged SQL, detecting an existing installation, creating an application-code rollback copy under `<data-root>\Rollback\code`, and launching MWPV with the migration flag. MWPV detects upgrade mode but does not trust the installer as authentication: the entry flow loads the keyset first.
 
-`AppUpgradeCoordinator` reads the current DB version, asks `MWPV.SqlCatalog` for a verified route, creates a verified upgrade backup, executes and validates the DB plan, rewrites/validates key-file SQL payload, publishes runtime SQL, scrubs staged SQL where possible, and clears the upgrade flag. `DbUpgradeExecutor` owns verified-script execution and DB validation. Upgrade result and failure categories cross through `UpgradeResult` and `AppExitCode`; successful completion returns to normal authenticated operation.
+`AppUpgradeCoordinator` reads the current DB version, asks `MWPV.SqlCatalog` for a verified route, creates a verified upgrade backup containing the matched encrypted database and `.pv` key-file database, executes and validates the DB plan, rewrites/validates key-file SQL payload, publishes runtime SQL, deletes staged SQL on success or terminal failure after MWPV takes ownership, and clears the upgrade flag on success. `DbUpgradeExecutor` owns verified-script execution and DB validation. A failed upgrade retains its verified backup for explicit manual restoration and does not produce automatic-restore outcomes; legacy codes 250 and 300 remain enum values only, not current restore results. Successful completion returns to normal authenticated operation.
 
 ## 11. Prohibited Responsibility Drift
 
@@ -273,6 +275,6 @@ For a proposed change:
 
 **Reviewed projects and areas:** `MWPV.csproj` and `MWPV.sln`; `App.xaml.cs`, `MainWindow.xaml.cs`; `Services`, including lifecycle, upgrade, logging, settings, backup, and clipboard services; `Utilities`, including security, SQL, diagnostics, and database helpers; `KeyFileLogic`; `MWPV.SqlCatalog`; sibling `Security.Utility`, `Backup.Utility`, and `Installer/MWPV_Installer.iss`.
 
-**Established ambiguities:** no dedicated runtime wipe of `RuntimeSqlStore`'s SQL snapshot was confirmed. The document therefore does not claim one. No general end-user restore flow was found; the confirmed restore use is upgrade rollback.
+**Established ambiguities:** no dedicated runtime wipe of `RuntimeSqlStore`'s SQL snapshot was confirmed. The document therefore does not claim one. No general end-user restore flow was found; current upgrade recovery is explicit manual restoration of the matched database and `.pv` from a retained verified backup.
 
 **Implementation/documentation mismatch and obsolete references:** comments and UI filters still use legacy terminology such as “archive” and include `.7z` filters, while the active key-file implementation is an encrypted SQLite key-file database. Older descriptions of encrypted per-log payload persistence are not supported by the current log-write implementation. `RequestV3.Payload`, `PayloadFmt`, and `PayloadVer` are intentionally non-persisting compatibility fields; `KeySetVersion` is persisted normally. The current early-login design intentionally retains richer diagnostics only in temporary DPAPI-protected `.elogp` files and does not carry them into the normal `Logs` table.
