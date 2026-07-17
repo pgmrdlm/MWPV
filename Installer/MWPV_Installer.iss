@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "MWPV"
-#define MyAppVersion "beta-01.0"
+#define MyAppVersion "beta-01.01.01"
 #define MyAppPublisher "DansGeekStop"
 #define MyAppURL "https://dansgeekstop.com"
 #define MyAppExeName "MWPV.exe"
@@ -21,7 +21,9 @@
 AppId={{D172A2BB-62C1-4637-B0EC-5D360E83E215}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+;VersionInfoProductVersion={#MyAppVersion}
 VersionInfoProductTextVersion={#MyAppVersion}
+VersionInfoTextVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
@@ -51,7 +53,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UsePreviousPrivileges=no
 OutputDir={#InstallerOutputDir}
-OutputBaseFilename=MWPV-Installer-beta-01.0
+OutputBaseFilename=MWPV-Installer-beta-01.01.01
 SetupIconFile=C:\Users\pgmrd\My Drive\MWPV\MWPV\Assets\Icons\MWPV.ico
 SolidCompression=yes
 WizardStyle=modern dynamic
